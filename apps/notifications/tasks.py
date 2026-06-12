@@ -3,9 +3,11 @@ from celery import shared_task
 from apps.notifications.models import BroadcastCampaign, StaffNotification
 from apps.notifications.services import (
     DELIVER_STAFF_NOTIFICATION_TASK,
+    PROCESS_SCHEDULED_BROADCAST_CAMPAIGNS_TASK,
     SEND_BROADCAST_CAMPAIGN_TASK,
     SEND_GUEST_ORDER_STATUS_UPDATE_TASK,
     deliver_staff_notification_now,
+    process_scheduled_broadcast_campaigns,
     send_broadcast_campaign_now,
     send_guest_order_status_update_now,
 )
@@ -68,3 +70,15 @@ def send_broadcast_campaign_task(self, campaign_id: str) -> None:
     except BroadcastCampaign.DoesNotExist:
         return
     send_broadcast_campaign_now(campaign)
+
+
+@shared_task(
+    bind=True,
+    name=PROCESS_SCHEDULED_BROADCAST_CAMPAIGNS_TASK,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 5},
+)
+def process_scheduled_broadcast_campaigns_task(self) -> int:
+    return process_scheduled_broadcast_campaigns()

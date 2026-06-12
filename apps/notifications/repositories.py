@@ -1,4 +1,5 @@
 from django.db.models import Q
+from django.utils import timezone
 
 from apps.notifications.models import BroadcastCampaign, NotificationPreference, StaffNotification
 from apps.users.models import GuestProfile
@@ -34,6 +35,14 @@ class BroadcastCampaignRepository:
             partner_id=partner_id,
             status__in=[BroadcastCampaign.Status.DRAFT, BroadcastCampaign.Status.SCHEDULED],
         )
+
+    @staticmethod
+    def due_scheduled():
+        return BroadcastCampaign.objects.filter(
+            status=BroadcastCampaign.Status.DRAFT,
+            scheduled_at__isnull=False,
+            scheduled_at__lte=timezone.now(),
+        ).order_by("scheduled_at", "created_at")
 
 
 class StaffNotificationRepository:

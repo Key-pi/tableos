@@ -30,7 +30,6 @@ class BotContent:
     module_quick_sale_enabled: bool
     module_reports_enabled: bool
     module_broadcasts_enabled: bool
-    allow_multiple_active_sessions_per_guest: bool
     auto_close_table_session_after_payment: bool
     max_menu_items_per_category_message: int
     duplicate_request_cooldown_seconds: int
@@ -42,6 +41,7 @@ class BotContent:
     button_pickup_label: str
     button_help_label: str
     button_my_profile: str
+    button_profile_bonuses_label: str
     button_call_staff_label: str
     button_request_bill_label: str
     button_call_waiter_label: str
@@ -92,7 +92,6 @@ class BotContent:
             module_quick_sale_enabled=True,
             module_reports_enabled=True,
             module_broadcasts_enabled=False,
-            allow_multiple_active_sessions_per_guest=False,
             auto_close_table_session_after_payment=True,
             max_menu_items_per_category_message=8,
             duplicate_request_cooldown_seconds=45,
@@ -104,6 +103,7 @@ class BotContent:
             button_pickup_label="Самовывоз",
             button_help_label="Как заказать",
             button_my_profile="Мой профиль",
+            button_profile_bonuses_label="Бонусы",
             button_call_staff_label="Позвать персонал",
             button_request_bill_label="Запросить счёт",
             button_call_waiter_label="Официант",
@@ -170,9 +170,6 @@ class BotContent:
             module_quick_sale_enabled=settings.module_quick_sale_enabled,
             module_reports_enabled=settings.module_reports_enabled,
             module_broadcasts_enabled=settings.module_broadcasts_enabled,
-            allow_multiple_active_sessions_per_guest=(
-                settings.allow_multiple_active_sessions_per_guest
-            ),
             auto_close_table_session_after_payment=(
                 settings.auto_close_table_session_after_payment
             ),
@@ -188,6 +185,9 @@ class BotContent:
             button_pickup_label=settings.button_pickup_label or defaults.button_pickup_label,
             button_help_label=settings.button_help_label or defaults.button_help_label,
             button_my_profile=settings.button_my_profile or defaults.button_my_profile,
+            button_profile_bonuses_label=(
+                settings.button_profile_bonuses_label or defaults.button_profile_bonuses_label
+            ),
             button_call_staff_label=(
                 settings.button_call_staff_label or defaults.button_call_staff_label
             ),

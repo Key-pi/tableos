@@ -39,7 +39,7 @@ class BillingServiceTests(TestCase):
             slug="billing-venue",
             status=Partner.Status.ACTIVE,
         )
-        PartnerBotSettings.objects.create(
+        self.bot_settings = PartnerBotSettings.objects.create(
             partner=self.partner,
             module_billing_enabled=True,
         )
@@ -196,6 +196,44 @@ class BillingServiceTests(TestCase):
         self.assertIsNotNone(self.order.paid_at)
         self.assertEqual(bill.status, Bill.Status.PAID)
         self.assertEqual(self.session.status, self.session.Status.CLOSED)
+
+    def test_full_payment_keeps_session_open_when_auto_close_disabled(self):
+        self.bot_settings.auto_close_table_session_after_payment = False
+        self.bot_settings.save(
+            update_fields=["auto_close_table_session_after_payment", "updated_at"]
+        )
+        transition_order_status(
+            order=self.order,
+            to_status=Order.Status.ACCEPTED,
+            actor_user=self.manager.user,
+            note="Taken by manager",
+        )
+        transition_order_status(
+            order=self.order,
+            to_status=Order.Status.READY,
+            actor_user=self.manager.user,
+            note="Ready for payment",
+        )
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+
+        record_payment(
+            bill=bill,
+            amount=bill.total_amount,
+            method=Payment.Method.TERMINAL,
+            created_by=self.manager.user,
+        )
+
+        self.order.refresh_from_db()
+        bill.refresh_from_db()
+        self.session.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.COMPLETED)
+        self.assertEqual(self.order.payment_method, Order.PaymentMethod.TERMINAL)
+        self.assertIsNotNone(self.order.paid_at)
+        self.assertEqual(bill.status, Bill.Status.PAID)
+        self.assertEqual(self.session.status, self.session.Status.ACTIVE)
 
     def test_create_shared_bill_for_table_collects_all_unbilled_orders(self):
         second_session = activate_table_session(

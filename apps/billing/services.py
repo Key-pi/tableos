@@ -21,6 +21,7 @@ from apps.bonuses.services import get_redeemable_bonus_amount
 from apps.notifications.services import notify_staff_about_billing_request
 from apps.orders.models import Cart, Order, OrderItem
 from apps.orders.services import transition_order_status
+from apps.partners.models import PartnerBotSettings
 from apps.tables.models import TableSession
 from apps.tables.services import close_table_session, get_active_table_session
 
@@ -658,6 +659,25 @@ def _close_table_sessions_if_fully_settled(*, partner_id, table_id) -> int:
 
     has_unfinished_orders = active_orders.exclude(status=Order.Status.COMPLETED).exists()
     if has_unfinished_orders:
+        return 0
+
+    auto_close_enabled = (
+        PartnerBotSettings.objects.filter(partner_id=partner_id)
+        .values_list("auto_close_table_session_after_payment", flat=True)
+        .first()
+    )
+    if auto_close_enabled is False:
+        BillingRequest.objects.filter(
+            partner_id=partner_id,
+            table_id=table_id,
+            status__in=[
+                BillingRequest.Status.OPEN,
+                BillingRequest.Status.AUTO_PREPARED,
+            ],
+        ).update(
+            status=BillingRequest.Status.PROCESSED,
+            processed_at=timezone.now(),
+        )
         return 0
 
     active_sessions = list(

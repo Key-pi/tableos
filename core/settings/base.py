@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+from celery.schedules import crontab
+
 from core.logging.config import LOGGING
 from core.settings.env import app_settings
 
@@ -104,3 +106,9 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    "process-scheduled-broadcast-campaigns-every-minute": {
+        "task": "notifications.process_scheduled_broadcast_campaigns",
+        "schedule": crontab(minute="*"),
+    }
+}

@@ -71,7 +71,6 @@ class PartnerBotSettingsInline(admin.StackedInline):
             "Behavior",
             {
                 "fields": (
-                    "allow_multiple_active_sessions_per_guest",
                     "auto_close_table_session_after_payment",
                     "max_menu_items_per_category_message",
                     "duplicate_request_cooldown_seconds",
@@ -95,6 +94,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                     "button_pickup_label",
                     "button_help_label",
                     "button_my_profile",
+                    "button_profile_bonuses_label",
                     "button_call_staff_label",
                     "button_request_bill_label",
                     "button_call_waiter_label",

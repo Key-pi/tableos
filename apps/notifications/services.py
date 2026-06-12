@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from dataclasses import dataclass
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
@@ -11,13 +12,17 @@ from django.utils import timezone
 
 from apps.employees.models import EmployeeProfile
 from apps.notifications.models import BroadcastCampaign, StaffNotification
-from apps.notifications.repositories import NotificationPreferenceRepository
+from apps.notifications.repositories import (
+    BroadcastCampaignRepository,
+    NotificationPreferenceRepository,
+)
 from apps.partners.models import BotInstance
 from apps.tables.services import get_active_table_session
 
 DELIVER_STAFF_NOTIFICATION_TASK = "notifications.deliver_staff_notification"
 SEND_GUEST_ORDER_STATUS_UPDATE_TASK = "notifications.send_guest_order_status_update"
 SEND_BROADCAST_CAMPAIGN_TASK = "notifications.send_broadcast_campaign"
+PROCESS_SCHEDULED_BROADCAST_CAMPAIGNS_TASK = "notifications.process_scheduled_broadcast_campaigns"
 
 
 class NotificationDeliveryError(Exception):
@@ -26,6 +31,13 @@ class NotificationDeliveryError(Exception):
 
 class GuestCallError(Exception):
     """Raised when a guest cannot safely request staff assistance."""
+
+
+@dataclass(frozen=True, slots=True)
+class BroadcastAudienceStats:
+    eligible_recipients: int
+    blocked_recipients: int
+    opted_in_guests: int
 
 
 def _active_partner_bot(partner_id) -> BotInstance:
@@ -43,6 +55,28 @@ def _active_partner_bot(partner_id) -> BotInstance:
     if not bot_instance.has_usable_token:
         raise NotificationDeliveryError("Partner bot token is missing or invalid.")
     return bot_instance
+
+
+def get_broadcast_audience_stats(*, partner_id) -> BroadcastAudienceStats:
+    audience = NotificationPreferenceRepository.marketing_guests(partner_id)
+    blocked_recipients = audience.filter(telegram_account__is_blocked=True).count()
+    eligible_recipients = audience.exclude(telegram_account__is_blocked=True).count()
+    opted_in_guests = audience.count()
+    return BroadcastAudienceStats(
+        eligible_recipients=eligible_recipients,
+        blocked_recipients=blocked_recipients,
+        opted_in_guests=opted_in_guests,
+    )
+
+
+def ensure_broadcast_campaign_can_send(*, partner_id) -> BroadcastAudienceStats:
+    _active_partner_bot(partner_id)
+    stats = get_broadcast_audience_stats(partner_id=partner_id)
+    if stats.eligible_recipients <= 0:
+        raise NotificationDeliveryError(
+            "Нет гостей, которым можно отправить рассылку: проверьте подписку и блокировки."
+        )
+    return stats
 
 
 async def _send_telegram_messages(
@@ -369,6 +403,7 @@ def send_broadcast_campaign(campaign: BroadcastCampaign) -> BroadcastCampaign:
     }:
         return campaign
 
+    ensure_broadcast_campaign_can_send(partner_id=campaign.partner_id)
     campaign.status = BroadcastCampaign.Status.SCHEDULED
     campaign.last_error = ""
     campaign.save(update_fields=["status", "last_error", "updated_at"])
@@ -431,3 +466,18 @@ def send_broadcast_campaign_now(campaign: BroadcastCampaign) -> BroadcastCampaig
         ]
     )
     return campaign
+
+
+def process_scheduled_broadcast_campaigns() -> int:
+    processed_count = 0
+    due_campaigns = list(BroadcastCampaignRepository.due_scheduled())
+    for campaign in due_campaigns:
+        try:
+            send_broadcast_campaign(campaign)
+        except NotificationDeliveryError as exc:
+            campaign.status = BroadcastCampaign.Status.FAILED
+            campaign.last_error = str(exc)
+            campaign.save(update_fields=["status", "last_error", "updated_at"])
+        else:
+            processed_count += 1
+    return processed_count

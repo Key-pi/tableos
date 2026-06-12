@@ -24,6 +24,7 @@ python manage.py createsuperuser
 python manage.py runserver
 python manage.py runbot
 celery -A core.celery worker --loglevel=info
+celery -A core.celery beat --loglevel=info
 python manage.py ensure_admin --username admin --email admin@tableos.local --password admin12345
 python manage.py seed_demo --slug demo-lounge --name "Demo Lounge"
 python manage.py seed_baseline_demo
@@ -93,4 +94,10 @@ Run a separate worker process in production and during local end-to-end testing:
 
 ```bash
 celery -A core.celery worker --loglevel=info
+```
+
+If you want `scheduled_at` campaigns to go out automatically, run Celery Beat too:
+
+```bash
+celery -A core.celery beat --loglevel=info
 ```

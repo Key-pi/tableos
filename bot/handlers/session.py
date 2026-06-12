@@ -23,6 +23,7 @@ from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
 
 router = Router()
+_MAX_GUEST_SESSION_ORDERS_PREVIEW = 8
 
 
 def _render_guest_order_line(order: Order) -> str:
@@ -83,7 +84,13 @@ def _build_guest_session_view(
             "Ваши заказы:",
         ]
     )
-    lines.extend(_render_guest_order_line(order) for order in visible_orders)
+    lines.extend(
+        _render_guest_order_line(order)
+        for order in visible_orders[:_MAX_GUEST_SESSION_ORDERS_PREVIEW]
+    )
+    hidden_orders = len(visible_orders) - _MAX_GUEST_SESSION_ORDERS_PREVIEW
+    if hidden_orders > 0:
+        lines.append(f"• И ещё {hidden_orders} заказ(а).")
 
     if unpaid_count:
         lines.extend(

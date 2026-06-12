@@ -173,7 +173,6 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name="Рассылки",
         help_text="Маркетинговые и информационные сообщения гостям.",
     )
-    allow_multiple_active_sessions_per_guest = models.BooleanField(default=False)
     auto_close_table_session_after_payment = models.BooleanField(default=True)
     max_menu_items_per_category_message = models.PositiveSmallIntegerField(default=8)
     duplicate_request_cooldown_seconds = models.PositiveSmallIntegerField(default=45)
@@ -194,6 +193,7 @@ class PartnerBotSettings(TimeStampedModel):
     button_pickup_label = models.CharField(max_length=64, default="Самовывоз")
     button_help_label = models.CharField(max_length=64, default="Как заказать")
     button_my_profile = models.CharField(max_length=64, default="Мой профиль")
+    button_profile_bonuses_label = models.CharField(max_length=64, default="Бонусы")
     button_call_staff_label = models.CharField(max_length=64, default="Позвать персонал")
     button_request_bill_label = models.CharField(max_length=64, default="Запросить счёт")
     button_call_waiter_label = models.CharField(max_length=64, default="Официант")

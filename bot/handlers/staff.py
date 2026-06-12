@@ -90,6 +90,9 @@ from bot.services.context import resolve_partner_for_bot_token
 from bot.states.staff_sale import StaffQuickSaleStates
 
 router = Router()
+_MAX_STAFF_ORDER_CARD_ITEMS = 6
+_MAX_STAFF_WALK_IN_SALE_ITEMS = 10
+_MAX_STAFF_QUICK_SALE_ITEMS = 10
 
 
 async def _safe_edit_message_text(
@@ -137,7 +140,15 @@ def _employee_label(employee: EmployeeProfile | None) -> str:
 
 
 def _render_order_card(order: Order) -> str:
-    items_text = ", ".join(f"{item.item_name} x{item.quantity}" for item in order.items.all())
+    items = list(order.items.all())
+    item_chunks = [
+        f"{item.item_name} x{item.quantity}"
+        for item in items[:_MAX_STAFF_ORDER_CARD_ITEMS]
+    ]
+    hidden_items = len(items) - _MAX_STAFF_ORDER_CARD_ITEMS
+    if hidden_items > 0:
+        item_chunks.append(f"и ещё {hidden_items}")
+    items_text = ", ".join(item_chunks)
     guest_label = order.guest.telegram_account.username or order.guest.telegram_account.telegram_id
     comment_text = order.comment or "Без комментария"
     assignee_label = _employee_label(order.assigned_employee) or "Пока не назначен"
@@ -381,8 +392,11 @@ def _render_walk_in_sale_card(sale: WalkInSale) -> str:
     ]
     if sale_items:
         lines.extend(["", "Позиции:"])
-        for item in sale_items:
+        for item in sale_items[:_MAX_STAFF_WALK_IN_SALE_ITEMS]:
             lines.append(f"• {item.item_name} x{item.quantity} • {item.unit_price} грн")
+        hidden_items = len(sale_items) - _MAX_STAFF_WALK_IN_SALE_ITEMS
+        if hidden_items > 0:
+            lines.append(f"• И ещё {hidden_items} позиц.")
     return "\n".join(lines)
 
 
@@ -747,11 +761,14 @@ def _compose_staff_sale_view(
         )
     if guest_preview.items:
         lines.append("Позиции:")
-        for item in guest_preview.items:
+        for item in guest_preview.items[:_MAX_STAFF_QUICK_SALE_ITEMS]:
             line_total = item["unit_price"] * item["quantity"]
             lines.append(
                 f"• {item['item_name']} x{item['quantity']} = {line_total} грн"
             )
+        hidden_items = len(guest_preview.items) - _MAX_STAFF_QUICK_SALE_ITEMS
+        if hidden_items > 0:
+            lines.append(f"• И ещё {hidden_items} позиц.")
         lines.extend(
             [
                 "",

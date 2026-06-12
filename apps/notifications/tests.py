@@ -1,18 +1,27 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.contrib import admin
+from django.test import RequestFactory
 from django.test import TestCase
 
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
+from apps.notifications.admin import BroadcastCampaignAdmin
+from apps.notifications.forms import BroadcastCampaignAdminForm
 from apps.notifications.models import BroadcastCampaign, NotificationPreference, StaffNotification
 from apps.notifications.services import (
     deliver_staff_notification,
+    get_broadcast_audience_stats,
+    NotificationDeliveryError,
+    process_scheduled_broadcast_campaigns,
     request_staff_assistance,
     send_broadcast_campaign,
 )
+from django.utils import timezone
 from apps.orders.services import create_order_from_session
 from apps.partners.models import BotInstance, Partner
 from apps.tables.models import Table
@@ -131,6 +140,192 @@ class NotificationDeliveryTests(TestCase):
         self.assertEqual(campaign.delivered_count, 1)
         self.assertEqual(campaign.failed_count, 1)
         self.assertEqual(campaign.status, BroadcastCampaign.Status.SENT)
+
+    def test_send_broadcast_campaign_requires_eligible_recipients(self):
+        campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Promo",
+            message="Hello guests",
+        )
+
+        with self.assertRaisesMessage(
+            NotificationDeliveryError,
+            "Нет гостей, которым можно отправить рассылку",
+        ):
+            send_broadcast_campaign(campaign)
+
+    def test_process_scheduled_broadcast_campaigns_queues_due_campaign(self):
+        guest_account = TelegramAccount.objects.create(
+            telegram_id=601010,
+            username="due_guest",
+        )
+        guest = GuestProfile.objects.create(
+            partner=self.partner,
+            telegram_account=guest_account,
+        )
+        NotificationPreference.objects.create(
+            partner=self.partner,
+            guest=guest,
+            marketing_enabled=True,
+        )
+        due_campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Due promo",
+            message="Hello due guests",
+            scheduled_at=timezone.now() - timedelta(minutes=1),
+        )
+        future_campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Future promo",
+            message="Hello future guests",
+            scheduled_at=timezone.now() + timedelta(minutes=10),
+        )
+
+        with patch("apps.notifications.services._send_telegram_messages", new=_successful_send):
+            with self.captureOnCommitCallbacks(execute=True):
+                processed_count = process_scheduled_broadcast_campaigns()
+
+        due_campaign.refresh_from_db()
+        future_campaign.refresh_from_db()
+        self.assertEqual(processed_count, 1)
+        self.assertEqual(due_campaign.status, BroadcastCampaign.Status.SENT)
+        self.assertEqual(future_campaign.status, BroadcastCampaign.Status.DRAFT)
+
+    def test_process_scheduled_broadcast_campaigns_marks_invalid_campaign_failed(self):
+        partner_without_bot = Partner.objects.create(
+            name="No Bot Partner",
+            slug="no-bot-partner",
+            status=Partner.Status.ACTIVE,
+        )
+        guest_account = TelegramAccount.objects.create(
+            telegram_id=601011,
+            username="no_bot_guest",
+        )
+        guest = GuestProfile.objects.create(
+            partner=partner_without_bot,
+            telegram_account=guest_account,
+        )
+        NotificationPreference.objects.create(
+            partner=partner_without_bot,
+            guest=guest,
+            marketing_enabled=True,
+        )
+        campaign = BroadcastCampaign.objects.create(
+            partner=partner_without_bot,
+            name="Broken promo",
+            message="No bot yet",
+            scheduled_at=timezone.now() - timedelta(minutes=1),
+        )
+
+        processed_count = process_scheduled_broadcast_campaigns()
+
+        campaign.refresh_from_db()
+        self.assertEqual(processed_count, 0)
+        self.assertEqual(campaign.status, BroadcastCampaign.Status.FAILED)
+        self.assertIn("No active polling bot", campaign.last_error)
+
+
+class BroadcastCampaignAdminFlowTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.partner = Partner.objects.create(
+            name="Campaign Partner",
+            slug="campaign-partner",
+            status=Partner.Status.ACTIVE,
+        )
+        self.owner = User.objects.create_user(
+            username="campaign_owner",
+            password="pass12345",
+            partner=self.partner,
+            role=User.Role.OWNER,
+            is_staff=True,
+            is_active=True,
+        )
+        self.bot = BotInstance.objects.create(
+            partner=self.partner,
+            display_name="Campaign Bot",
+            username="campaign_partner_bot",
+            mode=BotInstance.Mode.POLLING,
+            is_active=True,
+            token_encrypted="",
+        )
+        self.bot.set_token("523456789:ABCDEFGHIJKLMNOPQRST_uv-wxyz")
+        self.bot.save(update_fields=["token_encrypted"])
+        guest_account = TelegramAccount.objects.create(
+            telegram_id=651001,
+            username="campaign_guest",
+        )
+        self.guest = GuestProfile.objects.create(
+            partner=self.partner,
+            telegram_account=guest_account,
+        )
+        NotificationPreference.objects.create(
+            partner=self.partner,
+            guest=self.guest,
+            marketing_enabled=True,
+        )
+
+    def test_audience_stats_count_eligible_recipients(self):
+        stats = get_broadcast_audience_stats(partner_id=self.partner.id)
+
+        self.assertEqual(stats.opted_in_guests, 1)
+        self.assertEqual(stats.eligible_recipients, 1)
+        self.assertEqual(stats.blocked_recipients, 0)
+
+    def test_form_can_queue_campaign_immediately_for_partner_owner(self):
+        form = BroadcastCampaignAdminForm(
+            data={
+                "name": "Friday promo",
+                "message": "Hello guests",
+                "scheduled_at": "",
+                "send_now": "on",
+            },
+            request=self._build_request(),
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_admin_save_model_queues_campaign_when_send_now_checked(self):
+        model_admin = BroadcastCampaignAdmin(BroadcastCampaign, admin.site)
+        request = self._build_request()
+        campaign = BroadcastCampaign(partner=self.partner)
+        form = BroadcastCampaignAdminForm(
+            data={
+                "partner": str(self.partner.id),
+                "name": "Friday promo",
+                "message": "Hello guests",
+                "scheduled_at": "",
+                "send_now": "on",
+            },
+            instance=campaign,
+            request=request,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+        with patch("apps.notifications.admin.send_broadcast_campaign") as mocked_send:
+            model_admin.save_model(request, campaign, form, change=False)
+
+        mocked_send.assert_called_once_with(campaign)
+
+    def test_delivery_readiness_reports_missing_audience(self):
+        NotificationPreference.objects.all().delete()
+        self.guest.is_subscribed = False
+        self.guest.save(update_fields=["is_subscribed", "updated_at"])
+        model_admin = BroadcastCampaignAdmin(BroadcastCampaign, admin.site)
+        campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Promo",
+            message="Hello guests",
+        )
+
+        readiness = model_admin.delivery_readiness(campaign)
+
+        self.assertIn("Не готово", readiness)
+
+    def _build_request(self):
+        request = self.factory.get("/admin/")
+        request.user = self.owner
+        return request
 
 
 class StaffNotificationCreationTests(TestCase):
