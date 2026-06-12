@@ -1,0 +1,281 @@
+:root {
+    --tableos-cream: #fbf7f1;
+    --tableos-paper: rgba(255, 252, 247, 0.94);
+    --tableos-ink: #2f241d;
+    --tableos-muted: #736154;
+    --tableos-border: rgba(122, 92, 63, 0.14);
+    --tableos-shadow: 0 18px 50px rgba(58, 41, 29, 0.08);
+    --tableos-hero-shadow: 0 24px 60px rgba(66, 40, 15, 0.12);
+    --tableos-gradient: radial-gradient(circle at top left, rgba(255, 214, 153, 0.28), transparent 38%),
+        radial-gradient(circle at right 20%, rgba(181, 131, 90, 0.12), transparent 32%),
+        linear-gradient(180deg, #fffaf3 0%, #f8f2ea 100%);
+}
+
+body {
+    background:
+        radial-gradient(circle at 12% 0%, rgba(255, 226, 182, 0.35), transparent 24%),
+        radial-gradient(circle at 88% 8%, rgba(203, 150, 104, 0.15), transparent 18%),
+        linear-gradient(180deg, #fcf8f2 0%, #f5efe7 100%);
+}
+
+#nav-sidebar-inner {
+    background:
+        linear-gradient(180deg, rgba(255, 251, 245, 0.98) 0%, rgba(248, 242, 235, 0.96) 100%);
+    border-right: 1px solid rgba(114, 82, 55, 0.12);
+}
+
+#header {
+    backdrop-filter: blur(18px);
+    background: rgba(255, 251, 246, 0.8);
+    border-bottom: 1px solid rgba(114, 82, 55, 0.12);
+}
+
+#site-name {
+    min-width: 0;
+}
+
+.tableos-brand {
+    align-items: center;
+    display: inline-flex;
+    gap: 0.875rem;
+    min-width: 0;
+    text-decoration: none;
+}
+
+.tableos-brand__mark {
+    align-items: center;
+    background: linear-gradient(135deg, #c66f3d 0%, #91512f 100%);
+    border-radius: 16px;
+    box-shadow: 0 12px 30px rgba(144, 82, 45, 0.22);
+    color: #fffaf5;
+    display: inline-flex;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    height: 2.5rem;
+    justify-content: center;
+    letter-spacing: 0.06em;
+    width: 2.5rem;
+}
+
+.tableos-brand__copy {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.05;
+    min-width: 0;
+}
+
+.tableos-brand__title {
+    color: var(--tableos-ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+}
+
+.tableos-brand__subtitle {
+    color: var(--tableos-muted);
+    font-size: 0.73rem;
+    margin-top: 0.18rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.tableos-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.tableos-hero {
+    background: var(--tableos-gradient);
+    border: 1px solid rgba(171, 130, 89, 0.18);
+    border-radius: 1.5rem;
+    box-shadow: var(--tableos-hero-shadow);
+    overflow: hidden;
+    padding: 1.75rem;
+    position: relative;
+}
+
+.tableos-hero::after {
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.42), transparent 42%);
+    content: "";
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+}
+
+.tableos-hero__eyebrow {
+    color: #8f5d35;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    margin-bottom: 0.75rem;
+    position: relative;
+    text-transform: uppercase;
+    z-index: 1;
+}
+
+.tableos-hero__title {
+    color: var(--tableos-ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.8rem, 3vw, 2.6rem);
+    line-height: 1.02;
+    margin: 0;
+    max-width: 13ch;
+    position: relative;
+    z-index: 1;
+}
+
+.tableos-hero__text {
+    color: #5f4b3e;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin: 1rem 0 0;
+    max-width: 44rem;
+    position: relative;
+    z-index: 1;
+}
+
+.tableos-hero__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin: 1.25rem 0 0;
+    position: relative;
+    z-index: 1;
+}
+
+.tableos-hero__chip {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(158, 118, 81, 0.18);
+    border-radius: 999px;
+    color: #6f513c;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.48rem 0.8rem;
+}
+
+.tableos-dashboard__grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+    .tableos-dashboard__grid {
+        align-items: flex-start;
+        flex-direction: row;
+    }
+}
+
+#content-main .module,
+.result-list-wrapper > .grow > div > .border,
+.result-list-wrapper > .grow > .border,
+.inline-group .tabular,
+.inline-group .inline-related,
+.submit-row,
+.results,
+#changelist .result-list-wrapper > .grow > form,
+#changelist .result-list-wrapper > .grow > div[class*="border"] {
+    background: var(--tableos-paper);
+    border: 1px solid var(--tableos-border);
+    border-radius: 1.35rem;
+    box-shadow: var(--tableos-shadow);
+}
+
+#content-main form,
+#changelist-form {
+    gap: 1rem;
+}
+
+fieldset.module {
+    background: rgba(255, 252, 247, 0.76);
+    border: 1px solid rgba(134, 101, 70, 0.12);
+    border-radius: 1.1rem;
+    padding: 0.35rem 0.4rem 0.4rem;
+}
+
+fieldset.module h2 {
+    color: var(--tableos-ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1rem;
+    letter-spacing: 0.01em;
+}
+
+fieldset.module .leading-relaxed {
+    background: rgba(249, 239, 227, 0.72);
+    border: 1px solid rgba(165, 126, 90, 0.14);
+    border-radius: 0.95rem;
+    color: #6a5244;
+    margin: 0.9rem 0 1rem;
+    padding: 0.85rem 0.95rem;
+}
+
+#tabs-items,
+[x-data*="activeFieldsetTab"] nav {
+    background: rgba(244, 235, 225, 0.9);
+    border: 1px solid rgba(134, 101, 70, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+#tabs-items .active,
+[x-data*="activeFieldsetTab"] nav .active {
+    background: #fffdf9;
+    color: #9a4f26;
+}
+
+.result-list table tbody tr.data-row {
+    border-radius: 1rem;
+    overflow: hidden;
+}
+
+.result-list table tbody tr.data-row:hover {
+    box-shadow: 0 12px 30px rgba(66, 40, 15, 0.07);
+    transform: translateY(-1px);
+    transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.field-operations_links a,
+.field-telegram_start_links a {
+    color: #a54f22;
+    font-weight: 600;
+}
+
+textarea,
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="url"],
+select {
+    border-radius: 0.9rem;
+}
+
+.submit-row {
+    padding: 1rem 1.2rem;
+}
+
+.submit-row input,
+.submit-row a,
+.object-tools a,
+.field-operations_links a {
+    border-radius: 999px;
+}
+
+.breadcrumbs {
+    color: #7b6554;
+}
+
+.breadcrumbs a {
+    color: #9a4f26;
+}
+
+@media (max-width: 768px) {
+    .tableos-brand__subtitle {
+        display: none;
+    }
+
+    .tableos-hero {
+        padding: 1.25rem;
+    }
+}

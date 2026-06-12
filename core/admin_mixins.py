@@ -37,6 +37,8 @@ class ScopedAdminMixin(admin.ModelAdmin):
     """Reusable admin guard that scopes partner data and section permissions."""
 
     admin_section: str = ""
+    save_on_top = True
+    list_per_page = 25
     partner_filter: str | None = "partner_id"
     scope_partner_field: str | None = "partner"
     platform_only: bool = False

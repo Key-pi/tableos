@@ -42,8 +42,9 @@ class TableAdmin(ScopedAdminMixin):
     actions = ("create_shared_bill_action", "create_personal_bills_action")
     fieldsets = (
         (
-            None,
+            "Основа",
             {
+                "classes": ("tab",),
                 "fields": (
                     "partner",
                     "number",
@@ -54,8 +55,13 @@ class TableAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "QR / Telegram",
+            "QR и Telegram",
             {
+                "classes": ("tab",),
+                "description": (
+                    "Здесь собраны все deep link и QR-данные, которые менеджер обычно "
+                    "копирует, проверяет или отдаёт в печать."
+                ),
                 "fields": (
                     "qr_token",
                     "deep_link_payload",
@@ -67,8 +73,12 @@ class TableAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Table Operations",
+            "Операции",
             {
+                "classes": ("tab",),
+                "description": (
+                    "Краткая витрина по живым сессиям, заказам и счетам прямо из карточки стола."
+                ),
                 "fields": (
                     "operations_links",
                     "active_sessions_summary",
@@ -78,6 +88,7 @@ class TableAdmin(ScopedAdminMixin):
             },
         ),
     )
+    save_on_top = True
 
     def get_queryset(self, request):
         return super().get_queryset(request).prefetch_related("partner__bot_instances")

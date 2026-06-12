@@ -35,8 +35,9 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
     )
     fieldsets = (
         (
-            None,
+            "Профиль",
             {
+                "classes": ("tab",),
                 "fields": (
                     "partner",
                     "user",
@@ -48,8 +49,9 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Compensation",
+            "Оплата",
             {
+                "classes": ("tab",),
                 "fields": (
                     "hourly_rate",
                     "commission_rate",
@@ -57,8 +59,9 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Bot notifications",
+            "Уведомления",
             {
+                "classes": ("tab",),
                 "fields": (
                     "bot_notifications_enabled",
                     "notify_on_order_created",
@@ -73,6 +76,7 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
             },
         ),
     )
+    save_on_top = True
 
     @admin.display(description="Telegram")
     def telegram_binding(self, obj: EmployeeProfile) -> str:

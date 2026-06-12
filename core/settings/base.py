@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+from core.admin_ui import get_admin_sidebar_navigation
 from core.logging.config import LOGGING
 from core.settings.env import app_settings
 
@@ -72,6 +73,7 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -87,9 +89,49 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGGING = LOGGING
 
 UNFOLD = {
-    "SITE_TITLE": "tableos",
-    "SITE_HEADER": "tableos admin",
+    "SITE_TITLE": "TableOS Control Room",
+    "SITE_HEADER": "TableOS Control Room",
+    "SITE_SUBHEADER": "partner operations and bot content",
     "SITE_SYMBOL": "table_restaurant",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    "SHOW_BACK_BUTTON": True,
+    "BORDER_RADIUS": "1rem",
+    "THEME": "light",
+    "COLORS": {
+        "base": {
+            "50": "#fcf8f2",
+            "100": "#f7efe4",
+            "200": "#ecdfcf",
+            "300": "#dcc5ae",
+            "400": "#c4a383",
+            "500": "#aa805b",
+            "600": "#8c6547",
+            "700": "#6f4e37",
+            "800": "#563d2e",
+            "900": "#3f2e24",
+            "950": "#261a15",
+        },
+        "primary": {
+            "50": "#fff4eb",
+            "100": "#ffe5d2",
+            "200": "#ffc9a8",
+            "300": "#f7a977",
+            "400": "#e88747",
+            "500": "#c96a2f",
+            "600": "#a75324",
+            "700": "#86401f",
+            "800": "#6f341e",
+            "900": "#5c2d1c",
+            "950": "#34170e",
+        },
+    },
+    "STYLES": [f"/{STATIC_URL}admin/css/tableos-admin.css"],
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": get_admin_sidebar_navigation,
+    },
 }
 
 BOT_TOKEN_ENCRYPTION_KEY = app_settings.bot_token_encryption_key

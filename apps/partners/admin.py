@@ -6,6 +6,105 @@ from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 
 
+PARTNER_BOT_SETTINGS_ADMIN_FIELDSETS = (
+    (
+        "Модули",
+        {
+            "classes": ("tab",),
+            "description": (
+                "Включайте только те сценарии, которые реально нужны партнёру: "
+                "зал, меню, корзину, биллинг, staff flow и маркетинговые инструменты."
+            ),
+            "fields": (
+                "module_loyalty_enabled",
+                "module_menu_enabled",
+                "module_tables_enabled",
+                "module_delivery_enabled",
+                "module_pickup_enabled",
+                "module_orders_enabled",
+                "module_cart_enabled",
+                "module_billing_enabled",
+                "module_staff_call_enabled",
+                "module_quick_sale_enabled",
+                "module_reports_enabled",
+                "module_broadcasts_enabled",
+            ),
+        },
+    ),
+    (
+        "Поведение",
+        {
+            "classes": ("tab",),
+            "description": (
+                "Тонкая настройка guest-flow, staff call и post-payment поведения."
+            ),
+            "fields": (
+                "auto_close_table_session_after_payment",
+                "max_menu_items_per_category_message",
+                "duplicate_request_cooldown_seconds",
+                "allow_menu_without_session",
+                "staff_call_waiter_enabled",
+                "staff_call_bartender_enabled",
+                "staff_call_hookah_enabled",
+                "extra_config",
+            ),
+        },
+    ),
+    (
+        "Кнопки",
+        {
+            "classes": ("tab",),
+            "description": (
+                "Все ключевые CTA партнёр может адаптировать под свой tone of voice."
+            ),
+            "fields": (
+                "button_menu_label",
+                "button_session_label",
+                "button_cart_label",
+                "button_checkout_label",
+                "button_delivery_label",
+                "button_pickup_label",
+                "button_help_label",
+                "button_my_profile",
+                "button_call_staff_label",
+                "button_request_bill_label",
+                "button_call_waiter_label",
+                "button_call_bartender_label",
+                "button_call_hookah_label",
+            ),
+        },
+    ),
+    (
+        "Сообщения",
+        {
+            "classes": ("tab",),
+            "description": (
+                "Шаблоны welcome, menu, cart и order-сообщений. Переменные остаются "
+                "тем же runtime-контрактом, меняется только подача."
+            ),
+            "fields": (
+                "welcome_message_template",
+                "table_activated_message_template",
+                "menu_header_template",
+                "menu_requires_session_hint_template",
+                "menu_active_session_hint_template",
+                "menu_empty_message_template",
+                "ordering_help_message_template",
+                "cart_empty_message_template",
+                "cart_cleared_message_template",
+                "staff_call_prompt_template",
+                "staff_call_success_template",
+                "request_bill_prompt_template",
+                "request_bill_personal_success_template",
+                "request_bill_shared_success_template",
+                "request_bill_custom_success_template",
+                "order_created_message_template",
+            ),
+        },
+    ),
+)
+
+
 class PartnerBotSettingsInline(admin.StackedInline):
     model = PartnerBotSettings
     extra = 0
@@ -71,7 +170,6 @@ class PartnerBotSettingsInline(admin.StackedInline):
             "Behavior",
             {
                 "fields": (
-                    "allow_multiple_active_sessions_per_guest",
                     "auto_close_table_session_after_payment",
                     "max_menu_items_per_category_message",
                     "duplicate_request_cooldown_seconds",
@@ -247,7 +345,8 @@ class PartnerBotSettingsAdmin(ScopedAdminMixin):
         "allow_menu_without_session",
     )
     search_fields = ("partner__name", "partner__slug")
-    fieldsets = PartnerBotSettingsInline.fieldsets
+    fieldsets = PARTNER_BOT_SETTINGS_ADMIN_FIELDSETS
+    save_on_top = True
 
     def get_search_fields(self, request):
         if request.user.is_superuser:

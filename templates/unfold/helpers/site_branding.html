@@ -1,0 +1,15 @@
+{% load i18n %}
+
+<div id="site-name">
+    <a href="{% url 'admin:index' %}" class="tableos-brand">
+        <span class="tableos-brand__mark">T</span>
+        <span class="tableos-brand__copy">
+            <span class="tableos-brand__title">
+                {{ site_header|default:_('Django administration') }}
+            </span>
+            {% if site_subheader %}
+                <span class="tableos-brand__subtitle">{{ site_subheader }}</span>
+            {% endif %}
+        </span>
+    </a>
+</div>

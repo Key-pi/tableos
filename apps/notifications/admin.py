@@ -24,6 +24,31 @@ class NotificationPreferenceAdmin(ScopedAdminMixin):
 @admin.register(BroadcastCampaign)
 class BroadcastCampaignAdmin(ScopedAdminMixin):
     admin_section = AdminSection.NOTIFICATIONS
+    fieldsets = (
+        (
+            "Кампания",
+            {
+                "classes": ("tab",),
+                "fields": ("partner", "name", "message", "scheduled_at", "status"),
+            },
+        ),
+        (
+            "Доставка",
+            {
+                "classes": ("tab",),
+                "description": (
+                    "Служебное состояние отправки и counters обновляются автоматически."
+                ),
+                "fields": (
+                    "delivered_count",
+                    "failed_count",
+                    "last_error",
+                    "delivery_started_at",
+                    "sent_at",
+                ),
+            },
+        ),
+    )
     list_display = (
         "name",
         "partner",
@@ -43,6 +68,7 @@ class BroadcastCampaignAdmin(ScopedAdminMixin):
         "sent_at",
     )
     actions = ("send_now",)
+    save_on_top = True
 
     @admin.action(description=_("Queue selected campaigns for sending"))
     def send_now(self, request, queryset):

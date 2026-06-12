@@ -80,8 +80,9 @@ class WalkInSaleAdmin(ScopedAdminMixin):
     )
     fieldsets = (
         (
-            None,
+            "Продажа",
             {
+                "classes": ("tab",),
                 "fields": (
                     "partner",
                     "customer_code_input",
@@ -91,8 +92,12 @@ class WalkInSaleAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Resolved loyalty data",
+            "Результат",
             {
+                "classes": ("tab",),
+                "description": (
+                    "После сохранения здесь видна привязка к гостю и начисленные бонусы."
+                ),
                 "fields": (
                     "guest",
                     "customer_code_snapshot",
@@ -104,6 +109,7 @@ class WalkInSaleAdmin(ScopedAdminMixin):
             },
         ),
     )
+    save_on_top = True
 
     def get_form(self, request, obj=None, change=False, **kwargs):
         form_class = super().get_form(request, obj, change, **kwargs)

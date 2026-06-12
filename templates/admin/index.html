@@ -1,0 +1,30 @@
+{% extends "admin/base_site.html" %}
+
+{% load i18n %}
+
+{% block content %}
+    <div class="tableos-dashboard">
+        <section class="tableos-hero">
+            <div class="tableos-hero__eyebrow">TableOS admin</div>
+            <h1 class="tableos-hero__title">Операции, контент и бот-потоки в одном ритме</h1>
+            <p class="tableos-hero__text">
+                Здесь удобно держать под рукой зал, меню, заказы, платежи и partner-настройки
+                без ощущения перегруженной служебной панели.
+            </p>
+            <div class="tableos-hero__chips">
+                <span class="tableos-hero__chip">Партнёры и боты</span>
+                <span class="tableos-hero__chip">Каталог и зал</span>
+                <span class="tableos-hero__chip">Заказы и счета</span>
+                <span class="tableos-hero__chip">Лояльность и рассылки</span>
+            </div>
+        </section>
+
+        <div class="tableos-dashboard__grid">
+            <div class="grow">
+                {% include "unfold/helpers/app_list_default.html" %}
+            </div>
+
+            {% include "unfold/helpers/history.html" %}
+        </div>
+    </div>
+{% endblock %}

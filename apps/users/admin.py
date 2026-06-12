@@ -56,11 +56,17 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
 
     fieldsets = (
         (None, {"fields": ("username", "password")}),
-        ("Personal info", {"fields": ("first_name", "last_name", "email")}),
-        ("Partner", {"fields": ("partner", "role")}),
         (
-            "Permissions",
+            "Профиль",
             {
+                "classes": ("tab",),
+                "fields": ("first_name", "last_name", "email", "partner", "role"),
+            },
+        ),
+        (
+            "Доступ",
+            {
+                "classes": ("tab",),
                 "fields": (
                     "is_active",
                     "is_staff",
@@ -70,7 +76,13 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
                 )
             },
         ),
-        ("Important dates", {"fields": ("last_login", "date_joined")}),
+        (
+            "Активность",
+            {
+                "classes": ("tab",),
+                "fields": ("last_login", "date_joined"),
+            },
+        ),
     )
     add_fieldsets = (
         (
@@ -91,6 +103,7 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
             },
         ),
     )
+    save_on_top = True
 
     def get_fieldsets(self, request, obj=None):
         # On the add page Django must use the add_fieldsets (password1/password2),
