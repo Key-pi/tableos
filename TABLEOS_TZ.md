@@ -1747,13 +1747,7 @@ Admin должен позволять:
 - остальные команды-дубликаты убраны: действия доступны кнопками, поэтому изменение label не ломает доступ к функции.
 
 Целевые production-доработки:
-- Проверить что вс
-- пункт 16.1
-- пункт 16.2
-- пункт 16.4
-- zero-downtime reload bot configs;
-- graceful handling blocked users;
-- health status по каждому bot instance;
+
 
 
 
@@ -2163,28 +2157,43 @@ Flow:
 
 При этом Telegram bot должен оставаться fallback-интерфейсом.
 
-### 15.3. POS и fiscal
+[//]: # (### 15.3. POS и fiscal)
 
-Нужно реализовать:
+[//]: # ()
+[//]: # (Нужно реализовать:)
 
-- provider contracts;
-- POS tab sync;
-- external_ref;
-- fiscal receipt creation;
-- retry mechanism;
-- error visibility;
-- reconciliation report.
+[//]: # ()
+[//]: # (- provider contracts;)
 
-### 15.4. Online payments
+[//]: # (- POS tab sync;)
 
-Нужно реализовать:
+[//]: # (- external_ref;)
 
-- payment provider;
-- payment link;
-- callback/webhook от провайдера;
-- idempotency;
-- failed/refunded/canceled states;
-- guest notification after payment.
+[//]: # (- fiscal receipt creation;)
+
+[//]: # (- retry mechanism;)
+
+[//]: # (- error visibility;)
+
+[//]: # (- reconciliation report.)
+
+[//]: # (### 15.4. Online payments)
+
+[//]: # ()
+[//]: # (Нужно реализовать:)
+
+[//]: # ()
+[//]: # (- payment provider;)
+
+[//]: # (- payment link;)
+
+[//]: # (- callback/webhook от провайдера;)
+
+[//]: # (- idempotency;)
+
+[//]: # (- failed/refunded/canceled states;)
+
+[//]: # (- guest notification after payment.)
 
 ### 15.5. Analytics snapshots
 
@@ -2215,17 +2224,6 @@ Flow:
 - reports require billing or quick sale.
 
 ## 16. Риски и важные решения
-
-### 16.1. Кнопки не равны возможностям
-
-Основные кнопки гостя не должны жить отдельными `show_*` флагами. Кнопка появляется из включённого модуля и текущего guest journey.
-
-Пример:
-
-- `module_cart_enabled=false` означает, что кнопку корзины не показываем, а cart handlers отвечают "недоступно";
-- `module_delivery_enabled=true` означает, что в browse/table journey можно показать кнопку "Заказать доставку";
-- `module_pickup_enabled=true` означает, что можно показать кнопку самовывоза;
-- table ordering требует `module_tables_enabled`, `module_menu_enabled` и `module_orders_enabled`.
 
 ### 16.2. Столы не нужны всем
 
@@ -2259,15 +2257,7 @@ Flow:
 
 ## 17. Рекомендуемая очередность развития
 
-### Этап 1. Зафиксировать текущий MVP как продуктовые модули
-
-- привести PartnerBotSettings к явной модульной модели;
-- добавить dependency validation;
-- сделать `supports_cart()` зависящим от настроек;
-- разделить menu-only, loyalty-only, table-ordering flows;
-- обновить тексты `/start` в зависимости от модулей.
-
-### Этап 2. Улучшить UX клиента
+### Этап 1. Улучшить UX клиента
 
 - привести тексты к единому стилю;
 - улучшить "Мой стол";
@@ -2502,8 +2492,6 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - feature flag для tables;
 - авто-expiration сессий;
 
-[//]: # (- сценарий пересадки за другой стол;)
-- более явная логика нескольких гостей за столом в UI.
 
 ### 21.4. Меню
 
@@ -2526,7 +2514,6 @@ QR стола -> активная сессия -> меню -> корзина -> 
 
 Что нужно довести:
 
-- module_menu_enabled;
 - bulk import;
 - preview меню;
 - стоп-листы;
@@ -2562,13 +2549,10 @@ QR стола -> активная сессия -> меню -> корзина -> 
 
 Что нужно довести:
 
-- module_cart_enabled и module_orders_enabled;
-- гостевая отмена до accepted, если продуктово нужна;
 - комментарии к позициям из UI;
-- более точное разделение preparing/delivering в UX;
 - настройка, какие staff роли могут менять статусы.
 
-### 21.6. Счета и оплаты
+### 21.6. Счета и оплаты это на последок
 
 Основные файлы:
 
