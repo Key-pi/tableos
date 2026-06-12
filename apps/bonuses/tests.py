@@ -141,6 +141,47 @@ class WalkInSaleServiceTests(TestCase):
             ).exists()
         )
 
+    def test_preview_walk_in_sale_with_empty_code_is_anonymous(self):
+        preview = preview_walk_in_sale_by_customer_code(
+            partner_id=self.partner.id,
+            customer_code="",
+            items=[
+                {"menu_item_id": self.coffee.id, "quantity": 2},
+            ],
+        )
+
+        self.assertIsNone(preview.guest)
+        self.assertEqual(preview.total_amount, Decimal("180.00"))
+        self.assertEqual(preview.projected_bonus_amount, Decimal("0.00"))
+
+    def test_register_walk_in_sale_from_menu_items_anonymous(self):
+        sale = register_walk_in_sale_from_menu_items_by_customer_code(
+            partner_id=self.partner.id,
+            customer_code="",
+            items=[
+                {"menu_item_id": self.coffee.id, "quantity": 1},
+                {"menu_item_id": self.tea.id, "quantity": 1},
+            ],
+            comment="Аноним у бара",
+        )
+
+        self.assertIsNone(sale.guest)
+        self.assertEqual(sale.customer_code_snapshot, "")
+        self.assertEqual(sale.loyalty_label, "Аноним")
+        self.assertEqual(sale.amount, Decimal("170.00"))
+        self.assertEqual(sale.bonus_awarded_amount, Decimal("0.00"))
+        self.assertEqual(sale.items.count(), 2)
+
+    def test_register_walk_in_sale_by_code_rejects_unknown_code(self):
+        from apps.bonuses.services import BonusServiceError
+
+        with self.assertRaises(BonusServiceError):
+            register_walk_in_sale_by_customer_code(
+                partner_id=self.partner.id,
+                customer_code="NOPE99",
+                amount="100.00",
+            )
+
     def test_register_walk_in_sale_from_menu_items_preserves_comment(self):
         sale = register_walk_in_sale_from_menu_items_by_customer_code(
             partner_id=self.partner.id,

@@ -1418,25 +1418,11 @@ Shortcut:
 Текущие поля:
 
 - allow_menu_without_session;
-- show_help_button;
-- show_session_button;
-- show_cart_button;
-- show_checkout_button;
-- show_loyalty_button;
-- show_call_staff_button;
-- show_request_bill_button;
-- staff_call_waiter_enabled;
-- staff_call_bartender_enabled;
-- staff_call_hookah_enabled;
-- guest_flow_code;
-- staff_flow_code;
-- extra_config.
-
-Целевое расширение:
-
-- module_loyalty_enabled, всегда true для базового тарифа;
+- module_loyalty_enabled;
 - module_menu_enabled;
 - module_tables_enabled;
+- module_delivery_enabled;
+- module_pickup_enabled;
 - module_cart_enabled;
 - module_orders_enabled;
 - module_billing_enabled;
@@ -1444,10 +1430,23 @@ Shortcut:
 - module_quick_sale_enabled;
 - module_reports_enabled;
 - module_broadcasts_enabled;
-- ordering_mode: disabled, table, delivery, pickup, mixed;
-- require_table_for_order;
-- allow_multiple_active_sessions_per_guest, по умолчанию false;
+- allow_multiple_active_sessions_per_guest;
 - auto_close_table_session_after_payment;
+- max_menu_items_per_category_message;
+- duplicate_request_cooldown_seconds;
+- staff_call_waiter_enabled;
+- staff_call_bartender_enabled;
+- staff_call_hookah_enabled;
+- extra_config.
+
+Целевое расширение:
+
+- delivery и pickup должны быть такими же модулями, как tables/menu/cart;
+- не должно быть отдельного select-режима заказа, потому что партнёр может одновременно включить заказ за столом, доставку и самовывоз;
+- не должно быть отдельных флагов показа для основных кнопок: если модуль включён и доступен в текущем guest journey, кнопка показывается;
+- команда/handler для выключенного модуля должен давать понятный fallback, а не ломать flow;
+- preview/validation настроек в админке;
+- тарифные ограничения модулей.
 - max_menu_items_per_category_message;
 - duplicate_request_cooldown_seconds.
 
@@ -1472,7 +1471,6 @@ Shortcut:
 - все labels должны иметь дефолт;
 - пустое поле должно fallback-иться на дефолт;
 - label не должен ломать handler-фильтр;
-- при изменении label старые кнопки могут перестать матчиться, поэтому желательно поддержать командные fallback: `/menu`, `/cart`, `/profile`, `/bill`, `/call_staff`;
 - длинные labels стоит ограничивать или валидировать в admin.
 
 ### 8.3. Шаблоны сообщений
@@ -1745,7 +1743,8 @@ Admin должен позволять:
 - handlers не должны принимать partner_id от пользователя;
 - все Django ORM вызовы из aiogram должны быть через `sync_to_async`;
 - все тексты и кнопки должны идти через BotContent;
-- команды должны оставаться fallback даже если labels поменялись.
+- весь пользовательский интерфейс строится на кнопках (reply + inline); из команд остаются только `/start` (вход и QR deep links) и `/staff` (вход в staff-режим);
+- остальные команды-дубликаты убраны: действия доступны кнопками, поэтому изменение label не ломает доступ к функции.
 
 Целевые production-доработки:
 - Проверить что вс
@@ -1960,7 +1959,7 @@ Flow:
 - menu enabled;
 - tables enabled;
 - cart/orders enabled;
-- require_table_for_order true;
+- table ordering доступен через включённый tables module;
 - billing optional;
 - staff call optional.
 
@@ -2219,12 +2218,14 @@ Flow:
 
 ### 16.1. Кнопки не равны возможностям
 
-Сейчас есть поля `show_cart_button`, `show_checkout_button`, но `supports_cart()` всегда true. Целевое решение: разделить отображение кнопки и доступность модуля.
+Основные кнопки гостя не должны жить отдельными `show_*` флагами. Кнопка появляется из включённого модуля и текущего guest journey.
 
 Пример:
 
-- `module_cart_enabled=false` означает, что cart handlers должны отвечать "недоступно";
-- `show_cart_button=false` означает, что кнопку не показываем, но команда `/cart` может дать fallback.
+- `module_cart_enabled=false` означает, что кнопку корзины не показываем, а cart handlers отвечают "недоступно";
+- `module_delivery_enabled=true` означает, что в browse/table journey можно показать кнопку "Заказать доставку";
+- `module_pickup_enabled=true` означает, что можно показать кнопку самовывоза;
+- table ordering требует `module_tables_enabled`, `module_menu_enabled` и `module_orders_enabled`.
 
 ### 16.2. Столы не нужны всем
 
@@ -2438,8 +2439,8 @@ QR стола -> активная сессия -> меню -> корзина -> 
 
 Что нужно довести до целевой модели:
 
-- добавить явные module flags;
-- разделить "кнопку показывать" и "модуль включён";
+- держать delivery/pickup/table/cart/orders как явные module flags;
+- выводить основные кнопки из включённых модулей и текущего guest journey;
 - сделать preview/validation настроек;
 - реализовать webhook runtime позже.
 

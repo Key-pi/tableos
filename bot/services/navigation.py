@@ -19,6 +19,8 @@ class GuestAction:
     SESSION = "session"
     CART = "cart"
     CHECKOUT = "checkout"
+    DELIVERY = "delivery"
+    PICKUP = "pickup"
     PROFILE = "profile"
     HELP = "help"
     CALL_STAFF = "call_staff"
@@ -44,12 +46,20 @@ def resolve_guest_navigation_state(
     telegram_id: int,
     content,
 ) -> GuestNavigationState:
-    session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
+    session = None
+    if content.supports_tables():
+        session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
     if session is None:
-        actions = [GuestAction.MENU]
-        if content.show_loyalty_button:
+        actions = []
+        if content.supports_menu():
+            actions.append(GuestAction.MENU)
+        if content.supports_delivery_orders():
+            actions.append(GuestAction.DELIVERY)
+        if content.supports_pickup_orders():
+            actions.append(GuestAction.PICKUP)
+        if content.supports_loyalty():
             actions.append(GuestAction.PROFILE)
-        if content.show_help_button:
+        if content.supports_help():
             actions.append(GuestAction.HELP)
         return GuestNavigationState(
             journey=GuestJourney.BROWSE,
@@ -77,16 +87,22 @@ def resolve_guest_navigation_state(
     ).exists()
     has_billable_activity = has_billable_orders or has_open_bills
 
-    actions = [GuestAction.MENU]
-    if content.show_session_button:
+    actions = []
+    if content.supports_menu():
+        actions.append(GuestAction.MENU)
+    if content.supports_tables():
         actions.append(GuestAction.SESSION)
-    if content.supports_cart() and content.show_cart_button:
+    if content.supports_cart():
         actions.append(GuestAction.CART)
-    if has_active_cart and content.supports_cart() and content.show_checkout_button:
+    if has_active_cart and content.supports_cart():
         actions.append(GuestAction.CHECKOUT)
-    if content.show_loyalty_button:
+    if content.supports_delivery_orders():
+        actions.append(GuestAction.DELIVERY)
+    if content.supports_pickup_orders():
+        actions.append(GuestAction.PICKUP)
+    if content.supports_loyalty():
         actions.append(GuestAction.PROFILE)
-    if content.show_help_button:
+    if content.supports_help():
         actions.append(GuestAction.HELP)
     if content.supports_staff_call():
         actions.append(GuestAction.CALL_STAFF)

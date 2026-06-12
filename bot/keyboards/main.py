@@ -20,6 +20,8 @@ def build_main_keyboard(
                     GuestAction.SESSION,
                     GuestAction.CART,
                     GuestAction.CHECKOUT,
+                    GuestAction.DELIVERY,
+                    GuestAction.PICKUP,
                     GuestAction.PROFILE,
                     GuestAction.HELP,
                     GuestAction.CALL_STAFF,
@@ -28,6 +30,8 @@ def build_main_keyboard(
                 if has_active_session
                 else (
                     GuestAction.MENU,
+                    GuestAction.DELIVERY,
+                    GuestAction.PICKUP,
                     GuestAction.PROFILE,
                     GuestAction.HELP,
                 )
@@ -36,10 +40,13 @@ def build_main_keyboard(
         )
     rows: list[list[KeyboardButton]] = []
 
-    first_row = [KeyboardButton(text=content.button_menu_label)]
+    first_row = []
+    if navigation_state.has_action(GuestAction.MENU):
+        first_row.append(KeyboardButton(text=content.button_menu_label))
     if navigation_state.has_action(GuestAction.SESSION):
         first_row.append(KeyboardButton(text=content.button_session_label))
-    rows.append(first_row)
+    if first_row:
+        rows.append(first_row)
 
     second_row = []
     if navigation_state.has_action(GuestAction.CART):
@@ -49,9 +56,17 @@ def build_main_keyboard(
     if second_row:
         rows.append(second_row)
 
+    order_journey_row = []
+    if navigation_state.has_action(GuestAction.DELIVERY):
+        order_journey_row.append(KeyboardButton(text=content.button_delivery_label))
+    if navigation_state.has_action(GuestAction.PICKUP):
+        order_journey_row.append(KeyboardButton(text=content.button_pickup_label))
+    if order_journey_row:
+        rows.append(order_journey_row)
+
     third_row = []
     if navigation_state.has_action(GuestAction.PROFILE):
-        third_row.append(KeyboardButton(text=content.button_loyalty_label))
+        third_row.append(KeyboardButton(text=content.button_my_profile))
     if navigation_state.has_action(GuestAction.HELP):
         third_row.append(KeyboardButton(text=content.button_help_label))
     if third_row:

@@ -7,6 +7,7 @@ def build_menu_keyboard(
     active_category_id,
     items,
     has_session: bool,
+    supports_cart: bool = True,
 ) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
 
@@ -25,7 +26,7 @@ def build_menu_keyboard(
     if category_row:
         rows.append(category_row)
 
-    if has_session:
+    if has_session and supports_cart:
         for item in items:
             rows.append(
                 [

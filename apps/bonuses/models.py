@@ -120,7 +120,7 @@ class WalkInSale(PartnerBoundModel):
     def loyalty_label(self) -> str:
         if self.customer_code_snapshot:
             return self.customer_code_snapshot
-        return "anonymous"
+        return "Аноним"
 
 
 class WalkInSaleItem(PartnerBoundModel):

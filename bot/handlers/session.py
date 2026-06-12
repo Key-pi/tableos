@@ -1,5 +1,4 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
@@ -133,7 +132,6 @@ def _build_guest_order_card_text(order: Order) -> str:
     return "\n".join(lines)
 
 
-@router.message(Command("session"))
 @router.message(PartnerButtonFilter("button_session_label"))
 async def session_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)

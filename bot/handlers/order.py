@@ -1,5 +1,4 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
@@ -72,7 +71,40 @@ async def _send_navigation_keyboard_message(
     )
 
 
-@router.message(Command("cart"))
+@router.message(PartnerButtonFilter("button_delivery_label"))
+async def delivery_handler(message: Message, bot: Bot) -> None:
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    if not content.supports_delivery_orders():
+        text = "Доставка сейчас отключена для этого бота."
+    else:
+        text = "Сценарий доставки включён в настройках и будет доступен в следующем шаге."
+    await _send_navigation_keyboard_message(
+        message=message,
+        partner_id=partner.id,
+        telegram_id=message.from_user.id,
+        content=content,
+        text=text,
+    )
+
+
+@router.message(PartnerButtonFilter("button_pickup_label"))
+async def pickup_handler(message: Message, bot: Bot) -> None:
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    if not content.supports_pickup_orders():
+        text = "Самовывоз сейчас отключён для этого бота."
+    else:
+        text = "Сценарий самовывоза включён в настройках и будет доступен в следующем шаге."
+    await _send_navigation_keyboard_message(
+        message=message,
+        partner_id=partner.id,
+        telegram_id=message.from_user.id,
+        content=content,
+        text=text,
+    )
+
+
 @router.message(PartnerButtonFilter("button_cart_label"))
 async def cart_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
@@ -107,49 +139,6 @@ async def cart_handler(message: Message, bot: Bot) -> None:
     )
 
 
-@router.message(Command("cart_clear"))
-async def clear_cart_handler(message: Message, bot: Bot) -> None:
-    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
-    content = await sync_to_async(BotContent.for_partner)(partner)
-    navigation_state = await sync_to_async(resolve_guest_navigation_state)(
-        partner_id=partner.id,
-        telegram_id=message.from_user.id,
-        content=content,
-    )
-    try:
-        _ensure_cart_enabled(content)
-    except OrderFlowError as exc:
-        await message.answer(
-            str(exc),
-            reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
-        )
-        return
-    try:
-        await sync_to_async(clear_active_cart_for_telegram_user)(
-            partner_id=partner.id,
-            telegram_id=message.from_user.id,
-        )
-    except OrderFlowError as exc:
-        await message.answer(
-            str(exc),
-            reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
-        )
-        return
-
-    await message.answer(
-        content.cart_cleared_message_template,
-        reply_markup=build_main_keyboard(
-            content,
-            navigation_state=await sync_to_async(resolve_guest_navigation_state)(
-                partner_id=partner.id,
-                telegram_id=message.from_user.id,
-                content=content,
-            ),
-        ),
-    )
-
-
-@router.message(Command("checkout"))
 @router.message(PartnerButtonFilter("button_checkout_label"))
 async def checkout_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)

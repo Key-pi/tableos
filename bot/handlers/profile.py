@@ -1,5 +1,4 @@
 from aiogram import Bot, Router
-from aiogram.filters import Command
 from aiogram.types import Message
 from asgiref.sync import sync_to_async
 
@@ -84,10 +83,8 @@ def _render_profile_summary(
     return "\n".join(lines)
 
 
-@router.message(Command("bonus"))
-@router.message(Command("profile"))
-@router.message(PartnerButtonFilter("button_loyalty_label"))
-async def loyalty_handler(message: Message, bot: Bot) -> None:
+@router.message(PartnerButtonFilter("button_my_profile"))
+async def profile_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
     guest_profile = await sync_to_async(get_or_create_guest_profile)(

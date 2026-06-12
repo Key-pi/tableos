@@ -398,6 +398,7 @@ def create_billing_request_for_telegram_user(
     partner_id,
     telegram_id: int,
     request_type: str,
+    cooldown_seconds: int = 45,
 ) -> BillingRequestResult:
     table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
     if table_session is None:
@@ -410,7 +411,7 @@ def create_billing_request_for_telegram_user(
         table_session=table_session,
         guest=table_session.guest,
         request_type=request_type,
-        created_at__gte=timezone.now() - timedelta(seconds=45),
+        created_at__gte=timezone.now() - timedelta(seconds=cooldown_seconds),
         status__in=[BillingRequest.Status.OPEN, BillingRequest.Status.AUTO_PREPARED],
     ).exists()
     if recent_duplicate:

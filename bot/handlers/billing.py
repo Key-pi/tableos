@@ -1,5 +1,4 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
@@ -22,8 +21,6 @@ async def _resolve_partner_and_content(bot: Bot):
     return partner, content
 
 
-@router.message(Command("bill"))
-@router.message(Command("request_bill"))
 @router.message(PartnerButtonFilter("button_request_bill_label"))
 async def request_bill_handler(message: Message, bot: Bot) -> None:
     partner, content = await _resolve_partner_and_content(bot)
@@ -79,6 +76,7 @@ async def request_bill_callback(callback: CallbackQuery, bot: Bot) -> None:
             partner_id=partner.id,
             telegram_id=callback.from_user.id,
             request_type=request_type,
+            cooldown_seconds=content.duplicate_request_cooldown_seconds,
         )
     except BillingServiceError as exc:
         await callback.answer(str(exc), show_alert=True)

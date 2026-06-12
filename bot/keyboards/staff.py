@@ -43,6 +43,7 @@ def build_staff_orders_overview_keyboard(
     can_quick_sale: bool = False,
     can_view_day_report: bool = False,
     can_manage_billing: bool = False,
+    can_view_tables: bool = False,
 ) -> InlineKeyboardMarkup:
     inline_keyboard = [
         [
@@ -71,19 +72,23 @@ def build_staff_orders_overview_keyboard(
                 )
             )
         inline_keyboard.append(row)
-    if can_manage_billing:
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text="Столы",
-                    callback_data="stafftables:refresh",
-                ),
-                InlineKeyboardButton(
-                    text="Счета и оплаты",
-                    callback_data="staffbill:list",
-                )
-            ]
+    billing_row = []
+    if can_view_tables:
+        billing_row.append(
+            InlineKeyboardButton(
+                text="Столы",
+                callback_data="stafftables:refresh",
+            )
         )
+    if can_manage_billing:
+        billing_row.append(
+            InlineKeyboardButton(
+                text="Счета и оплаты",
+                callback_data="staffbill:list",
+            )
+        )
+    if billing_row:
+        inline_keyboard.append(billing_row)
     if can_quick_sale:
         inline_keyboard.append(
             [
@@ -103,6 +108,19 @@ def build_staff_orders_overview_keyboard(
             ]
         )
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
+
+
+def build_staff_sale_code_prompt_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Без кода (Аноним)",
+                    callback_data="staffsale:anon",
+                )
+            ]
+        ]
+    )
 
 
 def build_staff_notifications_keyboard() -> InlineKeyboardMarkup:
@@ -178,32 +196,41 @@ def build_staff_home_keyboard(
     can_quick_sale: bool = False,
     can_view_day_report: bool = False,
     can_manage_billing: bool = False,
+    can_view_orders: bool = True,
+    can_view_tables: bool = False,
 ) -> InlineKeyboardMarkup:
-    inline_keyboard = [
-        [
+    first_row = []
+    if can_view_orders:
+        first_row.append(
             InlineKeyboardButton(
                 text="Открытые заказы",
                 callback_data="stafforders:refresh",
-            ),
-            InlineKeyboardButton(
-                text="Уведомления",
-                callback_data="staffnotif:refresh",
-            ),
-        ],
-    ]
-    if can_manage_billing:
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text="Столы",
-                    callback_data="stafftables:refresh",
-                ),
-                InlineKeyboardButton(
-                    text="Счета и оплаты",
-                    callback_data="staffbill:list",
-                ),
-            ]
+            )
         )
+    first_row.append(
+        InlineKeyboardButton(
+            text="Уведомления",
+            callback_data="staffnotif:refresh",
+        )
+    )
+    inline_keyboard = [first_row]
+    billing_row = []
+    if can_view_tables:
+        billing_row.append(
+            InlineKeyboardButton(
+                text="Столы",
+                callback_data="stafftables:refresh",
+            )
+        )
+    if can_manage_billing:
+        billing_row.append(
+            InlineKeyboardButton(
+                text="Счета и оплаты",
+                callback_data="staffbill:list",
+            )
+        )
+    if billing_row:
+        inline_keyboard.append(billing_row)
     if can_quick_sale:
         inline_keyboard.append(
             [

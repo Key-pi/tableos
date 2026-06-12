@@ -41,7 +41,7 @@ class BillingServiceTests(TestCase):
         )
         PartnerBotSettings.objects.create(
             partner=self.partner,
-            show_request_bill_button=True,
+            module_billing_enabled=True,
         )
         self.bot = BotInstance.objects.create(
             partner=self.partner,

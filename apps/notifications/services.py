@@ -245,6 +245,7 @@ def request_staff_assistance(
     telegram_id: int,
     call_target: str,
     call_target_label: str,
+    cooldown_seconds: int = 45,
 ) -> tuple[int, int]:
     # Validate the delivery channel up front so the guest never sees a
     # successful response when the venue bot is not actually able to notify staff.
@@ -260,7 +261,7 @@ def request_staff_assistance(
         )
 
     table_number = table_session.table.number
-    recent_cutoff = timezone.now() - timedelta(seconds=45)
+    recent_cutoff = timezone.now() - timedelta(seconds=cooldown_seconds)
     recent_duplicate_exists = StaffNotification.objects.filter(
         partner_id=partner_id,
         category=StaffNotification.Category.GUEST_CALL,

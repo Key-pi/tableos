@@ -80,10 +80,12 @@ from bot.keyboards.staff import (
     build_staff_report_summary_keyboard,
     build_staff_report_table_detail_keyboard,
     build_staff_report_walkin_detail_keyboard,
+    build_staff_sale_code_prompt_keyboard,
     build_staff_sale_keyboard,
     build_staff_table_actions_keyboard,
     build_staff_tables_overview_keyboard,
 )
+from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.states.staff_sale import StaffQuickSaleStates
 
@@ -103,20 +105,6 @@ async def _safe_edit_message_text(
             return False
         raise
     return True
-
-
-def _split_staff_status_payload(text: str) -> tuple[str, str, str]:
-    payload = text.partition(" ")[2].strip()
-    status_part, separator, note_raw = payload.partition("|")
-    parts = status_part.split()
-    if len(parts) < 2:
-        raise OrderFlowError(
-            "Используйте формат: /staff_set ORDER_ID STATUS | комментарий"
-        )
-    order_public_id = parts[0].strip().lower()
-    to_status = parts[1].strip().lower()
-    note = note_raw.strip() if separator else ""
-    return order_public_id, to_status, note
 
 
 def _render_open_orders_summary(orders) -> str:
@@ -215,38 +203,64 @@ def _render_staff_notification_card(notification) -> str:
     )
 
 
-def _can_use_quick_sale(employee: EmployeeProfile) -> bool:
-    allowed_roles = {
-        employee.user.Role.OWNER,
-        employee.user.Role.MANAGER,
-        employee.user.Role.CASHIER,
+_STAFF_OPERATIONS_ROLES = frozenset(
+    {
+        "owner",
+        "manager",
+        "cashier",
     }
-    return employee.user.role in allowed_roles
+)
+
+
+def _module_enabled(employee: EmployeeProfile, check) -> bool:
+    # The resolver attaches the partner's BotContent; if it is missing (e.g. a
+    # helper called outside the staff flow) fall back to module-enabled so role
+    # checks stay backward compatible.
+    content = getattr(employee, "bot_content", None)
+    if content is None:
+        return True
+    return check(content)
+
+
+def _can_use_quick_sale(employee: EmployeeProfile) -> bool:
+    return employee.user.role in _STAFF_OPERATIONS_ROLES and _module_enabled(
+        employee, lambda content: content.supports_quick_sale()
+    )
 
 
 def _ensure_quick_sale_allowed(employee: EmployeeProfile) -> None:
-    if not _can_use_quick_sale(employee):
+    if employee.user.role not in _STAFF_OPERATIONS_ROLES:
         raise OrderFlowError(
             "Быстрая продажа сейчас доступна только владельцу, менеджеру или кассиру."
         )
+    if not _module_enabled(employee, lambda content: content.supports_quick_sale()):
+        raise OrderFlowError("Модуль быстрых продаж отключён для этого заведения.")
 
 
 def _can_view_day_report(employee: EmployeeProfile) -> bool:
-    allowed_roles = {
-        employee.user.Role.OWNER,
-        employee.user.Role.MANAGER,
-        employee.user.Role.CASHIER,
-    }
-    return employee.user.role in allowed_roles
+    return employee.user.role in _STAFF_OPERATIONS_ROLES and _module_enabled(
+        employee, lambda content: content.supports_reports()
+    )
 
 
 def _can_manage_billing(employee: EmployeeProfile) -> bool:
-    allowed_roles = {
-        employee.user.Role.OWNER,
-        employee.user.Role.MANAGER,
-        employee.user.Role.CASHIER,
-    }
-    return employee.user.role in allowed_roles
+    return employee.user.role in _STAFF_OPERATIONS_ROLES and _module_enabled(
+        employee, lambda content: content.supports_billing()
+    )
+
+
+def _can_view_open_orders(employee: EmployeeProfile) -> bool:
+    # Open orders feed is available to any staff role; it only depends on whether
+    # the partner runs the orders module (table, delivery, or pickup).
+    return _module_enabled(employee, lambda content: content.supports_orders())
+
+
+def _can_view_tables(employee: EmployeeProfile) -> bool:
+    # The staff tables feed drives per-table billing, so it keeps the billing
+    # capability and additionally requires the tables module to be enabled.
+    return _can_manage_billing(employee) and _module_enabled(
+        employee, lambda content: content.supports_tables()
+    )
 
 
 def _render_day_report(report) -> str:
@@ -684,32 +698,40 @@ def _compose_staff_sale_view(
         has_comment=bool(comment),
     )
 
-    telegram_account = guest_preview.guest.telegram_account
-    guest_identity = (
-        f"@{telegram_account.username}"
-        if telegram_account.username
-        else str(telegram_account.telegram_id)
-    )
-    first_visit = (
-        guest_preview.guest.first_visit_at.strftime("%d.%m.%Y")
-        if guest_preview.guest.first_visit_at
-        else "пока нет"
-    )
-    last_visit = (
-        guest_preview.guest.last_visit_at.strftime("%d.%m.%Y %H:%M")
-        if guest_preview.guest.last_visit_at
-        else "ещё не заходил за стол"
-    )
+    if guest_preview.guest is None:
+        lines = [
+            "<b>Быстрая продажа</b>",
+            "Покупатель: Аноним (без кода клиента)",
+            "Бонусы за эту продажу не начисляются.",
+            "",
+        ]
+    else:
+        telegram_account = guest_preview.guest.telegram_account
+        guest_identity = (
+            f"@{telegram_account.username}"
+            if telegram_account.username
+            else str(telegram_account.telegram_id)
+        )
+        first_visit = (
+            guest_preview.guest.first_visit_at.strftime("%d.%m.%Y")
+            if guest_preview.guest.first_visit_at
+            else "пока нет"
+        )
+        last_visit = (
+            guest_preview.guest.last_visit_at.strftime("%d.%m.%Y %H:%M")
+            if guest_preview.guest.last_visit_at
+            else "ещё не заходил за стол"
+        )
 
-    lines = [
-        "<b>Быстрая продажа</b>",
-        f"Код клиента: {guest_preview.guest.customer_code}",
-        f"Telegram: {guest_identity}",
-        f"Текущий баланс: {guest_preview.guest.loyalty_balance} бонусов",
-        f"Первый визит: {first_visit}",
-        f"Последний визит: {last_visit}",
-        "",
-    ]
+        lines = [
+            "<b>Быстрая продажа</b>",
+            f"Код клиента: {guest_preview.guest.customer_code}",
+            f"Telegram: {guest_identity}",
+            f"Текущий баланс: {guest_preview.guest.loyalty_balance} бонусов",
+            f"Первый визит: {first_visit}",
+            f"Последний визит: {last_visit}",
+            "",
+        ]
     if comment:
         lines.extend(
             [
@@ -750,6 +772,9 @@ async def _resolve_staff_employee_by_telegram_id(telegram_id: int, bot: Bot):
         raise OrderFlowError(
             "Сотрудник не привязан к этому боту. Укажите Telegram account в профиле сотрудника."
         ) from exc
+    # Attach the partner's bot modules so staff-side capabilities can be gated by
+    # the enabled modules, not only by the employee role.
+    employee.bot_content = await sync_to_async(BotContent.for_partner)(partner)
     return partner, employee
 
 
@@ -759,26 +784,6 @@ async def _resolve_staff_employee(message: Message, bot: Bot):
 
 async def _resolve_staff_employee_from_callback(callback: CallbackQuery, bot: Bot):
     return await _resolve_staff_employee_by_telegram_id(callback.from_user.id, bot)
-
-
-async def _send_open_orders_feed(
-    message: Message,
-    partner_id,
-    *,
-    can_quick_sale: bool,
-    can_view_day_report: bool,
-    can_manage_billing: bool,
-) -> None:
-    orders = await sync_to_async(list)(get_open_orders_for_partner(partner_id))
-    await message.answer(
-        _render_open_orders_summary(orders),
-        reply_markup=build_staff_orders_overview_keyboard(
-            order_shortcuts=_build_order_shortcuts(orders),
-            can_quick_sale=can_quick_sale,
-            can_view_day_report=can_view_day_report,
-            can_manage_billing=can_manage_billing,
-        ),
-    )
 
 
 async def _send_billing_feed(
@@ -956,10 +961,14 @@ async def staff_help_handler(message: Message, bot: Bot) -> None:
         can_quick_sale = _can_use_quick_sale(employee)
         can_view_day_report = _can_view_day_report(employee)
         can_manage_billing = _can_manage_billing(employee)
+        can_view_orders = _can_view_open_orders(employee)
+        can_view_tables = _can_view_tables(employee)
     except OrderFlowError:
         can_quick_sale = False
         can_view_day_report = False
         can_manage_billing = False
+        can_view_orders = False
+        can_view_tables = False
 
     await message.answer(
         (
@@ -971,111 +980,9 @@ async def staff_help_handler(message: Message, bot: Bot) -> None:
             can_quick_sale=can_quick_sale,
             can_view_day_report=can_view_day_report,
             can_manage_billing=can_manage_billing,
+            can_view_orders=can_view_orders,
+            can_view_tables=can_view_tables,
         ),
-    )
-
-
-@router.message(Command("staff_orders"))
-async def staff_orders_handler(message: Message, bot: Bot) -> None:
-    try:
-        partner, employee = await _resolve_staff_employee(message, bot)
-    except OrderFlowError as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
-        return
-
-    await _send_open_orders_feed(
-        message,
-        partner.id,
-        can_quick_sale=_can_use_quick_sale(employee),
-        can_view_day_report=_can_view_day_report(employee),
-        can_manage_billing=_can_manage_billing(employee),
-    )
-
-
-@router.message(Command("staff_bills"))
-async def staff_bills_handler(message: Message, bot: Bot) -> None:
-    try:
-        partner, employee = await _resolve_staff_employee(message, bot)
-        if not _can_manage_billing(employee):
-            raise OrderFlowError(
-                "Работа со счетами доступна только владельцу, менеджеру или кассиру."
-            )
-    except OrderFlowError as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
-        return
-
-    await _send_billing_feed(
-        message,
-        partner_id=partner.id,
-        can_quick_sale=_can_use_quick_sale(employee),
-        can_view_day_report=_can_view_day_report(employee),
-    )
-
-
-@router.message(Command("staff_tables"))
-async def staff_tables_handler(message: Message, bot: Bot) -> None:
-    try:
-        partner, employee = await _resolve_staff_employee(message, bot)
-        if not _can_manage_billing(employee):
-            raise OrderFlowError(
-                "Работа со столами доступна только владельцу, менеджеру или кассиру."
-            )
-    except OrderFlowError as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
-        return
-
-    await _send_tables_feed(
-        message,
-        partner_id=partner.id,
-        can_quick_sale=_can_use_quick_sale(employee),
-        can_view_day_report=_can_view_day_report(employee),
-    )
-
-
-@router.message(Command("staff_notifications"))
-async def staff_notifications_handler(message: Message, bot: Bot) -> None:
-    try:
-        partner, employee = await _resolve_staff_employee(message, bot)
-    except OrderFlowError as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
-        return
-
-    await _render_notifications_message(message, partner.id, employee.id)
-
-
-@router.message(Command("staff_set"))
-async def staff_set_status_handler(message: Message, bot: Bot) -> None:
-    try:
-        order_public_id, to_status, note = _split_staff_status_payload(message.text or "")
-        partner, employee = await _resolve_staff_employee(message, bot)
-    except OrderFlowError as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
-        return
-
-    try:
-        order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
-            partner.id,
-            order_public_id,
-        )
-        order = await sync_to_async(transition_order_status)(
-            order=order,
-            to_status=to_status,
-            actor_user=employee.user,
-            note=note,
-        )
-    except Order.DoesNotExist:
-        await message.answer("Заказ с таким ID не найден.", reply_markup=build_main_keyboard())
-        return
-    except OrderFlowError as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
-        return
-
-    await message.answer(
-        (
-            f"Заказ #{order.public_id} обновлён.\n"
-            f"Новый статус: {order.get_status_display()}"
-        ),
-        reply_markup=build_main_keyboard(),
     )
 
 
@@ -1083,6 +990,8 @@ async def staff_set_status_handler(message: Message, bot: Bot) -> None:
 async def staff_orders_refresh_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        if not _can_view_open_orders(employee):
+            raise OrderFlowError("Модуль заказов отключён для этого заведения.")
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
@@ -1096,6 +1005,7 @@ async def staff_orders_refresh_callback_handler(callback: CallbackQuery, bot: Bo
             can_quick_sale=_can_use_quick_sale(employee),
             can_view_day_report=_can_view_day_report(employee),
             can_manage_billing=_can_manage_billing(employee),
+            can_view_tables=_can_view_tables(employee),
         ),
     )
     await callback.answer("Список обновлён" if updated else "Без изменений")
@@ -1154,9 +1064,10 @@ async def staff_billing_refresh_callback_handler(callback: CallbackQuery, bot: B
 async def staff_tables_refresh_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
-        if not _can_manage_billing(employee):
+        if not _can_view_tables(employee):
             raise OrderFlowError(
-                "Работа со столами доступна только владельцу, менеджеру или кассиру."
+                "Работа со столами доступна только владельцу, менеджеру или кассиру "
+                "при включённом модуле столов."
             )
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -1283,25 +1194,6 @@ async def staff_table_personal_bills_callback_handler(callback: CallbackQuery, b
 
     await _safe_edit_message_text(callback.message, text, reply_markup=keyboard)
     await callback.answer("Персональные счета подготовлены")
-
-
-@router.message(Command("staff_report"))
-async def staff_report_handler(message: Message, bot: Bot) -> None:
-    try:
-        partner, employee = await _resolve_staff_employee(message, bot)
-        if not _can_view_day_report(employee):
-            raise OrderFlowError(
-                "Отчёт дня сейчас доступен только владельцу, менеджеру или кассиру."
-            )
-        report = await sync_to_async(build_daily_operations_report)(partner_id=partner.id)
-    except OrderFlowError as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
-        return
-
-    await message.answer(
-        _render_day_report(report),
-        reply_markup=build_staff_report_summary_keyboard(),
-    )
 
 
 @router.callback_query(lambda c: c.data == "staffreport:today")
@@ -1899,27 +1791,6 @@ async def staff_billing_request_action_callback_handler(
     await callback.answer("Запрос обновлён")
 
 
-@router.message(Command("staff_sale"))
-async def staff_sale_start_handler(message: Message, bot: Bot, state: FSMContext) -> None:
-    try:
-        _partner, employee = await _resolve_staff_employee(message, bot)
-        _ensure_quick_sale_allowed(employee)
-    except OrderFlowError as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
-        return
-
-    await state.clear()
-    await state.set_state(StaffQuickSaleStates.waiting_for_customer_code)
-    await message.answer(
-        "Введите код клиента для быстрой продажи. Например: FE231A",
-        reply_markup=build_staff_home_keyboard(
-            can_quick_sale=True,
-            can_view_day_report=_can_view_day_report(employee),
-            can_manage_billing=_can_manage_billing(employee),
-        ),
-    )
-
-
 @router.callback_query(lambda c: c.data == "staffsale:start")
 async def staff_sale_start_callback_handler(
     callback: CallbackQuery,
@@ -1936,12 +1807,9 @@ async def staff_sale_start_callback_handler(
     await state.clear()
     await state.set_state(StaffQuickSaleStates.waiting_for_customer_code)
     await callback.message.answer(
-        "Введите код клиента для быстрой продажи. Например: FE231A",
-        reply_markup=build_staff_home_keyboard(
-            can_quick_sale=True,
-            can_view_day_report=_can_view_day_report(employee),
-            can_manage_billing=_can_manage_billing(employee),
-        ),
+        "Введите код клиента для быстрой продажи (например FE231A).\n"
+        "Если клиент без кода — нажмите «Без кода (Аноним)» или отправьте «-».",
+        reply_markup=build_staff_sale_code_prompt_keyboard(),
     )
     await callback.answer()
 
@@ -1953,6 +1821,9 @@ async def staff_sale_customer_code_handler(
     state: FSMContext,
 ) -> None:
     customer_code = (message.text or "").strip().upper()
+    # "-" is an explicit shortcut for an anonymous sale (no customer code).
+    if customer_code == "-":
+        customer_code = ""
     try:
         partner, employee = await _resolve_staff_employee(message, bot)
         _ensure_quick_sale_allowed(employee)
@@ -1986,6 +1857,43 @@ async def staff_sale_noop_handler(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(
+    StaffQuickSaleStates.waiting_for_customer_code,
+    lambda c: c.data == "staffsale:anon",
+)
+async def staff_sale_anonymous_handler(
+    callback: CallbackQuery,
+    bot: Bot,
+    state: FSMContext,
+) -> None:
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_quick_sale_allowed(employee)
+        text, keyboard, selected_category_id = await sync_to_async(_compose_staff_sale_view)(
+            partner_id=partner.id,
+            customer_code="",
+            items_map={},
+            selected_category_id=None,
+        )
+    except (OrderFlowError, BonusServiceError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    await state.set_state(StaffQuickSaleStates.browsing_menu)
+    await state.update_data(
+        customer_code="",
+        items={},
+        selected_category_id=selected_category_id,
+        comment="",
+    )
+    sent_message = await callback.message.answer(text, reply_markup=keyboard)
+    await state.update_data(
+        preview_chat_id=sent_message.chat.id,
+        preview_message_id=sent_message.message_id,
+    )
+    await callback.answer("Анонимная продажа")
+
+
+@router.callback_query(
     StaffQuickSaleStates.browsing_menu,
     lambda c: c.data == "staffsale:change_customer",
 )
@@ -1995,12 +1903,9 @@ async def staff_sale_change_customer_handler(
 ) -> None:
     await state.set_state(StaffQuickSaleStates.waiting_for_customer_code)
     await callback.message.answer(
-        "Введите новый код клиента для быстрой продажи.",
-        reply_markup=build_staff_home_keyboard(
-            can_quick_sale=True,
-            can_view_day_report=True,
-            can_manage_billing=True,
-        ),
+        "Введите новый код клиента для быстрой продажи.\n"
+        "Если клиент без кода — нажмите «Без кода (Аноним)» или отправьте «-».",
+        reply_markup=build_staff_sale_code_prompt_keyboard(),
     )
     await callback.answer("Можно ввести другой код")
 
@@ -2228,7 +2133,7 @@ async def staff_sale_confirm_handler(
     await _safe_edit_message_text(
         callback.message,
         "<b>Быстрая продажа оформлена</b>\n"
-        f"Клиент: {sale.customer_code_snapshot}\n"
+        f"Клиент: {sale.loyalty_label}\n"
         f"Сумма: {sale.amount} грн\n"
         f"Начислено бонусов: +{sale.bonus_awarded_amount}\n"
         f"Позиций: {items_count}\n"
