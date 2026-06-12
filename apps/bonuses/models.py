@@ -101,6 +101,7 @@ class WalkInSale(PartnerBoundModel):
     customer_code_snapshot = models.CharField(max_length=12, blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     bonus_awarded_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    bonus_spent_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     comment = models.CharField(max_length=255, blank=True)
     created_by = models.ForeignKey(
         "users.User",
@@ -121,6 +122,11 @@ class WalkInSale(PartnerBoundModel):
         if self.customer_code_snapshot:
             return self.customer_code_snapshot
         return "Аноним"
+
+    @property
+    def net_amount(self):
+        # Amount the customer actually pays after bonus redemption.
+        return self.amount - self.bonus_spent_amount
 
 
 class WalkInSaleItem(PartnerBoundModel):

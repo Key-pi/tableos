@@ -136,6 +136,17 @@ def _build_guest_order_card_text(order: Order) -> str:
 async def session_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
+    if not content.supports_tables():
+        navigation_state = await sync_to_async(resolve_guest_navigation_state)(
+            partner_id=partner.id,
+            telegram_id=message.from_user.id,
+            content=content,
+        )
+        await message.answer(
+            "Столы сейчас отключены для этого бота.",
+            reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
+        )
+        return
     session = await sync_to_async(get_active_table_session)(
         partner_id=partner.id,
         telegram_id=message.from_user.id,

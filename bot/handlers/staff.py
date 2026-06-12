@@ -256,9 +256,10 @@ def _can_view_open_orders(employee: EmployeeProfile) -> bool:
 
 
 def _can_view_tables(employee: EmployeeProfile) -> bool:
-    # The staff tables feed drives per-table billing, so it keeps the billing
-    # capability and additionally requires the tables module to be enabled.
-    return _can_manage_billing(employee) and _module_enabled(
+    # "Столы" is gated by the tables module (plus an operations role). Per-table
+    # bill creation inside the feed still requires the billing module separately
+    # via _can_manage_billing.
+    return employee.user.role in _STAFF_OPERATIONS_ROLES and _module_enabled(
         employee, lambda content: content.supports_tables()
     )
 
@@ -651,6 +652,7 @@ def _compose_staff_sale_view(
     items_map: dict[str, int],
     selected_category_id: str | None,
     comment: str = "",
+    redeem_bonus: bool = False,
 ):
     categories = list(
         MenuCategory.objects.filter(partner_id=partner_id, is_active=True).order_by(
@@ -683,6 +685,8 @@ def _compose_staff_sale_view(
     category_items = list(
         MenuItemRepository.active_for_partner(partner_id).filter(category_id=selected_category_id)[:12]
     )
+    can_redeem = guest_preview.guest is not None and guest_preview.redeemable_bonus_amount > 0
+    redeem_active = redeem_bonus and can_redeem
     keyboard = build_staff_sale_keyboard(
         categories=[(str(category.id), category.name) for category in categories],
         selected_category_id=selected_category_id,
@@ -696,6 +700,8 @@ def _compose_staff_sale_view(
         ],
         can_confirm=bool(guest_preview.items),
         has_comment=bool(comment),
+        can_redeem=can_redeem,
+        redeem_active=redeem_active,
     )
 
     if guest_preview.guest is None:
@@ -753,6 +759,16 @@ def _compose_staff_sale_view(
                 f"Ожидаемое начисление: +{guest_preview.projected_bonus_amount} бонусов",
             ]
         )
+        if can_redeem:
+            lines.append(f"Доступно списать: {guest_preview.redeemable_bonus_amount} бонусов")
+            if redeem_active:
+                net_amount = (
+                    guest_preview.total_amount - guest_preview.redeemable_bonus_amount
+                )
+                lines.append(
+                    f"Списываем бонусами: {guest_preview.redeemable_bonus_amount} • "
+                    f"к оплате: {net_amount} грн"
+                )
     else:
         lines.append("Добавьте позиции из меню кнопками ниже.")
 
@@ -898,6 +914,7 @@ async def _render_staff_sale_message(
     items_map: dict[str, int],
     selected_category_id: str | None,
     comment: str = "",
+    redeem_bonus: bool = False,
 ) -> str:
     text, keyboard, selected_category_id = await sync_to_async(_compose_staff_sale_view)(
         partner_id=partner_id,
@@ -905,6 +922,7 @@ async def _render_staff_sale_message(
         items_map=items_map,
         selected_category_id=selected_category_id,
         comment=comment,
+        redeem_bonus=redeem_bonus,
     )
     try:
         await bot.edit_message_text(
@@ -958,17 +976,9 @@ async def _render_notifications_message(callback_or_message, partner_id, employe
 async def staff_help_handler(message: Message, bot: Bot) -> None:
     try:
         _partner, employee = await _resolve_staff_employee(message, bot)
-        can_quick_sale = _can_use_quick_sale(employee)
-        can_view_day_report = _can_view_day_report(employee)
-        can_manage_billing = _can_manage_billing(employee)
-        can_view_orders = _can_view_open_orders(employee)
-        can_view_tables = _can_view_tables(employee)
     except OrderFlowError:
-        can_quick_sale = False
-        can_view_day_report = False
-        can_manage_billing = False
-        can_view_orders = False
-        can_view_tables = False
+        # Guests are not staff: stay completely silent so /staff reveals nothing.
+        return
 
     await message.answer(
         (
@@ -977,11 +987,11 @@ async def staff_help_handler(message: Message, bot: Bot) -> None:
             "Команды можно использовать как резервный вариант, но основной режим уже кнопочный."
         ),
         reply_markup=build_staff_home_keyboard(
-            can_quick_sale=can_quick_sale,
-            can_view_day_report=can_view_day_report,
-            can_manage_billing=can_manage_billing,
-            can_view_orders=can_view_orders,
-            can_view_tables=can_view_tables,
+            can_quick_sale=_can_use_quick_sale(employee),
+            can_view_day_report=_can_view_day_report(employee),
+            can_manage_billing=_can_manage_billing(employee),
+            can_view_orders=_can_view_open_orders(employee),
+            can_view_tables=_can_view_tables(employee),
         ),
     )
 
@@ -1086,9 +1096,10 @@ async def staff_tables_refresh_callback_handler(callback: CallbackQuery, bot: Bo
 async def staff_table_open_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
-        if not _can_manage_billing(employee):
+        if not _can_view_tables(employee):
             raise OrderFlowError(
-                "Работа со столами и счетами доступна только владельцу, менеджеру или кассиру."
+                "Работа со столами доступна только владельцу, менеджеру или кассиру "
+                "при включённом модуле столов."
             )
         _, table_id = (callback.data or "").split(":", 1)
         text, keyboard = await sync_to_async(_build_table_ops_view)(
@@ -1110,9 +1121,10 @@ async def staff_table_open_callback_handler(callback: CallbackQuery, bot: Bot) -
 async def staff_session_close_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
-        if not _can_manage_billing(employee):
+        if not _can_view_tables(employee):
             raise OrderFlowError(
-                "Закрытие сессий доступно только владельцу, менеджеру или кассиру."
+                "Закрытие сессий доступно только владельцу, менеджеру или кассиру "
+                "при включённом модуле столов."
             )
         _, session_id = (callback.data or "").split(":", 1)
         session = await sync_to_async(
@@ -1843,6 +1855,7 @@ async def staff_sale_customer_code_handler(
         items={},
         selected_category_id=selected_category_id,
         comment="",
+        redeem_bonus=False,
     )
     sent_message = await message.answer(text, reply_markup=keyboard)
     await state.update_data(
@@ -1854,6 +1867,36 @@ async def staff_sale_customer_code_handler(
 @router.callback_query(StaffQuickSaleStates.browsing_menu, lambda c: c.data == "staffsale:noop")
 async def staff_sale_noop_handler(callback: CallbackQuery) -> None:
     await callback.answer()
+
+
+@router.callback_query(StaffQuickSaleStates.browsing_menu, lambda c: c.data == "staffsale:redeem")
+async def staff_sale_redeem_toggle_handler(
+    callback: CallbackQuery,
+    bot: Bot,
+    state: FSMContext,
+) -> None:
+    data = await state.get_data()
+    new_redeem = not data.get("redeem_bonus", False)
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_quick_sale_allowed(employee)
+        selected_category_id = await _render_staff_sale_message(
+            bot=bot,
+            chat_id=data["preview_chat_id"],
+            message_id=data["preview_message_id"],
+            partner_id=partner.id,
+            customer_code=data["customer_code"],
+            items_map=data.get("items", {}),
+            selected_category_id=data.get("selected_category_id"),
+            comment=data.get("comment", ""),
+            redeem_bonus=new_redeem,
+        )
+    except (OrderFlowError, BonusServiceError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    await state.update_data(redeem_bonus=new_redeem, selected_category_id=selected_category_id)
+    await callback.answer("Списываем бонусы" if new_redeem else "Списание отменено")
 
 
 @router.callback_query(
@@ -1884,6 +1927,7 @@ async def staff_sale_anonymous_handler(
         items={},
         selected_category_id=selected_category_id,
         comment="",
+        redeem_bonus=False,
     )
     sent_message = await callback.message.answer(text, reply_markup=keyboard)
     await state.update_data(
@@ -1948,6 +1992,7 @@ async def staff_sale_comment_clear_handler(
             items_map=data.get("items", {}),
             selected_category_id=data.get("selected_category_id"),
             comment="",
+            redeem_bonus=data.get("redeem_bonus", False),
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -1983,6 +2028,7 @@ async def staff_sale_clear_handler(
             items_map={},
             selected_category_id=data.get("selected_category_id"),
             comment=data.get("comment", ""),
+            redeem_bonus=data.get("redeem_bonus", False),
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -2015,6 +2061,7 @@ async def staff_sale_category_handler(
             items_map=data.get("items", {}),
             selected_category_id=category_id,
             comment=data.get("comment", ""),
+            redeem_bonus=data.get("redeem_bonus", False),
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -2062,6 +2109,7 @@ async def staff_sale_item_quantity_handler(
             items_map=items_map,
             selected_category_id=data.get("selected_category_id"),
             comment=data.get("comment", ""),
+            redeem_bonus=data.get("redeem_bonus", False),
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -2092,6 +2140,7 @@ async def staff_sale_comment_message_handler(
             items_map=data.get("items", {}),
             selected_category_id=data.get("selected_category_id"),
             comment=comment,
+            redeem_bonus=data.get("redeem_bonus", False),
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await message.answer(str(exc), reply_markup=build_main_keyboard())
@@ -2124,19 +2173,27 @@ async def staff_sale_confirm_handler(
             items=items_payload,
             comment=data.get("comment", ""),
             created_by=employee.user,
+            redeem_bonus=data.get("redeem_bonus", False),
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
     await state.clear()
-    await _safe_edit_message_text(
-        callback.message,
-        "<b>Быстрая продажа оформлена</b>\n"
-        f"Клиент: {sale.loyalty_label}\n"
-        f"Сумма: {sale.amount} грн\n"
-        f"Начислено бонусов: +{sale.bonus_awarded_amount}\n"
-        f"Позиций: {items_count}\n"
-        f"Комментарий: {sale.comment or 'без комментария'}"
+    result_lines = [
+        "<b>Быстрая продажа оформлена</b>",
+        f"Клиент: {sale.loyalty_label}",
+        f"Сумма: {sale.amount} грн",
+    ]
+    if sale.bonus_spent_amount > 0:
+        result_lines.append(f"Списано бонусами: {sale.bonus_spent_amount}")
+        result_lines.append(f"К оплате: {sale.net_amount} грн")
+    result_lines.extend(
+        [
+            f"Начислено бонусов: +{sale.bonus_awarded_amount}",
+            f"Позиций: {items_count}",
+            f"Комментарий: {sale.comment or 'без комментария'}",
+        ]
     )
+    await _safe_edit_message_text(callback.message, "\n".join(result_lines))
     await callback.answer("Продажа сохранена")

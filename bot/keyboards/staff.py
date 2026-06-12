@@ -378,6 +378,8 @@ def build_staff_sale_keyboard(
     draft_items: list[tuple[str, str, int]],
     can_confirm: bool,
     has_comment: bool,
+    can_redeem: bool = False,
+    redeem_active: bool = False,
 ) -> InlineKeyboardMarkup:
     keyboard: list[list[InlineKeyboardButton]] = []
     for category_id, label in categories:
@@ -437,6 +439,19 @@ def build_staff_sale_keyboard(
                 InlineKeyboardButton(
                     text="Убрать комментарий",
                     callback_data="staffsale:comment_clear",
+                )
+            ]
+        )
+    if can_redeem:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=(
+                        "Отменить списание бонусов"
+                        if redeem_active
+                        else "Списать бонусы"
+                    ),
+                    callback_data="staffsale:redeem",
                 )
             ]
         )

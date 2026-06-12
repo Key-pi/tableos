@@ -63,17 +63,17 @@ class StaffModuleGatingTests(SimpleTestCase):
         content.module_orders_enabled = False
         self.assertFalse(_can_view_open_orders(_StubEmployee("owner", content)))
 
-    def test_tables_button_needs_billing_role_and_tables_module(self):
+    def test_tables_button_needs_operations_role_and_tables_module(self):
+        # Tables feed is gated by the tables module + an operations role, and no
+        # longer requires the billing module (defaults: tables on, billing off).
         content = BotContent.defaults()
-        content.module_billing_enabled = True  # billing capability for the feed
-        manager = _StubEmployee("manager", content)
-        self.assertTrue(_can_view_tables(manager))
+        self.assertFalse(content.module_billing_enabled)
+        self.assertTrue(_can_view_tables(_StubEmployee("manager", content)))
 
-        # Waiters never reach the table billing feed.
+        # Waiters never reach the table feed.
         self.assertFalse(_can_view_tables(_StubEmployee("waiter", content)))
 
         # Tables module off hides the feed even for managers.
         no_tables = BotContent.defaults()
-        no_tables.module_billing_enabled = True
         no_tables.module_tables_enabled = False
         self.assertFalse(_can_view_tables(_StubEmployee("manager", no_tables)))

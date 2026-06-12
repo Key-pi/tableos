@@ -8,6 +8,26 @@ from apps.tables.services import get_active_table_session
 
 
 class GuestJourney:
+    """Current *context* a guest is in right now — not the same as enabled modules.
+
+    Modules (``PartnerBotSettings.module_*``) describe what a venue *offers*.
+    A journey describes which scenario a *specific guest* is currently going
+    through, so the bot can keep context across several messages and show the
+    right buttons/texts for that scenario.
+
+    - ``BROWSE``: no active table session (just looking at the menu / profile).
+    - ``TABLE``: the guest has an active table session (ordering at a table).
+    - ``DELIVERY`` / ``PICKUP``: placeholders for the upcoming multi-step
+      delivery and pickup flows (address, phone, etc.). They are intentionally
+      defined ahead of time but not assigned yet — the delivery/pickup handlers
+      are still stubs. When those flows are built (most likely as aiogram FSM
+      states), this is where the guest's current order journey will live.
+
+    Today only BROWSE/TABLE are assigned, and that distinction also happens to be
+    mirrored by ``GuestNavigationState.has_active_session``; the journey label is
+    kept as the explicit, future-proof name for the guest's current scenario.
+    """
+
     BROWSE = "browse"
     TABLE = "table"
     DELIVERY = "delivery"
@@ -29,6 +49,9 @@ class GuestAction:
 
 @dataclass(frozen=True, slots=True)
 class GuestNavigationState:
+    # `journey` is the guest's current scenario (see GuestJourney). Buttons are
+    # currently driven by `available_actions` + module checks, not by `journey`
+    # itself; the field is kept for delivery/pickup flows that will branch on it.
     journey: str
     available_actions: tuple[str, ...]
     has_active_session: bool = False

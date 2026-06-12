@@ -26,6 +26,7 @@ class WalkInSalePreview:
     items: list[dict]
     total_amount: Decimal
     projected_bonus_amount: Decimal
+    redeemable_bonus_amount: Decimal = Decimal("0.00")
 
 
 @transaction.atomic
@@ -106,6 +107,7 @@ def register_walk_in_sale(
     amount: Decimal | str,
     comment: str = "",
     created_by=None,
+    redeem_bonus: bool = False,
 ) -> WalkInSale:
     total = Decimal(amount).quantize(Decimal("0.01"))
     if guest is not None and guest.partner_id != partner_id:
@@ -118,6 +120,34 @@ def register_walk_in_sale(
         comment=comment,
         created_by=created_by,
     )
+
+    # Redemption uses the balance the guest walked in with (before this sale's
+    # accrual) and is capped by program max_redeem_share and the sale total.
+    bonus_spent = Decimal("0.00")
+    if guest is not None and redeem_bonus:
+        bonus_spent = get_redeemable_bonus_amount(
+            partner_id=partner_id,
+            guest=guest,
+            purchase_total=total,
+        )
+        if bonus_spent > 0:
+            BonusTransaction.objects.create(
+                partner_id=partner_id,
+                guest=guest,
+                program=None,
+                order=None,
+                transaction_type=BonusTransaction.TransactionType.REDEMPTION,
+                amount=bonus_spent,
+                comment=(
+                    comment
+                    or f"Walk-in sale redemption for customer code {guest.customer_code}."
+                ),
+            )
+            guest.loyalty_balance = (
+                Decimal(guest.loyalty_balance) - bonus_spent
+            ).quantize(Decimal("0.01"))
+            guest.save(update_fields=["loyalty_balance", "updated_at"])
+
     transactions = []
     if guest is not None:
         transactions = apply_bonus_programs(
@@ -131,7 +161,8 @@ def register_walk_in_sale(
         (transaction.amount for transaction in transactions),
         Decimal("0.00"),
     )
-    sale.save(update_fields=["bonus_awarded_amount", "updated_at"])
+    sale.bonus_spent_amount = bonus_spent
+    sale.save(update_fields=["bonus_awarded_amount", "bonus_spent_amount", "updated_at"])
     return sale
 
 
@@ -194,11 +225,19 @@ def preview_walk_in_sale_by_customer_code(
                 guest=guest,
                 purchase_total=total_amount,
             )
+    redeemable_bonus_amount = Decimal("0.00")
+    if guest is not None and total_amount > 0:
+        redeemable_bonus_amount = get_redeemable_bonus_amount(
+            partner_id=partner_id,
+            guest=guest,
+            purchase_total=total_amount,
+        )
     return WalkInSalePreview(
         guest=guest,
         items=normalized_items,
         total_amount=total_amount,
         projected_bonus_amount=projected_bonus_amount,
+        redeemable_bonus_amount=redeemable_bonus_amount,
     )
 
 
@@ -210,6 +249,7 @@ def register_walk_in_sale_from_menu_items_by_customer_code(
     items: list[dict],
     comment: str = "",
     created_by=None,
+    redeem_bonus: bool = False,
 ) -> WalkInSale:
     preview = preview_walk_in_sale_by_customer_code(
         partner_id=partner_id,
@@ -223,6 +263,7 @@ def register_walk_in_sale_from_menu_items_by_customer_code(
         amount=preview.total_amount,
         comment=comment,
         created_by=created_by,
+        redeem_bonus=redeem_bonus,
     )
     WalkInSaleItem.objects.bulk_create(
         [

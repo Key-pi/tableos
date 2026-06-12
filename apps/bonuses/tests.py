@@ -4,7 +4,7 @@ from django.contrib.admin.sites import AdminSite
 from django.test import TestCase
 
 from apps.bonuses.admin import WalkInSaleAdmin
-from apps.bonuses.models import BonusProgram, WalkInSale, WalkInSaleItem
+from apps.bonuses.models import BonusProgram, BonusTransaction, WalkInSale, WalkInSaleItem
 from apps.bonuses.services import (
     preview_walk_in_sale_by_customer_code,
     register_walk_in_sale,
@@ -171,6 +171,75 @@ class WalkInSaleServiceTests(TestCase):
         self.assertEqual(sale.amount, Decimal("170.00"))
         self.assertEqual(sale.bonus_awarded_amount, Decimal("0.00"))
         self.assertEqual(sale.items.count(), 2)
+
+    def test_quick_sale_redeems_bonus_when_requested(self):
+        self.program.max_redeem_share = Decimal("50.00")
+        self.program.save(update_fields=["max_redeem_share"])
+        self.guest.loyalty_balance = Decimal("100.00")
+        self.guest.save(update_fields=["loyalty_balance"])
+
+        sale = register_walk_in_sale_from_menu_items_by_customer_code(
+            partner_id=self.partner.id,
+            customer_code=self.guest.customer_code,
+            items=[{"menu_item_id": self.coffee.id, "quantity": 2}],  # 180.00 total
+            redeem_bonus=True,
+        )
+
+        self.guest.refresh_from_db()
+        # Redeemable = min(balance 100, 50% of 180 = 90, total 180) = 90.
+        self.assertEqual(sale.amount, Decimal("180.00"))
+        self.assertEqual(sale.bonus_spent_amount, Decimal("90.00"))
+        self.assertEqual(sale.net_amount, Decimal("90.00"))
+        # Accrual stays on the gross total: 5% of 180 = 9.
+        self.assertEqual(sale.bonus_awarded_amount, Decimal("9.00"))
+        # Balance: 100 - 90 redeemed + 9 accrued = 19.
+        self.assertEqual(self.guest.loyalty_balance, Decimal("19.00"))
+        self.assertTrue(
+            BonusTransaction.objects.filter(
+                guest=self.guest,
+                transaction_type=BonusTransaction.TransactionType.REDEMPTION,
+                amount=Decimal("90.00"),
+            ).exists()
+        )
+
+    def test_quick_sale_without_redeem_flag_keeps_balance(self):
+        self.program.max_redeem_share = Decimal("50.00")
+        self.program.save(update_fields=["max_redeem_share"])
+        self.guest.loyalty_balance = Decimal("100.00")
+        self.guest.save(update_fields=["loyalty_balance"])
+
+        sale = register_walk_in_sale_from_menu_items_by_customer_code(
+            partner_id=self.partner.id,
+            customer_code=self.guest.customer_code,
+            items=[{"menu_item_id": self.coffee.id, "quantity": 2}],
+        )
+
+        self.assertEqual(sale.bonus_spent_amount, Decimal("0.00"))
+
+    def test_quick_sale_redeem_ignored_for_anonymous(self):
+        sale = register_walk_in_sale_from_menu_items_by_customer_code(
+            partner_id=self.partner.id,
+            customer_code="",
+            items=[{"menu_item_id": self.coffee.id, "quantity": 1}],
+            redeem_bonus=True,
+        )
+
+        self.assertIsNone(sale.guest)
+        self.assertEqual(sale.bonus_spent_amount, Decimal("0.00"))
+
+    def test_preview_exposes_redeemable_bonus_amount(self):
+        self.program.max_redeem_share = Decimal("50.00")
+        self.program.save(update_fields=["max_redeem_share"])
+        self.guest.loyalty_balance = Decimal("100.00")
+        self.guest.save(update_fields=["loyalty_balance"])
+
+        preview = preview_walk_in_sale_by_customer_code(
+            partner_id=self.partner.id,
+            customer_code=self.guest.customer_code,
+            items=[{"menu_item_id": self.coffee.id, "quantity": 2}],
+        )
+
+        self.assertEqual(preview.redeemable_bonus_amount, Decimal("90.00"))
 
     def test_register_walk_in_sale_by_code_rejects_unknown_code(self):
         from apps.bonuses.services import BonusServiceError
