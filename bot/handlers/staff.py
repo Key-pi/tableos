@@ -25,6 +25,7 @@ from apps.billing.repositories import (
 from apps.billing.services import (
     BillingServiceError,
     cancel_billing_request,
+    get_bill_context_label,
     create_personal_bills_for_table,
     create_shared_bill_for_table,
     issue_bill,
@@ -65,7 +66,6 @@ from apps.tables.services import (
     can_close_table_session,
     close_table_session_if_settled,
 )
-from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.staff import (
     STATUS_LABELS,
     build_staff_bill_actions_keyboard,
@@ -136,6 +136,18 @@ def _employee_label(employee: EmployeeProfile | None) -> str:
     return full_name or employee.user.username
 
 
+def _order_context_label(order: Order) -> str:
+    if order.table_id is not None:
+        return f"Стол: #{order.table.number}"
+    return "Сценарий: заказ без привязки к столу"
+
+
+def _order_short_context_label(order: Order) -> str:
+    if order.table_id is not None:
+        return f"T{order.table.number}"
+    return "Вне стола"
+
+
 def _render_order_card(order: Order) -> str:
     items_text = ", ".join(f"{item.item_name} x{item.quantity}" for item in order.items.all())
     guest_label = order.guest.telegram_account.username or order.guest.telegram_account.telegram_id
@@ -145,7 +157,7 @@ def _render_order_card(order: Order) -> str:
     received_label = "Получен" if is_order_received(order) else "Не получен"
     return (
         f"<b>Заказ #{order.public_id}</b>\n"
-        f"Стол: #{order.table.number}\n"
+        f"{_order_context_label(order)}\n"
         f"Гость: {guest_label}\n"
         f"Ответственный: {assignee_label}\n"
         f"Статус: {order.get_status_display()}\n"
@@ -170,7 +182,7 @@ def _build_order_shortcuts(orders: list[Order]) -> list[tuple[str, str, bool]]:
     for order in orders[:8]:
         payment_badge = "не опл." if not is_order_paid(order) else "опл."
         label = (
-            f"#{order.public_id} • T{order.table.number} • "
+            f"#{order.public_id} • {_order_short_context_label(order)} • "
             f"{short_status_labels.get(order.status, order.get_status_display())} • {payment_badge}"
         )
         shortcuts.append(
@@ -201,6 +213,17 @@ def _render_staff_notification_card(notification) -> str:
         f"{notification.message}\n"
         f"Заказ: {order_label}"
     )
+
+
+def _message_text(message: Message | None) -> str:
+    if message is None:
+        return ""
+    return (getattr(message, "html_text", None) or getattr(message, "text", "") or "").strip()
+
+
+def _is_staff_overview_message(message: Message | None, title: str) -> bool:
+    text = _message_text(message)
+    return text.startswith(f"<b>{title}</b>") or text.startswith(title)
 
 
 _STAFF_OPERATIONS_ROLES = frozenset(
@@ -261,6 +284,18 @@ def _can_view_tables(employee: EmployeeProfile) -> bool:
     # via _can_manage_billing.
     return employee.user.role in _STAFF_OPERATIONS_ROLES and _module_enabled(
         employee, lambda content: content.supports_tables()
+    )
+
+
+def _build_staff_home_markup(employee: EmployeeProfile | None):
+    if employee is None:
+        return None
+    return build_staff_home_keyboard(
+        can_quick_sale=_can_use_quick_sale(employee),
+        can_view_day_report=_can_view_day_report(employee),
+        can_manage_billing=_can_manage_billing(employee),
+        can_view_orders=_can_view_open_orders(employee),
+        can_view_tables=_can_view_tables(employee),
     )
 
 
@@ -450,13 +485,17 @@ def _guest_label(guest) -> str:
 
 
 def _render_billing_overview(requests, bills, unbilled_orders) -> str:
-    return (
-        "<b>Счета и оплаты</b>\n"
-        f"Открытых запросов счёта: {len(requests)}\n"
-        f"Открытых счетов: {len(bills)}\n"
-        f"Неоплаченных заказов без счёта: {len(unbilled_orders)}\n"
-        "Ниже заказы без счёта и карточки для работы."
-    )
+    off_table_unbilled_count = sum(1 for order in unbilled_orders if order.table_id is None)
+    lines = [
+        "<b>Счета и оплаты</b>",
+        f"Открытых запросов счёта: {len(requests)}",
+        f"Открытых счетов: {len(bills)}",
+        f"Неоплаченных заказов без счёта: {len(unbilled_orders)}",
+    ]
+    if off_table_unbilled_count:
+        lines.append(f"Из них без привязки к столу: {off_table_unbilled_count}")
+    lines.append("Ниже заказы без счёта и карточки для работы.")
+    return "\n".join(lines)
 
 
 def _build_active_table_shortcuts(active_sessions, unbilled_orders) -> list[tuple[str, str]]:
@@ -473,6 +512,8 @@ def _build_active_table_shortcuts(active_sessions, unbilled_orders) -> list[tupl
         )
         data["guest_ids"].add(session.guest_id)
     for order in unbilled_orders:
+        if order.table_id is None:
+            continue
         table_id = str(order.table_id)
         data = tables_map.setdefault(
             table_id,
@@ -495,8 +536,8 @@ def _build_active_table_shortcuts(active_sessions, unbilled_orders) -> list[tupl
     ][:8]
 
 
-def _build_unbilled_order_shortcuts(orders: list[Order]) -> list[tuple[str, str, str]]:
-    shortcuts: list[tuple[str, str, str]] = []
+def _build_unbilled_order_shortcuts(orders: list[Order]) -> list[tuple[str, str, str | None]]:
+    shortcuts: list[tuple[str, str, str | None]] = []
     prioritized_orders = [
         order
         for order in orders
@@ -510,10 +551,16 @@ def _build_unbilled_order_shortcuts(orders: list[Order]) -> list[tuple[str, str,
             else order.get_status_display()
         )
         label = (
-            f"К оплате #{order.public_id} • T{order.table.number} • "
+            f"К оплате #{order.public_id} • {_order_short_context_label(order)} • "
             f"{short_status_label} • {order.total_amount} грн"
         )
-        shortcuts.append((order.public_id, label, str(order.table_id)))
+        shortcuts.append(
+            (
+                order.public_id,
+                label,
+                str(order.table_id) if order.table_id is not None else None,
+            )
+        )
     return shortcuts
 
 
@@ -622,7 +669,7 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
 
     bill_text = (
         f"<b>Счёт #{bill.public_id}</b>\n"
-        f"Стол: #{bill.table.number}\n"
+        f"Контекст: {get_bill_context_label(bill)}\n"
         f"Гость: {guest_label}\n"
         f"Тип: {bill.get_kind_display()}\n"
         f"Статус: {bill.get_status_display()}\n"
@@ -643,6 +690,23 @@ def _build_quick_sale_items_payload(items_map: dict[str, int]) -> list[dict]:
         for item_id, quantity in items_map.items()
         if quantity > 0
     ]
+
+
+def _require_staff_sale_preview_state(data: dict) -> dict:
+    preview_chat_id = data.get("preview_chat_id")
+    preview_message_id = data.get("preview_message_id")
+    customer_code = data.get("customer_code")
+    if preview_chat_id is None or preview_message_id is None or customer_code is None:
+        raise OrderFlowError("Черновик быстрой продажи устарел. Начните заново.")
+    return {
+        "preview_chat_id": preview_chat_id,
+        "preview_message_id": preview_message_id,
+        "customer_code": customer_code,
+        "items": data.get("items", {}),
+        "selected_category_id": data.get("selected_category_id"),
+        "comment": data.get("comment", ""),
+        "redeem_bonus": data.get("redeem_bonus", False),
+    }
 
 
 def _compose_staff_sale_view(
@@ -812,14 +876,26 @@ async def _send_billing_feed(
     requests, bills, unbilled_orders = await sync_to_async(
         _load_billing_feed_data
     )(partner_id)
-    await message.answer(
-        _render_billing_overview(requests, bills, unbilled_orders),
-        reply_markup=build_staff_billing_overview_keyboard(
-            unbilled_order_shortcuts=_build_unbilled_order_shortcuts(unbilled_orders),
-            can_quick_sale=can_quick_sale,
-            can_view_day_report=can_view_day_report,
-        ),
+    is_refreshing_existing_overview = _is_staff_overview_message(message, "Счета и оплаты")
+    overview_text = _render_billing_overview(requests, bills, unbilled_orders)
+    overview_markup = build_staff_billing_overview_keyboard(
+        unbilled_order_shortcuts=_build_unbilled_order_shortcuts(unbilled_orders),
+        can_quick_sale=can_quick_sale,
+        can_view_day_report=can_view_day_report,
     )
+    if is_refreshing_existing_overview:
+        await _safe_edit_message_text(
+            message,
+            overview_text,
+            reply_markup=overview_markup,
+        )
+    else:
+        await message.answer(
+            overview_text,
+            reply_markup=overview_markup,
+        )
+    if is_refreshing_existing_overview:
+        return
     for billing_request in requests:
         await message.answer(
             _render_billing_request_card(billing_request),
@@ -915,7 +991,7 @@ async def _render_staff_sale_message(
     selected_category_id: str | None,
     comment: str = "",
     redeem_bonus: bool = False,
-) -> str:
+) -> tuple[str, int, int]:
     text, keyboard, selected_category_id = await sync_to_async(_compose_staff_sale_view)(
         partner_id=partner_id,
         customer_code=customer_code,
@@ -931,10 +1007,19 @@ async def _render_staff_sale_message(
             message_id=message_id,
             reply_markup=keyboard,
         )
+        return selected_category_id, chat_id, message_id
     except TelegramBadRequest as exc:
-        if "message is not modified" not in str(exc):
-            raise
-    return selected_category_id
+        error_text = str(exc).lower()
+        if "message is not modified" in error_text:
+            return selected_category_id, chat_id, message_id
+        if "message to edit not found" in error_text or "message can't be edited" in error_text:
+            sent_message = await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=keyboard,
+            )
+            return selected_category_id, sent_message.chat.id, sent_message.message_id
+        raise
 
 
 async def _render_notifications_message(callback_or_message, partner_id, employee_id) -> None:
@@ -943,8 +1028,13 @@ async def _render_notifications_message(callback_or_message, partner_id, employe
     )
     markup = build_staff_notifications_keyboard() if notifications else None
     text = _render_staff_notifications(notifications)
+    should_send_cards = True
 
     if isinstance(callback_or_message, CallbackQuery):
+        should_send_cards = not _is_staff_overview_message(
+            callback_or_message.message,
+            "Уведомления персоналу",
+        )
         await _safe_edit_message_text(
             callback_or_message.message,
             text,
@@ -952,6 +1042,8 @@ async def _render_notifications_message(callback_or_message, partner_id, employe
         )
     else:
         await callback_or_message.answer(text, reply_markup=markup)
+    if not should_send_cards:
+        return
     for notification in notifications:
         target = (
             callback_or_message.message
@@ -1221,11 +1313,12 @@ async def staff_report_callback_handler(callback: CallbackQuery, bot: Bot) -> No
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await callback.message.answer(
+    updated = await _safe_edit_message_text(
+        callback.message,
         _render_day_report(report),
         reply_markup=build_staff_report_summary_keyboard(),
     )
-    await callback.answer("Отчёт обновлён")
+    await callback.answer("Отчёт обновлён" if updated else "Без изменений")
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("staffreportsec:"))
@@ -1255,7 +1348,8 @@ async def staff_report_section_callback_handler(callback: CallbackQuery, bot: Bo
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await callback.message.answer(
+    updated = await _safe_edit_message_text(
+        callback.message,
         _render_report_section(page_result),
         reply_markup=build_staff_report_section_keyboard(
             section=section,
@@ -1264,7 +1358,7 @@ async def staff_report_section_callback_handler(callback: CallbackQuery, bot: Bo
             item_shortcuts=_build_report_section_shortcuts(page_result),
         ),
     )
-    await callback.answer("Раздел журнала открыт")
+    await callback.answer("Раздел журнала открыт" if updated else "Без изменений")
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("staffreportsaleopen:"))
@@ -1532,6 +1626,11 @@ async def staff_notification_accept_order_callback_handler(
         return
 
     if order.status != Order.Status.NEW:
+        await sync_to_async(mark_staff_notification_read)(
+            notification_id=notification_id,
+            employee_id=employee.id,
+            partner_id=partner.id,
+        )
         refreshed_order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
             partner.id,
             order.public_id,
@@ -1551,12 +1650,32 @@ async def staff_notification_accept_order_callback_handler(
         employee_id=employee.id,
         partner_id=partner.id,
     )
-    order = await sync_to_async(transition_order_status)(
-        order=order,
-        to_status=Order.Status.ACCEPTED,
-        actor_user=employee.user,
-        note="Accepted from staff notification card",
-    )
+    try:
+        order = await sync_to_async(transition_order_status)(
+            order=order,
+            to_status=Order.Status.ACCEPTED,
+            actor_user=employee.user,
+            note="Accepted from staff notification card",
+        )
+    except OrderFlowError:
+        await sync_to_async(mark_staff_notification_read)(
+            notification_id=notification_id,
+            employee_id=employee.id,
+            partner_id=partner.id,
+        )
+        refreshed_order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
+            partner.id,
+            order.public_id,
+        )
+        await callback.message.answer(
+            _render_order_card(refreshed_order),
+            reply_markup=build_staff_order_actions_keyboard(
+                order_public_id=refreshed_order.public_id,
+                available_statuses=get_available_staff_actions(refreshed_order.status),
+            ),
+        )
+        await callback.answer("Заказ уже изменился, показываю актуальную карточку")
+        return
 
     refreshed_order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
         partner.id,
@@ -1593,7 +1712,7 @@ async def staff_bill_open_or_refresh_callback_handler(callback: CallbackQuery, b
             bill_public_id,
         )
     except Bill.DoesNotExist:
-        await callback.answer("Счёт не найден или уже закрыт.", show_alert=True)
+        await callback.answer("Счёт не найден.", show_alert=True)
         return
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -1629,7 +1748,7 @@ async def staff_bill_issue_callback_handler(callback: CallbackQuery, bot: Bot) -
         )
         bill = await sync_to_async(issue_bill)(bill)
     except Bill.DoesNotExist:
-        await callback.answer("Счёт не найден или уже закрыт.", show_alert=True)
+        await callback.answer("Счёт не найден.", show_alert=True)
         return
     except (OrderFlowError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -1680,7 +1799,7 @@ async def staff_bill_pay_callback_handler(callback: CallbackQuery, bot: Bot) -> 
             comment=f"Recorded via staff bot ({method}).",
         )
     except Bill.DoesNotExist:
-        await callback.answer("Счёт не найден или уже закрыт.", show_alert=True)
+        await callback.answer("Счёт не найден.", show_alert=True)
         return
     except (OrderFlowError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -1730,7 +1849,7 @@ async def staff_bill_redeem_bonus_callback_handler(callback: CallbackQuery, bot:
             created_by=employee.user,
         )
     except Bill.DoesNotExist:
-        await callback.answer("Счёт не найден или уже закрыт.", show_alert=True)
+        await callback.answer("Счёт не найден.", show_alert=True)
         return
     except (OrderFlowError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -1780,7 +1899,7 @@ async def staff_billing_request_action_callback_handler(
         elif prefix == "staffbillreqcancel":
             billing_request = await sync_to_async(cancel_billing_request)(billing_request)
     except BillingRequest.DoesNotExist:
-        await callback.answer("Запрос счёта уже обработан.", show_alert=True)
+        await callback.answer("Запрос счёта не найден.", show_alert=True)
         return
     except (OrderFlowError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -1836,6 +1955,7 @@ async def staff_sale_customer_code_handler(
     # "-" is an explicit shortcut for an anonymous sale (no customer code).
     if customer_code == "-":
         customer_code = ""
+    employee = None
     try:
         partner, employee = await _resolve_staff_employee(message, bot)
         _ensure_quick_sale_allowed(employee)
@@ -1846,7 +1966,10 @@ async def staff_sale_customer_code_handler(
             selected_category_id=None,
         )
     except (OrderFlowError, BonusServiceError) as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
+        await message.answer(
+            str(exc),
+            reply_markup=_build_staff_home_markup(employee),
+        )
         return
 
     await state.set_state(StaffQuickSaleStates.browsing_menu)
@@ -1876,26 +1999,32 @@ async def staff_sale_redeem_toggle_handler(
     state: FSMContext,
 ) -> None:
     data = await state.get_data()
-    new_redeem = not data.get("redeem_bonus", False)
     try:
+        preview_data = _require_staff_sale_preview_state(data)
+        new_redeem = not preview_data["redeem_bonus"]
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
         _ensure_quick_sale_allowed(employee)
-        selected_category_id = await _render_staff_sale_message(
+        selected_category_id, preview_chat_id, preview_message_id = await _render_staff_sale_message(
             bot=bot,
-            chat_id=data["preview_chat_id"],
-            message_id=data["preview_message_id"],
+            chat_id=preview_data["preview_chat_id"],
+            message_id=preview_data["preview_message_id"],
             partner_id=partner.id,
-            customer_code=data["customer_code"],
-            items_map=data.get("items", {}),
-            selected_category_id=data.get("selected_category_id"),
-            comment=data.get("comment", ""),
+            customer_code=preview_data["customer_code"],
+            items_map=preview_data["items"],
+            selected_category_id=preview_data["selected_category_id"],
+            comment=preview_data["comment"],
             redeem_bonus=new_redeem,
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await state.update_data(redeem_bonus=new_redeem, selected_category_id=selected_category_id)
+    await state.update_data(
+        redeem_bonus=new_redeem,
+        selected_category_id=selected_category_id,
+        preview_chat_id=preview_chat_id,
+        preview_message_id=preview_message_id,
+    )
     await callback.answer("Списываем бонусы" if new_redeem else "Списание отменено")
 
 
@@ -1981,24 +2110,30 @@ async def staff_sale_comment_clear_handler(
 ) -> None:
     data = await state.get_data()
     try:
+        preview_data = _require_staff_sale_preview_state(data)
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
         _ensure_quick_sale_allowed(employee)
-        selected_category_id = await _render_staff_sale_message(
+        selected_category_id, preview_chat_id, preview_message_id = await _render_staff_sale_message(
             bot=bot,
-            chat_id=data["preview_chat_id"],
-            message_id=data["preview_message_id"],
+            chat_id=preview_data["preview_chat_id"],
+            message_id=preview_data["preview_message_id"],
             partner_id=partner.id,
-            customer_code=data["customer_code"],
-            items_map=data.get("items", {}),
-            selected_category_id=data.get("selected_category_id"),
+            customer_code=preview_data["customer_code"],
+            items_map=preview_data["items"],
+            selected_category_id=preview_data["selected_category_id"],
             comment="",
-            redeem_bonus=data.get("redeem_bonus", False),
+            redeem_bonus=preview_data["redeem_bonus"],
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await state.update_data(comment="", selected_category_id=selected_category_id)
+    await state.update_data(
+        comment="",
+        selected_category_id=selected_category_id,
+        preview_chat_id=preview_chat_id,
+        preview_message_id=preview_message_id,
+    )
     await callback.answer("Комментарий убран")
 
 
@@ -2017,24 +2152,30 @@ async def staff_sale_clear_handler(
 ) -> None:
     data = await state.get_data()
     try:
+        preview_data = _require_staff_sale_preview_state(data)
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
         _ensure_quick_sale_allowed(employee)
-        selected_category_id = await _render_staff_sale_message(
+        selected_category_id, preview_chat_id, preview_message_id = await _render_staff_sale_message(
             bot=bot,
-            chat_id=data["preview_chat_id"],
-            message_id=data["preview_message_id"],
+            chat_id=preview_data["preview_chat_id"],
+            message_id=preview_data["preview_message_id"],
             partner_id=partner.id,
-            customer_code=data["customer_code"],
+            customer_code=preview_data["customer_code"],
             items_map={},
-            selected_category_id=data.get("selected_category_id"),
-            comment=data.get("comment", ""),
-            redeem_bonus=data.get("redeem_bonus", False),
+            selected_category_id=preview_data["selected_category_id"],
+            comment=preview_data["comment"],
+            redeem_bonus=preview_data["redeem_bonus"],
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await state.update_data(items={}, selected_category_id=selected_category_id)
+    await state.update_data(
+        items={},
+        selected_category_id=selected_category_id,
+        preview_chat_id=preview_chat_id,
+        preview_message_id=preview_message_id,
+    )
     await callback.answer("Позиции очищены")
 
 
@@ -2050,24 +2191,29 @@ async def staff_sale_category_handler(
     data = await state.get_data()
     _, _, category_id = (callback.data or "").split(":", 2)
     try:
+        preview_data = _require_staff_sale_preview_state(data)
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
         _ensure_quick_sale_allowed(employee)
-        selected_category_id = await _render_staff_sale_message(
+        selected_category_id, preview_chat_id, preview_message_id = await _render_staff_sale_message(
             bot=bot,
-            chat_id=data["preview_chat_id"],
-            message_id=data["preview_message_id"],
+            chat_id=preview_data["preview_chat_id"],
+            message_id=preview_data["preview_message_id"],
             partner_id=partner.id,
-            customer_code=data["customer_code"],
-            items_map=data.get("items", {}),
+            customer_code=preview_data["customer_code"],
+            items_map=preview_data["items"],
             selected_category_id=category_id,
-            comment=data.get("comment", ""),
-            redeem_bonus=data.get("redeem_bonus", False),
+            comment=preview_data["comment"],
+            redeem_bonus=preview_data["redeem_bonus"],
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await state.update_data(selected_category_id=selected_category_id)
+    await state.update_data(
+        selected_category_id=selected_category_id,
+        preview_chat_id=preview_chat_id,
+        preview_message_id=preview_message_id,
+    )
     await callback.answer()
 
 
@@ -2086,7 +2232,12 @@ async def staff_sale_item_quantity_handler(
 ) -> None:
     data = await state.get_data()
     _, action, item_id = (callback.data or "").split(":", 2)
-    items_map = dict(data.get("items", {}))
+    try:
+        preview_data = _require_staff_sale_preview_state(data)
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    items_map = dict(preview_data["items"])
     current_quantity = int(items_map.get(item_id, 0))
     if action == "add":
         items_map[item_id] = current_quantity + 1
@@ -2100,22 +2251,27 @@ async def staff_sale_item_quantity_handler(
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
         _ensure_quick_sale_allowed(employee)
-        selected_category_id = await _render_staff_sale_message(
+        selected_category_id, preview_chat_id, preview_message_id = await _render_staff_sale_message(
             bot=bot,
-            chat_id=data["preview_chat_id"],
-            message_id=data["preview_message_id"],
+            chat_id=preview_data["preview_chat_id"],
+            message_id=preview_data["preview_message_id"],
             partner_id=partner.id,
-            customer_code=data["customer_code"],
+            customer_code=preview_data["customer_code"],
             items_map=items_map,
-            selected_category_id=data.get("selected_category_id"),
-            comment=data.get("comment", ""),
-            redeem_bonus=data.get("redeem_bonus", False),
+            selected_category_id=preview_data["selected_category_id"],
+            comment=preview_data["comment"],
+            redeem_bonus=preview_data["redeem_bonus"],
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await state.update_data(items=items_map, selected_category_id=selected_category_id)
+    await state.update_data(
+        items=items_map,
+        selected_category_id=selected_category_id,
+        preview_chat_id=preview_chat_id,
+        preview_message_id=preview_message_id,
+    )
     await callback.answer("Черновик обновлён")
 
 
@@ -2128,26 +2284,36 @@ async def staff_sale_comment_message_handler(
     data = await state.get_data()
     raw_comment = (message.text or "").strip()
     comment = "" if raw_comment == "-" else raw_comment
+    employee = None
     try:
+        preview_data = _require_staff_sale_preview_state(data)
         partner, employee = await _resolve_staff_employee(message, bot)
         _ensure_quick_sale_allowed(employee)
-        selected_category_id = await _render_staff_sale_message(
+        selected_category_id, preview_chat_id, preview_message_id = await _render_staff_sale_message(
             bot=bot,
-            chat_id=data["preview_chat_id"],
-            message_id=data["preview_message_id"],
+            chat_id=preview_data["preview_chat_id"],
+            message_id=preview_data["preview_message_id"],
             partner_id=partner.id,
-            customer_code=data["customer_code"],
-            items_map=data.get("items", {}),
-            selected_category_id=data.get("selected_category_id"),
+            customer_code=preview_data["customer_code"],
+            items_map=preview_data["items"],
+            selected_category_id=preview_data["selected_category_id"],
             comment=comment,
-            redeem_bonus=data.get("redeem_bonus", False),
+            redeem_bonus=preview_data["redeem_bonus"],
         )
     except (OrderFlowError, BonusServiceError) as exc:
-        await message.answer(str(exc), reply_markup=build_main_keyboard())
+        await message.answer(
+            str(exc),
+            reply_markup=_build_staff_home_markup(employee),
+        )
         return
 
     await state.set_state(StaffQuickSaleStates.browsing_menu)
-    await state.update_data(comment=comment, selected_category_id=selected_category_id)
+    await state.update_data(
+        comment=comment,
+        selected_category_id=selected_category_id,
+        preview_chat_id=preview_chat_id,
+        preview_message_id=preview_message_id,
+    )
     await message.answer("Комментарий сохранён." if comment else "Комментарий очищен.")
 
 
@@ -2158,7 +2324,12 @@ async def staff_sale_confirm_handler(
     state: FSMContext,
 ) -> None:
     data = await state.get_data()
-    items_payload = _build_quick_sale_items_payload(data.get("items", {}))
+    try:
+        preview_data = _require_staff_sale_preview_state(data)
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    items_payload = _build_quick_sale_items_payload(preview_data["items"])
     if not items_payload:
         await callback.answer("Сначала добавьте позиции.", show_alert=True)
         return
@@ -2169,11 +2340,11 @@ async def staff_sale_confirm_handler(
         items_count = len(items_payload)
         sale = await sync_to_async(register_walk_in_sale_from_menu_items_by_customer_code)(
             partner_id=partner.id,
-            customer_code=data["customer_code"],
+            customer_code=preview_data["customer_code"],
             items=items_payload,
-            comment=data.get("comment", ""),
+            comment=preview_data["comment"],
             created_by=employee.user,
-            redeem_bonus=data.get("redeem_bonus", False),
+            redeem_bonus=preview_data["redeem_bonus"],
         )
     except (OrderFlowError, BonusServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)

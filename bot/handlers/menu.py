@@ -1,4 +1,5 @@
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
@@ -19,18 +20,39 @@ from bot.services.navigation import resolve_guest_navigation_state
 router = Router()
 
 
+def _trim_menu_description(description: str, *, limit: int = 280) -> str:
+    text = description.strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1].rstrip()}…"
+
+
+async def _safe_edit_menu_message(message: Message, text: str, *, reply_markup) -> bool:
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+        return True
+    except TelegramBadRequest as exc:
+        if "message is not modified" in str(exc).lower():
+            return False
+        raise
+
+
 def _render_menu_category_view(*, partner, content, category, menu_items, session) -> str:
     lines = [content.menu_header(partner_name=partner.name)]
     lines.append(f"Категория: <b>{category.name}</b>")
     lines.append("")
-    for item in menu_items:
-        category_name = item.category.name if item.category_id else "Без категории"
-        lines.append(f"{item.name} • {item.price} грн • {category_name}")
-        # If category chips become visually enough later, we can trim the
-        # repeated category label here without changing add-to-cart behavior.
-        if item.description:
-            lines.append(item.description)
+    if not menu_items:
+        lines.append("В этой категории сейчас нет доступных позиций.")
         lines.append("")
+    else:
+        for item in menu_items:
+            category_name = item.category.name if item.category_id else "Без категории"
+            lines.append(f"{item.name} • {item.price} грн • {category_name}")
+            # If category chips become visually enough later, we can trim the
+            # repeated category label here without changing add-to-cart behavior.
+            if item.description:
+                lines.append(_trim_menu_description(item.description))
+            lines.append("")
 
     if session is None:
         # Guests may browse categories and positions freely, but ordering
@@ -131,8 +153,15 @@ async def _send_menu_view(*, target, bot: Bot, category_id: str | None = None) -
         supports_cart=content.supports_cart(),
     )
     if isinstance(target, CallbackQuery):
-        await target.message.edit_text(text, reply_markup=keyboard)
-        await target.answer()
+        updated = await _safe_edit_menu_message(
+            target.message,
+            text,
+            reply_markup=keyboard,
+        )
+        if updated:
+            await target.answer()
+        else:
+            await target.answer("Без изменений")
     else:
         await target.answer(text, reply_markup=keyboard)
 

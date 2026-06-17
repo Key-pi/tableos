@@ -149,6 +149,11 @@ TelegramAccount - глобальная Telegram-идентичность пол�
 
 GuestProfile - профиль гостя внутри конкретного партнёра. Именно здесь хранится код клиента и бонусный баланс.
 
+Важно:
+
+- `GuestProfile` также хранит partner-scoped признак подписки `is_subscribed`;
+- Telegram identity остаётся общей через `TelegramAccount`, а loyalty/subscription state живёт внутри конкретного партнёра.
+
 Код клиента - короткий код гостя, например `E1239A`. Используется для лояльности, быстрых продаж и идентификации на кассе.
 
 Стол - физический стол или зона в заведении. Имеет номер, QR-token и Telegram deep link.
@@ -178,11 +183,11 @@ BillingRequest - запрос гостя на счёт: персональный
 - `apps/tables` - столы, QR deep links, сессии стола;
 - `apps/menu` - категории меню и позиции;
 - `apps/orders` - корзины, заказы, позиции заказов, история статусов;
-- `apps/billing` - счета, запросы счёта, платежи, fiscal receipt-задел;
+- `apps/billing` - счета, запросы счёта, платежи;
 - `apps/bonuses` - бонусные программы, транзакции, быстрые продажи;
 - `apps/employees` - сотрудники, Telegram-привязка, уведомления;
 - `apps/notifications` - staff notifications, preferences, broadcasts;
-- `apps/analytics` - отчёт дня и daily metric-задел;
+- `apps/analytics` - отчёт дня и daily metric snapshots;
 - `bot` - aiogram handlers, keyboards, runtime и сервисы контента;
 - `core` - настройки Django, Celery, admin scoping, security.
 
@@ -216,10 +221,9 @@ BillingRequest - запрос гостя на счёт: персональный
 - webhook mode есть в модели, но не реализован как production runtime;
 - POS/fiscal/online payment интеграции пока только заложены моделями;
 - часть модулей есть в коде, но ещё не вынесена в полноценную продуктовую конфигурацию;
-- `supports_cart()` сейчас всегда возвращает true, хотя целевая логика должна зависеть от включённого модуля заказов;
+- `supports_cart()` уже зависит от модулей menu + orders + cart;
 - delivery/pickup сценарии пока не реализованы как отдельные journey;
-- scheduled analytics aggregation пока не реализован;
-- scheduled marketing campaigns имеют модельный задел, но полноценный планировщик ещё нужен.
+- scheduled marketing campaigns уже подхватываются Celery beat, но продуктово ещё требуют сегменты, preview и unsubscribe UX.
 
 ## 6. Принципы продукта
 
@@ -287,6 +291,7 @@ BillingRequest - запрос гостя на счёт: персональный
 - EmployeeProfile;
 - TelegramAccount сотрудника;
 - активный профиль сотрудника;
+- активный `User.is_active=True`;
 - разрешённая роль или включённая возможность.
 
 ### 6.6. Операционные действия должны быть аудируемыми
@@ -322,7 +327,12 @@ BillingRequest - запрос гостя на счёт: персональный
 - first_visit_at;
 - last_visit_at;
 - loyalty_balance;
-- notification preferences.
+- is_subscribed.
+
+Важно:
+
+- подписка на маркетинговые рассылки в текущем проекте состоит из двух слоёв: partner-scoped `GuestProfile.is_subscribed` и per-channel `NotificationPreference.marketing_enabled`;
+- это позволяет не смешивать базовый guest profile и более детальные notification preferences.
 
 Гостевой UX:
 
@@ -511,6 +521,13 @@ https://t.me/HookahTestTableOs_bot?start=table_2_nightowl_tbl_02
 
 Если оплата полная и все заказы завершены, сессия может закрыться автоматически.
 
+Текущая реализация:
+
+- `can_close_table_session()` уже проверяет settlement-хвосты по корзине, заказам, billing requests и bills;
+- `auto_close_table_session_after_payment` уже реально влияет на post-payment поведение;
+- `timed_out` и `expires_at` есть в модели, но полноценный expiration lifecycle пока не внедрён;
+- новый QR scan закрывает предыдущую active session этого же гостя, но conflict-flow по "старой компании за столом" ещё не реализован.
+
 ### 7.4. Модуль корзины и заказов
 
 Статус: включаемый. Зависит от меню. В режиме "заказы за столом" зависит от столов.
@@ -530,6 +547,11 @@ https://t.me/HookahTestTableOs_bot?start=table_2_nightowl_tbl_02
 - Order: guest, table, table_session, status, payment_method, totals, assigned_employee, accepted_at, received_at, paid_at;
 - OrderItem: menu_item, item_name, unit_price, quantity;
 - OrderStatusHistory.
+
+Важно:
+
+- в текущем коде `Cart.table_session`, `Order.table` и `Order.table_session` уже допускают `NULL`, чтобы домен не был намертво table-first;
+- table order по-прежнему остаётся основным guest journey, но модель уже подготовлена под non-table сценарии.
 
 Статусы заказа:
 
@@ -573,6 +595,11 @@ Staff UX может показывать упрощённые действия:
 - при нажатии на позицию в меню создаётся или обновляется активная Cart;
 - если позиция уже есть в корзине, quantity увеличивается;
 - гость получает короткий callback ответ "Позиция добавлена в корзину";
+
+Дополнительно:
+
+- правило "одна active cart на гостя в рамках партнёра" уже закреплено и на уровне БД, и в transaction-safe сервисном слое;
+- если гость открывает новый стол, старая active cart с позициями больше не переносится молча: она переводится в `abandoned`, а новый визит получает новую корзину.
 
 #### 7.4.2. Просмотр корзины
 
@@ -851,7 +878,6 @@ Staff уведомление:
 - BillOrder;
 - BillItem;
 - Payment;
-- FiscalReceipt;
 - BillingRequest.
 
 Bill status:
@@ -887,12 +913,14 @@ Payment status:
 Правила создания счёта:
 
 - в один счёт можно включить только заказы одного партнёра;
-- в один счёт можно включить только заказы одного стола;
+- в один счёт можно включить только заказы одного стола, либо заказы одного гостя без стола;
 - отменённые заказы нельзя включать;
 - одна и та же позиция заказа не должна попасть в два открытых/оплаченных счёта;
 - BillItem хранит snapshot позиции;
 - total_amount считается из BillItem минус discounts и bonus_spent;
-- paid_amount считается из Payment со status `paid`.
+- paid_amount считается из Payment со status `paid`;
+- attach/add flow не должен молча игнорировать неподходящие или отсутствующие order ids;
+- счёт без стола не должен принимать table-order или заказы разных гостей.
 
 Правила оплаты:
 
@@ -900,6 +928,7 @@ Payment status:
 - нельзя платить уже paid bill;
 - сумма оплаты должна быть больше 0;
 - сумма оплаты не может превышать остаток;
+- способ оплаты должен валидироваться на уровне core-сервиса, а не только через UI/admin form;
 - частичная оплата переводит bill в `partially_paid`;
 - полная оплата переводит bill в `paid`, ставит closed_at;
 - если bill полностью оплачен, связанные BillingRequest переводятся в `processed`;
@@ -1010,7 +1039,11 @@ Staff notification:
 - cashback;
 - visit;
 - milestone.
-- custom
+
+Важно:
+
+- `custom` в текущем проекте живёт не как отдельный `program_type`, а как `strategy_code` у BonusProgram;
+- partner-specific custom logic подключается через registry кастомных стратегий, не ломая общий accrual loop.
 
 Правила начисления:
 
@@ -1018,7 +1051,7 @@ Staff notification:
 - cashback начисляет процент от purchase_total;
 - visit начисляет fixed_amount, по умолчанию не чаще одного раза в день;
 - milestone начисляет fixed_amount на каждый N-й completed order;
-- custom - это возможность написать кастомную функцию бонус начислений которая будуте применяться так же как и уже заготовленные
+- custom strategy выбирается по `strategy_code` и может считать бонус так же, как built-in стратегии, но без отдельной ветки продукта;
 - каждая операция создаёт BonusTransaction;
 - баланс гостя увеличивается суммой начислений.
 
@@ -1036,14 +1069,31 @@ Telegram: @key_pi
 Первый визит: 12.06.2026 18:20
 Последний визит: 12.06.2026 20:10
 
+Этот код можно назвать на баре или кассе, чтобы получить бонусы за быструю продажу.
+```
+
+Кнопка под сообщением:
+
+- "Бонусы".
+
+Экран бонусов:
+
+```text
+Бонусы
+Текущий баланс: 120.00 бонусов
+
 Активные программы
 • Cashback - Cashback / Order completed
 
-Последние движения по бонусам
+Последние движения
 • +45.00 через Cashback (12.06 20:30)
-
-Этот код можно назвать на баре или кассе, чтобы получить бонусы за быструю продажу.
 ```
+
+Текущая реализация:
+
+- summary профиля и бонусная часть разделены на два экрана;
+- история бонусов показывается страницами;
+- активные программы в бонусном экране режутся до компактного preview, чтобы не упираться в лимит Telegram-сообщения.
 
 ### 7.10. Модуль быстрых продаж
 
@@ -1070,19 +1120,25 @@ Flow:
 4. бот показывает карточку гостя, текущий баланс, первый/последний визит;
 5. сотрудник выбирает категории и позиции меню;
 6. можно менять количество, очистить, добавить комментарий;
-7. бот показывает итог и ожидаемое начисление;
-8. сотрудник подтверждает продажу;
-9. создаются WalkInSale и WalkInSaleItem;
-10. начисляются бонусы по `manual_purchase` если включены;
-11. продажа попадает в отчёт дня.
+7. бот показывает итог, ожидаемое начисление и доступную к списанию сумму бонусов;
+8. если у гостя есть доступный баланс, сотрудник может включить/выключить списание бонусов;
+9. сотрудник подтверждает продажу;
+10. создаются WalkInSale и WalkInSaleItem;
+11. если включено списание, создаётся BonusTransaction типа redemption;
+12. начисляются бонусы по `manual_purchase` если включены;
+13. продажа попадает в отчёт дня.
 
 Правила:
 
 - код клиента не обязателен, если кода нет то это будет считаться анонимной покупкой;
+- в staff-боте `-` может использоваться как явный shortcut для анонимной продажи;
 - guest если есть должен принадлежать партнёру;
 - позиции должны быть активны и доступны;
 - quantity должно быть больше 0;
 - сумма считается из меню;
+- preview быстрой продажи должен уметь показать projected bonus и redeemable bonus amount до сохранения;
+- списание бонусов ограничено балансом гостя, total продажи и max_redeem_share активных программ;
+- quick sale при списании бонусов использует баланс гостя до начисления бонусов за текущую продажу;
 - продажу нельзя редактировать после создания, только смотреть.
 
 ### 7.11. Модуль staff-бота
@@ -1103,7 +1159,9 @@ Flow:
 - команда `/staff`;
 - бот проверяет Telegram ID сотрудника;
 - ищет EmployeeProfile текущего партнёра;
-- если не найдено, показывает ошибку.
+- если Telegram ID не привязан к staff для этого партнёра, `/staff` в текущем runtime намеренно не раскрывает лишнюю информацию и может остаться без ответа;
+- в текущем runtime staff access жёстко опирается на active `EmployeeProfile` и явную Telegram-привязку сотрудника к этому партнёру;
+- зависимость от `User.is_active` как отдельного жёсткого правила стоит считать целевым требованием и отдельно держать под контролем при дальнейшей стабилизации staff access.
 
 Главная staff-клавиатура:
 
@@ -1396,13 +1454,13 @@ Shortcut:
 Текущий flow:
 
 - кампания создаётся в админке;
-- admin action ставит её в очередь;
+- поле `scheduled_at` работает как отложенный запуск: Celery beat регулярно подхватывает due-кампании и ставит их в очередь;
+- admin action ставит кампанию в очередь;
 - Celery отправляет сообщения;
 - campaign получает status sent/failed.
 
 Целевые доработки:
 
-- полноценный scheduled_at processor;
 - сегменты аудитории;
 - preview перед отправкой;
 - rate limits;
@@ -1418,7 +1476,6 @@ Shortcut:
 Текущие поля:
 
 - allow_menu_without_session;
-- module_loyalty_enabled;
 - module_menu_enabled;
 - module_tables_enabled;
 - module_delivery_enabled;
@@ -1429,8 +1486,6 @@ Shortcut:
 - module_staff_call_enabled;
 - module_quick_sale_enabled;
 - module_reports_enabled;
-- module_broadcasts_enabled;
-- allow_multiple_active_sessions_per_guest;
 - auto_close_table_session_after_payment;
 - max_menu_items_per_category_message;
 - duplicate_request_cooldown_seconds;
@@ -1439,15 +1494,19 @@ Shortcut:
 - staff_call_hookah_enabled;
 - extra_config.
 
+Текущие оговорки по фактическому поведению:
+
+- loyalty, профиль гостя и код клиента теперь считаются базовой частью продукта и больше не описываются как отключаемый partner-level module flag;
+- рассылки теперь считаются встроенной capability admin/runtime, а не partner-level module flag;
+- `auto_close_table_session_after_payment` реально участвует в post-payment flow: при `False` счёт и заказы завершаются как обычно, но active table session не закрывается автоматически.
+
 Целевое расширение:
 
-- delivery и pickup должны быть такими же модулями, как tables/menu/cart;
 - не должно быть отдельного select-режима заказа, потому что партнёр может одновременно включить заказ за столом, доставку и самовывоз;
 - не должно быть отдельных флагов показа для основных кнопок: если модуль включён и доступен в текущем guest journey, кнопка показывается;
 - команда/handler для выключенного модуля должен давать понятный fallback, а не ломать flow;
-- preview/validation настроек в админке;
+- validation модулей и bot instance уже есть, но всё ещё нужен визуальный preview настроек в админке;
 - тарифные ограничения модулей.
-- max_menu_items_per_category_message;
 - duplicate_request_cooldown_seconds.
 
 ### 8.2. Кнопки
@@ -1458,8 +1517,11 @@ Shortcut:
 - button_session_label;
 - button_cart_label;
 - button_checkout_label;
+- button_delivery_label;
+- button_pickup_label;
 - button_help_label;
-- button_loyalty_label;
+- button_my_profile;
+- button_profile_bonuses_label;
 - button_call_staff_label;
 - button_request_bill_label;
 - button_call_waiter_label;
@@ -1536,6 +1598,13 @@ Shortcut:
 - нельзя видеть данные других партнёров;
 - superuser видит всё.
 
+Текущая реализация уже делает больше:
+
+- scope применяется не только к changelist queryset, но и к связанным FK/M2M выборкам в формах;
+- `platform_only` поля и модели скрываются от partner admin;
+- sensitive fields могут скрываться отдельно по `can_manage_sensitive`;
+- если у пользователя нет валидного `AdminAccessProfile`, partner admin должен видеть пустой scope.
+
 ### 9.2. RBAC
 
 Секции админки:
@@ -1574,6 +1643,8 @@ Shortcut:
 - RBAC админки и staff-роль в боте - разные системы;
 - изменение AdminAccessProfile не должно автоматически давать staff-бот права;
 - staff-бот зависит от EmployeeProfile и User.role.
+- `AdminAccessProfile` в текущем проекте автоматически синхронизирует `User.partner` с partner профиля доступа;
+- для non-superuser `AdminAccessProfile` также автоматически приводит `User.is_staff` к состоянию `can_access_admin && is_active`.
 
 ### 9.3. Управление партнёром
 
@@ -1645,6 +1716,12 @@ BotInstance:
 - временная недоступность позиции;
 - модификаторы и опции, если потребуется.
 
+Текущие UX-заметки:
+
+- если категория пуста, бот показывает честный empty-state вместо полупустого сообщения;
+- слишком длинные описания позиций уже режутся до компактного preview, чтобы не упираться в лимит Telegram-сообщения;
+- кнопки добавления в корзину и shortcut "Открыть корзину" не показываются без active table session, даже если меню можно просматривать без стола.
+
 ### 9.7. Управление сотрудниками
 
 EmployeeProfile:
@@ -1664,6 +1741,13 @@ EmployeeProfile:
 - привязывать Telegram ID и username;
 - включать/выключать уведомления;
 - выбирать типы уведомлений.
+
+Важно:
+
+- admin-форма сотрудника уже умеет принимать raw `telegram_id` и `telegram_username`, нормализует username без `@` и создаёт или переиспользует `TelegramAccount`;
+- если для сотрудника включены bot notifications, `telegram_id` уже обязателен на уровне admin-формы;
+- правило "деактивированный `User` не должен иметь staff-доступ" остаётся важным целевым требованием, но его нужно отдельно проверять при дальнейшей стабилизации staff access;
+- Telegram binding сотрудника остаётся отдельным слоем от admin-доступа и не должен выдаваться автоматически вместе с `AdminAccessProfile`.
 
 ### 9.8. Управление заказами
 
@@ -1692,7 +1776,7 @@ Admin должен позволять:
 - выдавать счёт;
 - фиксировать оплату наличными или терминалом;
 - видеть remaining amount;
-- видеть Payment и FiscalReceipt.
+- видеть Payment.
 
 Целевые доработки:
 
@@ -1720,7 +1804,7 @@ Admin должен позволять:
 - ручные корректировки баланса;
 - уровни лояльности;
 - купоны;
-- partner-specific custom strategy registry.
+- partner-facing UX для custom strategy registry.
 
 ## 10. Telegram runtime
 
@@ -1736,6 +1820,12 @@ Admin должен позволять:
 - не разрешает duplicate token;
 - запускает aiogram polling для всех ботов;
 - регистрирует token -> partner runtime mapping.
+
+Фактическая реализация:
+
+- runtime уже fail-fast валидирует небезопасные bot configs до старта polling;
+- `BotInstanceAdminForm` не даёт активировать polling-бот без реального token;
+- webhook mode пока остаётся модельным заделом и явно блокируется в текущем runbot/runtime.
 
 Требования:
 
@@ -1816,6 +1906,10 @@ Status:
 - у одного стола может быть много активных сессий разных гостей;
 - закрытие возможно только после clean settlement.
 
+Фактическая оговорка:
+
+- `timed_out` пока остаётся декларативным статусом модели и ещё не участвует в реальном runtime lifecycle.
+
 ### 12.3. Cart
 
 Status:
@@ -1827,8 +1921,10 @@ Status:
 Правила:
 
 - активная корзина одна на гостя в активной сессии;
+- это правило должно быть закреплено не только на уровне сервисов, но и на уровне БД/транзакционной логики;
 - checkout переводит в checked_out;
-- abandoned нужен для будущего cleanup.
+- если гость открыл новый стол, а в старой active cart уже были позиции, старая корзина переводится в abandoned и не переносится в новый визит;
+- abandoned нужен для cleanup и честного разделения визитов между разными table sessions.
 
 ### 12.4. Order
 
@@ -2037,7 +2133,8 @@ Flow:
 - повторный `/start` не создаёт дубль GuestProfile;
 - код клиента уникален внутри партнёра;
 - один TelegramAccount может иметь разные GuestProfile у разных партнёров;
-- "Мой профиль" показывает код и баланс.
+- "Мой профиль" показывает код, баланс и статус гостя отдельным коротким экраном;
+- бонусы и история бонусов открываются отдельной inline-кнопкой.
 
 ### 14.2. Меню
 
@@ -2066,7 +2163,8 @@ Flow:
 - очистка очищает корзину;
 - checkout пустой корзины запрещён;
 - checkout создаёт Order и OrderItem;
-- Cart становится checked_out.
+- Cart становится checked_out;
+- старая корзина с позициями не должна молча переноситься на новый стол того же гостя.
 
 ### 14.5. Заказы
 
@@ -2101,6 +2199,7 @@ Flow:
 ### 14.8. Staff bot
 
 - непривязанный Telegram ID не получает staff access;
+- `/staff` для гостя сейчас ведёт себя тихо и не раскрывает, существует ли staff-режим для этого бота;
 - staff home показывает кнопки по роли;
 - quick sale доступен owner/manager/cashier;
 - billing доступен owner/manager/cashier;
@@ -2197,10 +2296,9 @@ Flow:
 
 ### 15.5. Analytics snapshots
 
-Текущий report строится on demand. Для продакшена нужны scheduled snapshots:
+Текущий report строится on demand, а daily metric snapshots уже считаются через Celery beat.
+Что ещё полезно довести:
 
-- PartnerDailyMetric aggregation;
-- scheduled Celery beat;
 - пересчёт за период;
 - dashboard в админке.
 
@@ -2220,7 +2318,7 @@ Flow:
 - orders require menu;
 - table orders require tables;
 - staff call requires tables;
-- quick sale requires menu and loyalty;
+- quick sale requires menu;
 - reports require billing or quick sale.
 
 ## 16. Риски и важные решения
@@ -2277,9 +2375,6 @@ Flow:
 
 - webhook mode;
 - health dashboard по ботам;
-- Celery beat;
-- scheduled broadcasts;
-- analytics snapshots;
 - observability.
 
 ### Этап 5. Интеграции
@@ -2308,7 +2403,7 @@ Flow:
 - staff call: on;
 - quick sale: on;
 - report: on;
-- broadcasts: optional.
+- broadcasts: built-in.
 
 Кнопки клиента:
 
@@ -2424,14 +2519,17 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - BotInstance с username, encrypted token, mode, webhook_url, is_active;
 - проверка token_status;
 - PartnerBotSettings с кнопками, шаблонами и behavior flags;
-- BotContent, который собирает defaults и partner settings в runtime object;
+- delivery/pickup flags заведены как явные module flags;
+- loyalty/profile считаются базовой частью продукта, а broadcasts больше не живут как partner-level module flag;
+- BotContent, который собирает defaults и partner settings в runtime object и выступает capability-layer для модульной логики;
+- главная guest-клавиатура уже строится из enabled modules и текущего guest navigation state;
+- validation зависимостей модулей и bot instance уже реализована;
+- partner templates уже рендерятся через безопасный fallback: плохой `.format(...)` не должен ронять bot delivery в runtime;
 - runtime mapping token -> partner.
 
 Что нужно довести до целевой модели:
 
-- держать delivery/pickup/table/cart/orders как явные module flags;
-- выводить основные кнопки из включённых модулей и текущего guest journey;
-- сделать preview/validation настроек;
+- сделать preview настроек;
 - реализовать webhook runtime позже.
 
 ### 21.2. Пользователи, гости и доступы
@@ -2451,10 +2549,15 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - GuestProfile как профиль гостя внутри партнёра;
 - customer_code;
 - loyalty_balance;
+- is_subscribed в GuestProfile;
 - AdminAccessProfile;
 - AdminSectionPermission;
 - RBAC presets;
-- ScopedAdminMixin для tenant scoping.
+- ScopedAdminMixin для tenant scoping;
+- автоматическая синхронизация `User.partner` и `User.is_staff` через `AdminAccessProfile`;
+- `ScopedAdminMixin` уже скопирует partner scope не только в queryset, но и в связанные FK/M2M выборки для partner admin;
+- `ScopedAdminMixin` уже умеет скрывать `platform_only` и `sensitive_fields` в зависимости от секции и прав;
+- guest profile sync теперь обновляет и очищенные Telegram-поля тоже, чтобы username/first_name/last_name/language_code не застревали навсегда в старом состоянии.
 
 Что нужно довести:
 
@@ -2485,12 +2588,15 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - правила can_close_table_session;
 - guest "Мой стол";
 - guest order card;
-- guest confirm received.
+- guest confirm received;
+- Table admin уже показывает operational QR-links, copyable Telegram start URLs и сводки по active sessions / orders / bills;
+- guest-side session overview уже ограничивает длинные списки заказов preview-блоком, чтобы не раздувать одно сообщение.
 
 Что нужно довести:
 
-- feature flag для tables;
 - авто-expiration сессий;
+- conflict-flow для зависших старых компаний на одном столе;
+- явный lifecycle/UX для `timed_out` или другой soft-stale стратегии.
 
 
 ### 21.4. Меню
@@ -2510,7 +2616,13 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - active menu repository;
 - category inline keyboard;
 - menu refresh;
-- add-to-cart buttons только при active session.
+- add-to-cart buttons только при active session;
+- refresh защищён от обычного Telegram-кейса `message is not modified`;
+- stale callback на уже скрытую/неактивную позицию не должен позволять добавить её в корзину;
+- active menu repository уже фильтрует только `is_available=True` и `category__is_active=True`;
+- пустая категория получает явный empty-state;
+- длинные description режутся до компактного preview;
+- shortcut "Открыть корзину" не показывается без active session.
 
 Что нужно довести:
 
@@ -2540,12 +2652,17 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - OrderStatusHistory;
 - explicit status transitions;
 - cart add/change/remove/clear/checkout;
-- create_order_from_session;
+- `create_order_from_session`, а также более общий `create_order` для non-table сценариев;
+- Order и Cart уже не намертво table-first на уровне модели;
+- активная корзина больше не должна переноситься между разными table sessions вместе с позициями;
+- правило одной active cart на гостя зафиксировано constraint/transaction-safe логикой;
+- core-сервис заказа не позволяет создать пустой order без позиций;
 - staff notification on order created;
 - guest order status updates;
 - staff status actions;
 - assignment responsible employee on accepted;
-- completed unpaid order остаётся видимым.
+- completed unpaid order остаётся видимым;
+- guest-side menu/session/cart экраны уже ограничивают слишком длинные списки preview-блоками, чтобы не упираться в лимиты Telegram-сообщений.
 
 Что нужно довести:
 
@@ -2570,7 +2687,7 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - Bill, BillOrder, BillItem;
 - BillingRequest;
 - Payment;
-- FiscalReceipt model shell;
+- Bill уже допускает non-table settlement context;
 - create personal/shared bill;
 - get_or_create personal/shared bill;
 - custom split request;
@@ -2579,16 +2696,19 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - partial/full payment;
 - bonus redemption for personal bill;
 - auto-process billing request after paid bill;
-- close sessions if fully settled.
+- close sessions if fully settled;
+- `auto_close_table_session_after_payment` реально участвует в post-payment flow;
+- bill/request repositories уже умеют открывать не только open-объекты, но и paid/processed карточки для report/staff navigation;
+- core billing-сервисы строже валидируют вход: неподходящие order ids и неизвестные payment methods не должны проходить молча.
 
 Что нужно довести:
 
 - ручной split по позициям;
 - ввод частичной суммы в staff-боте;
 - online payments;
-- POS/fiscal providers;
+- POS providers;
 - refunds;
-- receipt lifecycle.
+- richer payment lifecycle beyond the current cash/terminal MVP.
 
 ### 21.7. Бонусы и быстрые продажи
 
@@ -2597,7 +2717,7 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - `apps/bonuses/models.py`;
 - `apps/bonuses/services.py`;
 - `apps/bonuses/admin.py`;
-- `bot/handlers/loyalty.py`;
+- `bot/handlers/profile.py`;
 - `bot/handlers/staff.py`;
 - `bot/states/staff_sale.py`.
 
@@ -2606,19 +2726,25 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - BonusProgram;
 - BonusTransaction;
 - cashback, visit, milestone logic;
+- custom strategy registry по `BonusProgram.strategy_code`;
 - visit bonus on QR activation;
 - get_redeemable_bonus_amount;
 - WalkInSale;
 - WalkInSaleItem;
 - quick sale FSM in staff bot;
-- guest profile summary.
+- quick sale preview с projected bonus и redeemable bonus amount;
+- анонимная quick sale без customer code;
+- quick sale redemption до подтверждения продажи;
+- guest profile summary;
+- отдельный бонусный экран с pagination истории и настраиваемой кнопкой;
+- quick sale flow уже защищён от stale state и удалённого preview-сообщения, чтобы staff не терял сценарий из-за старого callback или ручного удаления сообщения.
 
 Что нужно довести:
 
 - bonus expiration job;
 - ручная корректировка баланса;
 - уведомления гостю о бонусах;
-- кастомные стратегии по партнёрам;
+- partner-facing UX для кастомных стратегий по партнёрам;
 - настройка момента начисления: completed, paid или both.
 
 ### 21.8. Сотрудники и уведомления
@@ -2639,6 +2765,8 @@ QR стола -> активная сессия -> меню -> корзина -> 
 
 - EmployeeProfile;
 - Telegram binding;
+- admin-форма уже умеет создавать или переиспользовать `TelegramAccount` сотрудника из raw `telegram_id/telegram_username`;
+- при включённых bot notifications `telegram_id` уже обязателен на уровне admin-формы;
 - notification preferences на сотрудника;
 - StaffNotification;
 - NotificationPreference;
@@ -2646,13 +2774,21 @@ QR стола -> активная сессия -> меню -> корзина -> 
 - guest staff call;
 - billing request notifications;
 - Celery delivery;
-- staff unread notifications UI.
+- ручная постановка broadcast campaign в очередь через admin action;
+- `scheduled_at` уже используется для автоматической постановки кампаний в очередь через Celery beat;
+- scheduled broadcast processing через Celery beat;
+- batched broadcast delivery и отдельная Celery queue `broadcasts`;
+- staff unread notifications UI;
+- delivery status / delivered_at / delivery_error уже сохраняются на StaffNotification;
+- Celery tasks уже идут с autoretry/backoff для operational delivery;
+- delivery защищена от `TelegramRetryAfter` и повторяет отправку после требуемой паузы;
+- blocked Telegram accounts автоматически помечаются как `TelegramAccount.is_blocked` и дальше исключаются из массовой доставки;
+- пустая broadcast audience больше не считается успешной кампанией;
+- suspended partner не должен доставлять notifications даже при наличии валидного bot token.
 
 Что нужно довести:
 
-- retry policy;
 - notification digest;
-- scheduled campaigns;
 - unsubscribe UX;
 - role-based notification routing в админке.
 
@@ -2669,13 +2805,17 @@ QR стола -> активная сессия -> меню -> корзина -> 
 Что уже есть:
 
 - PartnerDailyMetric model;
+- scheduled PartnerDailyMetric aggregation через Celery task;
 - on-demand daily operations report;
 - pages for paid bills, walk-in sales, tables, tails;
-- staff report UI.
+- table detail page со сессиями, заказами, paid/open bills и позициями;
+- staff report UI;
+- snapshot aggregation уже timezone-aware по partner timezone и умеет строиться для явно запрошенного `bucket_date`;
+- refresh job уже идёт только по active partners;
+- tails/report flow уже безопасно показывает off-table orders как отдельный operational context, а не ломается на `table.number`.
 
 Что нужно довести:
 
-- scheduled aggregation;
 - web dashboard;
 - экспорт;
 - фильтры по периоду;

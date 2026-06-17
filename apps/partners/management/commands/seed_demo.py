@@ -63,7 +63,6 @@ class Command(BaseCommand):
 
         settings, _ = PartnerBotSettings.objects.get_or_create(partner=partner)
         settings.allow_menu_without_session = True
-        settings.module_loyalty_enabled = True
         settings.module_menu_enabled = True
         settings.module_tables_enabled = True
         settings.module_cart_enabled = True
@@ -72,7 +71,6 @@ class Command(BaseCommand):
         settings.save(
             update_fields=[
                 "allow_menu_without_session",
-                "module_loyalty_enabled",
                 "module_menu_enabled",
                 "module_tables_enabled",
                 "module_cart_enabled",

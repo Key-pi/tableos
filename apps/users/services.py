@@ -14,16 +14,16 @@ def get_or_create_guest_profile(
 ) -> GuestProfile:
     telegram_account, _ = TelegramAccount.objects.get_or_create(telegram_id=telegram_id)
     changed_fields = []
-    if username and telegram_account.username != username:
+    if telegram_account.username != username:
         telegram_account.username = username
         changed_fields.append("username")
-    if first_name and telegram_account.first_name != first_name:
+    if telegram_account.first_name != first_name:
         telegram_account.first_name = first_name
         changed_fields.append("first_name")
-    if last_name and telegram_account.last_name != last_name:
+    if telegram_account.last_name != last_name:
         telegram_account.last_name = last_name
         changed_fields.append("last_name")
-    if language_code and telegram_account.language_code != language_code:
+    if telegram_account.language_code != language_code:
         telegram_account.language_code = language_code
         changed_fields.append("language_code")
     if changed_fields:

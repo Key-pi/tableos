@@ -480,7 +480,7 @@ def build_staff_sale_keyboard(
 
 def build_staff_billing_overview_keyboard(
     *,
-    unbilled_order_shortcuts: list[tuple[str, str, str]] | None = None,
+    unbilled_order_shortcuts: list[tuple[str, str, str | None]] | None = None,
     can_quick_sale: bool = False,
     can_view_day_report: bool = False,
 ) -> InlineKeyboardMarkup:
@@ -497,18 +497,20 @@ def build_staff_billing_overview_keyboard(
         ],
     ]
     for order_public_id, label, table_id in unbilled_order_shortcuts or []:
-        inline_keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text=label,
-                    callback_data=f"stafforderopen:{order_public_id}",
-                ),
+        row = [
+            InlineKeyboardButton(
+                text=label,
+                callback_data=f"stafforderopen:{order_public_id}",
+            )
+        ]
+        if table_id:
+            row.append(
                 InlineKeyboardButton(
                     text="Стол",
                     callback_data=f"stafftableopen:{table_id}",
-                ),
-            ]
-        )
+                )
+            )
+        inline_keyboard.append(row)
     if can_quick_sale:
         inline_keyboard.append(
             [

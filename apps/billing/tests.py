@@ -4,8 +4,10 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from apps.billing.models import Bill, BillingRequest, Payment
+from apps.billing.repositories import BillRepository, BillingRequestRepository
 from apps.billing.services import (
     BillingServiceError,
+    attach_orders_to_bill,
     cancel_billing_request,
     create_bill_from_orders,
     create_billing_request_for_telegram_user,
@@ -21,7 +23,7 @@ from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
 from apps.notifications.models import StaffNotification
 from apps.orders.models import Order
-from apps.orders.services import create_order_from_session, transition_order_status
+from apps.orders.services import create_order, create_order_from_session, transition_order_status
 from apps.partners.models import BotInstance, Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.tables.services import activate_table_session
@@ -134,6 +136,74 @@ class BillingServiceTests(TestCase):
         self.assertEqual(bill.items.count(), 1)
         self.assertEqual(bill.total_amount, Decimal("300.00"))
 
+    def test_create_bill_from_orders_allows_personal_bill_without_table(self):
+        order = create_order(
+            partner_id=self.partner.id,
+            guest=self.session.guest,
+            table=None,
+            table_session=None,
+            items=[
+                {
+                    "menu_item_id": self.menu_item.id,
+                    "item_name": self.menu_item.name,
+                    "unit_price": self.menu_item.price,
+                    "quantity": 1,
+                }
+            ],
+            comment="Walk-in bill preparation",
+        )
+
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(order.id)],
+            kind=Bill.Kind.PERSONAL,
+            label="Off-table personal bill",
+        )
+
+        self.assertIsNone(bill.table_id)
+        self.assertEqual(bill.primary_guest_id, self.session.guest_id)
+        self.assertEqual(bill.total_amount, Decimal("150.00"))
+
+    def test_attach_orders_to_bill_rejects_orders_from_another_table(self):
+        second_table = Table.objects.create(
+            partner=self.partner,
+            number=2,
+            name="Table 2",
+            qr_token="billing_tbl_02",
+        )
+        second_session = activate_table_session(
+            partner_id=self.partner.id,
+            telegram_id=5550102,
+            payload=second_table.deep_link_payload,
+            username="billing_guest_second_table",
+            first_name="Second Table",
+        )
+        second_order = create_order_from_session(
+            partner_id=self.partner.id,
+            table_session=second_session,
+            items=[
+                {
+                    "menu_item_id": self.menu_item.id,
+                    "item_name": self.menu_item.name,
+                    "unit_price": self.menu_item.price,
+                    "quantity": 1,
+                }
+            ],
+        )
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+
+        with self.assertRaisesMessage(
+            BillingServiceError,
+            "В этот счёт можно добавлять только заказы того же стола.",
+        ):
+            attach_orders_to_bill(
+                bill=bill,
+                order_ids=[str(second_order.id)],
+            )
+
     def test_record_payment_supports_partial_and_full_payment(self):
         bill = create_bill_from_orders(
             partner_id=self.partner.id,
@@ -161,6 +231,57 @@ class BillingServiceTests(TestCase):
         self.assertEqual(bill.paid_amount, Decimal("300.00"))
         self.session.refresh_from_db()
         self.assertEqual(self.session.status, self.session.Status.ACTIVE)
+
+    def test_record_payment_rejects_unknown_method(self):
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+
+        with self.assertRaisesMessage(BillingServiceError, "Неизвестный способ оплаты."):
+            record_payment(
+                bill=bill,
+                amount="100.00",
+                method="crypto",
+            )
+
+    def test_bill_repository_can_load_paid_bill_by_public_id(self):
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+        record_payment(
+            bill=bill,
+            amount=bill.total_amount,
+            method=Payment.Method.CASH,
+        )
+        bill.refresh_from_db()
+
+        loaded_bill = BillRepository.by_public_id_for_partner(
+            self.partner.id,
+            bill.public_id,
+        )
+
+        self.assertEqual(loaded_bill.id, bill.id)
+        self.assertEqual(loaded_bill.status, Bill.Status.PAID)
+
+    def test_billing_request_repository_can_load_processed_request_by_id(self):
+        request = BillingRequest.objects.create(
+            partner=self.partner,
+            table=self.table,
+            guest=self.session.guest,
+            table_session=self.session,
+            request_type=BillingRequest.RequestType.CUSTOM_SPLIT,
+            status=BillingRequest.Status.PROCESSED,
+        )
+
+        loaded_request = BillingRequestRepository.by_id_for_partner(
+            self.partner.id,
+            request.id,
+        )
+
+        self.assertEqual(loaded_request.id, request.id)
+        self.assertEqual(loaded_request.status, BillingRequest.Status.PROCESSED)
 
     def test_full_payment_marks_ready_orders_completed_and_closes_session(self):
         transition_order_status(
@@ -196,6 +317,42 @@ class BillingServiceTests(TestCase):
         self.assertIsNotNone(self.order.paid_at)
         self.assertEqual(bill.status, Bill.Status.PAID)
         self.assertEqual(self.session.status, self.session.Status.CLOSED)
+
+    def test_full_payment_keeps_session_active_when_auto_close_setting_is_disabled(self):
+        self.partner.bot_settings.auto_close_table_session_after_payment = False
+        self.partner.bot_settings.save(
+            update_fields=["auto_close_table_session_after_payment", "updated_at"]
+        )
+        transition_order_status(
+            order=self.order,
+            to_status=Order.Status.ACCEPTED,
+            actor_user=self.manager.user,
+            note="Taken by manager",
+        )
+        transition_order_status(
+            order=self.order,
+            to_status=Order.Status.READY,
+            actor_user=self.manager.user,
+            note="Ready for payment",
+        )
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+
+        record_payment(
+            bill=bill,
+            amount=bill.total_amount,
+            method=Payment.Method.TERMINAL,
+            created_by=self.manager.user,
+        )
+
+        self.order.refresh_from_db()
+        bill.refresh_from_db()
+        self.session.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.COMPLETED)
+        self.assertEqual(bill.status, Bill.Status.PAID)
+        self.assertEqual(self.session.status, self.session.Status.ACTIVE)
 
     def test_create_shared_bill_for_table_collects_all_unbilled_orders(self):
         second_session = activate_table_session(

@@ -111,11 +111,6 @@ class PartnerBotSettings(TimeStampedModel):
         on_delete=models.CASCADE,
         related_name="bot_settings",
     )
-    module_loyalty_enabled = models.BooleanField(
-        default=True,
-        verbose_name="Лояльность и профиль клиента",
-        help_text="Базовый модуль: регистрация гостя, код клиента, бонусный баланс.",
-    )
     module_menu_enabled = models.BooleanField(
         default=True,
         verbose_name="Меню",
@@ -161,19 +156,13 @@ class PartnerBotSettings(TimeStampedModel):
     module_quick_sale_enabled = models.BooleanField(
         default=True,
         verbose_name="Быстрые продажи",
-        help_text="Продажа на кассе по коду клиента. Требует меню и лояльность.",
+        help_text="Продажа на кассе по коду клиента. Требует меню.",
     )
     module_reports_enabled = models.BooleanField(
         default=True,
         verbose_name="Отчёт дня",
         help_text="Операционный отчёт в staff-боте.",
     )
-    module_broadcasts_enabled = models.BooleanField(
-        default=False,
-        verbose_name="Рассылки",
-        help_text="Маркетинговые и информационные сообщения гостям.",
-    )
-    allow_multiple_active_sessions_per_guest = models.BooleanField(default=False)
     auto_close_table_session_after_payment = models.BooleanField(default=True)
     max_menu_items_per_category_message = models.PositiveSmallIntegerField(default=8)
     duplicate_request_cooldown_seconds = models.PositiveSmallIntegerField(default=45)
@@ -194,6 +183,7 @@ class PartnerBotSettings(TimeStampedModel):
     button_pickup_label = models.CharField(max_length=64, default="Самовывоз")
     button_help_label = models.CharField(max_length=64, default="Как заказать")
     button_my_profile = models.CharField(max_length=64, default="Мой профиль")
+    button_profile_bonuses_label = models.CharField(max_length=64, default="Бонусы")
     button_call_staff_label = models.CharField(max_length=64, default="Позвать персонал")
     button_request_bill_label = models.CharField(max_length=64, default="Запросить счёт")
     button_call_waiter_label = models.CharField(max_length=64, default="Официант")
@@ -286,8 +276,6 @@ class PartnerBotSettings(TimeStampedModel):
             add_error("module_staff_call_enabled", "Staff call module requires tables module.")
         if self.module_quick_sale_enabled and not self.module_menu_enabled:
             add_error("module_quick_sale_enabled", "Quick sale module requires menu module.")
-        if self.module_quick_sale_enabled and not self.module_loyalty_enabled:
-            add_error("module_quick_sale_enabled", "Quick sale module requires loyalty module.")
         if self.max_menu_items_per_category_message < 1:
             add_error(
                 "max_menu_items_per_category_message",

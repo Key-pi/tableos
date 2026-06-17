@@ -4,21 +4,26 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 def build_guest_session_overview_keyboard(
     *,
     order_shortcuts: list[tuple[str, str]],
-) -> InlineKeyboardMarkup | None:
-    if not order_shortcuts:
-        return None
-
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=label,
-                    callback_data=f"guestorderopen:{order_public_id}",
-                )
-            ]
-            for order_public_id, label in order_shortcuts
+) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text="Обновить мой стол",
+                callback_data="guestsession:back",
+            )
         ]
-    )
+    ]
+
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=label,
+                callback_data=f"guestorderopen:{order_public_id}",
+            )
+        ]
+        for order_public_id, label in order_shortcuts
+    ] + rows
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def build_guest_order_card_keyboard(

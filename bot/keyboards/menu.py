@@ -47,6 +47,7 @@ def build_cart_keyboard(*, cart=None, supports_cart: bool) -> InlineKeyboardMark
         return None
 
     rows: list[list[InlineKeyboardButton]] = []
+    has_items = bool(cart is not None and cart.items.all())
     if cart is not None:
         for item in cart.items.all():
             rows.append(
@@ -70,13 +71,12 @@ def build_cart_keyboard(*, cart=None, supports_cart: bool) -> InlineKeyboardMark
                 ]
             )
 
-    rows.extend(
-        [
+    if has_items:
+        rows.append(
             [
                 InlineKeyboardButton(text="Оформить", callback_data="cart:checkout"),
                 InlineKeyboardButton(text="Очистить", callback_data="cart:clear"),
-            ],
-            [InlineKeyboardButton(text="Обновить корзину", callback_data="cart:refresh")],
-        ]
-    )
+            ]
+        )
+    rows.append([InlineKeyboardButton(text="Обновить корзину", callback_data="cart:refresh")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

@@ -7,4 +7,5 @@ class MenuItemRepository:
         return MenuItem.objects.filter(
             partner_id=partner_id,
             is_available=True,
+            category__is_active=True,
         ).select_related("category")

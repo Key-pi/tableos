@@ -1,23 +1,32 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
 from asgiref.sync import async_to_sync
 from django.db import transaction
 from django.utils import timezone
 
 from apps.employees.models import EmployeeProfile
 from apps.notifications.models import BroadcastCampaign, StaffNotification
-from apps.notifications.repositories import NotificationPreferenceRepository
-from apps.partners.models import BotInstance
+from apps.notifications.repositories import (
+    BroadcastCampaignRepository,
+    NotificationPreferenceRepository,
+)
+from apps.partners.models import BotInstance, Partner
 from apps.tables.services import get_active_table_session
+from apps.users.models import TelegramAccount
+from core.settings.env import app_settings
 
 DELIVER_STAFF_NOTIFICATION_TASK = "notifications.deliver_staff_notification"
 SEND_GUEST_ORDER_STATUS_UPDATE_TASK = "notifications.send_guest_order_status_update"
 SEND_BROADCAST_CAMPAIGN_TASK = "notifications.send_broadcast_campaign"
+PROCESS_SCHEDULED_BROADCAST_CAMPAIGNS_TASK = "notifications.process_scheduled_broadcast_campaigns"
+BROADCAST_BATCH_SIZE = max(1, app_settings.notification_broadcast_batch_size)
 
 
 class NotificationDeliveryError(Exception):
@@ -35,11 +44,14 @@ def _active_partner_bot(partner_id) -> BotInstance:
             is_active=True,
             mode=BotInstance.Mode.POLLING,
         )
+        .select_related("partner")
         .order_by("created_at")
         .first()
     )
     if bot_instance is None:
         raise NotificationDeliveryError("No active polling bot is configured for this partner.")
+    if bot_instance.partner.status != Partner.Status.ACTIVE:
+        raise NotificationDeliveryError("Partner is not active, delivery is disabled.")
     if not bot_instance.has_usable_token:
         raise NotificationDeliveryError("Partner bot token is missing or invalid.")
     return bot_instance
@@ -48,23 +60,42 @@ def _active_partner_bot(partner_id) -> BotInstance:
 async def _send_telegram_messages(
     token: str,
     messages: list[tuple[int, str]],
-) -> list[tuple[int, bool, str]]:
+) -> list[tuple[int, bool, str, bool]]:
     bot = Bot(
         token=token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    results: list[tuple[int, bool, str]] = []
+    results: list[tuple[int, bool, str, bool]] = []
     try:
         for chat_id, text in messages:
-            try:
-                await bot.send_message(chat_id=chat_id, text=text)
-            except Exception as exc:  # noqa: BLE001
-                results.append((chat_id, False, str(exc)))
-            else:
-                results.append((chat_id, True, ""))
+            while True:
+                try:
+                    await bot.send_message(chat_id=chat_id, text=text)
+                except TelegramRetryAfter as exc:
+                    await asyncio.sleep(max(float(exc.retry_after), 1.0))
+                    continue
+                except TelegramForbiddenError as exc:
+                    results.append((chat_id, False, str(exc), True))
+                except TelegramBadRequest as exc:
+                    results.append((chat_id, False, str(exc), False))
+                except TelegramAPIError as exc:
+                    results.append((chat_id, False, str(exc), False))
+                except Exception as exc:  # noqa: BLE001
+                    results.append((chat_id, False, str(exc), False))
+                else:
+                    results.append((chat_id, True, "", False))
+                break
     finally:
         await bot.session.close()
     return results
+
+
+def _unpack_delivery_result(result) -> tuple[int, bool, str, bool]:
+    chat_id = result[0]
+    is_sent = result[1]
+    error_message = result[2]
+    should_mark_blocked = result[3] if len(result) > 3 else False
+    return chat_id, is_sent, error_message, should_mark_blocked
 
 
 @transaction.atomic
@@ -135,7 +166,7 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
         notification.save(update_fields=["delivery_status", "delivery_error", "updated_at"])
         return notification
 
-    _chat_id, is_sent, error_message = results[0]
+    _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
     notification.delivery_status = (
         StaffNotification.DeliveryStatus.SENT
         if is_sent
@@ -143,6 +174,9 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
     )
     notification.delivered_at = timezone.now() if is_sent else None
     notification.delivery_error = error_message
+    if should_mark_blocked:
+        employee.telegram_account.is_blocked = True
+        employee.telegram_account.save(update_fields=["is_blocked", "updated_at"])
     notification.save(
         update_fields=[
             "delivery_status",
@@ -169,6 +203,12 @@ def _employee_display_name(employee) -> str:
         return ""
     full_name = employee.user.get_full_name().strip()
     return full_name or employee.user.username
+
+
+def _order_delivery_context_label(order) -> str:
+    if order.table_id is not None:
+        return f"Стол: #{order.table.number}"
+    return "Сценарий: заказ без привязки к столу"
 
 
 def send_guest_order_status_update(*, order, from_status: str, to_status: str):
@@ -217,7 +257,7 @@ def send_guest_order_status_update_now(
 
     lines = [
         f"<b>Обновление по заказу #{order.public_id}</b>",
-        f"Стол: #{order.table.number}",
+        _order_delivery_context_label(order),
         f"Новый статус: {order.get_status_display()}",
         f"Оплата: {'получена' if order.paid_at else 'ещё не зафиксирована'}",
         f"Получение: {'подтверждено' if order.received_at else 'ещё не подтверждено'}",
@@ -234,7 +274,10 @@ def send_guest_order_status_update_now(
         bot_instance.token,
         [(guest_chat_id, "\n".join(lines))],
     )
-    _chat_id, is_sent, _error_message = results[0]
+    _chat_id, is_sent, _error_message, should_mark_blocked = _unpack_delivery_result(results[0])
+    if should_mark_blocked:
+        order.guest.telegram_account.is_blocked = True
+        order.guest.telegram_account.save(update_fields=["is_blocked", "updated_at"])
     return is_sent
 
 
@@ -370,29 +413,79 @@ def send_broadcast_campaign(campaign: BroadcastCampaign) -> BroadcastCampaign:
         return campaign
 
     campaign.status = BroadcastCampaign.Status.SCHEDULED
+    campaign.delivery_started_at = None
+    campaign.sent_at = None
+    campaign.delivered_count = 0
+    campaign.failed_count = 0
     campaign.last_error = ""
-    campaign.save(update_fields=["status", "last_error", "updated_at"])
+    campaign.save(
+        update_fields=[
+            "status",
+            "delivery_started_at",
+            "sent_at",
+            "delivered_count",
+            "failed_count",
+            "last_error",
+            "updated_at",
+        ]
+    )
     from apps.notifications.tasks import send_broadcast_campaign_task
 
     transaction.on_commit(
-        lambda: send_broadcast_campaign_task.delay(str(campaign.id))
+        lambda: send_broadcast_campaign_task.delay(str(campaign.id), "")
     )
     return campaign
 
 
 @transaction.atomic
-def send_broadcast_campaign_now(campaign: BroadcastCampaign) -> BroadcastCampaign:
-    recipients = list(
-        NotificationPreferenceRepository.marketing_guests(campaign.partner_id).exclude(
-            telegram_account__is_blocked=True
+def send_broadcast_campaign_now(
+    campaign: BroadcastCampaign,
+    *,
+    after_guest_id: str = "",
+) -> BroadcastCampaign:
+    recipient_batch = NotificationPreferenceRepository.marketing_guests_batch(
+        campaign.partner_id,
+        after_guest_id=after_guest_id or None,
+        limit=BROADCAST_BATCH_SIZE + 1,
+    )
+    has_more_batches = len(recipient_batch) > BROADCAST_BATCH_SIZE
+    recipients = recipient_batch[:BROADCAST_BATCH_SIZE]
+
+    if after_guest_id:
+        campaign = BroadcastCampaign.objects.get(id=campaign.id)
+    elif campaign.status != BroadcastCampaign.Status.SENDING:
+        campaign.status = BroadcastCampaign.Status.SENDING
+        campaign.delivery_started_at = timezone.now()
+        campaign.last_error = ""
+        campaign.sent_at = None
+        campaign.save(
+            update_fields=[
+                "status",
+                "delivery_started_at",
+                "last_error",
+                "sent_at",
+                "updated_at",
+            ]
         )
-    )
-    campaign.status = BroadcastCampaign.Status.SENDING
-    campaign.delivery_started_at = timezone.now()
-    campaign.last_error = ""
-    campaign.save(
-        update_fields=["status", "delivery_started_at", "last_error", "updated_at"]
-    )
+
+    if not recipients:
+        if after_guest_id:
+            _finalize_broadcast_campaign(campaign)
+        else:
+            campaign.status = BroadcastCampaign.Status.FAILED
+            campaign.delivered_count = 0
+            campaign.failed_count = 0
+            campaign.last_error = "No eligible recipients for this campaign."
+            campaign.save(
+                update_fields=[
+                    "status",
+                    "delivered_count",
+                    "failed_count",
+                    "last_error",
+                    "updated_at",
+                ]
+            )
+        return campaign
 
     try:
         bot_instance = _active_partner_bot(campaign.partner_id)
@@ -408,22 +501,63 @@ def send_broadcast_campaign_now(campaign: BroadcastCampaign) -> BroadcastCampaig
         for guest in recipients
     ]
     results = async_to_sync(_send_telegram_messages)(bot_instance.token, message_payloads)
-    delivered_count = sum(1 for _chat_id, is_sent, _error in results if is_sent)
-    failed_results = [result for result in results if not result[1]]
+    delivered_count = 0
+    failed_count = 0
+    failed_results: list[tuple[int, bool, str, bool]] = []
+    blocked_chat_ids: list[int] = []
+    for result in results:
+        chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(result)
+        if is_sent:
+            delivered_count += 1
+        else:
+            failed_count += 1
+            failed_results.append((chat_id, is_sent, error_message, should_mark_blocked))
+        if should_mark_blocked:
+            blocked_chat_ids.append(chat_id)
 
-    campaign.delivered_count = delivered_count
-    campaign.failed_count = len(failed_results)
-    campaign.sent_at = timezone.now()
-    if failed_results and delivered_count == 0:
-        campaign.status = BroadcastCampaign.Status.FAILED
+    if blocked_chat_ids:
+        TelegramAccount.objects.filter(telegram_id__in=blocked_chat_ids).update(
+            is_blocked=True,
+            updated_at=timezone.now(),
+        )
+
+    campaign.delivered_count += delivered_count
+    campaign.failed_count += failed_count
+    if failed_results:
         campaign.last_error = failed_results[0][2]
-    else:
-        campaign.status = BroadcastCampaign.Status.SENT
-        campaign.last_error = failed_results[0][2] if failed_results else ""
     campaign.save(
         update_fields=[
             "delivered_count",
             "failed_count",
+            "last_error",
+            "updated_at",
+        ]
+    )
+
+    if has_more_batches:
+        from apps.notifications.tasks import send_broadcast_campaign_task
+
+        next_after_guest_id = str(recipients[-1].id)
+        transaction.on_commit(
+            lambda: send_broadcast_campaign_task.delay(str(campaign.id), next_after_guest_id)
+        )
+        return campaign
+
+    _finalize_broadcast_campaign(campaign)
+    return campaign
+
+
+def _finalize_broadcast_campaign(campaign: BroadcastCampaign) -> BroadcastCampaign:
+    campaign = BroadcastCampaign.objects.get(id=campaign.id)
+    campaign.sent_at = timezone.now()
+    if campaign.delivered_count == 0:
+        campaign.status = BroadcastCampaign.Status.FAILED
+        if not campaign.last_error:
+            campaign.last_error = "Campaign delivery failed for all recipients."
+    else:
+        campaign.status = BroadcastCampaign.Status.SENT
+    campaign.save(
+        update_fields=[
             "sent_at",
             "status",
             "last_error",
@@ -431,3 +565,11 @@ def send_broadcast_campaign_now(campaign: BroadcastCampaign) -> BroadcastCampaig
         ]
     )
     return campaign
+
+
+def process_scheduled_broadcast_campaigns() -> int:
+    processed_count = 0
+    for campaign in BroadcastCampaignRepository.due_scheduled():
+        send_broadcast_campaign(campaign)
+        processed_count += 1
+    return processed_count

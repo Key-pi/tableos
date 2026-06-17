@@ -173,6 +173,19 @@ class PartnerBotSettingsModuleTests(TestCase):
         self.assertNotIn("QR", text)
         self.assertNotIn("меню", text.lower())
 
+    def test_loyalty_is_treated_as_base_product_capability(self):
+        settings = PartnerBotSettings.objects.create(
+            partner=self.partner,
+            module_menu_enabled=True,
+            module_quick_sale_enabled=True,
+        )
+
+        settings.full_clean()
+        content = BotContent.from_settings(settings)
+
+        self.assertTrue(content.supports_loyalty())
+        self.assertTrue(content.supports_quick_sale())
+
 
 class BotRuntimeConfigTests(TestCase):
     def _create_bot(

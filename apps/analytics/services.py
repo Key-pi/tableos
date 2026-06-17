@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from datetime import timezone as dt_timezone
 from decimal import Decimal
 from math import ceil
@@ -10,11 +11,14 @@ from django.db.models import Count, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from apps.analytics.models import PartnerDailyMetric
 from apps.billing.models import Bill, BillingRequest, Payment
+from apps.billing.services import get_bill_context_label
 from apps.bonuses.models import WalkInSale
 from apps.orders.models import Order
 from apps.partners.models import Partner
 from apps.tables.models import Table, TableSession
+from apps.users.models import GuestProfile
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,12 +67,18 @@ class DailyTableDetail:
 REPORT_PAGE_SIZE = 5
 
 
-def _resolve_partner_day_bounds(*, partner_id):
+def _resolve_partner_day_bounds(*, partner_id, bucket_date=None):
     partner = Partner.objects.get(id=partner_id)
     now = timezone.now()
     partner_tz = ZoneInfo(partner.timezone)
     local_now = now.astimezone(partner_tz)
-    day_start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    target_date = bucket_date or local_now.date()
+    day_start_local = datetime(
+        year=target_date.year,
+        month=target_date.month,
+        day=target_date.day,
+        tzinfo=partner_tz,
+    )
     day_end_local = day_start_local.replace(hour=23, minute=59, second=59, microsecond=999999)
     day_start = day_start_local.astimezone(dt_timezone.utc)
     day_end = day_end_local.astimezone(dt_timezone.utc)
@@ -91,9 +101,10 @@ def _paginate_items(*, section: str, items: list[dict], page: int) -> ReportPage
     )
 
 
-def build_daily_operations_report(*, partner_id) -> DailyOperationsReport:
+def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOperationsReport:
     partner, day_start_local, day_start, day_end = _resolve_partner_day_bounds(
-        partner_id=partner_id
+        partner_id=partner_id,
+        bucket_date=bucket_date,
     )
 
     paid_payments = Payment.objects.filter(
@@ -225,6 +236,78 @@ def build_daily_operations_report(*, partner_id) -> DailyOperationsReport:
     )
 
 
+def refresh_partner_daily_metric(*, partner_id, bucket_date=None) -> PartnerDailyMetric:
+    partner, day_start_local, day_start, day_end = _resolve_partner_day_bounds(
+        partner_id=partner_id,
+        bucket_date=bucket_date,
+    )
+    report = build_daily_operations_report(partner_id=partner_id, bucket_date=bucket_date)
+
+    session_guest_ids = set(
+        TableSession.objects.filter(
+            partner_id=partner_id,
+            started_at__gte=day_start,
+            started_at__lte=day_end,
+        ).values_list("guest_id", flat=True)
+    )
+    order_guest_ids = set(
+        Order.objects.filter(
+            partner_id=partner_id,
+            created_at__gte=day_start,
+            created_at__lte=day_end,
+        ).values_list("guest_id", flat=True)
+    )
+    walk_in_guest_ids = set(
+        WalkInSale.objects.filter(
+            partner_id=partner_id,
+            created_at__gte=day_start,
+            created_at__lte=day_end,
+            guest_id__isnull=False,
+        ).values_list("guest_id", flat=True)
+    )
+    active_guest_ids = session_guest_ids | order_guest_ids | walk_in_guest_ids
+
+    repeat_visits = 0
+    if active_guest_ids:
+        repeat_visits = GuestProfile.objects.filter(
+            partner_id=partner_id,
+            id__in=active_guest_ids,
+            first_visit_at__lt=day_start,
+            last_visit_at__gte=day_start,
+            last_visit_at__lte=day_end,
+        ).count()
+
+    sales_count = report.paid_bills_count + report.walk_in_sales_count
+    average_check = Decimal("0.00")
+    if sales_count > 0:
+        average_check = (report.total_revenue / sales_count).quantize(Decimal("0.01"))
+
+    metric, _created = PartnerDailyMetric.objects.update_or_create(
+        partner=partner,
+        bucket_date=day_start_local.date(),
+        defaults={
+            "revenue": report.total_revenue,
+            "orders_count": report.created_orders_count,
+            "average_check": average_check,
+            "active_guests": len(active_guest_ids),
+            "repeat_visits": repeat_visits,
+        },
+    )
+    return metric
+
+
+def refresh_daily_partner_metrics() -> int:
+    refreshed = 0
+    active_partner_ids = Partner.objects.filter(status=Partner.Status.ACTIVE).values_list(
+        "id",
+        flat=True,
+    )
+    for partner_id in active_partner_ids:
+        refresh_partner_daily_metric(partner_id=partner_id)
+        refreshed += 1
+    return refreshed
+
+
 def build_daily_paid_bills_page(*, partner_id, page: int = 1) -> ReportPage:
     _partner, _day_start_local, day_start, day_end = _resolve_partner_day_bounds(
         partner_id=partner_id
@@ -245,7 +328,7 @@ def build_daily_paid_bills_page(*, partner_id, page: int = 1) -> ReportPage:
             "kind": "bill",
             "public_id": bill.public_id,
             "label": (
-                f"{_format_dt(bill.closed_at)} • стол {bill.table.number} • "
+                f"{_format_dt(bill.closed_at)} • {get_bill_context_label(bill)} • "
                 f"{bill.get_kind_display()} • {bill.total_amount} грн • "
                 f"{_bill_payment_method_label(bill)}"
             ),
@@ -528,7 +611,7 @@ def build_daily_tails_page(*, partner_id, page: int = 1) -> ReportPage:
                 "kind": "bill",
                 "public_id": bill.public_id,
                 "label": (
-                    f"Счёт #{bill.public_id} • стол {bill.table.number} • "
+                    f"Счёт #{bill.public_id} • {get_bill_context_label(bill)} • "
                     f"остаток "
                     f"{(bill.total_amount - bill.paid_amount).quantize(Decimal('0.01'))} грн"
                 ),
@@ -544,7 +627,7 @@ def build_daily_tails_page(*, partner_id, page: int = 1) -> ReportPage:
                 "kind": "order",
                 "public_id": order.public_id,
                 "label": (
-                    f"Заказ #{order.public_id} • стол {order.table.number} • "
+                    f"Заказ #{order.public_id} • {_order_context_label(order)} • "
                     f"{order.get_status_display()} • {order.total_amount} грн"
                 ),
                 "subtitle": f"Не оплачен • гость: {_guest_label(order.guest)}",
@@ -556,7 +639,7 @@ def build_daily_tails_page(*, partner_id, page: int = 1) -> ReportPage:
                 "kind": "order",
                 "public_id": order.public_id,
                 "label": (
-                    f"Заказ #{order.public_id} • стол {order.table.number} • "
+                    f"Заказ #{order.public_id} • {_order_context_label(order)} • "
                     f"{order.get_status_display()} • {order.total_amount} грн"
                 ),
                 "subtitle": f"Оплачен, но не подтверждён • гость: {_guest_label(order.guest)}",
@@ -621,6 +704,12 @@ def _bill_payment_method_label(bill: Bill) -> str:
     if len(unique_methods) == 1:
         return unique_methods[0]
     return " / ".join(unique_methods)
+
+
+def _order_context_label(order: Order) -> str:
+    if order.table_id is not None:
+        return f"стол {order.table.number}"
+    return "заказ без привязки к столу"
 
 
 def _format_dt(value) -> str:

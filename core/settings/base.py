@@ -1,5 +1,8 @@
 import sys
+from datetime import timedelta
 from pathlib import Path
+
+from kombu import Queue
 
 from core.logging.config import LOGGING
 from core.settings.env import app_settings
@@ -104,3 +107,21 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_DEFAULT_QUEUE = "default"
+CELERY_TASK_QUEUES = (
+    Queue("default"),
+    Queue("broadcasts"),
+)
+CELERY_TASK_ROUTES = {
+    "notifications.send_broadcast_campaign": {"queue": "broadcasts"},
+}
+CELERY_BEAT_SCHEDULE = {
+    "process-scheduled-broadcast-campaigns": {
+        "task": "notifications.process_scheduled_broadcast_campaigns",
+        "schedule": timedelta(minutes=1),
+    },
+    "refresh-daily-partner-metrics": {
+        "task": "analytics.refresh_daily_partner_metrics",
+        "schedule": timedelta(minutes=15),
+    },
+}

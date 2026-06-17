@@ -8,7 +8,6 @@ from apps.billing.models import (
     BillingRequest,
     BillItem,
     BillOrder,
-    FiscalReceipt,
     Payment,
 )
 from apps.billing.services import (
@@ -41,11 +40,6 @@ class PaymentInline(admin.TabularInline):
 
     def has_add_permission(self, request, obj=None):
         return False
-
-
-class FiscalReceiptInline(admin.TabularInline):
-    model = FiscalReceipt
-    extra = 0
 
 
 @admin.register(BillingRequest)
@@ -121,7 +115,7 @@ class BillAdmin(ScopedAdminMixin):
         "created_at",
         "updated_at",
     )
-    inlines = [BillOrderInline, BillItemInline, PaymentInline, FiscalReceiptInline]
+    inlines = [BillOrderInline, BillItemInline, PaymentInline]
     actions = (
         "mark_as_issued",
         "record_remaining_cash_payment",
@@ -238,13 +232,3 @@ class PaymentAdmin(ScopedAdminMixin):
         obj.amount = payment.amount
         obj.paid_at = payment.paid_at
         obj.created_by = payment.created_by
-
-
-@admin.register(FiscalReceipt)
-class FiscalReceiptAdmin(ScopedAdminMixin):
-    admin_section = AdminSection.BILLING
-    allow_partner_add = False
-    allow_partner_delete = False
-    list_display = ("bill", "provider", "status", "external_receipt_id", "partner", "processed_at")
-    list_filter = ("partner", "provider", "status")
-    search_fields = ("bill__public_id", "external_receipt_id", "fiscal_number", "partner__name")

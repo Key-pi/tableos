@@ -26,6 +26,36 @@ class GuestProfileServiceTests(TestCase):
         self.assertEqual(guest_profile.telegram_account.username, "profile_guest")
         self.assertIn("telegram_account", guest_profile._state.fields_cache)
 
+    def test_get_or_create_guest_profile_syncs_blank_telegram_fields(self):
+        partner = Partner.objects.create(
+            name="Blank Sync Venue",
+            slug="blank-sync-venue",
+            status=Partner.Status.ACTIVE,
+        )
+
+        get_or_create_guest_profile(
+            partner_id=partner.id,
+            telegram_id=99887767,
+            username="profile_guest",
+            first_name="Profile",
+            last_name="Guest",
+            language_code="ru",
+        )
+
+        guest_profile = get_or_create_guest_profile(
+            partner_id=partner.id,
+            telegram_id=99887767,
+            username="",
+            first_name="",
+            last_name="",
+            language_code="",
+        )
+
+        self.assertEqual(guest_profile.telegram_account.username, "")
+        self.assertEqual(guest_profile.telegram_account.first_name, "")
+        self.assertEqual(guest_profile.telegram_account.last_name, "")
+        self.assertEqual(guest_profile.telegram_account.language_code, "")
+
 
 class UserAdminCreateTests(TestCase):
     def setUp(self):

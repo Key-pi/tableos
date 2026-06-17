@@ -18,7 +18,6 @@ def _render_template(template: str, **context) -> str:
 
 @dataclass(slots=True)
 class BotContent:
-    module_loyalty_enabled: bool
     module_menu_enabled: bool
     module_tables_enabled: bool
     module_delivery_enabled: bool
@@ -29,8 +28,6 @@ class BotContent:
     module_staff_call_enabled: bool
     module_quick_sale_enabled: bool
     module_reports_enabled: bool
-    module_broadcasts_enabled: bool
-    allow_multiple_active_sessions_per_guest: bool
     auto_close_table_session_after_payment: bool
     max_menu_items_per_category_message: int
     duplicate_request_cooldown_seconds: int
@@ -42,6 +39,7 @@ class BotContent:
     button_pickup_label: str
     button_help_label: str
     button_my_profile: str
+    button_profile_bonuses_label: str
     button_call_staff_label: str
     button_request_bill_label: str
     button_call_waiter_label: str
@@ -80,7 +78,6 @@ class BotContent:
     @classmethod
     def defaults(cls) -> "BotContent":
         return cls(
-            module_loyalty_enabled=True,
             module_menu_enabled=True,
             module_tables_enabled=True,
             module_delivery_enabled=False,
@@ -91,8 +88,6 @@ class BotContent:
             module_staff_call_enabled=False,
             module_quick_sale_enabled=True,
             module_reports_enabled=True,
-            module_broadcasts_enabled=False,
-            allow_multiple_active_sessions_per_guest=False,
             auto_close_table_session_after_payment=True,
             max_menu_items_per_category_message=8,
             duplicate_request_cooldown_seconds=45,
@@ -104,6 +99,7 @@ class BotContent:
             button_pickup_label="Самовывоз",
             button_help_label="Как заказать",
             button_my_profile="Мой профиль",
+            button_profile_bonuses_label="Бонусы",
             button_call_staff_label="Позвать персонал",
             button_request_bill_label="Запросить счёт",
             button_call_waiter_label="Официант",
@@ -158,7 +154,6 @@ class BotContent:
     def from_settings(cls, settings: PartnerBotSettings) -> "BotContent":
         defaults = cls.defaults()
         return cls(
-            module_loyalty_enabled=settings.module_loyalty_enabled,
             module_menu_enabled=settings.module_menu_enabled,
             module_tables_enabled=settings.module_tables_enabled,
             module_delivery_enabled=settings.module_delivery_enabled,
@@ -169,10 +164,6 @@ class BotContent:
             module_staff_call_enabled=settings.module_staff_call_enabled,
             module_quick_sale_enabled=settings.module_quick_sale_enabled,
             module_reports_enabled=settings.module_reports_enabled,
-            module_broadcasts_enabled=settings.module_broadcasts_enabled,
-            allow_multiple_active_sessions_per_guest=(
-                settings.allow_multiple_active_sessions_per_guest
-            ),
             auto_close_table_session_after_payment=(
                 settings.auto_close_table_session_after_payment
             ),
@@ -188,6 +179,9 @@ class BotContent:
             button_pickup_label=settings.button_pickup_label or defaults.button_pickup_label,
             button_help_label=settings.button_help_label or defaults.button_help_label,
             button_my_profile=settings.button_my_profile or defaults.button_my_profile,
+            button_profile_bonuses_label=(
+                settings.button_profile_bonuses_label or defaults.button_profile_bonuses_label
+            ),
             button_call_staff_label=(
                 settings.button_call_staff_label or defaults.button_call_staff_label
             ),
@@ -266,7 +260,7 @@ class BotContent:
         return self.module_cart_enabled and self.supports_orders()
 
     def supports_loyalty(self) -> bool:
-        return self.module_loyalty_enabled
+        return True
 
     def supports_menu(self) -> bool:
         return self.module_menu_enabled
@@ -313,11 +307,7 @@ class BotContent:
         )
 
     def supports_quick_sale(self) -> bool:
-        return (
-            self.module_quick_sale_enabled
-            and self.module_loyalty_enabled
-            and self.module_menu_enabled
-        )
+        return self.module_quick_sale_enabled and self.module_menu_enabled
 
     def supports_reports(self) -> bool:
         return self.module_reports_enabled

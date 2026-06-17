@@ -1,7 +1,7 @@
 from decimal import Decimal
 from uuid import UUID
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.employees.models import EmployeeProfile
@@ -116,10 +116,38 @@ def create_order_from_session(
     items: list[dict],
     comment: str = "",
 ) -> Order:
-    order = Order.objects.create(
+    return create_order(
         partner_id=partner_id,
         guest=table_session.guest,
         table=table_session.table,
+        table_session=table_session,
+        items=items,
+        comment=comment,
+    )
+
+
+@transaction.atomic
+def create_order(
+    *,
+    partner_id,
+    guest,
+    items: list[dict],
+    table=None,
+    table_session: TableSession | None = None,
+    comment: str = "",
+) -> Order:
+    if not items:
+        raise OrderFlowError("Нельзя создать заказ без позиций.")
+    if table_session is not None:
+        if table is None:
+            table = table_session.table
+        if guest != table_session.guest:
+            raise OrderFlowError("Гость заказа не совпадает с гостем активной сессии.")
+
+    order = Order.objects.create(
+        partner_id=partner_id,
+        guest=guest,
+        table=table,
         table_session=table_session,
         comment=comment,
     )
@@ -295,15 +323,47 @@ def get_or_create_active_cart_for_telegram_user(
     )
     if cart is not None:
         if cart.table_session_id != table_session.id:
+            if cart.items.exists():
+                cart.status = Cart.Status.ABANDONED
+                cart.save(update_fields=["status", "updated_at"])
+                cart = None
+            else:
+                cart.table_session = table_session
+                cart.save(update_fields=["table_session", "updated_at"])
+        if cart is not None:
+            return cart
+
+    try:
+        return Cart.objects.create(
+            partner_id=partner_id,
+            guest=table_session.guest,
+            table_session=table_session,
+        )
+    except IntegrityError:
+        cart = (
+            Cart.objects.select_for_update()
+            .filter(
+                partner_id=partner_id,
+                guest=table_session.guest,
+                status=Cart.Status.ACTIVE,
+            )
+            .order_by("-updated_at")
+            .first()
+        )
+        if cart is None:
+            raise
+        if cart.table_session_id != table_session.id:
+            if cart.items.exists():
+                cart.status = Cart.Status.ABANDONED
+                cart.save(update_fields=["status", "updated_at"])
+                return Cart.objects.create(
+                    partner_id=partner_id,
+                    guest=table_session.guest,
+                    table_session=table_session,
+                )
             cart.table_session = table_session
             cart.save(update_fields=["table_session", "updated_at"])
         return cart
-
-    return Cart.objects.create(
-        partner_id=partner_id,
-        guest=table_session.guest,
-        table_session=table_session,
-    )
 
 
 @transaction.atomic
@@ -352,7 +412,8 @@ def get_active_cart_for_telegram_user(
     table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
     if table_session is None:
         return None
-    return (
+
+    cart = (
         Cart.objects.filter(
             partner_id=partner_id,
             guest=table_session.guest,
@@ -363,6 +424,16 @@ def get_active_cart_for_telegram_user(
         .order_by("-updated_at")
         .first()
     )
+    if cart is None:
+        return None
+    if cart.table_session_id != table_session.id:
+        if cart.items.all():
+            cart.status = Cart.Status.ABANDONED
+            cart.save(update_fields=["status", "updated_at"])
+            return None
+        cart.table_session = table_session
+        cart.save(update_fields=["table_session", "updated_at"])
+    return cart
 
 
 @transaction.atomic
@@ -454,9 +525,13 @@ def checkout_active_cart_for_telegram_user(
     cart_items = list(cart.items.all())
     if not cart_items:
         raise OrderFlowError("Корзина пуста. Добавьте позиции перед оформлением.")
+    if cart.table_session_id is None:
+        raise OrderFlowError("Эта корзина не привязана к столу для оформления заказа.")
 
-    order = create_order_from_session(
+    order = create_order(
         partner_id=partner_id,
+        guest=cart.guest,
+        table=cart.table_session.table if cart.table_session_id else None,
         table_session=cart.table_session,
         items=[
             {
@@ -494,6 +569,7 @@ def _build_items_payload(
             partner_id=partner_id,
             public_id__in=lookup_codes,
             is_available=True,
+            category__is_active=True,
         )
     }
     missing_codes = [
@@ -529,6 +605,12 @@ def _refresh_cart_totals(cart: Cart) -> Cart:
     return cart
 
 
+def _order_location_label(order: Order) -> str:
+    if order.table_id is not None:
+        return f"стол #{order.table.number}"
+    return "заказ без привязки к столу"
+
+
 def _staff_notification_recipients(order: Order):
     # Staff notifications must stay partner-scoped even if one Telegram account
     # is reused by the same person across different venues.
@@ -553,7 +635,7 @@ def _create_staff_notifications_for_order_created(order: Order) -> None:
                 category=StaffNotification.Category.ORDER_CREATED,
                 title=f"Новый заказ #{order.public_id}",
                 message=(
-                    f"Поступил новый заказ на стол #{order.table.number} "
+                    f"Поступил новый заказ на {_order_location_label(order)} "
                     f"с суммой {order.total_amount} грн."
                 ),
             )
@@ -581,7 +663,7 @@ def _create_staff_notifications_for_status_change(
                 category=StaffNotification.Category.ORDER_STATUS_CHANGED,
                 title=f"Заказ #{order.public_id}: {to_status}",
                 message=(
-                    f"Статус заказа для стола #{order.table.number} "
+                    f"Статус заказа для {_order_location_label(order)} "
                     f"изменён с {from_status or '-'} на {to_status}."
                 ),
             )
