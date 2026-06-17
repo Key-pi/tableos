@@ -23,7 +23,9 @@ python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver
 python manage.py runbot
-celery -A core.celery worker --loglevel=info
+celery -A core.celery worker -Q default --loglevel=info
+celery -A core.celery worker -Q broadcasts --loglevel=info
+celery -A core.celery beat --loglevel=info
 python manage.py ensure_admin --username admin --email admin@tableos.local --password admin12345
 python manage.py seed_demo --slug demo-lounge --name "Demo Lounge"
 python manage.py seed_baseline_demo
@@ -93,4 +95,13 @@ Run a separate worker process in production and during local end-to-end testing:
 
 ```bash
 celery -A core.celery worker --loglevel=info
+```
+
+For better isolation in production, keep broadcast delivery on a separate queue so
+mass campaigns cannot block operational notifications:
+
+```bash
+celery -A core.celery worker -Q default --loglevel=info
+celery -A core.celery worker -Q broadcasts --loglevel=info
+celery -A core.celery beat --loglevel=info
 ```

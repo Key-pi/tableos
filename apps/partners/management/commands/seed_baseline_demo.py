@@ -164,14 +164,17 @@ class Command(BaseCommand):
 
         settings, _ = PartnerBotSettings.objects.get_or_create(partner=partner)
         settings.allow_menu_without_session = True
-        settings.show_help_button = True
-        settings.show_session_button = True
-        settings.show_cart_button = True
-        settings.show_checkout_button = True
-        settings.show_loyalty_button = True
-        settings.show_call_staff_button = True
-        settings.show_request_bill_button = True
-        settings.button_loyalty_label = "Мой профиль"
+        settings.module_menu_enabled = True
+        settings.module_tables_enabled = True
+        settings.module_cart_enabled = True
+        settings.module_orders_enabled = True
+        settings.module_billing_enabled = True
+        settings.module_staff_call_enabled = True
+        settings.module_quick_sale_enabled = True
+        settings.module_reports_enabled = True
+        settings.module_delivery_enabled = False
+        settings.module_pickup_enabled = False
+        settings.button_my_profile = "Мой профиль"
         settings.staff_call_waiter_enabled = True
         settings.staff_call_bartender_enabled = True
         settings.staff_call_hookah_enabled = slug == "night-owl-hookah"

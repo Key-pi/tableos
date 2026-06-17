@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
 from apps.notifications.models import BroadcastCampaign, NotificationPreference, StaffNotification
 from apps.notifications.services import (
     deliver_staff_notification,
+    process_scheduled_broadcast_campaigns,
     request_staff_assistance,
     send_broadcast_campaign,
+    send_broadcast_campaign_now,
 )
 from apps.orders.services import create_order_from_session
 from apps.partners.models import BotInstance, Partner
@@ -32,6 +36,10 @@ async def _partially_failed_send(_token, messages):
         else:
             results.append((chat_id, False, "blocked"))
     return results
+
+
+async def _blocked_send(_token, messages):
+    return [(chat_id, False, "bot was blocked by the user", True) for chat_id, _text in messages]
 
 
 class NotificationDeliveryTests(TestCase):
@@ -131,6 +139,184 @@ class NotificationDeliveryTests(TestCase):
         self.assertEqual(campaign.delivered_count, 1)
         self.assertEqual(campaign.failed_count, 1)
         self.assertEqual(campaign.status, BroadcastCampaign.Status.SENT)
+
+    def test_process_scheduled_broadcast_campaigns_queues_due_campaign(self):
+        guest_account = TelegramAccount.objects.create(
+            telegram_id=601010,
+            username="guest_due",
+        )
+        guest = GuestProfile.objects.create(
+            partner=self.partner,
+            telegram_account=guest_account,
+        )
+        NotificationPreference.objects.create(
+            partner=self.partner,
+            guest=guest,
+            marketing_enabled=True,
+        )
+        campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Due promo",
+            message="Scheduled hello",
+            scheduled_at=timezone.now() - timedelta(minutes=1),
+        )
+
+        with patch(
+            "apps.notifications.services._send_telegram_messages",
+            new=_successful_send,
+        ):
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                processed_count = process_scheduled_broadcast_campaigns()
+
+        campaign.refresh_from_db()
+        self.assertEqual(processed_count, 1)
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(campaign.status, BroadcastCampaign.Status.SENT)
+        self.assertEqual(campaign.delivered_count, 1)
+
+    def test_process_scheduled_broadcast_campaigns_skips_future_campaign(self):
+        campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Future promo",
+            message="Scheduled later",
+            scheduled_at=timezone.now() + timedelta(minutes=10),
+        )
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            processed_count = process_scheduled_broadcast_campaigns()
+
+        campaign.refresh_from_db()
+        self.assertEqual(processed_count, 0)
+        self.assertEqual(len(callbacks), 0)
+        self.assertEqual(campaign.status, BroadcastCampaign.Status.DRAFT)
+
+    def test_broadcast_delivery_is_processed_in_batches(self):
+        guests = []
+        for index in range(3):
+            account = TelegramAccount.objects.create(
+                telegram_id=601100 + index,
+                username=f"batch_guest_{index}",
+            )
+            guest = GuestProfile.objects.create(
+                partner=self.partner,
+                telegram_account=account,
+            )
+            NotificationPreference.objects.create(
+                partner=self.partner,
+                guest=guest,
+                marketing_enabled=True,
+            )
+            guests.append(guest)
+        campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Batch promo",
+            message="Hello batch",
+        )
+
+        with patch("apps.notifications.services.BROADCAST_BATCH_SIZE", 2):
+            with patch(
+                "apps.notifications.services._send_telegram_messages",
+                new=_successful_send,
+            ):
+                with self.captureOnCommitCallbacks(execute=False) as callbacks:
+                    send_broadcast_campaign_now(campaign)
+
+                campaign.refresh_from_db()
+                self.assertEqual(campaign.status, BroadcastCampaign.Status.SENDING)
+                self.assertEqual(campaign.delivered_count, 2)
+                self.assertEqual(len(callbacks), 1)
+
+                for callback in callbacks:
+                    callback()
+
+        campaign.refresh_from_db()
+        self.assertEqual(campaign.status, BroadcastCampaign.Status.SENT)
+        self.assertEqual(campaign.delivered_count, 3)
+        self.assertEqual(campaign.failed_count, 0)
+
+    def test_broadcast_delivery_marks_blocked_accounts(self):
+        guest_account = TelegramAccount.objects.create(
+            telegram_id=601030,
+            username="blocked_guest",
+        )
+        guest = GuestProfile.objects.create(
+            partner=self.partner,
+            telegram_account=guest_account,
+        )
+        NotificationPreference.objects.create(
+            partner=self.partner,
+            guest=guest,
+            marketing_enabled=True,
+        )
+        campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Blocked promo",
+            message="Will be blocked",
+        )
+
+        with patch(
+            "apps.notifications.services._send_telegram_messages",
+            new=_blocked_send,
+        ):
+            with self.captureOnCommitCallbacks(execute=True):
+                send_broadcast_campaign(campaign)
+
+        campaign.refresh_from_db()
+        guest_account.refresh_from_db()
+        self.assertTrue(guest_account.is_blocked)
+        self.assertEqual(campaign.status, BroadcastCampaign.Status.FAILED)
+        self.assertEqual(campaign.failed_count, 1)
+
+    def test_send_broadcast_campaign_fails_when_audience_is_empty(self):
+        campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Empty promo",
+            message="Nobody will receive this",
+        )
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            send_broadcast_campaign(campaign)
+
+        campaign.refresh_from_db()
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(campaign.status, BroadcastCampaign.Status.FAILED)
+        self.assertEqual(campaign.delivered_count, 0)
+        self.assertEqual(campaign.failed_count, 0)
+        self.assertEqual(campaign.last_error, "No eligible recipients for this campaign.")
+
+    def test_send_broadcast_campaign_fails_for_suspended_partner(self):
+        guest_account = TelegramAccount.objects.create(
+            telegram_id=601020,
+            username="guest_suspended",
+        )
+        guest = GuestProfile.objects.create(
+            partner=self.partner,
+            telegram_account=guest_account,
+        )
+        NotificationPreference.objects.create(
+            partner=self.partner,
+            guest=guest,
+            marketing_enabled=True,
+        )
+        self.partner.status = Partner.Status.SUSPENDED
+        self.partner.save(update_fields=["status", "updated_at"])
+        campaign = BroadcastCampaign.objects.create(
+            partner=self.partner,
+            name="Suspended promo",
+            message="Should not be delivered",
+        )
+
+        with patch("apps.notifications.services._send_telegram_messages", new=_successful_send):
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                send_broadcast_campaign(campaign)
+
+        campaign.refresh_from_db()
+        self.assertEqual(len(callbacks), 1)
+        self.assertEqual(campaign.status, BroadcastCampaign.Status.FAILED)
+        self.assertEqual(
+            campaign.last_error,
+            "Partner is not active, delivery is disabled.",
+        )
 
 
 class StaffNotificationCreationTests(TestCase):

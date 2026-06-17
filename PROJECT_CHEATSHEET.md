@@ -19,6 +19,14 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py runbot
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker --loglevel=info
 ```
 
+Для production-like запуска лучше разделять очереди:
+
+```bash
+DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q default --loglevel=info
+DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q broadcasts --loglevel=info
+DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery beat --loglevel=info
+```
+
 Если запускаешь через Docker Compose:
 
 ```bash
@@ -100,6 +108,13 @@ notifications.send_guest_order_status_update
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker --loglevel=info
 ```
 
+Проверить worker'ы по отдельным очередям:
+
+```bash
+DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q default --loglevel=info
+DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q broadcasts --loglevel=info
+```
+
 Если Redis не запущен, worker будет ругаться на broker connection. Подними Redis:
 
 ```bash
@@ -158,6 +173,7 @@ docker compose up redis
 - Всё tenant-scoped должно иметь `partner_id` и фильтроваться по партнёру.
 - В мутирующих сценариях использовать `transaction.atomic`.
 - Внешние вызовы не делать внутри транзакции напрямую: Celery task через `transaction.on_commit`.
+- Массовые broadcast-задачи держать в отдельной Celery queue, чтобы они не мешали staff/order notifications.
 - Для aiogram handlers использовать `sync_to_async` вокруг Django ORM/service calls.
 - После изменения моделей всегда запускать `makemigrations --check --dry-run`.
 
@@ -204,9 +220,8 @@ Admin не показывает данные партнёра:
 - Нет публичного REST/API слоя.
 - Нет Telegram WebApp/frontend.
 - Webhook mode для Telegram пока не реализован.
-- Bonus expiration, scheduled campaigns, POS sync, fiscal sync и analytics snapshots ещё не вынесены в Celery tasks.
+- Bonus expiration, POS sync и fiscal sync ещё не вынесены в полноценные фоновые интеграции.
 - POS/fiscal/online payment provider contracts пока не реализованы.
-- `PartnerDailyMetric` есть, но scheduled aggregation ещё нет.
 
 
 

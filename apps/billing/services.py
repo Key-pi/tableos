@@ -13,7 +13,6 @@ from apps.billing.models import (
     BillingRequest,
     BillItem,
     BillOrder,
-    FiscalReceipt,
     Payment,
 )
 from apps.bonuses.models import BonusTransaction
@@ -21,6 +20,7 @@ from apps.bonuses.services import get_redeemable_bonus_amount
 from apps.notifications.services import notify_staff_about_billing_request
 from apps.orders.models import Cart, Order, OrderItem
 from apps.orders.services import transition_order_status
+from apps.partners.models import PartnerBotSettings
 from apps.tables.models import TableSession
 from apps.tables.services import close_table_session, get_active_table_session
 
@@ -40,6 +40,14 @@ def get_bill_remaining_amount(bill: Bill) -> Decimal:
     refreshed_bill = Bill.objects.prefetch_related("items", "payments").get(id=bill.id)
     recalculate_bill_totals(refreshed_bill)
     return (refreshed_bill.total_amount - refreshed_bill.paid_amount).quantize(Decimal("0.01"))
+
+
+def get_bill_context_label(bill: Bill) -> str:
+    if bill.table_id is not None:
+        return f"стол #{bill.table.number}"
+    if bill.primary_guest_id is not None:
+        return f"гость {bill.primary_guest.customer_code}"
+    return "заказ без привязки к столу"
 
 
 def get_table_billable_orders(
@@ -81,16 +89,41 @@ def attach_orders_to_bill(
     if not order_ids:
         return bill
 
+    requested_order_ids = {str(order_id) for order_id in order_ids}
     existing_order_ids = set(bill.bill_orders.values_list("order_id", flat=True))
     requested_orders = list(
         Order.objects.select_related("table", "guest")
         .prefetch_related("items")
         .filter(
             partner_id=bill.partner_id,
-            id__in=order_ids,
-            table_id=bill.table_id,
+            id__in=requested_order_ids,
         )
     )
+    if len(requested_orders) != len(requested_order_ids):
+        raise BillingServiceError("Не все выбранные заказы найдены в этом заведении.")
+
+    if bill.table_id is not None:
+        invalid_context = [order for order in requested_orders if order.table_id != bill.table_id]
+        if invalid_context:
+            raise BillingServiceError("В этот счёт можно добавлять только заказы того же стола.")
+    else:
+        if any(order.table_id is not None for order in requested_orders):
+            raise BillingServiceError(
+                "В счёт без привязки к столу можно добавлять только такие же заказы."
+            )
+        if bill.primary_guest_id is not None:
+            invalid_guest_orders = [
+                order for order in requested_orders if order.guest_id != bill.primary_guest_id
+            ]
+            if invalid_guest_orders:
+                raise BillingServiceError(
+                    "В персональный счёт без стола можно добавлять только заказы этого гостя."
+                )
+        elif len({order.guest_id for order in requested_orders}) != 1:
+            raise BillingServiceError(
+                "Заказы без стола можно объединять только в рамках одного гостя."
+            )
+
     orders = [order for order in requested_orders if order.id not in existing_order_ids]
     if not orders:
         return bill
@@ -191,28 +224,35 @@ def create_bill_from_orders(
     if not order_ids:
         raise BillingServiceError("Нужно выбрать хотя бы один заказ для создания счёта.")
 
+    requested_order_ids = {str(order_id) for order_id in order_ids}
     orders = list(
         Order.objects.select_related("table", "guest")
         .prefetch_related("items")
         .filter(
             partner_id=partner_id,
-            id__in=order_ids,
+            id__in=requested_order_ids,
         )
     )
-    if len(orders) != len(set(order_ids)):
+    if len(orders) != len(requested_order_ids):
         raise BillingServiceError("Не все выбранные заказы найдены в этом заведении.")
-
-    table_ids = {order.table_id for order in orders}
-    if len(table_ids) != 1:
-        raise BillingServiceError("В один счёт можно объединять только заказы одного стола.")
 
     if any(order.status == Order.Status.CANCELED for order in orders):
         raise BillingServiceError("Отменённые заказы нельзя включать в новый счёт.")
 
+    table_ids = {order.table_id for order in orders}
+    if len(table_ids) != 1:
+        raise BillingServiceError(
+            "В один счёт можно объединять только заказы одного стола или одного гостя без стола."
+        )
+    if next(iter(table_ids)) is None and len({order.guest_id for order in orders}) != 1:
+        raise BillingServiceError(
+            "Заказы без стола можно объединять только в рамках одного гостя."
+        )
+
     allocated_order_item_ids = set(
         BillItem.objects.filter(
             partner_id=partner_id,
-            order_item_id__in=OrderItem.objects.filter(order_id__in=order_ids).values("id"),
+            order_item_id__in=OrderItem.objects.filter(order_id__in=requested_order_ids).values("id"),
             bill__status__in=[
                 Bill.Status.DRAFT,
                 Bill.Status.ISSUED,
@@ -229,7 +269,7 @@ def create_bill_from_orders(
     primary_guest = orders[0].guest if len({order.guest_id for order in orders}) == 1 else None
     bill = Bill.objects.create(
         partner_id=partner_id,
-        table=orders[0].table,
+        table=orders[0].table if orders[0].table_id is not None else None,
         primary_guest=primary_guest,
         kind=kind,
         source=created_source,
@@ -398,6 +438,7 @@ def create_billing_request_for_telegram_user(
     partner_id,
     telegram_id: int,
     request_type: str,
+    cooldown_seconds: int = 45,
 ) -> BillingRequestResult:
     table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
     if table_session is None:
@@ -410,7 +451,7 @@ def create_billing_request_for_telegram_user(
         table_session=table_session,
         guest=table_session.guest,
         request_type=request_type,
-        created_at__gte=timezone.now() - timedelta(seconds=45),
+        created_at__gte=timezone.now() - timedelta(seconds=cooldown_seconds),
         status__in=[BillingRequest.Status.OPEN, BillingRequest.Status.AUTO_PREPARED],
     ).exists()
     if recent_duplicate:
@@ -487,6 +528,8 @@ def record_payment(
     amount_value = Decimal(amount).quantize(Decimal("0.01"))
     if amount_value <= 0:
         raise BillingServiceError("Сумма оплаты должна быть больше нуля.")
+    if method not in Payment.Method.values:
+        raise BillingServiceError("Неизвестный способ оплаты.")
 
     bill = Bill.objects.select_for_update().prefetch_related("items", "payments").get(id=bill.id)
     recalculate_bill_totals(bill)
@@ -597,10 +640,24 @@ def _process_post_payment_updates(bill: Bill) -> None:
 
     _sync_orders_after_bill_paid(bill)
     _mark_related_billing_requests_processed(bill)
-    _close_table_sessions_if_fully_settled(
-        partner_id=bill.partner_id,
-        table_id=bill.table_id,
+    if bill.table_id is None:
+        return
+    if _partner_auto_closes_table_session_after_payment(partner_id=bill.partner_id):
+        _close_table_sessions_if_fully_settled(
+            partner_id=bill.partner_id,
+            table_id=bill.table_id,
+        )
+
+
+def _partner_auto_closes_table_session_after_payment(*, partner_id) -> bool:
+    setting_value = (
+        PartnerBotSettings.objects.filter(partner_id=partner_id)
+        .values_list("auto_close_table_session_after_payment", flat=True)
+        .first()
     )
+    if setting_value is None:
+        return True
+    return setting_value
 
 
 def _mark_related_billing_requests_processed(bill: Bill) -> int:
@@ -726,34 +783,6 @@ def _derive_order_payment_method(paid_payments: list[Payment]) -> str | None:
     if len(mapped_methods) == 1:
         return next(iter(mapped_methods))
     return None
-
-
-@transaction.atomic
-def create_fiscal_receipt(
-    *,
-    bill: Bill,
-    payment: Payment | None = None,
-    provider: str = FiscalReceipt.Provider.MANUAL,
-    status: str = FiscalReceipt.Status.PENDING,
-    external_receipt_id: str = "",
-    fiscal_number: str = "",
-    raw_payload: dict | None = None,
-    error_message: str = "",
-) -> FiscalReceipt:
-    return FiscalReceipt.objects.create(
-        partner_id=bill.partner_id,
-        bill=bill,
-        payment=payment,
-        provider=provider,
-        status=status,
-        external_receipt_id=external_receipt_id,
-        fiscal_number=fiscal_number,
-        raw_payload=raw_payload or {},
-        error_message=error_message,
-        processed_at=timezone.now() if status == FiscalReceipt.Status.SUCCESS else None,
-    )
-
-
 def mark_billing_request_processed(billing_request: BillingRequest) -> BillingRequest:
     if billing_request.status == BillingRequest.Status.CANCELED:
         raise BillingServiceError("Нельзя обработать уже отменённый запрос счёта.")

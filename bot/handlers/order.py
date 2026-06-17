@@ -1,5 +1,5 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
@@ -34,16 +34,30 @@ def _render_cart(cart) -> str:
     if not cart.items.all():
         return "Корзина пуста."
 
+    preview_items = list(cart.items.all()[:6])
     lines = [
         f"<b>Корзина</b> • стол #{cart.table_session.table.number}",
     ]
-    for item in cart.items.all():
+    for item in preview_items:
         line_total = item.unit_price * item.quantity
         lines.append(f"{item.item_name} • {item.quantity} x {item.unit_price} = {line_total} грн")
+    hidden_items_count = cart.items.count() - len(preview_items)
+    if hidden_items_count > 0:
+        lines.append(f"И ещё позиций: {hidden_items_count}")
     lines.append("")
     lines.append(f"Итого: {cart.total_amount} грн")
     lines.append("Используйте кнопки ниже, чтобы менять количество и оформить заказ.")
     return "\n".join(lines)
+
+
+async def _safe_edit_cart_message(message: Message, text: str, *, reply_markup=None) -> bool:
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+        return True
+    except TelegramBadRequest as exc:
+        if "message is not modified" in str(exc).lower():
+            return False
+        raise
 
 
 def _ensure_cart_enabled(content: BotContent) -> None:
@@ -57,10 +71,10 @@ async def _send_navigation_keyboard_message(
     partner_id,
     telegram_id: int,
     content: BotContent,
-    text: str,
+    text: str | None = None,
 ) -> None:
-    await message.answer(
-        text,
+    keyboard_message = await message.answer(
+        text or "\u2060",
         reply_markup=build_main_keyboard(
             content,
             navigation_state=await sync_to_async(resolve_guest_navigation_state)(
@@ -70,9 +84,47 @@ async def _send_navigation_keyboard_message(
             ),
         ),
     )
+    if text is None:
+        try:
+            await keyboard_message.delete()
+        except TelegramBadRequest:
+            pass
 
 
-@router.message(Command("cart"))
+@router.message(PartnerButtonFilter("button_delivery_label"))
+async def delivery_handler(message: Message, bot: Bot) -> None:
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    if not content.supports_delivery_orders():
+        text = "Доставка сейчас отключена для этого бота."
+    else:
+        text = "Сценарий доставки включён в настройках и будет доступен в следующем шаге."
+    await _send_navigation_keyboard_message(
+        message=message,
+        partner_id=partner.id,
+        telegram_id=message.from_user.id,
+        content=content,
+        text=text,
+    )
+
+
+@router.message(PartnerButtonFilter("button_pickup_label"))
+async def pickup_handler(message: Message, bot: Bot) -> None:
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    if not content.supports_pickup_orders():
+        text = "Самовывоз сейчас отключён для этого бота."
+    else:
+        text = "Сценарий самовывоза включён в настройках и будет доступен в следующем шаге."
+    await _send_navigation_keyboard_message(
+        message=message,
+        partner_id=partner.id,
+        telegram_id=message.from_user.id,
+        content=content,
+        text=text,
+    )
+
+
 @router.message(PartnerButtonFilter("button_cart_label"))
 async def cart_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
@@ -107,49 +159,6 @@ async def cart_handler(message: Message, bot: Bot) -> None:
     )
 
 
-@router.message(Command("cart_clear"))
-async def clear_cart_handler(message: Message, bot: Bot) -> None:
-    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
-    content = await sync_to_async(BotContent.for_partner)(partner)
-    navigation_state = await sync_to_async(resolve_guest_navigation_state)(
-        partner_id=partner.id,
-        telegram_id=message.from_user.id,
-        content=content,
-    )
-    try:
-        _ensure_cart_enabled(content)
-    except OrderFlowError as exc:
-        await message.answer(
-            str(exc),
-            reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
-        )
-        return
-    try:
-        await sync_to_async(clear_active_cart_for_telegram_user)(
-            partner_id=partner.id,
-            telegram_id=message.from_user.id,
-        )
-    except OrderFlowError as exc:
-        await message.answer(
-            str(exc),
-            reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
-        )
-        return
-
-    await message.answer(
-        content.cart_cleared_message_template,
-        reply_markup=build_main_keyboard(
-            content,
-            navigation_state=await sync_to_async(resolve_guest_navigation_state)(
-                partner_id=partner.id,
-                telegram_id=message.from_user.id,
-                content=content,
-            ),
-        ),
-    )
-
-
-@router.message(Command("checkout"))
 @router.message(PartnerButtonFilter("button_checkout_label"))
 async def checkout_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
@@ -229,21 +238,24 @@ async def cart_refresh_callback(callback: CallbackQuery, bot: Bot) -> None:
         telegram_id=callback.from_user.id,
     )
     if cart is None:
-        await callback.message.edit_text(content.cart_empty_message_template)
+        await _safe_edit_cart_message(callback.message, content.cart_empty_message_template)
         await _send_navigation_keyboard_message(
             message=callback.message,
             partner_id=partner.id,
             telegram_id=callback.from_user.id,
             content=content,
-            text="Клавиатура обновлена.",
         )
         await callback.answer()
         return
-    await callback.message.edit_text(
+    updated = await _safe_edit_cart_message(
+        callback.message,
         _render_cart(cart),
         reply_markup=build_cart_keyboard(cart=cart, supports_cart=True),
     )
-    await callback.answer()
+    if updated:
+        await callback.answer()
+    else:
+        await callback.answer("Без изменений")
 
 
 @router.callback_query(F.data == "cart:clear")
@@ -259,13 +271,12 @@ async def cart_clear_callback(callback: CallbackQuery, bot: Bot) -> None:
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
-    await callback.message.edit_text(content.cart_cleared_message_template)
+    await _safe_edit_cart_message(callback.message, content.cart_cleared_message_template)
     await _send_navigation_keyboard_message(
         message=callback.message,
         partner_id=partner.id,
         telegram_id=callback.from_user.id,
         content=content,
-        text="Клавиатура обновлена.",
     )
     await callback.answer("Корзина очищена.")
 
@@ -283,7 +294,8 @@ async def cart_checkout_callback(callback: CallbackQuery, bot: Bot) -> None:
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
-    await callback.message.edit_text(
+    await _safe_edit_cart_message(
+        callback.message,
         content.order_created_message(
             order_public_id=order.public_id,
             total_amount=order.total_amount,
@@ -295,7 +307,6 @@ async def cart_checkout_callback(callback: CallbackQuery, bot: Bot) -> None:
         partner_id=partner.id,
         telegram_id=callback.from_user.id,
         content=content,
-        text="Клавиатура обновлена.",
     )
     await callback.answer("Заказ оформлен.")
 
@@ -325,18 +336,18 @@ async def cart_item_quantity_callback(callback: CallbackQuery, bot: Bot) -> None
         return
 
     if not cart.items.all():
-        await callback.message.edit_text(content.cart_empty_message_template)
+        await _safe_edit_cart_message(callback.message, content.cart_empty_message_template)
         await _send_navigation_keyboard_message(
             message=callback.message,
             partner_id=partner.id,
             telegram_id=callback.from_user.id,
             content=content,
-            text="Клавиатура обновлена.",
         )
         await callback.answer("Корзина обновлена.")
         return
 
-    await callback.message.edit_text(
+    await _safe_edit_cart_message(
+        callback.message,
         _render_cart(cart),
         reply_markup=build_cart_keyboard(cart=cart, supports_cart=True),
     )
@@ -360,18 +371,18 @@ async def cart_item_remove_callback(callback: CallbackQuery, bot: Bot) -> None:
         return
 
     if not cart.items.all():
-        await callback.message.edit_text(content.cart_empty_message_template)
+        await _safe_edit_cart_message(callback.message, content.cart_empty_message_template)
         await _send_navigation_keyboard_message(
             message=callback.message,
             partner_id=partner.id,
             telegram_id=callback.from_user.id,
             content=content,
-            text="Клавиатура обновлена.",
         )
         await callback.answer("Позиция удалена.")
         return
 
-    await callback.message.edit_text(
+    await _safe_edit_cart_message(
+        callback.message,
         _render_cart(cart),
         reply_markup=build_cart_keyboard(cart=cart, supports_cart=True),
     )

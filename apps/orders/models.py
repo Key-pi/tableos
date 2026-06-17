@@ -1,6 +1,7 @@
 import secrets
 
 from django.db import models
+from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
 
@@ -31,11 +32,15 @@ class Order(PartnerBoundModel):
         "tables.Table",
         on_delete=models.PROTECT,
         related_name="orders",
+        null=True,
+        blank=True,
     )
     table_session = models.ForeignKey(
         "tables.TableSession",
         on_delete=models.PROTECT,
         related_name="orders",
+        null=True,
+        blank=True,
     )
     assigned_employee = models.ForeignKey(
         "employees.EmployeeProfile",
@@ -120,6 +125,8 @@ class Cart(PartnerBoundModel):
         "tables.TableSession",
         on_delete=models.CASCADE,
         related_name="carts",
+        null=True,
+        blank=True,
     )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
     comment = models.TextField(blank=True)
@@ -129,6 +136,13 @@ class Cart(PartnerBoundModel):
 
     class Meta:
         ordering = ["-updated_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["partner", "guest"],
+                condition=Q(status="active"),
+                name="unique_active_cart_per_partner_guest",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.partner.name} / cart / {self.guest_id} / {self.status}"

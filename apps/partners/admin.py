@@ -12,17 +12,69 @@ class PartnerBotSettingsInline(admin.StackedInline):
     max_num = 1
     fieldsets = (
         (
+            "Модули · Базовые",
+            {
+                "description": (
+                    "Профиль гостя и бонусный баланс считаются базовой частью "
+                    "продукта. Меню нужно для заказов, корзины и быстрых продаж."
+                ),
+                "fields": (
+                    "module_menu_enabled",
+                ),
+            },
+        ),
+        (
+            "Модули · Сценарии заказа",
+            {
+                "description": (
+                    "Столы, доставка и самовывоз — независимые сценарии. "
+                    "Можно включить любой набор; для заказов нужен хотя бы один."
+                ),
+                "fields": (
+                    "module_tables_enabled",
+                    "module_delivery_enabled",
+                    "module_pickup_enabled",
+                ),
+            },
+        ),
+        (
+            "Модули · Заказы и оплата",
+            {
+                "description": (
+                    "Корзина требует меню и заказы. Счета требуют заказы; "
+                    "запрос счёта гостем работает только при включённых столах."
+                ),
+                "fields": (
+                    "module_orders_enabled",
+                    "module_cart_enabled",
+                    "module_billing_enabled",
+                ),
+            },
+        ),
+        (
+            "Модули · Операции и отчёты",
+            {
+                "description": (
+                    "Вызов персонала требует столы. Быстрые продажи требуют меню."
+                ),
+                "fields": (
+                    "module_staff_call_enabled",
+                    "module_quick_sale_enabled",
+                    "module_reports_enabled",
+                ),
+            },
+        ),
+        (
             "Behavior",
             {
                 "fields": (
+                    "auto_close_table_session_after_payment",
+                    "max_menu_items_per_category_message",
+                    "duplicate_request_cooldown_seconds",
                     "allow_menu_without_session",
-                    "show_call_staff_button",
-                    "show_request_bill_button",
                     "staff_call_waiter_enabled",
                     "staff_call_bartender_enabled",
                     "staff_call_hookah_enabled",
-                    "guest_flow_code",
-                    "staff_flow_code",
                     "extra_config",
                 )
             },
@@ -31,17 +83,15 @@ class PartnerBotSettingsInline(admin.StackedInline):
             "Buttons",
             {
                 "fields": (
-                    "show_help_button",
-                    "show_session_button",
-                    "show_cart_button",
-                    "show_checkout_button",
-                    "show_loyalty_button",
                     "button_menu_label",
                     "button_session_label",
                     "button_cart_label",
                     "button_checkout_label",
+                    "button_delivery_label",
+                    "button_pickup_label",
                     "button_help_label",
-                    "button_loyalty_label",
+                    "button_my_profile",
+                    "button_profile_bonuses_label",
                     "button_call_staff_label",
                     "button_request_bill_label",
                     "button_call_waiter_label",
@@ -173,14 +223,26 @@ class BotInstanceAdmin(ScopedAdminMixin):
 @admin.register(PartnerBotSettings)
 class PartnerBotSettingsAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BOT_CONTENT
-    platform_only_fields = ("guest_flow_code", "staff_flow_code", "extra_config")
+    platform_only_fields = ("extra_config",)
     list_display = (
         "partner",
+        "module_menu_enabled",
+        "module_delivery_enabled",
+        "module_pickup_enabled",
+        "module_orders_enabled",
+        "module_billing_enabled",
         "allow_menu_without_session",
-        "show_help_button",
         "updated_at",
     )
-    list_filter = ("allow_menu_without_session", "show_help_button")
+    list_filter = (
+        "module_menu_enabled",
+        "module_delivery_enabled",
+        "module_pickup_enabled",
+        "module_orders_enabled",
+        "module_billing_enabled",
+        "module_staff_call_enabled",
+        "allow_menu_without_session",
+    )
     search_fields = ("partner__name", "partner__slug")
     fieldsets = PartnerBotSettingsInline.fieldsets
 

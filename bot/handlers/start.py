@@ -37,6 +37,20 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
         employee = None
 
     if payload:
+        if not content.supports_tables():
+            await message.answer(
+                "Столы сейчас отключены для этого бота.",
+                reply_markup=build_main_keyboard(
+                    content,
+                    navigation_state=await sync_to_async(resolve_guest_navigation_state)(
+                        partner_id=partner.id,
+                        telegram_id=message.from_user.id,
+                        content=content,
+                    ),
+                ),
+            )
+            return
+
         try:
             session = await sync_to_async(activate_table_session)(
                 partner_id=partner.id,
@@ -59,7 +73,7 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
                         table_number=session.table.number,
                     ),
                     "",
-                    f"Ваш бонусный код: <code>{guest_profile.customer_code}</code>",
+                    f"Ваш код клиента: <code>{guest_profile.customer_code}</code>",
                 ]
             ),
             reply_markup=build_main_keyboard(
@@ -73,6 +87,7 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
         )
         return
 
+    start_hint_lines = content.start_hint_lines()
     await message.answer(
         "\n".join(
             [
@@ -82,6 +97,7 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
                 f"Ваш код клиента: <code>{guest_profile.customer_code}</code>",
                 "Этот код можно назвать на баре или кассе для начисления бонусов.",
             ]
+            + ([""] + start_hint_lines if start_hint_lines else [])
             + (
                 [
                     "",

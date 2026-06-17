@@ -93,6 +93,11 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
     )
 
     def get_fieldsets(self, request, obj=None):
+        # On the add page Django must use the add_fieldsets (password1/password2),
+        # otherwise the creation form renders against change fields and fails
+        # validation with no visible error.
+        if obj is None:
+            return self.get_add_fieldsets(request)
         if request.user.is_superuser:
             return self.fieldsets
         return (

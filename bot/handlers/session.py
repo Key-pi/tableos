@@ -1,5 +1,5 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
@@ -57,6 +57,7 @@ def _build_guest_session_view(
     content,
 ) -> tuple[str, list[tuple[str, str]]]:
     visible_orders = [order for order in orders if not is_order_final(order)]
+    preview_orders = visible_orders[:6]
     lines = [
         f"Ваш стол: #{session.table.number}",
         f"Заведение: {partner.name}",
@@ -84,7 +85,10 @@ def _build_guest_session_view(
             "Ваши заказы:",
         ]
     )
-    lines.extend(_render_guest_order_line(order) for order in visible_orders)
+    lines.extend(_render_guest_order_line(order) for order in preview_orders)
+    hidden_orders_count = len(visible_orders) - len(preview_orders)
+    if hidden_orders_count > 0:
+        lines.append(f"• И ещё заказов: {hidden_orders_count}")
 
     if unpaid_count:
         lines.extend(
@@ -117,12 +121,17 @@ def _build_guest_order_card_text(order: Order) -> str:
         f"Оплата: {payment_label}",
         f"Получение: {received_label}",
         f"Заказ взял в работу: {_employee_label(order)}",
-        "",
-        (
-            "Если заказ уже у вас, но он ещё не оплачен, "
-            "запросите счёт кнопкой «Запросить счёт»."
-        ),
     ]
+    if not is_order_paid(order):
+        lines.extend(
+            [
+                "",
+                (
+                    "Если заказ уже у вас, но он ещё не оплачен, "
+                    "запросите счёт кнопкой «Запросить счёт»."
+                ),
+            ]
+        )
     if order.status not in {Order.Status.NEW, Order.Status.CANCELED, Order.Status.COMPLETED}:
         lines.extend(
             [
@@ -133,11 +142,31 @@ def _build_guest_order_card_text(order: Order) -> str:
     return "\n".join(lines)
 
 
-@router.message(Command("session"))
+async def _safe_edit_session_message(message: Message, text: str, *, reply_markup) -> bool:
+    try:
+        await message.edit_text(text, reply_markup=reply_markup)
+        return True
+    except TelegramBadRequest as exc:
+        if "message is not modified" in str(exc).lower():
+            return False
+        raise
+
+
 @router.message(PartnerButtonFilter("button_session_label"))
 async def session_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
+    if not content.supports_tables():
+        navigation_state = await sync_to_async(resolve_guest_navigation_state)(
+            partner_id=partner.id,
+            telegram_id=message.from_user.id,
+            content=content,
+        )
+        await message.answer(
+            "Столы сейчас отключены для этого бота.",
+            reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
+        )
+        return
     session = await sync_to_async(get_active_table_session)(
         partner_id=partner.id,
         telegram_id=message.from_user.id,
@@ -188,7 +217,8 @@ async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
         await callback.answer("Заказ уже не найден для активного стола.", show_alert=True)
         return
 
-    await callback.message.edit_text(
+    updated = await _safe_edit_session_message(
+        callback.message,
         _build_guest_order_card_text(order),
         reply_markup=build_guest_order_card_keyboard(
             order_public_id=order.public_id,
@@ -196,7 +226,10 @@ async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
             not in {Order.Status.NEW, Order.Status.CANCELED, Order.Status.COMPLETED},
         ),
     )
-    await callback.answer()
+    if updated:
+        await callback.answer()
+    else:
+        await callback.answer("Без изменений")
 
 
 @router.callback_query(F.data == "guestsession:back")
@@ -218,13 +251,17 @@ async def guest_session_back_callback(callback: CallbackQuery, bot: Bot) -> None
         orders=orders,
         content=content,
     )
-    await callback.message.edit_text(
+    updated = await _safe_edit_session_message(
+        callback.message,
         session_text,
         reply_markup=build_guest_session_overview_keyboard(
             order_shortcuts=order_shortcuts,
         ),
     )
-    await callback.answer()
+    if updated:
+        await callback.answer()
+    else:
+        await callback.answer("Без изменений")
 
 
 @router.callback_query(F.data.startswith("guestorderconfirm:"))
@@ -251,11 +288,15 @@ async def guest_order_confirm_callback(callback: CallbackQuery, bot: Bot) -> Non
         await callback.answer("Получение подтверждено.")
         return
 
-    await callback.message.edit_text(
+    updated = await _safe_edit_session_message(
+        callback.message,
         _build_guest_order_card_text(order),
         reply_markup=build_guest_order_card_keyboard(
             order_public_id=order.public_id,
             can_confirm_received=False,
         ),
     )
-    await callback.answer(f"Заказ #{order.public_id} отмечен как полученный.")
+    if updated:
+        await callback.answer(f"Заказ #{order.public_id} отмечен как полученный.")
+    else:
+        await callback.answer("Без изменений")

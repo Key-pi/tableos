@@ -44,6 +44,10 @@ class AppSettings(BaseSettings):
         default=True,
         validation_alias="CELERY_TASK_IGNORE_RESULT",
     )
+    notification_broadcast_batch_size: int = Field(
+        default=250,
+        validation_alias="NOTIFICATIONS_BROADCAST_BATCH_SIZE",
+    )
 
     @field_validator("allowed_hosts", "csrf_trusted_origins", mode="before")
     @classmethod

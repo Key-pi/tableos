@@ -9,97 +9,24 @@ from django.utils import timezone
 
 from apps.bonuses.models import BonusProgram, BonusTransaction, WalkInSale, WalkInSaleItem
 from apps.bonuses.repositories import BonusProgramRepository
+from apps.bonuses.strategies import (
+    BonusContext,
+    BonusServiceError,
+    resolve_bonus_strategy,
+)
 from apps.menu.models import MenuItem
 from apps.orders.models import Order
 from apps.users.models import GuestProfile
 from apps.users.selectors import get_guest_profile_by_customer_code
 
 
-class BonusServiceError(Exception):
-    """Raised when loyalty rules cannot be evaluated or applied safely."""
-
-
-@dataclass(slots=True)
-class BonusContext:
-    event: str
-    guest: GuestProfile
-    order: Order | None = None
-    purchase_total: Decimal | None = None
-    comment: str = ""
-
-
 @dataclass(slots=True)
 class WalkInSalePreview:
-    guest: GuestProfile
+    guest: GuestProfile | None
     items: list[dict]
     total_amount: Decimal
     projected_bonus_amount: Decimal
-
-
-def _purchase_total(context: BonusContext) -> Decimal:
-    if context.purchase_total is not None:
-        return Decimal(context.purchase_total)
-    if context.order is not None:
-        return Decimal(context.order.total_amount)
-    return Decimal("0.00")
-
-
-def _cashback_bonus(program: BonusProgram, context: BonusContext) -> Decimal:
-    total = _purchase_total(context)
-    if total < program.min_order_total:
-        return Decimal("0.00")
-    return (total * program.percent / Decimal("100")).quantize(Decimal("0.01"))
-
-
-def _visit_bonus(program: BonusProgram, context: BonusContext) -> Decimal:
-    once_per_day = program.config.get("once_per_day", True)
-    if once_per_day:
-        started_at = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        already_awarded = BonusTransaction.objects.filter(
-            partner_id=program.partner_id,
-            guest=context.guest,
-            program=program,
-            transaction_type=BonusTransaction.TransactionType.ACCRUAL,
-            created_at__gte=started_at,
-        ).exists()
-        if already_awarded:
-            return Decimal("0.00")
-    return Decimal(program.fixed_amount)
-
-
-def _milestone_bonus(program: BonusProgram, context: BonusContext) -> Decimal:
-    if context.order is None or program.milestone_order_count <= 0:
-        return Decimal("0.00")
-    completed_orders_count = context.guest.orders.filter(
-        partner_id=program.partner_id,
-        status=Order.Status.COMPLETED,
-    ).count()
-    if completed_orders_count % program.milestone_order_count != 0:
-        return Decimal("0.00")
-    return Decimal(program.fixed_amount)
-
-
-BUILTIN_BONUS_STRATEGIES = {
-    BonusProgram.ProgramType.CASHBACK: _cashback_bonus,
-    BonusProgram.ProgramType.VISIT: _visit_bonus,
-    BonusProgram.ProgramType.MILESTONE: _milestone_bonus,
-}
-
-# Partner-specific strategies can be registered here later without changing the
-# shared accrual loop or pushing venue branches into bot handlers.
-CUSTOM_BONUS_STRATEGIES = {}
-
-
-def resolve_bonus_strategy(program: BonusProgram):
-    if program.strategy_code:
-        try:
-            return CUSTOM_BONUS_STRATEGIES[program.strategy_code]
-        except KeyError as exc:
-            raise BonusServiceError(
-                "Unknown bonus strategy code "
-                f"`{program.strategy_code}` for program `{program.name}`."
-            ) from exc
-    return BUILTIN_BONUS_STRATEGIES[program.program_type]
+    redeemable_bonus_amount: Decimal = Decimal("0.00")
 
 
 @transaction.atomic
@@ -180,6 +107,7 @@ def register_walk_in_sale(
     amount: Decimal | str,
     comment: str = "",
     created_by=None,
+    redeem_bonus: bool = False,
 ) -> WalkInSale:
     total = Decimal(amount).quantize(Decimal("0.01"))
     if guest is not None and guest.partner_id != partner_id:
@@ -192,6 +120,34 @@ def register_walk_in_sale(
         comment=comment,
         created_by=created_by,
     )
+
+    # Redemption uses the balance the guest walked in with (before this sale's
+    # accrual) and is capped by program max_redeem_share and the sale total.
+    bonus_spent = Decimal("0.00")
+    if guest is not None and redeem_bonus:
+        bonus_spent = get_redeemable_bonus_amount(
+            partner_id=partner_id,
+            guest=guest,
+            purchase_total=total,
+        )
+        if bonus_spent > 0:
+            BonusTransaction.objects.create(
+                partner_id=partner_id,
+                guest=guest,
+                program=None,
+                order=None,
+                transaction_type=BonusTransaction.TransactionType.REDEMPTION,
+                amount=bonus_spent,
+                comment=(
+                    comment
+                    or f"Walk-in sale redemption for customer code {guest.customer_code}."
+                ),
+            )
+            guest.loyalty_balance = (
+                Decimal(guest.loyalty_balance) - bonus_spent
+            ).quantize(Decimal("0.01"))
+            guest.save(update_fields=["loyalty_balance", "updated_at"])
+
     transactions = []
     if guest is not None:
         transactions = apply_bonus_programs(
@@ -205,7 +161,8 @@ def register_walk_in_sale(
         (transaction.amount for transaction in transactions),
         Decimal("0.00"),
     )
-    sale.save(update_fields=["bonus_awarded_amount", "updated_at"])
+    sale.bonus_spent_amount = bonus_spent
+    sale.save(update_fields=["bonus_awarded_amount", "bonus_spent_amount", "updated_at"])
     return sale
 
 
@@ -217,9 +174,9 @@ def register_walk_in_sale_by_customer_code(
     comment: str = "",
     created_by=None,
 ) -> WalkInSale:
+    # Empty code means an anonymous walk-in sale: the venue still tracks the sale
+    # in the day report, but no guest is attached and no loyalty bonus is awarded.
     normalized_customer_code = customer_code.strip().upper()
-    if not normalized_customer_code:
-        raise BonusServiceError("Customer code is required for a loyalty quick sale.")
     guest = None
     if normalized_customer_code:
         try:
@@ -242,13 +199,14 @@ def preview_walk_in_sale_by_customer_code(
     customer_code: str,
     items: list[dict],
 ) -> WalkInSalePreview:
+    # Empty code is allowed: this is an anonymous walk-in sale with no loyalty guest.
     normalized_customer_code = customer_code.strip().upper()
-    if not normalized_customer_code:
-        raise BonusServiceError("Customer code is required for a loyalty quick sale.")
-    try:
-        guest = get_guest_profile_by_customer_code(partner_id, normalized_customer_code)
-    except GuestProfile.DoesNotExist as exc:
-        raise BonusServiceError("Customer code was not found for this venue.") from exc
+    guest = None
+    if normalized_customer_code:
+        try:
+            guest = get_guest_profile_by_customer_code(partner_id, normalized_customer_code)
+        except GuestProfile.DoesNotExist as exc:
+            raise BonusServiceError("Customer code was not found for this venue.") from exc
     normalized_items: list[dict] = []
     total_amount = Decimal("0.00")
     projected_bonus_amount = Decimal("0.00")
@@ -261,7 +219,15 @@ def preview_walk_in_sale_by_customer_code(
             (item["unit_price"] * item["quantity"] for item in normalized_items),
             Decimal("0.00"),
         )
-        projected_bonus_amount = _preview_bonus_amount(
+        if guest is not None:
+            projected_bonus_amount = _preview_bonus_amount(
+                partner_id=partner_id,
+                guest=guest,
+                purchase_total=total_amount,
+            )
+    redeemable_bonus_amount = Decimal("0.00")
+    if guest is not None and total_amount > 0:
+        redeemable_bonus_amount = get_redeemable_bonus_amount(
             partner_id=partner_id,
             guest=guest,
             purchase_total=total_amount,
@@ -271,6 +237,7 @@ def preview_walk_in_sale_by_customer_code(
         items=normalized_items,
         total_amount=total_amount,
         projected_bonus_amount=projected_bonus_amount,
+        redeemable_bonus_amount=redeemable_bonus_amount,
     )
 
 
@@ -282,6 +249,7 @@ def register_walk_in_sale_from_menu_items_by_customer_code(
     items: list[dict],
     comment: str = "",
     created_by=None,
+    redeem_bonus: bool = False,
 ) -> WalkInSale:
     preview = preview_walk_in_sale_by_customer_code(
         partner_id=partner_id,
@@ -291,10 +259,11 @@ def register_walk_in_sale_from_menu_items_by_customer_code(
     sale = register_walk_in_sale(
         partner_id=partner_id,
         guest=preview.guest,
-        customer_code_snapshot=preview.guest.customer_code,
+        customer_code_snapshot=preview.guest.customer_code if preview.guest else "",
         amount=preview.total_amount,
         comment=comment,
         created_by=created_by,
+        redeem_bonus=redeem_bonus,
     )
     WalkInSaleItem.objects.bulk_create(
         [

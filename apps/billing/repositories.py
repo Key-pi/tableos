@@ -5,14 +5,9 @@ from apps.tables.models import TableSession
 
 class BillRepository:
     @staticmethod
-    def open_for_partner(partner_id):
+    def all_for_partner(partner_id):
         return Bill.objects.filter(
             partner_id=partner_id,
-            status__in=[
-                Bill.Status.DRAFT,
-                Bill.Status.ISSUED,
-                Bill.Status.PARTIALLY_PAID,
-            ],
         ).select_related(
             "table",
             "primary_guest",
@@ -25,19 +20,25 @@ class BillRepository:
         )
 
     @staticmethod
+    def open_for_partner(partner_id):
+        return BillRepository.all_for_partner(partner_id).filter(
+            status__in=[
+                Bill.Status.DRAFT,
+                Bill.Status.ISSUED,
+                Bill.Status.PARTIALLY_PAID,
+            ],
+        )
+
+    @staticmethod
     def by_public_id_for_partner(partner_id, public_id: str):
-        return BillRepository.open_for_partner(partner_id).get(public_id=public_id)
+        return BillRepository.all_for_partner(partner_id).get(public_id=public_id)
 
 
 class BillingRequestRepository:
     @staticmethod
-    def open_for_partner(partner_id):
+    def all_for_partner(partner_id):
         return BillingRequest.objects.filter(
             partner_id=partner_id,
-            status__in=[
-                BillingRequest.Status.OPEN,
-                BillingRequest.Status.AUTO_PREPARED,
-            ],
         ).select_related(
             "table",
             "guest",
@@ -46,8 +47,17 @@ class BillingRequestRepository:
         ).order_by("-created_at")
 
     @staticmethod
+    def open_for_partner(partner_id):
+        return BillingRequestRepository.all_for_partner(partner_id).filter(
+            status__in=[
+                BillingRequest.Status.OPEN,
+                BillingRequest.Status.AUTO_PREPARED,
+            ],
+        )
+
+    @staticmethod
     def by_id_for_partner(partner_id, request_id):
-        return BillingRequestRepository.open_for_partner(partner_id).get(id=request_id)
+        return BillingRequestRepository.all_for_partner(partner_id).get(id=request_id)
 
 
 class BillingOperationsRepository:

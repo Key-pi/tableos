@@ -1,5 +1,4 @@
 from aiogram import Bot, F, Router
-from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
@@ -21,7 +20,6 @@ async def _resolve_partner_and_content(bot: Bot):
     return partner, content
 
 
-@router.message(Command("call_staff"))
 @router.message(PartnerButtonFilter("button_call_staff_label"))
 async def call_staff_handler(message: Message, bot: Bot) -> None:
     partner, content = await _resolve_partner_and_content(bot)
@@ -81,6 +79,7 @@ async def guest_call_request_callback(callback: CallbackQuery, bot: Bot) -> None
             telegram_id=callback.from_user.id,
             call_target=call_target,
             call_target_label=call_target_label,
+            cooldown_seconds=content.duplicate_request_cooldown_seconds,
         )
     except GuestCallError as exc:
         await callback.answer(str(exc), show_alert=True)

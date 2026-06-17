@@ -63,17 +63,19 @@ class Command(BaseCommand):
 
         settings, _ = PartnerBotSettings.objects.get_or_create(partner=partner)
         settings.allow_menu_without_session = True
-        settings.show_help_button = True
-        settings.show_session_button = True
-        settings.show_loyalty_button = True
-        settings.button_loyalty_label = "Мой профиль"
+        settings.module_menu_enabled = True
+        settings.module_tables_enabled = True
+        settings.module_cart_enabled = True
+        settings.module_orders_enabled = True
+        settings.button_my_profile = "Мой профиль"
         settings.save(
             update_fields=[
                 "allow_menu_without_session",
-                "show_help_button",
-                "show_session_button",
-                "show_loyalty_button",
-                "button_loyalty_label",
+                "module_menu_enabled",
+                "module_tables_enabled",
+                "module_cart_enabled",
+                "module_orders_enabled",
+                "button_my_profile",
                 "updated_at",
             ]
         )

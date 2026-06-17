@@ -1,15 +1,22 @@
+from decimal import Decimal
+
+from django.db import IntegrityError
 from django.test import TestCase
 
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
-from apps.orders.models import Order
+from apps.orders.models import Cart, CartItem, Order
 from apps.orders.repositories import OrderRepository
 from apps.orders.selectors import get_open_orders_for_partner
 from apps.orders.services import (
     add_items_to_cart_for_telegram_user,
+    checkout_active_cart_for_telegram_user,
     confirm_order_received_by_guest,
+    create_order,
+    get_active_cart_for_telegram_user,
     get_available_staff_actions,
     transition_order_status,
+    OrderFlowError,
 )
 from apps.partners.models import Partner
 from apps.tables.models import Table
@@ -72,6 +79,228 @@ class OrderItemCodeParsingTests(TestCase):
         self.assertEqual(cart.items.count(), 1)
         self.assertEqual(cart.items.first().menu_item_id, self.menu_item.id)
 
+    def test_add_to_cart_rejects_item_from_inactive_category(self):
+        self.menu_item.category.is_active = False
+        self.menu_item.category.save(update_fields=["is_active", "updated_at"])
+
+        with self.assertRaisesMessage(
+            OrderFlowError,
+            "Некоторые позиции недоступны или не принадлежат этому заведению: SMKDR001.",
+        ):
+            add_items_to_cart_for_telegram_user(
+                partner_id=self.partner.id,
+                telegram_id=777001,
+                raw_items="SMKDR001x1",
+            )
+
+
+class GenericOrderCreationTests(TestCase):
+    def setUp(self):
+        self.partner = Partner.objects.create(
+            name="Generic Orders Venue",
+            slug="generic-orders-venue",
+            status=Partner.Status.ACTIVE,
+        )
+        self.telegram_account = TelegramAccount.objects.create(
+            telegram_id=771001,
+            username="generic_guest",
+        )
+        self.guest = GuestProfile.objects.create(
+            partner=self.partner,
+            telegram_account=self.telegram_account,
+        )
+        self.table = Table.objects.create(
+            partner=self.partner,
+            number=3,
+            name="Table 3",
+            qr_token="generic03",
+        )
+        self.table_session = activate_table_session(
+            partner_id=self.partner.id,
+            telegram_id=self.telegram_account.telegram_id,
+            payload=self.table.deep_link_payload,
+            username=self.telegram_account.username,
+            first_name="Generic",
+        )
+        category = MenuCategory.objects.create(
+            partner=self.partner,
+            name="Food",
+            sort_order=10,
+        )
+        self.menu_item = MenuItem.objects.create(
+            partner=self.partner,
+            category=category,
+            public_id="GEN001",
+            name="Burger",
+            price="220.00",
+            sort_order=10,
+        )
+
+    def test_create_order_rejects_empty_items(self):
+        with self.assertRaisesMessage(OrderFlowError, "Нельзя создать заказ без позиций."):
+            create_order(
+                partner_id=self.partner.id,
+                guest=self.guest,
+                items=[],
+            )
+
+    def test_create_order_allows_preparation_for_non_table_flow(self):
+        order = create_order(
+            partner_id=self.partner.id,
+            guest=self.guest,
+            table=None,
+            table_session=None,
+            items=[
+                {
+                    "menu_item_id": self.menu_item.id,
+                    "item_name": self.menu_item.name,
+                    "unit_price": self.menu_item.price,
+                    "quantity": 2,
+                }
+            ],
+            comment="Off-table prepared order",
+        )
+
+        self.assertIsNone(order.table_id)
+        self.assertIsNone(order.table_session_id)
+        self.assertEqual(order.total_amount, Decimal("440.00"))
+        self.assertEqual(order.items.count(), 1)
+
+
+class ActiveCartConstraintTests(TestCase):
+    def setUp(self):
+        self.partner = Partner.objects.create(
+            name="Cart Constraint Venue",
+            slug="cart-constraint-venue",
+            status=Partner.Status.ACTIVE,
+        )
+        self.telegram_account = TelegramAccount.objects.create(
+            telegram_id=772001,
+            username="cart_guest",
+        )
+        self.guest = GuestProfile.objects.create(
+            partner=self.partner,
+            telegram_account=self.telegram_account,
+        )
+        self.table = Table.objects.create(
+            partner=self.partner,
+            number=6,
+            name="Table 6",
+            qr_token="cartconstraint06",
+        )
+        self.table_session = activate_table_session(
+            partner_id=self.partner.id,
+            telegram_id=self.telegram_account.telegram_id,
+            payload=self.table.deep_link_payload,
+            username=self.telegram_account.username,
+            first_name="Cart",
+        )
+        category = MenuCategory.objects.create(
+            partner=self.partner,
+            name="Desserts",
+            sort_order=10,
+        )
+        self.menu_item = MenuItem.objects.create(
+            partner=self.partner,
+            category=category,
+            public_id="CRT001",
+            name="Cake",
+            price="90.00",
+            sort_order=10,
+        )
+
+    def test_model_enforces_single_active_cart_per_guest(self):
+        Cart.objects.create(
+            partner=self.partner,
+            guest=self.guest,
+            table_session=self.table_session,
+            status=Cart.Status.ACTIVE,
+        )
+
+        with self.assertRaises(IntegrityError):
+            Cart.objects.create(
+                partner=self.partner,
+                guest=self.guest,
+                table_session=self.table_session,
+                status=Cart.Status.ACTIVE,
+            )
+
+    def test_checked_out_cart_does_not_block_new_active_cart(self):
+        Cart.objects.create(
+            partner=self.partner,
+            guest=self.guest,
+            table_session=self.table_session,
+            status=Cart.Status.CHECKED_OUT,
+        )
+
+        active_cart = Cart.objects.create(
+            partner=self.partner,
+            guest=self.guest,
+            table_session=self.table_session,
+            status=Cart.Status.ACTIVE,
+        )
+
+        self.assertEqual(active_cart.status, Cart.Status.ACTIVE)
+
+    def test_active_cart_with_items_is_abandoned_when_guest_opens_new_table_session(self):
+        category = MenuCategory.objects.create(
+            partner=self.partner,
+            name="Tea",
+            sort_order=20,
+        )
+        menu_item = MenuItem.objects.create(
+            partner=self.partner,
+            category=category,
+            public_id="CRT002",
+            name="Green Tea",
+            price="80.00",
+            sort_order=20,
+        )
+        cart = Cart.objects.create(
+            partner=self.partner,
+            guest=self.guest,
+            table_session=self.table_session,
+            status=Cart.Status.ACTIVE,
+        )
+        CartItem.objects.create(
+            partner=self.partner,
+            cart=cart,
+            menu_item=menu_item,
+            item_name=menu_item.name,
+            unit_price=menu_item.price,
+            quantity=1,
+        )
+        second_table = Table.objects.create(
+            partner=self.partner,
+            number=7,
+            name="Table 7",
+            qr_token="cartconstraint07",
+        )
+        second_session = activate_table_session(
+            partner_id=self.partner.id,
+            telegram_id=self.telegram_account.telegram_id,
+            payload=second_table.deep_link_payload,
+            username=self.telegram_account.username,
+            first_name="Cart",
+        )
+
+        active_cart = get_active_cart_for_telegram_user(
+            partner_id=self.partner.id,
+            telegram_id=self.telegram_account.telegram_id,
+        )
+
+        cart.refresh_from_db()
+        self.assertEqual(cart.status, Cart.Status.ABANDONED)
+        self.assertIsNone(active_cart)
+
+        recreated_cart = add_items_to_cart_for_telegram_user(
+            partner_id=self.partner.id,
+            telegram_id=self.telegram_account.telegram_id,
+            raw_items="CRT002x1",
+        )
+
+        self.assertEqual(recreated_cart.table_session_id, second_session.id)
+        self.assertEqual(recreated_cart.status, Cart.Status.ACTIVE)
 
 class OrderRepositorySelectRelatedTests(TestCase):
     def setUp(self):

@@ -40,7 +40,7 @@ class MainKeyboardStateTests(SimpleTestCase):
             button_texts,
             [
                 content.button_menu_label,
-                content.button_loyalty_label,
+                content.button_my_profile,
                 content.button_help_label,
             ],
         )
@@ -68,8 +68,8 @@ class GuestNavigationResolverTests(TestCase):
             qr_token="navtable2",
         )
         self.content = BotContent.defaults()
-        self.content.show_request_bill_button = True
-        self.content.show_call_staff_button = True
+        self.content.module_billing_enabled = True
+        self.content.module_staff_call_enabled = True
         self.category = MenuCategory.objects.create(
             partner=self.partner,
             name="Drinks",
@@ -97,6 +97,24 @@ class GuestNavigationResolverTests(TestCase):
         self.assertFalse(state.has_action(GuestAction.CART))
         self.assertTrue(state.has_action(GuestAction.MENU))
         self.assertTrue(state.has_action(GuestAction.PROFILE))
+
+    def test_resolver_exposes_delivery_and_pickup_modules_without_session(self):
+        self.content.module_delivery_enabled = True
+        self.content.module_pickup_enabled = True
+
+        state = resolve_guest_navigation_state(
+            partner_id=self.partner.id,
+            telegram_id=self.telegram_account.telegram_id,
+            content=self.content,
+        )
+        keyboard = build_main_keyboard(self.content, navigation_state=state)
+        button_texts = [button.text for row in keyboard.keyboard for button in row]
+
+        self.assertEqual(state.journey, GuestJourney.BROWSE)
+        self.assertTrue(state.has_action(GuestAction.DELIVERY))
+        self.assertTrue(state.has_action(GuestAction.PICKUP))
+        self.assertIn(self.content.button_delivery_label, button_texts)
+        self.assertIn(self.content.button_pickup_label, button_texts)
 
     def test_resolver_shows_checkout_and_bill_only_when_relevant(self):
         session = activate_table_session(
@@ -141,3 +159,19 @@ class GuestNavigationResolverTests(TestCase):
         self.assertTrue(state.has_billable_activity)
         self.assertTrue(state.has_action(GuestAction.CHECKOUT))
         self.assertTrue(state.has_action(GuestAction.REQUEST_BILL))
+
+    def test_resolver_hides_menu_and_cart_for_loyalty_only_config(self):
+        self.content.module_menu_enabled = False
+        self.content.module_tables_enabled = False
+        self.content.module_cart_enabled = False
+        self.content.module_orders_enabled = False
+
+        state = resolve_guest_navigation_state(
+            partner_id=self.partner.id,
+            telegram_id=self.telegram_account.telegram_id,
+            content=self.content,
+        )
+
+        self.assertFalse(state.has_action(GuestAction.MENU))
+        self.assertFalse(state.has_action(GuestAction.CART))
+        self.assertTrue(state.has_action(GuestAction.PROFILE))

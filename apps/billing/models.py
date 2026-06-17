@@ -31,6 +31,8 @@ class Bill(PartnerBoundModel):
         "tables.Table",
         on_delete=models.PROTECT,
         related_name="bills",
+        null=True,
+        blank=True,
     )
     primary_guest = models.ForeignKey(
         "users.GuestProfile",
@@ -211,41 +213,3 @@ class Payment(PartnerBoundModel):
 
     def __str__(self) -> str:
         return f"{self.bill.public_id} / {self.method} / {self.amount}"
-
-
-class FiscalReceipt(PartnerBoundModel):
-    """Receipt sync record that stores what happened when a bill was sent to POS or fiscalized."""
-
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        SENT = "sent", "Sent"
-        SUCCESS = "success", "Success"
-        FAILED = "failed", "Failed"
-        CANCELED = "canceled", "Canceled"
-
-    class Provider(models.TextChoices):
-        MANUAL = "manual", "Manual"
-        POS = "pos", "POS"
-        ONLINE = "online", "Online"
-
-    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name="fiscal_receipts")
-    payment = models.ForeignKey(
-        Payment,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="fiscal_receipts",
-    )
-    provider = models.CharField(max_length=16, choices=Provider.choices, default=Provider.MANUAL)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
-    external_receipt_id = models.CharField(max_length=255, blank=True)
-    fiscal_number = models.CharField(max_length=255, blank=True)
-    raw_payload = models.JSONField(default=dict, blank=True)
-    error_message = models.TextField(blank=True)
-    processed_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self) -> str:
-        return f"{self.bill.public_id} / receipt / {self.status}"

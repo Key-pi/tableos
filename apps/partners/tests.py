@@ -1,7 +1,9 @@
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from apps.partners.forms import BotInstanceAdminForm
-from apps.partners.models import BotInstance, Partner
+from apps.partners.models import BotInstance, Partner, PartnerBotSettings
+from bot.services.content import BotContent
 from bot.services.runtime import BotRuntimeConfigError, load_active_bot_configs
 
 
@@ -65,6 +67,124 @@ class BotInstanceAdminFormTests(TestCase):
         saved_instance = form.save()
         self.assertEqual(saved_instance.username, "RealTestBot")
         self.assertTrue(saved_instance.has_usable_token)
+
+
+class PartnerBotSettingsModuleTests(TestCase):
+    def setUp(self):
+        self.partner = Partner.objects.create(
+            name="Module Venue",
+            slug="module-venue",
+            status=Partner.Status.ACTIVE,
+        )
+
+    def test_supports_cart_depends_on_module(self):
+        settings = PartnerBotSettings.objects.create(
+            partner=self.partner,
+            module_cart_enabled=False,
+        )
+
+        content = BotContent.from_settings(settings)
+
+        self.assertFalse(content.supports_cart())
+
+        settings.module_cart_enabled = True
+        content = BotContent.from_settings(settings)
+
+        self.assertTrue(content.supports_cart())
+
+    def test_validates_module_dependencies(self):
+        settings = PartnerBotSettings(
+            partner=self.partner,
+            module_menu_enabled=False,
+            module_orders_enabled=True,
+            module_cart_enabled=True,
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            settings.full_clean()
+
+        self.assertIn("module_orders_enabled", ctx.exception.error_dict)
+        self.assertIn("module_cart_enabled", ctx.exception.error_dict)
+
+    def test_cart_can_be_enabled_without_tables(self):
+        settings = PartnerBotSettings(
+            partner=self.partner,
+            module_tables_enabled=False,
+            module_delivery_enabled=True,
+            module_menu_enabled=True,
+            module_orders_enabled=True,
+            module_cart_enabled=True,
+            module_billing_enabled=False,
+            module_staff_call_enabled=False,
+        )
+
+        settings.full_clean()
+        settings.save()
+
+        content = BotContent.from_settings(settings)
+        self.assertTrue(content.supports_cart())
+        self.assertTrue(content.supports_delivery_orders())
+        self.assertFalse(content.supports_table_orders())
+
+    def test_billing_can_be_enabled_without_tables(self):
+        settings = PartnerBotSettings(
+            partner=self.partner,
+            module_tables_enabled=False,
+            module_pickup_enabled=True,
+            module_menu_enabled=True,
+            module_orders_enabled=True,
+            module_cart_enabled=True,
+            module_billing_enabled=True,
+            module_staff_call_enabled=False,
+        )
+
+        settings.full_clean()
+        settings.save()
+
+        content = BotContent.from_settings(settings)
+        self.assertTrue(content.module_billing_enabled)
+        # Guest bill request stays gated on tables even when billing is enabled.
+        self.assertFalse(content.supports_billing_request())
+
+    def test_order_journey_modules_are_independent(self):
+        settings = PartnerBotSettings.objects.create(
+            partner=self.partner,
+            module_tables_enabled=True,
+            module_delivery_enabled=True,
+            module_pickup_enabled=True,
+        )
+
+        content = BotContent.from_settings(settings)
+
+        self.assertTrue(content.supports_table_orders())
+        self.assertTrue(content.supports_delivery_orders())
+        self.assertTrue(content.supports_pickup_orders())
+
+    def test_help_text_follows_enabled_modules(self):
+        content = BotContent.defaults()
+        content.module_menu_enabled = False
+        content.module_tables_enabled = False
+        content.module_cart_enabled = False
+        content.module_orders_enabled = False
+
+        text = content.ordering_help_message()
+
+        self.assertIn(content.button_my_profile, text)
+        self.assertNotIn("QR", text)
+        self.assertNotIn("меню", text.lower())
+
+    def test_loyalty_is_treated_as_base_product_capability(self):
+        settings = PartnerBotSettings.objects.create(
+            partner=self.partner,
+            module_menu_enabled=True,
+            module_quick_sale_enabled=True,
+        )
+
+        settings.full_clean()
+        content = BotContent.from_settings(settings)
+
+        self.assertTrue(content.supports_loyalty())
+        self.assertTrue(content.supports_quick_sale())
 
 
 class BotRuntimeConfigTests(TestCase):
