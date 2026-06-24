@@ -4,8 +4,10 @@ from django.contrib.admin.sites import AdminSite
 from django.test import TestCase
 
 from apps.bonuses.admin import WalkInSaleAdmin
+from apps.bonuses.forms import BonusProgramAdminForm
 from apps.bonuses.models import BonusProgram, BonusTransaction, WalkInSale, WalkInSaleItem
 from apps.bonuses.services import (
+    apply_bonus_programs,
     preview_walk_in_sale_by_customer_code,
     register_walk_in_sale,
     register_walk_in_sale_by_customer_code,
@@ -262,6 +264,121 @@ class WalkInSaleServiceTests(TestCase):
         )
 
         self.assertEqual(sale.comment, "Без сиропа, с собой")
+
+
+class BonusProgramAdminFormTests(TestCase):
+    def setUp(self):
+        self.partner = Partner.objects.create(
+            name="Bonus Logic Venue",
+            slug="bonus-logic-venue",
+            status=Partner.Status.ACTIVE,
+        )
+
+    def test_cashback_logic_preset_sets_builtin_fields(self):
+        form = BonusProgramAdminForm(
+            data={
+                "partner": str(self.partner.id),
+                "name": "Order cashback",
+                "trigger_event": BonusProgram.TriggerEvent.ORDER_COMPLETED,
+                "bonus_logic": "cashback_percent",
+                "program_type": "",
+                "strategy_code": "",
+                "percent": "5.00",
+                "fixed_amount": "0.00",
+                "min_order_total": "0.00",
+                "milestone_order_count": "0",
+                "max_redeem_share": "30.00",
+                "expires_in_days": "90",
+                "config": "{}",
+                "is_active": "on",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        program = form.save()
+        self.assertEqual(program.program_type, BonusProgram.ProgramType.CASHBACK)
+        self.assertEqual(program.strategy_code, "")
+
+    def test_tiered_cashback_logic_sets_custom_strategy_and_default_config(self):
+        form = BonusProgramAdminForm(
+            data={
+                "partner": str(self.partner.id),
+                "name": "Tiered cashback",
+                "trigger_event": BonusProgram.TriggerEvent.ORDER_COMPLETED,
+                "bonus_logic": "tiered_cashback_by_total",
+                "program_type": "",
+                "strategy_code": "",
+                "percent": "0.00",
+                "fixed_amount": "0.00",
+                "min_order_total": "0.00",
+                "milestone_order_count": "0",
+                "max_redeem_share": "30.00",
+                "expires_in_days": "90",
+                "config": "{}",
+                "is_active": "on",
+            }
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+        program = form.save()
+        self.assertEqual(program.program_type, BonusProgram.ProgramType.CASHBACK)
+        self.assertEqual(program.strategy_code, "tiered_cashback_by_total")
+        self.assertEqual(
+            program.config,
+            {
+                "tiers": [
+                    {"min_total": "0.00", "percent": "5.00"},
+                    {"min_total": "1000.00", "percent": "7.00"},
+                ]
+            },
+        )
+
+
+class CustomBonusStrategyTests(TestCase):
+    def setUp(self):
+        self.partner = Partner.objects.create(
+            name="Tiered Bonus Venue",
+            slug="tiered-bonus-venue",
+            status=Partner.Status.ACTIVE,
+        )
+        telegram_account = TelegramAccount.objects.create(
+            telegram_id=12345002,
+            username="tiered_guest",
+        )
+        self.guest = GuestProfile.objects.create(
+            partner=self.partner,
+            telegram_account=telegram_account,
+        )
+
+    def test_tiered_cashback_strategy_uses_best_matching_threshold(self):
+        program = BonusProgram.objects.create(
+            partner=self.partner,
+            name="Tiered cashback",
+            trigger_event=BonusProgram.TriggerEvent.MANUAL_PURCHASE,
+            program_type=BonusProgram.ProgramType.CASHBACK,
+            strategy_code="tiered_cashback_by_total",
+            config={
+                "tiers": [
+                    {"min_total": "0.00", "percent": "5.00"},
+                    {"min_total": "1000.00", "percent": "7.00"},
+                ]
+            },
+            is_active=True,
+        )
+
+        transactions = apply_bonus_programs(
+            partner_id=self.partner.id,
+            event=BonusProgram.TriggerEvent.MANUAL_PURCHASE,
+            guest=self.guest,
+            purchase_total=Decimal("1200.00"),
+            comment="Tiered cashback test",
+        )
+
+        self.guest.refresh_from_db()
+        self.assertEqual(len(transactions), 1)
+        self.assertEqual(transactions[0].program_id, program.id)
+        self.assertEqual(transactions[0].amount, Decimal("84.00"))
+        self.assertEqual(self.guest.loyalty_balance, Decimal("84.00"))
 
 
 class WalkInSaleAdminPermissionTests(TestCase):

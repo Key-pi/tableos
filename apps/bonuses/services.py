@@ -51,6 +51,19 @@ def apply_bonus_programs(
     programs = BonusProgramRepository.active_for_partner_event(partner_id, event)
 
     for program in programs:
+        if (
+            event == BonusProgram.TriggerEvent.ORDER_COMPLETED
+            and order is not None
+            and BonusTransaction.objects.filter(
+                partner_id=partner_id,
+                guest=guest,
+                program=program,
+                order=order,
+                transaction_type=BonusTransaction.TransactionType.ACCRUAL,
+            ).exists()
+        ):
+            continue
+
         strategy = resolve_bonus_strategy(program)
         amount = Decimal(strategy(program, context)).quantize(Decimal("0.01"))
         if amount <= 0:

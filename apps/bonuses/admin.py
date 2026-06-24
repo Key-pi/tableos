@@ -1,7 +1,8 @@
 from django.contrib import admin
 
-from apps.bonuses.forms import WalkInSaleAdminForm
+from apps.bonuses.forms import BonusProgramAdminForm, WalkInSaleAdminForm
 from apps.bonuses.models import BonusProgram, BonusTransaction, WalkInSale, WalkInSaleItem
+from apps.bonuses.strategies import infer_bonus_logic_code, get_bonus_logic_option
 from apps.bonuses.services import register_walk_in_sale_by_customer_code
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
@@ -18,19 +19,80 @@ class WalkInSaleItemInline(admin.TabularInline):
 @admin.register(BonusProgram)
 class BonusProgramAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BONUSES
-    platform_only_fields = ("strategy_code", "config")
+    form = BonusProgramAdminForm
     list_display = (
         "name",
         "partner",
         "trigger_event",
-        "program_type",
+        "bonus_logic_label",
         "percent",
         "fixed_amount",
         "milestone_order_count",
         "is_active",
+        "config_preview",
+        "updated_at",
     )
     list_filter = ("partner", "trigger_event", "program_type", "is_active")
-    search_fields = ("name", "partner__name")
+    search_fields = ("name", "partner__name", "strategy_code")
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "partner",
+                    "name",
+                    "trigger_event",
+                    "bonus_logic",
+                    "is_active",
+                )
+            },
+        ),
+        (
+            "Amounts and limits",
+            {
+                "fields": (
+                    "percent",
+                    "fixed_amount",
+                    "min_order_total",
+                    "milestone_order_count",
+                    "max_redeem_share",
+                    "expires_in_days",
+                )
+            },
+        ),
+        (
+            "Advanced strategy config",
+            {
+                "fields": (
+                    "config",
+                    "program_type",
+                    "strategy_code",
+                ),
+                "description": (
+                    "Built-in logics can usually keep config empty. "
+                    "Custom strategies may require JSON config."
+                ),
+            },
+        ),
+    )
+
+    @admin.display(description="Bonus logic")
+    def bonus_logic_label(self, obj: BonusProgram) -> str:
+        logic_code = infer_bonus_logic_code(obj)
+        return get_bonus_logic_option(logic_code).label
+
+    @admin.display(description="Config")
+    def config_preview(self, obj: BonusProgram) -> str:
+        if not obj.config:
+            return "—"
+        if obj.strategy_code == "tiered_cashback_by_total":
+            tiers = obj.config.get("tiers", [])
+            parts = [
+                f"{tier.get('min_total', '0')}+ => {tier.get('percent', '0')}%"
+                for tier in tiers
+            ]
+            return "; ".join(parts) or "—"
+        return str(obj.config)
 
 
 @admin.register(BonusTransaction)

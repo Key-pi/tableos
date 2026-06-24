@@ -232,6 +232,29 @@ class BillingServiceTests(TestCase):
         self.session.refresh_from_db()
         self.assertEqual(self.session.status, self.session.Status.ACTIVE)
 
+    def test_full_payment_awards_order_completed_bonus_once(self):
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+
+        record_payment(
+            bill=bill,
+            amount=bill.total_amount,
+            method=Payment.Method.CASH,
+        )
+
+        self.order.refresh_from_db()
+        self.session.guest.refresh_from_db()
+        accruals = BonusTransaction.objects.filter(
+            guest=self.session.guest,
+            order=self.order,
+            transaction_type=BonusTransaction.TransactionType.ACCRUAL,
+        )
+        self.assertEqual(accruals.count(), 1)
+        self.assertEqual(accruals.first().amount, Decimal("15.00"))
+        self.assertEqual(self.session.guest.loyalty_balance, Decimal("265.00"))
+
     def test_record_payment_rejects_unknown_method(self):
         bill = create_bill_from_orders(
             partner_id=self.partner.id,

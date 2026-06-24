@@ -16,7 +16,8 @@ from apps.billing.models import (
     Payment,
 )
 from apps.bonuses.models import BonusTransaction
-from apps.bonuses.services import get_redeemable_bonus_amount
+from apps.bonuses.models import BonusProgram
+from apps.bonuses.services import apply_bonus_programs, get_redeemable_bonus_amount
 from apps.notifications.services import notify_staff_about_billing_request
 from apps.orders.models import Cart, Order, OrderItem
 from apps.orders.services import transition_order_status
@@ -766,8 +767,20 @@ def _sync_orders_after_bill_paid(bill: Bill) -> int:
         if order.paid_at is None:
             order.paid_at = now
             order.save(update_fields=["paid_at", "updated_at"])
+        _award_order_completed_bonus(order=order, bill=bill)
         updated_count += 1
     return updated_count
+
+
+def _award_order_completed_bonus(*, order: Order, bill: Bill) -> None:
+    apply_bonus_programs(
+        partner_id=order.partner_id,
+        event=BonusProgram.TriggerEvent.ORDER_COMPLETED,
+        guest=order.guest,
+        order=order,
+        purchase_total=order.total_amount,
+        comment=f"Paid/completed via bill #{bill.public_id}.",
+    )
 
 
 def _derive_order_payment_method(paid_payments: list[Payment]) -> str | None:
