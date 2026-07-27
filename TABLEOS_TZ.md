@@ -1,5 +1,16 @@
 # TableOS - подробное техническое задание
 
+> **Статус после audit 2026-07-27:** legacy product/specification source. Этот
+> документ сохранён полностью как исходное требование и не является молчаливым
+> описанием фактически работающего кода. Canonical product contract находится в
+> [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md), current
+> implementation — в
+> [`docs/architecture/AS_IS_ARCHITECTURE.md`](docs/architecture/AS_IS_ARCHITECTURE.md),
+> а построчное сопоставление и противоречия — в
+> [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](docs/product/LEGACY_TZ_MIGRATION_MAP.md).
+> При расхождении сначала фиксируйте evidence и получите owner decision; не
+> меняйте код или смысл требования молча.
+
 Дата актуализации: 2026-06-12  
 Контекст: документ составлен после анализа текущего проекта TableOS и исходного продуктового описания.
 

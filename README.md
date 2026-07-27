@@ -1,107 +1,43 @@
-# tableos
+# TableOS
 
-White-label B2B platform for hospitality venues built on Django and aiogram.
+TableOS is a multi-tenant hospitality platform built as a Django modular
+monolith with an aiogram Telegram bot, Celery, PostgreSQL, and Redis.
 
-## Initial architecture
+## Start here
 
-- `apps/`: business domains and Django apps
-- `bot/`: Telegram delivery layer, handlers, FSM, and bot runtime
-- `core/`: project configuration and shared cross-cutting concerns
-- `infrastructure/`: Docker, nginx, Redis, and helper scripts
+- Product contract and current feature status:
+  [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md) and
+  [`docs/product/FEATURE_MATRIX.md`](docs/product/FEATURE_MATRIX.md)
+- Current implementation:
+  [`docs/architecture/AS_IS_ARCHITECTURE.md`](docs/architecture/AS_IS_ARCHITECTURE.md)
+- Target boundaries and decisions:
+  [`docs/architecture/TARGET_ARCHITECTURE.md`](docs/architecture/TARGET_ARCHITECTURE.md)
+  and [`docs/decisions/`](docs/decisions/)
+- Development and checks:
+  [`docs/engineering/DEVELOPMENT.md`](docs/engineering/DEVELOPMENT.md) and
+  [`docs/engineering/TESTING.md`](docs/engineering/TESTING.md)
+- Repository rules for contributors and agents: [`AGENTS.md`](AGENTS.md)
+- Audited baseline, findings, and proposed batches:
+  [`docs/audits/`](docs/audits/)
 
-## Delivery approach
+`TABLEOS_TZ.md` and `PROJECT_CHEATSHEET.md` are retained as legacy/evidence
+documents. Their relationship to current code is mapped in
+[`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](docs/product/LEGACY_TZ_MIGRATION_MAP.md).
 
-1. Foundation: repository layout, settings, custom user, partner-aware base models, bot bootstrap.
-2. Core domain: partners, tables, menu, orders, bonuses, and notifications.
-3. Runtime flows: QR sessions, ordering, staff actions, and bot middlewares.
-4. Product hardening: analytics, broadcasts, dashboards, tests, and deployment.
+## Local verification
 
-## Local commands
-
-```bash
-python manage.py migrate
-python manage.py createsuperuser
-python manage.py runserver
-python manage.py runbot
-celery -A core.celery worker -Q default --loglevel=info
-celery -A core.celery worker -Q broadcasts --loglevel=info
-celery -A core.celery beat --loglevel=info
-python manage.py ensure_admin --username admin --email admin@tableos.local --password admin12345
-python manage.py seed_demo --slug demo-lounge --name "Demo Lounge"
-python manage.py seed_baseline_demo
-```
-
-## Local development
-
-For quick local bootstrap without PostgreSQL, set `DJANGO_USE_SQLITE=true` in `.env`.
-Production and shared environments should continue using PostgreSQL.
-
-## Demo mode
-
-Fast demo bootstrap:
+For quick local exploration, SQLite is available explicitly via
+`DJANGO_USE_SQLITE=true`; PostgreSQL is required for production-like locking and
+constraint behavior.
 
 ```bash
-python manage.py seed_demo \
-  --slug demo-lounge \
-  --name "Demo Lounge" \
-  --with-admin \
-  --with-manager
+env DJANGO_USE_SQLITE=true PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python manage.py check
+env DJANGO_USE_SQLITE=true PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python manage.py makemigrations --check --dry-run
+env DJANGO_USE_SQLITE=true PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python manage.py test
+docker compose config --quiet
 ```
 
-If you already have a Telegram bot from BotFather, add:
-
-```bash
-python manage.py seed_demo \
-  --slug demo-lounge \
-  --name "Demo Lounge" \
-  --bot-username your_bot_username \
-  --bot-token 123456:ABCDEF
-```
-
-What you get after bootstrap:
-
-- demo partner with tables and menu items
-- partner bot settings aligned with the current button-based guest flow
-- optional local admin user
-- optional manager user and employee profile
-- printed table deep links and current guest-flow hints
-
-For a fuller QA baseline with two venues, staff, tables, bots, menu, and loyalty rules:
-
-```bash
-python manage.py migrate
-python manage.py seed_baseline_demo
-```
-
-What you get after baseline seed:
-
-- `platform_admin / tableos12345`
-- `night-owl-hookah` with 7 tables plus bar, 5 staff users, hookahs and alcohol menu
-- `riverstone-cafe` with 12 tables, 8 staff users, cafe menu and alcohol
-- one inactive `BotInstance` per partner with placeholder token and ready `username` for QR links
-- no seeded guests or orders, so guest flows can be tested from a clean state
-- current bot defaults, including `Мой профиль`, staff call, billing request, and quick-sale-ready menu data
-
-Useful local URLs:
-
-- `/` demo landing page
-- `/admin/` Django admin
-- `/health/` healthcheck
-
-## Celery background jobs
-
-Telegram deliveries and broadcasts are queued through Celery with Redis as broker.
-Run a separate worker process in production and during local end-to-end testing:
-
-```bash
-celery -A core.celery worker --loglevel=info
-```
-
-For better isolation in production, keep broadcast delivery on a separate queue so
-mass campaigns cannot block operational notifications:
-
-```bash
-celery -A core.celery worker -Q default --loglevel=info
-celery -A core.celery worker -Q broadcasts --loglevel=info
-celery -A core.celery beat --loglevel=info
-```
+The complete, source-verified setup, process topology, and current lint baseline
+are documented in [`docs/engineering/`](docs/engineering/), rather than copied
+here. Never put real bot tokens, passwords, or environment secrets into this
+repository’s documentation.

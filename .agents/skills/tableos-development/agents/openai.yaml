@@ -1,0 +1,4 @@
+interface:
+  display_name: "TableOS Development"
+  short_description: "Implement TableOS changes safely"
+  default_prompt: "Use $tableos-development to make a focused, tenant-safe TableOS change that follows repository governance."

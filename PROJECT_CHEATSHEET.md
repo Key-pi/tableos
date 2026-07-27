@@ -1,5 +1,14 @@
 # TableOS: шпаргалка по проекту
 
+> **Статус:** legacy operational reference, updated mechanically after the
+> 2026-07-27 audit. Canonical onboarding and verified commands live in
+> [`docs/engineering/`](docs/engineering/); current behavior and known gaps are
+> in [`docs/architecture/AS_IS_ARCHITECTURE.md`](docs/architecture/AS_IS_ARCHITECTURE.md)
+> and [`docs/audits/`](docs/audits/). Product/spec reconciliation is recorded in
+> [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](docs/product/LEGACY_TZ_MIGRATION_MAP.md).
+> This file is retained for historical navigation and does not override those
+> documents or source code.
+
 ## Что это
 
 TableOS сейчас работает как backend/admin/Telegram-bot MVP для заведений:
@@ -39,7 +48,7 @@ docker compose up db redis web worker
 
 ```bash
 DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py migrate
-DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py ensure_admin --username admin --email admin@tableos.local --password admin12345
+DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py ensure_admin --username admin --email admin@tableos.local --password "$TABLEOS_LOCAL_ADMIN_PASSWORD"
 DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py seed_baseline_demo
 ```
 
@@ -58,12 +67,12 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 ./.venv/bin/ruff check .
 ```
 
-Ожидаемый текущий baseline:
+Проверенный baseline на 2026-07-27 (полный вывод и версии — в [BASELINE.md](docs/audits/BASELINE.md)):
 
-- `manage.py test`: 66 tests OK.
+- `manage.py test`: 139 tests OK.
 - `manage.py check`: no issues.
 - `makemigrations --check --dry-run`: no changes detected.
-- `ruff check .`: all checks passed.
+- `ruff check --no-cache .`: 21 pre-existing violations; `ruff format --check --no-cache .`: 54 files would reformat. Это не green baseline.
 
 ## Как работает Celery
 
@@ -77,12 +86,17 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 6. Worker отправляет сообщение через Telegram API.
 7. Результат пишется обратно в модель: `delivery_status`, `delivered_at`, `delivery_error`.
 
+Важно: это целевой безопасный паттерн для обычных уведомлений. Broadcast
+реализация имеет зафиксированное исключение — Telegram I/O внутри транзакции и
+отсутствие durable recipient lease; см.
+[ARCHITECTURE_AUDIT.md](docs/audits/ARCHITECTURE_AUDIT.md#aa-008--broadcast-delivery-mixes-transaction-with-network-io-and-has-no-durable-lease).
+
 Ключевые файлы:
 
-- [core/celery.py](/Users/danil/projects/tableos/core/celery.py)
-- [apps/notifications/tasks.py](/Users/danil/projects/tableos/apps/notifications/tasks.py)
-- [apps/notifications/services.py](/Users/danil/projects/tableos/apps/notifications/services.py)
-- [core/settings/base.py](/Users/danil/projects/tableos/core/settings/base.py)
+- [core/celery.py](core/celery.py)
+- [apps/notifications/tasks.py](apps/notifications/tasks.py)
+- [apps/notifications/services.py](apps/notifications/services.py)
+- [core/settings/base.py](core/settings/base.py)
 
 Важно: в тестах Celery работает в eager-режиме, потому что `CELERY_TASK_ALWAYS_EAGER` автоматически включается для `manage.py test`. Поэтому тесты не требуют живого Redis.
 
@@ -98,6 +112,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python -c "import os; os.environ.setdefault('
 
 ```text
 notifications.deliver_staff_notification
+notifications.process_scheduled_broadcast_campaigns
 notifications.send_broadcast_campaign
 notifications.send_guest_order_status_update
 ```
@@ -151,20 +166,20 @@ docker compose up redis
 
 ## Где что искать
 
-- Настройки: [core/settings](/Users/danil/projects/tableos/core/settings/base.py)
-- URL: [core/urls.py](/Users/danil/projects/tableos/core/urls.py)
-- Admin scoping/RBAC: [core/admin_mixins.py](/Users/danil/projects/tableos/core/admin_mixins.py)
-- Celery: [core/celery.py](/Users/danil/projects/tableos/core/celery.py)
-- Партнёры и боты: [apps/partners](/Users/danil/projects/tableos/apps/partners/models.py)
-- Пользователи/гости/admin access: [apps/users](/Users/danil/projects/tableos/apps/users/models.py)
-- Столы/QR-сессии: [apps/tables](/Users/danil/projects/tableos/apps/tables/services.py)
-- Меню: [apps/menu](/Users/danil/projects/tableos/apps/menu/models.py)
-- Заказы/корзина: [apps/orders](/Users/danil/projects/tableos/apps/orders/services.py)
-- Биллинг: [apps/billing](/Users/danil/projects/tableos/apps/billing/services.py)
-- Бонусы/quick sale: [apps/bonuses](/Users/danil/projects/tableos/apps/bonuses/services.py)
-- Уведомления: [apps/notifications](/Users/danil/projects/tableos/apps/notifications/services.py)
-- Аналитика/отчёт дня: [apps/analytics](/Users/danil/projects/tableos/apps/analytics/services.py)
-- Bot handlers: [bot/handlers](/Users/danil/projects/tableos/bot/handlers/staff.py)
+- Настройки: [core/settings](core/settings/base.py)
+- URL: [core/urls.py](core/urls.py)
+- Admin scoping/RBAC: [core/admin_mixins.py](core/admin_mixins.py)
+- Celery: [core/celery.py](core/celery.py)
+- Партнёры и боты: [apps/partners](apps/partners/models.py)
+- Пользователи/гости/admin access: [apps/users](apps/users/models.py)
+- Столы/QR-сессии: [apps/tables](apps/tables/services.py)
+- Меню: [apps/menu](apps/menu/models.py)
+- Заказы/корзина: [apps/orders](apps/orders/services.py)
+- Биллинг: [apps/billing](apps/billing/services.py)
+- Бонусы/quick sale: [apps/bonuses](apps/bonuses/services.py)
+- Уведомления: [apps/notifications](apps/notifications/services.py)
+- Аналитика/отчёт дня: [apps/analytics](apps/analytics/services.py)
+- Bot handlers: [bot/handlers](bot/handlers/staff.py)
 
 ## Правила разработки
 
