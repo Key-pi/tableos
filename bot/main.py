@@ -12,11 +12,13 @@ from bot.handlers.profile import router as profile_router
 from bot.handlers.session import router as session_router
 from bot.handlers.staff import router as staff_router
 from bot.handlers.start import router as start_router
+from bot.middlewares.partner_runtime import PartnerRuntimeMiddleware
 from bot.services.runtime import BotRuntimeConfig, register_runtime_configs
 
 
 def create_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher()
+    dispatcher.update.outer_middleware(PartnerRuntimeMiddleware())
     dispatcher.include_router(start_router)
     dispatcher.include_router(session_router)
     dispatcher.include_router(menu_router)

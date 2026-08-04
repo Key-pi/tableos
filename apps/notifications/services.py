@@ -326,6 +326,8 @@ def request_staff_assistance(
             notify_on_guest_calls=True,
             telegram_account__isnull=False,
             user__role__in=recipient_roles,
+            user__is_active=True,
+            user__partner_id=partner_id,
         )
     )
     if not recipients:
@@ -368,6 +370,8 @@ def notify_staff_about_billing_request(billing_request) -> int:
             notify_on_billing_requests=True,
             telegram_account__isnull=False,
             user__role__in=("waiter", "cashier", "manager", "owner"),
+            user__is_active=True,
+            user__partner_id=billing_request.partner_id,
         )
     )
     if not recipients:

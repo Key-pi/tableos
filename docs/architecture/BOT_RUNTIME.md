@@ -11,8 +11,8 @@ router order and text filters are observable behavior.
 
 | Concern | Current implementation | Governance rule |
 |---|---|---|
-| Partner resolution | bot token/runtime selects partner | per-update context must revalidate active/suspension policy |
-| Router assembly | static inclusion in `bot/dispatcher.py` | new router registration is a dynamic-consumer check in review |
+| Partner resolution | bot token/runtime selects partner; B1 rechecks current partner and bot-instance state before dispatch | suspended partner gets the standard paused-work response; a disabled bot instance is dropped |
+| Router assembly | static inclusion in `bot/main.py` | new router registration is a dynamic-consumer check in review |
 | Reply labels | exact configured text filters in `bot/filters/content.py` | actionable labels must be collision-safe or use stable callback intent |
 | Callback data | handler resolves domain record/employee | callback identifier is not authorization; reload scoped current state |
 | ORM access | handlers generally wrap Django access with `sync_to_async` | retain non-blocking adapter behavior; do not put business invariants in handler |
@@ -34,13 +34,18 @@ live guard again.
 
 ## Current exception cases recorded by audit
 
-- Staff eligibility misses `User.is_active`; see AA-001.
-- Runtime suspension is startup-only rather than a confirmed per-update guard;
-  see AA-009.
-- Several staff callbacks resolve an employee but do not demonstrate a renewed
-  module/capability check; stale-card product semantics remain PQ-004/PQ-013.
-- Duplicate configurable labels can route based on handler order; see AA-010
-  and PQ-016.
+- B1 `PartnerRuntimeMiddleware` runs before every router/filter dispatch.
+  It sends `Работа бота приостановлена, ожидайте обновлений.` for a suspended
+  partner and shows the same text as a callback alert. A live-disabled
+  `BotInstance` is silently dropped. The polling transport itself closes when
+  the runtime process is restarted.
+- B1 staff resolution now requires active `User`, active `EmployeeProfile`, and
+  matching partner. Stale order callbacks recheck the current orders-module
+  capability before reading or mutating an order; a formal role matrix remains
+  PQ-004.
+- B1 rejects duplicate/non-empty routed reply labels in
+  `PartnerBotSettings.clean()`. Raw reply text remains the routing mechanism;
+  a stable-intent redesign is outside this batch.
 
 ## Callback and content design
 

@@ -262,3 +262,22 @@ The critical defects are integrity rather than a simple N+1 count. Two lower-pri
 ### Documents versus code
 
 The documents created by this audit preserve legacy claims as evidence and classify their relationship to source. Product decisions are deliberately left open where the code cannot establish the desired rule (notably completed-versus-paid bonus timing, revenue semantics, zero-total settlement, and stale-card behavior). They must receive owner approval before implementation.
+
+## B1 implementation update — 2026-08-03–04
+
+The findings above preserve the audited baseline. The following table records
+the approved B1 implementation without rewriting that evidence.
+
+| Finding | B1 result | Remaining boundary |
+|---|---|---|
+| AA-001 | Staff resolution and staff-notification recipient selection now require active Django user, active employee profile, and partner consistency. | A formal per-role authorization matrix is still PQ-004. |
+| AA-002 | Generic `create_order` now rejects foreign guest, table, table-session, and menu-item input before mutation. | The database cannot yet enforce all cross-table partner relations; other public service graphs require separate review. |
+| AA-009 | Staff order callbacks recheck current orders-module capability before use. B1 runtime middleware/context recheck every update; a suspended partner receives the approved paused-work response and a live-disabled bot instance is dropped. | Polling transport itself still ends on an operational restart. |
+| AA-010 | `PartnerBotSettings.clean()` rejects duplicate/non-empty routed reply labels. | Raw reply-text routing remains; a stable-intent migration was not selected. |
+| AA-015 | Tenant Admin no longer receives a global partner list filter and foreign partner inline instances are rejected. Non-superusers cannot rebind Telegram ID or use direct global identity Admin, but the venue owner/authorised employee editor can change their staff member's `@username`; the owner can edit venue-user username/name. | Operational/money Admin bypasses are B2/B3. |
+| AA-016 | Added focused service, bot, model-validation, notification, and Admin characterization tests. | PostgreSQL locking/constraint coverage is still required for B2–B4. |
+
+The B1 technical controls are verified by the focused Django test suite in
+local SQLite mode. It is not evidence of a PostgreSQL concurrency invariant;
+the owner approved and B1 implemented the former PQ-013/PQ-019 policies on
+2026-08-04.

@@ -19,7 +19,7 @@ from apps.orders.services import (
     OrderFlowError,
 )
 from apps.partners.models import Partner
-from apps.tables.models import Table
+from apps.tables.models import Table, TableSession
 from apps.tables.services import activate_table_session
 from apps.users.models import GuestProfile, TelegramAccount, User
 
@@ -165,6 +165,110 @@ class GenericOrderCreationTests(TestCase):
         self.assertIsNone(order.table_session_id)
         self.assertEqual(order.total_amount, Decimal("440.00"))
         self.assertEqual(order.items.count(), 1)
+
+    def test_create_order_accepts_a_string_partner_id(self):
+        order = create_order(
+            partner_id=str(self.partner.id),
+            guest=self.guest,
+            items=[
+                {
+                    "menu_item_id": self.menu_item.id,
+                    "item_name": self.menu_item.name,
+                    "unit_price": self.menu_item.price,
+                    "quantity": 1,
+                }
+            ],
+        )
+
+        order.refresh_from_db()
+        self.assertEqual(order.partner_id, self.partner.id)
+
+    def test_create_order_rejects_foreign_guest_table_session_and_menu_item(self):
+        other_partner = Partner.objects.create(
+            name="Foreign Generic Orders Venue",
+            slug="foreign-generic-orders-venue",
+            status=Partner.Status.ACTIVE,
+        )
+        foreign_account = TelegramAccount.objects.create(
+            telegram_id=771002,
+            username="foreign_generic_guest",
+        )
+        foreign_guest = GuestProfile.objects.create(
+            partner=other_partner,
+            telegram_account=foreign_account,
+        )
+        foreign_table = Table.objects.create(
+            partner=other_partner,
+            number=3,
+            name="Foreign table 3",
+            qr_token="foreign-generic03",
+        )
+        foreign_session = TableSession.objects.create(
+            partner=other_partner,
+            guest=foreign_guest,
+            table=foreign_table,
+        )
+        foreign_category = MenuCategory.objects.create(
+            partner=other_partner,
+            name="Foreign food",
+            sort_order=10,
+        )
+        foreign_menu_item = MenuItem.objects.create(
+            partner=other_partner,
+            category=foreign_category,
+            public_id="FOR001",
+            name="Foreign burger",
+            price="220.00",
+            sort_order=10,
+        )
+        item_payload = {
+            "menu_item_id": self.menu_item.id,
+            "item_name": self.menu_item.name,
+            "unit_price": self.menu_item.price,
+            "quantity": 1,
+        }
+
+        with self.assertRaisesMessage(
+            OrderFlowError,
+            "Гость заказа относится к другому заведению.",
+        ):
+            create_order(partner_id=self.partner.id, guest=foreign_guest, items=[item_payload])
+
+        with self.assertRaisesMessage(OrderFlowError, "Стол заказа относится к другому заведению."):
+            create_order(
+                partner_id=self.partner.id,
+                guest=self.guest,
+                table=foreign_table,
+                items=[item_payload],
+            )
+
+        with self.assertRaisesMessage(
+            OrderFlowError,
+            "Сессия заказа относится к другому заведению.",
+        ):
+            create_order(
+                partner_id=self.partner.id,
+                guest=self.guest,
+                table_session=foreign_session,
+                items=[item_payload],
+            )
+
+        with self.assertRaisesMessage(
+            OrderFlowError,
+            "Позиция заказа относится к другому заведению.",
+        ):
+            create_order(
+                partner_id=self.partner.id,
+                guest=self.guest,
+                items=[
+                    {
+                        "menu_item_id": foreign_menu_item.id,
+                        "item_name": foreign_menu_item.name,
+                        "unit_price": foreign_menu_item.price,
+                        "quantity": 1,
+                    }
+                ],
+            )
 
 
 class ActiveCartConstraintTests(TestCase):

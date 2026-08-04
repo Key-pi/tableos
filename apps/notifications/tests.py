@@ -466,3 +466,46 @@ class StaffNotificationCreationTests(TestCase):
             ).count(),
             2,
         )
+
+    def test_request_staff_assistance_excludes_inactive_django_users(self):
+        self.employee.user.is_active = False
+        self.employee.user.save(update_fields=["is_active"])
+
+        waiter_user = User.objects.create_user(
+            username="active_orders_waiter",
+            password="pass12345",
+            partner=self.partner,
+            role=User.Role.WAITER,
+        )
+        waiter_account = TelegramAccount.objects.create(
+            telegram_id=701104,
+            username="active_orders_waiter",
+        )
+        waiter = EmployeeProfile.objects.create(
+            partner=self.partner,
+            user=waiter_user,
+            telegram_account=waiter_account,
+            bot_notifications_enabled=True,
+            notify_on_guest_calls=True,
+        )
+
+        with patch("apps.notifications.services._send_telegram_messages", new=_successful_send):
+            with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                _table_number, queued_count = request_staff_assistance(
+                    partner_id=self.partner.id,
+                    telegram_id=701001,
+                    call_target="waiter",
+                    call_target_label="Официант",
+                )
+
+        self.assertEqual(queued_count, 1)
+        self.assertEqual(len(callbacks), 1)
+        self.assertSetEqual(
+            set(
+                StaffNotification.objects.filter(
+                    partner=self.partner,
+                    category=StaffNotification.Category.GUEST_CALL,
+                ).values_list("employee_id", flat=True)
+            ),
+            {waiter.id},
+        )

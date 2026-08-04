@@ -7,6 +7,20 @@ from core.database.models import TimeStampedModel
 from core.security.crypto import decrypt_text, encrypt_text
 
 
+_ROUTED_REPLY_LABEL_FIELDS = (
+    "button_menu_label",
+    "button_session_label",
+    "button_cart_label",
+    "button_checkout_label",
+    "button_delivery_label",
+    "button_pickup_label",
+    "button_help_label",
+    "button_my_profile",
+    "button_call_staff_label",
+    "button_request_bill_label",
+)
+
+
 class Partner(TimeStampedModel):
     """Venue or business account that owns isolated data inside the platform."""
 
@@ -280,6 +294,25 @@ class PartnerBotSettings(TimeStampedModel):
             add_error(
                 "max_menu_items_per_category_message",
                 "At least one menu item must be shown per category message.",
+            )
+
+        labels_by_text: dict[str, str] = {}
+        for field_name in _ROUTED_REPLY_LABEL_FIELDS:
+            label = getattr(self, field_name).strip()
+            if not label:
+                add_error(field_name, "Action button label cannot be empty.")
+                continue
+            existing_field = labels_by_text.get(label)
+            if existing_field is None:
+                labels_by_text[label] = field_name
+                continue
+            add_error(
+                existing_field,
+                "Action button labels must be unique for each partner bot.",
+            )
+            add_error(
+                field_name,
+                "Action button labels must be unique for each partner bot.",
             )
 
         if errors:

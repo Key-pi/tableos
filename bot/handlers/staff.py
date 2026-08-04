@@ -278,6 +278,11 @@ def _can_view_open_orders(employee: EmployeeProfile) -> bool:
     return _module_enabled(employee, lambda content: content.supports_orders())
 
 
+def _ensure_open_orders_allowed(employee: EmployeeProfile) -> None:
+    if not _can_view_open_orders(employee):
+        raise OrderFlowError("Модуль заказов отключён для этого заведения.")
+
+
 def _can_view_tables(employee: EmployeeProfile) -> bool:
     # "Столы" is gated by the tables module (plus an operations role). Per-table
     # bill creation inside the feed still requires the billing module separately
@@ -1092,8 +1097,7 @@ async def staff_help_handler(message: Message, bot: Bot) -> None:
 async def staff_orders_refresh_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
-        if not _can_view_open_orders(employee):
-            raise OrderFlowError("Модуль заказов отключён для этого заведения.")
+        _ensure_open_orders_allowed(employee)
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
@@ -1116,7 +1120,8 @@ async def staff_orders_refresh_callback_handler(callback: CallbackQuery, bot: Bo
 @router.callback_query(lambda c: c.data and c.data.startswith("stafforderopen:"))
 async def staff_order_open_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
-        partner, _employee = await _resolve_staff_employee_from_callback(callback, bot)
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_open_orders_allowed(employee)
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
@@ -1438,6 +1443,7 @@ async def staff_report_table_open_callback_handler(
 async def staff_order_status_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_open_orders_allowed(employee)
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
@@ -1495,7 +1501,8 @@ async def staff_order_status_callback_handler(callback: CallbackQuery, bot: Bot)
 @router.callback_query(lambda c: c.data and c.data.startswith("stafforderrefresh:"))
 async def staff_order_refresh_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
-        partner, _employee = await _resolve_staff_employee_from_callback(callback, bot)
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_open_orders_allowed(employee)
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
@@ -1583,7 +1590,8 @@ async def staff_notification_open_order_callback_handler(
     bot: Bot,
 ) -> None:
     try:
-        partner, _employee = await _resolve_staff_employee_from_callback(callback, bot)
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_open_orders_allowed(employee)
         _, order_public_id = (callback.data or "").split(":", 1)
         order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
             partner.id,
@@ -1613,6 +1621,7 @@ async def staff_notification_accept_order_callback_handler(
 ) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_open_orders_allowed(employee)
         _, notification_id, order_public_id = (callback.data or "").split(":", 2)
         order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
             partner.id,

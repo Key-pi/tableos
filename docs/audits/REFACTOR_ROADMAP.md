@@ -1,8 +1,9 @@
 # TableOS — Refactor roadmap
 
-**Status:** proposal only. No batch in this document is authorized by the
-audit itself. Each batch requires owner approval before any application-code,
-migration, dependency, or runtime change begins.
+**Status:** B0 is complete and B1 was owner-approved on 2026-08-03. The B1
+implementation update is recorded below. Every other batch remains a proposal
+and requires owner approval before any application-code, migration, dependency,
+or runtime change begins.
 
 ## Operating rules for every batch
 
@@ -50,6 +51,25 @@ needed before any subsequent batch.
 **Suggested sequence:** first write failing tests for AA-001/AA-009 and admin
 scope; then introduce the smallest shared guard; finally validate config label
 rules and document any consciously retained legacy callback response.
+
+**Implementation update — 2026-08-03:** the approved technical slice is
+implemented without a schema migration. It adds active `User` + active
+`EmployeeProfile` + partner consistency to staff resolution and notification
+recipient queries; validates guest/table/session/menu ownership in generic
+`create_order`; rechecks current orders-module capability for stale staff order
+callbacks; rejects duplicate/non-empty routed reply labels; and closes the
+audited tenant Admin list-filter and inline-write gaps. On 2026-08-04 the owner
+approved the remaining runtime/identity policies: a suspended partner receives
+the standard paused-work response, a live-disabled bot instance processes no
+update, and only a superuser can rebind Telegram ID or edit the direct global
+identity Admin. The venue owner (or an Employees-section editor authorised by
+that owner) can change a staff member's `@username`; the owner can also change
+their venue user's username/name. The middleware/form implementation and
+characterization tests cover those policies.
+
+**B1 status: complete.** No schema migration was required. `is_active=False`
+stops application handling immediately; stopping the polling transport itself
+remains an operational process restart, not a B1 code path.
 
 ## Batch B2 — State machines, sessions, and safe Admin commands
 

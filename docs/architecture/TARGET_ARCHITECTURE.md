@@ -92,9 +92,9 @@ flowchart TB
 
 ### 4.2. Авторизация
 
-* Telegram user — глобальная identity; guest/staff profile — partner-scoped role. Изменение глобальной identity не должно быть побочным эффектом tenant-admin формы.
+* Telegram user — глобальная identity; guest/staff profile — partner-scoped role. Изменение Telegram ID и прямой global `TelegramAccount` Admin доступны только superuser. Владелец заведения (и сотрудник с выданным разделом `Employees`) может менять `@username` и поля профиля своего сотрудника; владелец также меняет username/имя venue-пользователя через scoped `UserAdmin`. Поскольку `@username` хранится в global identity, это owner-approved изменение отображается во всех её контекстах. Данные, полученные из Telegram update-а, остаются доверенной синхронизацией от платформы Telegram.
 * Staff access требует одновременно активного `User`, активного `EmployeeProfile`, корректной partner связи и нужной capability. Все callback handlers повторно проверяют capability на момент действия, не только при построении клавиатуры.
-* `Partner.status=suspended` проверяется в per-update/session resolution, а не только при старте bot runtime.
+* `Partner.status=suspended` проверяется в per-update/session resolution, а не только при старте bot runtime. Suspended partner получает стандартный paused-work response; `BotInstance.is_active=False` не обрабатывает update, а polling transport останавливается при restart runtime process.
 * Django Admin получает тот же scoped command/query API. List filters, foreign keys и inline forms не должны раскрывать другие tenant-ы; отсутствие object permission не считается достаточной изоляцией.
 
 ### 4.3. Роли и конфигурация

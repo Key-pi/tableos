@@ -1,7 +1,8 @@
 # TableOS — Tenancy and permissions
 
-**Status:** audited current controls and target invariants. This document does
-not claim that the target controls are already implemented.
+**Status:** audited controls and target invariants, with the B1 implementation
+update recorded below. It does not claim that all target controls are already
+implemented.
 
 ## Trust model
 
@@ -17,11 +18,11 @@ not claim that the target controls are already implemented.
 
 | Control | Confirmed current behavior | Gap / evidence | Status |
 |---|---|---|---|
-| Partner-scoped bot reads | Main guest/staff handlers resolve partner from bot runtime and often use scoped selectors | Public service APIs are not uniformly guarded against mismatched object graphs | PARTIAL_CURRENT |
+| Partner-scoped bot reads | Main guest/staff handlers resolve partner from bot runtime and often use scoped selectors; B1 `create_order` validates guest/table/session/menu ownership | Public service APIs are not uniformly guarded against mismatched object graphs | PARTIAL_CURRENT |
 | Partner-bound model | `PartnerBoundModel` supplies `partner` FK | FK alone cannot enforce same partner across linked tables (`core/database/models.py:22-33`) | DEFECT — AA-002 |
-| Staff eligibility | Employee selector checks active profile | It omits `User.is_active` (`apps/employees/selectors.py:11-16`) | DEFECT — AA-001 |
-| Runtime suspension | Startup validates partner state | Per-update context does not recheck status (`bot/services/context.py:5-7`) | PARTIAL_CURRENT — AA-009 |
-| Admin object scope | `ScopedAdminMixin` limits normal object querysets | partner list filters, inlines and global identity form need further scope/authority guards | PARTIAL_CURRENT — AA-015 |
+| Staff eligibility | B1 selector requires active `User`, active profile and matching user/profile partner; staff notification recipients use the same active-user/partner constraints | A formal per-role authority policy remains PQ-004 | PARTIAL_CURRENT — AA-001 mitigated |
+| Runtime suspension | B1 middleware and context recheck `Partner.status` and `BotInstance.is_active` for every update; suspension returns the approved message and an inactive instance drops the update | Polling transport remains connected until its process is restarted, but it does no further application work | CONFIRMED_CURRENT — AA-009 mitigated |
+| Admin object scope | `ScopedAdminMixin` limits normal object querysets; B1 removes tenant-facing partner list filters and rejects foreign partner inline writes; Telegram ID/direct global identity Admin are superuser-only, while authorised employee editors may change their venue employee's `@username` | Direct operational/money mutations still need their own approved controls | PARTIAL_CURRENT — AA-015 mitigated |
 | Admin access vs staff role | `AdminAccessProfile` gates back office | it is not the same as an active staff profile/capability | DESIGN RULE |
 
 ## Target invariants
@@ -38,6 +39,25 @@ not claim that the target controls are already implemented.
    weaker tenant boundary than normal change-list querysets.
 6. Cross-table partner identity is enforced in services now and, after data
    audit, with the narrowest viable PostgreSQL schema mechanism.
+
+## B1 implementation update — 2026-08-03
+
+The approved B1 technical slice adds live active-user/profile/partner checks to
+staff resolution, validates the generic order command's guest/table/session/menu
+graph, rechecks the current orders-module capability on previously rendered
+staff order callbacks, validates routed reply-label uniqueness, and narrows the
+audited Admin surfaces. The final owner decisions add an outer bot middleware:
+a suspended partner receives `Работа бота приостановлена, ожидайте обновлений.`,
+while a live-disabled `BotInstance` drops updates. The request-bound employee
+Admin form permits Telegram ID mutation only to a superuser, while the venue
+owner or an Employees-section editor may change their employee's `@username`.
+The scoped `UserAdmin` also permits the venue owner to update their employee's
+username and name.
+
+Characterization tests cover disabled users, partner mismatches, foreign order
+inputs, stale order callbacks, duplicate labels, suspended/live-disabled bots,
+global identity edits, and tenant list-filter/related-choice/inline behavior.
+No migration or database-level same-partner constraint is part of B1.
 
 ## Implementation guard pattern
 
@@ -74,4 +94,4 @@ compare values from related rows.
 
 Open semantics are tracked in
 [`../product/OPEN_PRODUCT_QUESTIONS.md`](../product/OPEN_PRODUCT_QUESTIONS.md),
-especially PQ-013, PQ-019 and PQ-020.
+especially PQ-004, PQ-005 and PQ-020.

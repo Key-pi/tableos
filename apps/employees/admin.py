@@ -74,6 +74,16 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
         ),
     )
 
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        form_class = super().get_form(request, obj, change, **kwargs)
+
+        class RequestBoundEmployeeProfileAdminForm(form_class):
+            def __init__(self, *args, **form_kwargs):
+                form_kwargs["actor_user"] = request.user
+                super().__init__(*args, **form_kwargs)
+
+        return RequestBoundEmployeeProfileAdminForm
+
     @admin.display(description="Telegram")
     def telegram_binding(self, obj: EmployeeProfile) -> str:
         if obj.telegram_account_id is None:

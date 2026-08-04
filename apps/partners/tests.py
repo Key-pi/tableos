@@ -106,6 +106,19 @@ class PartnerBotSettingsModuleTests(TestCase):
         self.assertIn("module_orders_enabled", ctx.exception.error_dict)
         self.assertIn("module_cart_enabled", ctx.exception.error_dict)
 
+    def test_rejects_colliding_routed_reply_labels(self):
+        settings = PartnerBotSettings(
+            partner=self.partner,
+            button_menu_label="Open",
+            button_my_profile="Open",
+        )
+
+        with self.assertRaises(ValidationError) as ctx:
+            settings.full_clean()
+
+        self.assertIn("button_menu_label", ctx.exception.error_dict)
+        self.assertIn("button_my_profile", ctx.exception.error_dict)
+
     def test_cart_can_be_enabled_without_tables(self):
         settings = PartnerBotSettings(
             partner=self.partner,

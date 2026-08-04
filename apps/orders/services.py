@@ -126,6 +126,36 @@ def create_order_from_session(
     )
 
 
+def _validate_order_tenant_context(
+    *,
+    partner_id,
+    guest,
+    table,
+    table_session: TableSession | None,
+    items: list[dict],
+) -> None:
+    partner_scope_id = str(partner_id)
+    if str(guest.partner_id) != partner_scope_id:
+        raise OrderFlowError("Гость заказа относится к другому заведению.")
+
+    if table_session is not None:
+        if str(table_session.partner_id) != partner_scope_id:
+            raise OrderFlowError("Сессия заказа относится к другому заведению.")
+        if table_session.guest_id != guest.id:
+            raise OrderFlowError("Гость заказа не совпадает с гостем активной сессии.")
+        if table is not None and table_session.table_id != table.id:
+            raise OrderFlowError("Стол заказа не совпадает со столом активной сессии.")
+
+    if table is not None and str(table.partner_id) != partner_scope_id:
+        raise OrderFlowError("Стол заказа относится к другому заведению.")
+
+    menu_item_ids = {item_payload["menu_item_id"] for item_payload in items}
+    if MenuItem.objects.filter(partner_id=partner_id, id__in=menu_item_ids).count() != len(
+        menu_item_ids
+    ):
+        raise OrderFlowError("Позиция заказа относится к другому заведению.")
+
+
 @transaction.atomic
 def create_order(
     *,
@@ -141,8 +171,13 @@ def create_order(
     if table_session is not None:
         if table is None:
             table = table_session.table
-        if guest != table_session.guest:
-            raise OrderFlowError("Гость заказа не совпадает с гостем активной сессии.")
+    _validate_order_tenant_context(
+        partner_id=partner_id,
+        guest=guest,
+        table=table,
+        table_session=table_session,
+        items=items,
+    )
 
     order = Order.objects.create(
         partner_id=partner_id,
@@ -288,13 +323,17 @@ def confirm_order_received_by_guest(
 
 
 def _resolve_actor_employee(*, order: Order, actor_user: User | None) -> EmployeeProfile | None:
-    if actor_user is None:
+    if actor_user is None or not actor_user.is_active:
         return None
     try:
         employee = actor_user.employee_profile
     except EmployeeProfile.DoesNotExist:
         return None
-    if employee.partner_id != order.partner_id or not employee.is_active:
+    if (
+        employee.partner_id != order.partner_id
+        or employee.partner_id != actor_user.partner_id
+        or not employee.is_active
+    ):
         return None
     return employee
 
@@ -619,6 +658,8 @@ def _staff_notification_recipients(order: Order):
         is_active=True,
         bot_notifications_enabled=True,
         telegram_account__isnull=False,
+        user__is_active=True,
+        user__partner_id=order.partner_id,
     )
 
 

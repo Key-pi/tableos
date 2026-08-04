@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 
 from apps.partners.models import Partner
 from apps.users.models import AdminAccessProfile, User
@@ -107,6 +108,21 @@ class ScopedAdminMixin(admin.ModelAdmin):
             return queryset.none()
         return queryset.filter(**{self.partner_filter: partner_scope_id})
 
+    def get_list_filter(self, request):
+        list_filters = super().get_list_filter(request)
+        if self.is_platform_admin(request):
+            return list_filters
+        return tuple(
+            list_filter
+            for list_filter in list_filters
+            if not self._is_partner_list_filter(list_filter)
+        )
+
+    @staticmethod
+    def _is_partner_list_filter(list_filter) -> bool:
+        field_name = list_filter[0] if isinstance(list_filter, tuple) else list_filter
+        return field_name in {"partner", "partner_id"}
+
     def get_exclude(self, request, obj=None):
         exclude = list(super().get_exclude(request, obj) or [])
         if not self.is_platform_admin(request):
@@ -168,17 +184,18 @@ class ScopedAdminMixin(admin.ModelAdmin):
         instances = formset.save(commit=False)
         partner_scope_id = self.get_partner_scope_id(request)
 
+        if not self.is_platform_admin(request) and partner_scope_id is not None:
+            for instance in [*instances, *formset.deleted_objects]:
+                if not hasattr(instance, "partner_id"):
+                    continue
+                if instance.partner_id not in {None, partner_scope_id}:
+                    raise PermissionDenied("Inline object belongs to another partner.")
+                instance.partner_id = partner_scope_id
+
         for deleted_object in formset.deleted_objects:
             deleted_object.delete()
 
         for instance in instances:
-            if (
-                not self.is_platform_admin(request)
-                and partner_scope_id is not None
-                and hasattr(instance, "partner_id")
-                and not instance.partner_id
-            ):
-                instance.partner_id = partner_scope_id
             instance.save()
 
         formset.save_m2m()

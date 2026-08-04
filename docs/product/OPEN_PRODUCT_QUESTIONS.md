@@ -19,13 +19,13 @@
 | PQ-010 | Is partial payment a staff-facing MVP operation? | Defines cashier UI, receipts and bill lifecycle | Full payments only; manual amount entry; split tender; provider-assisted | Core supports partial payment but product UI scope is not settled — AMBIGUOUS_PRODUCT_DECISION |
 | PQ-011 | Is online payment / prepayment needed in first production release? | Requires provider callbacks, fraud/retry/refund contracts | No; pay-by-link; deposit; full online payment | Future scope in legacy TZ — AMBIGUOUS_PRODUCT_DECISION |
 | PQ-012 | What delivery/pickup journey is required and when? | Existing flags have no user journey; data design depends on answer | Defer; pickup first; delivery first; both as parallel flows | Flags exist but no viable delivery/pickup flow — CODE_IS_BEHIND_SPEC / FUTURE_SCOPE |
-| PQ-013 | Does a suspended partner stop an already-running bot immediately? | Affects incident response, legal/commercial suspension semantics and cache policy | Stop all flows immediately; permit read-only profile; allow queued delivery grace period; restart-only (not recommended) | Startup checks status; per-update resolver does not — AMBIGUOUS_PRODUCT_DECISION with a security-sensitive default needed |
+| PQ-013 | Does a suspended partner stop an already-running bot immediately? | Affects incident response, legal/commercial suspension semantics and cache policy | **Approved for B1:** a suspended partner receives `Работа бота приостановлена, ожидайте обновлений.` for messages and callback alerts; a disabled bot instance processes no updates | `PartnerRuntimeMiddleware` and the live runtime resolver recheck `Partner.status` and `BotInstance.is_active` before dispatch — RESOLVED_FOR_B1 |
 | PQ-014 | What delivery guarantee is promised for broadcasts? | Determines lease/outbox/recipient ledger design and customer-facing counts | At-least-once; best-effort with duplicate tolerance; effectively-once per campaign/recipient; manual reconciliation | Current task can retry/concurrently send without a durable cursor/lease — AMBIGUOUS_PRODUCT_DECISION |
 | PQ-015 | What reliability guarantee is promised for operational staff/guest notifications? | Separates business success from communication delivery | Best effort; retry with observable failure; escalation/manual queue; provider fallback | Legacy says delivery failure must not undo business event; exact retry semantics are unspecified — NEEDS_FOLLOW_UP |
-| PQ-016 | How should configurable labels be made safe? | Identical reply labels can choose the first matching handler | Reject duplicate actionable labels; stable hidden intent commands; context-specific collisions allowed with resolver | Raw text matching exists and no collision validation was found — AMBIGUOUS_PRODUCT_DECISION |
+| PQ-016 | How should configurable labels be made safe? | Identical reply labels can choose the first matching handler | **Approved for B1:** reject duplicate actionable labels; stable hidden intent commands and context-specific collision rules remain future choices | `PartnerBotSettings.clean()` now rejects duplicate/non-empty routed reply labels before settings are saved — RESOLVED_FOR_B1 |
 | PQ-017 | Are partner admin users allowed to directly edit operational/money state? | Direct fields/actions can bypass audit trail and transitions | Read-only ledger/state + safe actions; limited corrective workflow with reason/audit; platform-only override | Product requirements forbid bypass, current admin exposes paths — CODE_IS_BEHIND_SPEC |
 | PQ-018 | What correction workflow is allowed for bonus ledger and balances? | Needs auditability and financial reconciliation | Immutable compensating entries only; manager adjustment with reason; platform-only correction | Future work mentioned, no canonical policy — AMBIGUOUS_PRODUCT_DECISION |
-| PQ-019 | Who can mutate a global Telegram identity? | A partner administrator changing it may affect contexts for another partner | Platform only; verified account-claim workflow; partner edit limited to binding reference | `EmployeeProfileAdminForm` can create/reuse/update global account fields — AMBIGUOUS_PRODUCT_DECISION |
+| PQ-019 | Who can mutate a global Telegram identity? | A partner administrator changing it may affect contexts for another partner | **Approved for B1:** only superuser can rebind Telegram ID or use direct global identity Admin; the venue owner (and Employees-section staff authorised by that owner) may change a venue employee's `@username`, name and other profile data | `TelegramAccountAdmin` is platform-only; request-bound employee form disables Telegram ID but permits `@username` for an authorised tenant editor; scoped `UserAdmin` permits the venue owner's employee username/name edits — RESOLVED_FOR_B1 |
 | PQ-020 | What tenant relation guarantee is required at the database layer? | Service-only checks do not protect imports/admin/future callers | App-level validation only; DB constraints where feasible + services; redesign ownership relations | Cross-partner FKs are currently representable — SECURITY/TENANCY_RISK requiring owner/architecture decision |
 | PQ-021 | What languages/locales are required? | Affects templates, staff UX, reporting and Telegram content | Partner locale only; guest locale fallback; multilingual content management | Open in legacy TZ — AMBIGUOUS_PRODUCT_DECISION |
 | PQ-022 | Are inventory/stop-lists, modifiers, service charge and tips in product scope? | Changes menu snapshots, pricing and billing | Exclude; one/more MVP additions; integrate provider inventory | Listed as future/open, no approved scope — FUTURE_SCOPE |
@@ -35,9 +35,9 @@
 
 ## Decisions that should precede high-risk roadmap batches
 
-1. **PQ-013, PQ-014, PQ-017, PQ-020** — suspension, delivery guarantee, administrative mutation and tenant relation integrity alter security/financial guarantees.
+1. **PQ-014, PQ-017, PQ-020** — delivery guarantee, administrative mutation and tenant relation integrity alter security/financial guarantees.
 2. **PQ-002, PQ-006, PQ-007, PQ-009** — order/bonus/session/bill semantics determine the correct state-machine and migration tests.
-3. **PQ-004, PQ-005, PQ-016, PQ-019** — staff authority, routing and identity policy must be settled before hardening callbacks/admin.
+3. **PQ-004, PQ-005** — staff authority must be settled before further callback hardening.
 
 ## Decisions that do not block characterization testing
 
@@ -55,3 +55,16 @@ These are treated as accepted product principles unless the owner explicitly cha
 - notification delivery failure does not undo a successfully persisted business event;
 - polling is the current runtime; webhook remains future scope;
 - modules shape capability/UX, not separate product forks.
+- B1 approves non-empty, unique actionable reply labels for one partner bot;
+  a move to stable callback/intent routing remains a separate decision.
+- B1 suspension policy: a suspended partner receives the standard paused-work
+  response; a disabled bot instance processes no update. Stopping the polling
+  transport itself still requires the runtime process to be restarted.
+- B1 staff-identity policy: only a superuser may rebind Telegram ID or edit a
+  `TelegramAccount` directly. The venue owner (and an Employees-section editor
+  they authorise) may change their employee's `@username`; the owner may also
+  edit that venue user's username/name. Since Telegram `@username` is stored on
+  a shared identity, its display change is owner-approved and can be visible in
+  every context that uses that same Telegram account. Telegram data received
+  from Telegram itself and trusted management/bootstrap commands remain system
+  integration paths.

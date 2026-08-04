@@ -32,12 +32,18 @@ class EmployeeProfileAdminForm(forms.ModelForm):
             "is_active",
         )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, actor_user=None, **kwargs):
+        self.actor_user = actor_user
         super().__init__(*args, **kwargs)
         account = self.instance.telegram_account if self.instance.pk else None
         if account is not None:
             self.fields["telegram_id"].initial = account.telegram_id
             self.fields["telegram_username"].initial = account.username
+        if not getattr(self.actor_user, "is_superuser", False):
+            self.fields["telegram_id"].disabled = True
+            self.fields[
+                "telegram_id"
+            ].help_text = "Только superuser может менять глобальный Telegram ID."
 
     def clean_telegram_username(self) -> str:
         return self.cleaned_data.get("telegram_username", "").strip().removeprefix("@")
@@ -72,7 +78,7 @@ class EmployeeProfileAdminForm(forms.ModelForm):
                 telegram_id=telegram_id,
                 defaults={"username": telegram_username},
             )
-            if telegram_username and account.username != telegram_username:
+            if account.username != telegram_username:
                 account.username = telegram_username
                 account.save(update_fields=["username", "updated_at"])
             instance.telegram_account = account

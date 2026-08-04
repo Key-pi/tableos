@@ -13,4 +13,6 @@ def get_staff_employee_by_telegram(partner_id, telegram_id: int) -> EmployeeProf
         partner_id=partner_id,
         telegram_account__telegram_id=telegram_id,
         is_active=True,
+        user__is_active=True,
+        user__partner_id=partner_id,
     )
