@@ -1,6 +1,7 @@
 import secrets
 
 from django.db import models
+from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
 
@@ -61,6 +62,13 @@ class TableSession(PartnerBoundModel):
 
     class Meta:
         ordering = ["-started_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["partner", "guest"],
+                condition=Q(status="active"),
+                name="unique_active_table_session_per_partner_guest",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.partner.name} / table {self.table.number} / {self.status}"

@@ -1,8 +1,9 @@
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from apps.orders.models import Order
 from apps.partners.models import Partner
-from apps.tables.models import Table
+from apps.tables.models import Table, TableSession
 from apps.tables.services import activate_table_session, can_close_table_session
 from apps.users.models import TelegramAccount
 
@@ -69,3 +70,20 @@ class TableSessionSettlementTests(TestCase):
 
         self.assertFalse(can_close)
         self.assertIn("без оплаты", reason)
+
+    def test_only_one_active_session_can_exist_for_guest_in_partner(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                TableSession.objects.create(
+                    partner=self.partner,
+                    guest=self.session.guest,
+                    table=self.table,
+                )
+
+        closed_session = TableSession.objects.create(
+            partner=self.partner,
+            guest=self.session.guest,
+            table=self.table,
+            status=TableSession.Status.CLOSED,
+        )
+        self.assertEqual(closed_session.status, TableSession.Status.CLOSED)

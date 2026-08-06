@@ -54,8 +54,7 @@ def activate_table_session(
     parsed = parse_table_deep_link_payload(payload)
     try:
         table = (
-            Table.objects.select_for_update()
-            .select_related("partner")
+            Table.objects.select_related("partner")
             .get(
                 partner_id=partner_id,
                 number=parsed.table_number,
@@ -73,6 +72,22 @@ def activate_table_session(
         last_name=last_name,
         language_code=language_code,
     )
+    guest_profile = GuestProfile.objects.select_for_update().get(
+        id=guest_profile.id,
+        partner_id=partner_id,
+    )
+    try:
+        table = (
+            Table.objects.select_for_update()
+            .select_related("partner")
+            .get(
+                id=table.id,
+                partner_id=partner_id,
+                is_active=True,
+            )
+        )
+    except Table.DoesNotExist as exc:
+        raise TableSessionError("Стол по этому QR-коду уже недоступен.") from exc
     mark_guest_visit(guest_profile)
     _close_guest_active_sessions(partner_id=partner_id, guest_profile=guest_profile)
     session = TableSession.objects.create(
@@ -105,25 +120,34 @@ def get_active_table_session(*, partner_id: UUID | str, telegram_id: int) -> Tab
 
 
 def _close_guest_active_sessions(*, partner_id: UUID | str, guest_profile: GuestProfile) -> None:
-    active_sessions = TableSession.objects.filter(
+    active_sessions = TableSession.objects.select_for_update().filter(
         partner_id=partner_id,
         guest=guest_profile,
         status=TableSession.Status.ACTIVE,
     )
-    if active_sessions.exists():
-        now = timezone.now()
-        active_sessions.update(
-            status=TableSession.Status.CLOSED,
-            closed_at=now,
-            updated_at=now,
-        )
+    for session in active_sessions:
+        _close_locked_table_session(session)
 
 
-def close_table_session(session: TableSession) -> TableSession:
+def _close_locked_table_session(session: TableSession) -> TableSession:
+    if session.status != TableSession.Status.ACTIVE:
+        return session
     session.status = TableSession.Status.CLOSED
     session.closed_at = timezone.now()
     session.save(update_fields=["status", "closed_at", "updated_at"])
     return session
+
+
+@transaction.atomic
+def close_table_session(session: TableSession) -> TableSession:
+    try:
+        locked_session = TableSession.objects.select_for_update().get(
+            id=session.id,
+            partner_id=session.partner_id,
+        )
+    except TableSession.DoesNotExist as exc:
+        raise TableSessionError("Сессия стола не найдена в этом заведении.") from exc
+    return _close_locked_table_session(locked_session)
 
 
 def can_close_table_session(session: TableSession) -> tuple[bool, str]:
@@ -187,7 +211,16 @@ def can_close_table_session(session: TableSession) -> tuple[bool, str]:
 
 @transaction.atomic
 def close_table_session_if_settled(session: TableSession) -> TableSession:
-    can_close, reason = can_close_table_session(session)
+    try:
+        locked_session = TableSession.objects.select_for_update().get(
+            id=session.id,
+            partner_id=session.partner_id,
+        )
+    except TableSession.DoesNotExist as exc:
+        raise TableSessionError("Сессия стола не найдена в этом заведении.") from exc
+    if locked_session.status != TableSession.Status.ACTIVE:
+        return locked_session
+    can_close, reason = can_close_table_session(locked_session)
     if not can_close:
         raise TableSessionError(reason)
-    return close_table_session(session)
+    return _close_locked_table_session(locked_session)

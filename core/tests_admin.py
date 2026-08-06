@@ -1,17 +1,25 @@
+from unittest.mock import patch
+
 from django.contrib import admin
 from django.contrib.admin.utils import flatten_fieldsets
 from django.core.exceptions import PermissionDenied
 from django.test import RequestFactory, TestCase
 
+from apps.billing.admin import BillAdmin, BillingRequestAdmin
+from apps.billing.models import Bill, BillingRequest
+from apps.billing.services import mark_billing_request_processed
 from apps.employees.admin import EmployeeProfileAdmin
 from apps.employees.models import EmployeeProfile
 from apps.orders.admin import OrderAdmin
 from apps.orders.models import Order
 from apps.partners.admin import BotInstanceAdmin, PartnerAdmin, PartnerBotSettingsAdmin
 from apps.partners.models import BotInstance, Partner, PartnerBotSettings
+from apps.tables.admin import TableSessionAdmin
+from apps.tables.models import Table, TableSession
+from apps.tables.services import close_table_session_if_settled
 from apps.users.admin import TelegramAccountAdmin, UserAdmin
 from apps.users.constants import AdminAccessPreset
-from apps.users.models import AdminAccessProfile, TelegramAccount, User
+from apps.users.models import AdminAccessProfile, GuestProfile, TelegramAccount, User
 
 
 class OwnerFacingAdminTests(TestCase):
@@ -240,3 +248,110 @@ class OwnerFacingAdminTests(TestCase):
             model_admin.save_formset(request, form=None, formset=_Formset(), change=True)
 
         self.assertTrue(EmployeeProfile.objects.filter(id=foreign_employee.id).exists())
+
+    def test_order_admin_hides_lifecycle_and_derived_fields(self):
+        request = self._build_request()
+        model_admin = OrderAdmin(Order, admin.site)
+        form = model_admin.get_form(request, Order(partner=self.partner))(
+            instance=Order(partner=self.partner)
+        )
+
+        for field_name in (
+            "status",
+            "subtotal_amount",
+            "bonus_spent",
+            "discount_amount",
+            "total_amount",
+            "received_at",
+            "paid_at",
+        ):
+            self.assertNotIn(field_name, form.fields)
+
+    def test_bill_and_table_session_admin_hide_lifecycle_fields(self):
+        request = self._build_request()
+        bill_form = BillAdmin(Bill, admin.site).get_form(request, Bill(partner=self.partner))(
+            instance=Bill(partner=self.partner)
+        )
+        session_form = TableSessionAdmin(TableSession, admin.site).get_form(
+            request,
+            TableSession(partner=self.partner),
+        )(instance=TableSession(partner=self.partner))
+
+        for field_name in ("status", "subtotal_amount", "total_amount", "paid_amount"):
+            self.assertNotIn(field_name, bill_form.fields)
+        for field_name in ("guest", "table", "status", "started_at", "closed_at"):
+            self.assertNotIn(field_name, session_form.fields)
+
+    def test_billing_request_admin_transitions_through_owner_service(self):
+        table = Table.objects.create(
+            partner=self.partner,
+            number=11,
+            name="Action table",
+            qr_token="action-table-11",
+        )
+        account = TelegramAccount.objects.create(telegram_id=910011, username="action_guest")
+        guest = GuestProfile.objects.create(partner=self.partner, telegram_account=account)
+        session = TableSession.objects.create(
+            partner=self.partner,
+            guest=guest,
+            table=table,
+        )
+        billing_request = BillingRequest.objects.create(
+            partner=self.partner,
+            table=table,
+            guest=guest,
+            table_session=session,
+            request_type=BillingRequest.RequestType.CUSTOM_SPLIT,
+        )
+        request = self._build_request()
+        model_admin = BillingRequestAdmin(BillingRequest, admin.site)
+
+        with (
+            patch.object(model_admin, "message_user"),
+            patch(
+                "apps.billing.admin.mark_billing_request_processed",
+                create=True,
+                wraps=mark_billing_request_processed,
+            ) as transition,
+        ):
+            model_admin.mark_processed(
+                request,
+                BillingRequest.objects.filter(pk=billing_request.pk),
+            )
+
+        transition.assert_called_once()
+        billing_request.refresh_from_db()
+        self.assertEqual(billing_request.status, BillingRequest.Status.PROCESSED)
+
+    def test_table_session_admin_closes_only_through_owner_service(self):
+        table = Table.objects.create(
+            partner=self.partner,
+            number=12,
+            name="Session action table",
+            qr_token="session-action-12",
+        )
+        account = TelegramAccount.objects.create(telegram_id=910012, username="session_guest")
+        guest = GuestProfile.objects.create(partner=self.partner, telegram_account=account)
+        session = TableSession.objects.create(
+            partner=self.partner,
+            guest=guest,
+            table=table,
+        )
+        request = self._build_request()
+        model_admin = TableSessionAdmin(TableSession, admin.site)
+
+        with (
+            patch.object(model_admin, "message_user"),
+            patch(
+                "apps.tables.admin.close_table_session_if_settled",
+                wraps=close_table_session_if_settled,
+            ) as close_session,
+        ):
+            model_admin.close_settled_sessions(
+                request,
+                TableSession.objects.filter(pk=session.pk),
+            )
+
+        close_session.assert_called_once()
+        session.refresh_from_db()
+        self.assertEqual(session.status, TableSession.Status.CLOSED)

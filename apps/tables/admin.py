@@ -10,6 +10,7 @@ from apps.billing.services import (
 )
 from apps.orders.models import Order
 from apps.tables.models import Table, TableSession
+from apps.tables.services import TableSessionError, close_table_session_if_settled
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 
@@ -311,3 +312,34 @@ class TableSessionAdmin(ScopedAdminMixin):
     list_display = ("table", "guest", "partner", "status", "started_at", "closed_at")
     list_filter = ("partner", "status")
     search_fields = ("table__number", "guest__telegram_account__username", "partner__name")
+    readonly_fields = (
+        "partner",
+        "guest",
+        "table",
+        "started_at",
+        "expires_at",
+        "closed_at",
+        "status",
+        "created_at",
+        "updated_at",
+    )
+    actions = ("close_settled_sessions",)
+
+    @admin.action(description="Close selected settled sessions")
+    def close_settled_sessions(self, request, queryset):
+        closed_count = 0
+        for session in queryset:
+            was_active = session.status == TableSession.Status.ACTIVE
+            try:
+                closed_session = close_table_session_if_settled(session)
+            except TableSessionError as exc:
+                self.message_user(
+                    request,
+                    f"Сессия стола #{session.table.number}: {exc}",
+                    level=messages.WARNING,
+                )
+                continue
+            if was_active and closed_session.status == TableSession.Status.CLOSED:
+                closed_count += 1
+        if closed_count:
+            self.message_user(request, f"Закрыто сессий стола: {closed_count}.")

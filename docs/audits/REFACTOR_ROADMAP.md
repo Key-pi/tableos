@@ -1,9 +1,9 @@
 # TableOS — Refactor roadmap
 
-**Status:** B0 is complete and B1 was owner-approved on 2026-08-03. The B1
-implementation update is recorded below. Every other batch remains a proposal
-and requires owner approval before any application-code, migration, dependency,
-or runtime change begins.
+**Status:** B0 and B1 are complete; B2 was owner-approved on 2026-08-06 and its
+implementation update is recorded below. B3–B5 remain proposals and require
+owner approval before any application-code, migration, dependency, or runtime
+change begins.
 
 ## Operating rules for every batch
 
@@ -84,8 +84,23 @@ remains an operational process restart, not a B1 code path.
 | **Rollback** | Keep a reversible migration only after data audit; preserve prior admin action behind a temporary compatibility path only if it still enforces the owner service. |
 | **Exit criterion** | One canonical state command per lifecycle, deterministic duplicate-callback behavior, and no supported Admin bypass. |
 
-**Design checkpoint:** choose a canonical lock order for guest/session/order and
-record it in an implementation ADR or update ADR-0003 before adding locks.
+**Design checkpoint (resolved in B2):** canonical lock order is recorded in
+ADR-0003 before the corresponding locks and constraint are applied.
+
+**Implementation update — 2026-08-06:** B2 adds locked reloads for order
+transitions, bill issue/payment, billing-request transitions and table-session
+close; serializes table activation with `GuestProfile → Table → active session`
+locks; and adds the partial unique active-session constraint after a local data
+audit found no duplicate active guest scopes. Order/cart/bill/allocation/session
+Admin forms now protect lifecycle/derived/relation fields, while approved
+state changes use explicit owner-service actions. `BillingRequestAdmin` no
+longer performs raw queryset updates. The full SQLite suite and Admin/service
+characterization tests pass; PostgreSQL-only concurrency tests are included but
+were not executable because the local Docker/PostgreSQL service was unavailable.
+
+**B2 implementation status:** complete in application code; PostgreSQL
+concurrency execution remains an environment verification prerequisite before
+production rollout of the migration.
 
 ## Batch B3 — Financial integrity and loyalty semantics
 
@@ -143,6 +158,5 @@ record it in an implementation ADR or update ADR-0003 before adding locks.
 | Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
 | Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
 
-The next safe action is not to start coding automatically. It is to approve B1
-as a bounded implementation batch (or select a different batch after resolving
-its listed owner decisions).
+The next safe action is to resolve the listed B3 product/data decisions before
+starting financial-integrity implementation.

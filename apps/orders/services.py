@@ -225,6 +225,14 @@ def transition_order_status(
     actor_user: User | None = None,
     note: str = "",
 ) -> Order:
+    try:
+        order = Order.objects.select_for_update().get(
+            id=order.id,
+            partner_id=order.partner_id,
+        )
+    except Order.DoesNotExist as exc:
+        raise OrderFlowError("Заказ не найден в этом заведении.") from exc
+
     allowed_statuses = ORDER_STATUS_TRANSITIONS[order.status]
     if to_status not in allowed_statuses:
         raise OrderFlowError(f"Нельзя перевести заказ из `{order.status}` в `{to_status}`.")

@@ -281,3 +281,19 @@ The B1 technical controls are verified by the focused Django test suite in
 local SQLite mode. It is not evidence of a PostgreSQL concurrency invariant;
 the owner approved and B1 implemented the former PQ-013/PQ-019 policies on
 2026-08-04.
+
+## B2 implementation update — 2026-08-06
+
+The approved B2 batch keeps the audited findings above as historical evidence
+and records the bounded remediation:
+
+| Finding | B2 result | Remaining boundary |
+|---|---|---|
+| AA-003 | Order/cart/bill/allocation/session lifecycle and derived fields are read-only in Admin; explicit order, bill, table-session and BillingRequest actions call owner services. BillingRequest actions no longer use queryset `.update()`. | Financial allocation/ledger correction policy remains B3. |
+| AA-004 | `transition_order_status()` reloads the current order under `select_for_update()` before validating and writing history/notifications. | PostgreSQL concurrent execution is included as a gated test and was not runnable locally. |
+| AA-005 | Table activation locks `GuestProfile → Table → active sessions`; the partial unique active-session constraint prevents duplicate scopes and preserves latest-scan-wins behavior. | Production migration requires the same duplicate audit before rollout; PostgreSQL two-table scan execution is environment-gated. |
+| AA-016 | Added B2 stale-state, Admin bypass, service-action and PostgreSQL-only concurrency characterization tests. | Local verification remains SQLite-only because Docker/PostgreSQL was unavailable. |
+
+The local data audit immediately before the migration found 2 active
+`TableSession` rows and no duplicate active `(partner, guest)` scopes. The
+migration does not repair or delete data.

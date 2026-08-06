@@ -121,6 +121,13 @@ flowchart TB
 
 Команда открывает короткую `transaction.atomic()` только для чтения/проверки/изменения локальных строк. Она получает актуальные строки через `select_for_update()` в стабильном порядке и не использует объект, загруженный до блокировки, как источник истины. Конкурентно изменяемые use case покрываются тестами на PostgreSQL: повторный callback, параллельный scan, attach bill item, payment/bonus redemption.
 
+B2 фиксирует lifecycle lock order для уже поддержанных команд: активация
+сессии — `GuestProfile → Table → active TableSession`; order transition
+блокирует canonical `Order`; payment completion — `Bill → Order →
+BillingRequest → TableSession`. Partial unique constraint на активную сессию
+применяется только после duplicate-data audit. SQLite-тесты не заменяют
+PostgreSQL concurrency evidence.
+
 ### 6.2. Внешние эффекты
 
 Telegram и другой network I/O запускаются **после successful commit**. `transaction.on_commit()` публикует durable command/job, а task доставляет её с идемпотентным ключом. Запрещены `sleep`, retry loop и сетевой запрос внутри открытой транзакции.

@@ -1,5 +1,4 @@
 from django.contrib import admin, messages
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.billing.forms import PaymentAdminForm
@@ -12,8 +11,10 @@ from apps.billing.models import (
 )
 from apps.billing.services import (
     BillingServiceError,
+    cancel_billing_request,
     get_bill_remaining_amount,
     issue_bill,
+    mark_billing_request_processed,
     record_payment,
 )
 from apps.users.constants import AdminSection
@@ -23,12 +24,33 @@ from core.admin_mixins import ScopedAdminMixin
 class BillOrderInline(admin.TabularInline):
     model = BillOrder
     extra = 0
+    can_delete = False
+    readonly_fields = ("bill", "order", "partner", "created_at", "updated_at")
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class BillItemInline(admin.TabularInline):
     model = BillItem
     extra = 0
-    readonly_fields = ("line_total",)
+    can_delete = False
+    readonly_fields = (
+        "bill",
+        "order",
+        "order_item",
+        "partner",
+        "item_name",
+        "unit_price",
+        "quantity",
+        "line_total",
+        "comment",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class PaymentInline(admin.TabularInline):
@@ -66,24 +88,48 @@ class BillingRequestAdmin(ScopedAdminMixin):
         "bill__public_id",
         "partner__name",
     )
-    readonly_fields = ("created_at", "updated_at", "processed_at")
+    readonly_fields = (
+        "partner",
+        "table",
+        "guest",
+        "table_session",
+        "request_type",
+        "status",
+        "bill",
+        "note",
+        "created_at",
+        "updated_at",
+        "processed_at",
+    )
     actions = ("mark_processed", "mark_canceled")
 
     @admin.action(description=_("Mark selected billing requests as processed"))
     def mark_processed(self, request, queryset):
-        updated = queryset.exclude(status=BillingRequest.Status.PROCESSED).update(
-            status=BillingRequest.Status.PROCESSED,
-            processed_at=timezone.now(),
-        )
+        updated = 0
+        for billing_request in queryset:
+            was_processed = billing_request.status == BillingRequest.Status.PROCESSED
+            try:
+                processed_request = mark_billing_request_processed(billing_request)
+            except BillingServiceError as exc:
+                self.message_user(request, str(exc), level=messages.WARNING)
+                continue
+            if not was_processed and processed_request.status == BillingRequest.Status.PROCESSED:
+                updated += 1
         if updated:
             self.message_user(request, f"Обработано запросов счёта: {updated}.")
 
     @admin.action(description=_("Mark selected billing requests as canceled"))
     def mark_canceled(self, request, queryset):
-        updated = queryset.exclude(status=BillingRequest.Status.CANCELED).update(
-            status=BillingRequest.Status.CANCELED,
-            processed_at=timezone.now(),
-        )
+        updated = 0
+        for billing_request in queryset:
+            was_canceled = billing_request.status == BillingRequest.Status.CANCELED
+            try:
+                canceled_request = cancel_billing_request(billing_request)
+            except BillingServiceError as exc:
+                self.message_user(request, str(exc), level=messages.WARNING)
+                continue
+            if not was_canceled and canceled_request.status == BillingRequest.Status.CANCELED:
+                updated += 1
         if updated:
             self.message_user(request, f"Отменено запросов счёта: {updated}.")
 
@@ -106,6 +152,13 @@ class BillAdmin(ScopedAdminMixin):
     search_fields = ("public_id", "partner__name", "table__name", "table__number", "label")
     readonly_fields = (
         "public_id",
+        "table",
+        "primary_guest",
+        "status",
+        "kind",
+        "source",
+        "discount_amount",
+        "bonus_spent_amount",
         "subtotal_amount",
         "total_amount",
         "paid_amount",
@@ -185,6 +238,7 @@ class BillOrderAdmin(ScopedAdminMixin):
     list_display = ("bill", "order", "partner", "created_at")
     list_filter = ("partner",)
     search_fields = ("bill__public_id", "order__public_id", "partner__name")
+    readonly_fields = ("bill", "order", "partner", "created_at", "updated_at")
 
 
 @admin.register(BillItem)
@@ -195,6 +249,19 @@ class BillItemAdmin(ScopedAdminMixin):
     list_display = ("bill", "item_name", "quantity", "unit_price", "line_total", "partner")
     list_filter = ("partner",)
     search_fields = ("bill__public_id", "item_name", "order__public_id", "partner__name")
+    readonly_fields = (
+        "bill",
+        "order",
+        "order_item",
+        "partner",
+        "item_name",
+        "unit_price",
+        "quantity",
+        "line_total",
+        "comment",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(Payment)

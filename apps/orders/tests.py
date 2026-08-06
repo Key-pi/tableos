@@ -507,6 +507,24 @@ class OrderOwnershipTests(TestCase):
         self.assertEqual(self.order.assigned_employee_id, self.employee.id)
         self.assertIsNotNone(self.order.accepted_at)
 
+    def test_transition_reloads_current_order_before_validating_status(self):
+        stale_order = Order.objects.get(pk=self.order.pk)
+        self.order.status = Order.Status.ACCEPTED
+        self.order.save(update_fields=["status", "updated_at"])
+
+        with self.assertRaisesMessage(
+            OrderFlowError,
+            "Нельзя перевести заказ из `accepted` в `accepted`.",
+        ):
+            transition_order_status(
+                order=stale_order,
+                to_status=Order.Status.ACCEPTED,
+                actor_user=self.user,
+            )
+
+        self.assertEqual(self.order.status, Order.Status.ACCEPTED)
+        self.assertEqual(self.order.status_history.count(), 0)
+
     def test_accepted_order_can_be_marked_ready_in_operational_flow(self):
         transition_order_status(
             order=self.order,

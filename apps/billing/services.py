@@ -22,7 +22,7 @@ from apps.orders.models import Cart, Order, OrderItem
 from apps.orders.services import transition_order_status
 from apps.partners.models import PartnerBotSettings
 from apps.tables.models import TableSession
-from apps.tables.services import close_table_session, get_active_table_session
+from apps.tables.services import close_table_session_if_settled, get_active_table_session
 
 
 class BillingServiceError(Exception):
@@ -500,6 +500,13 @@ def create_billing_request_for_telegram_user(
 
 @transaction.atomic
 def issue_bill(bill: Bill) -> Bill:
+    try:
+        bill = Bill.objects.select_for_update().get(
+            id=bill.id,
+            partner_id=bill.partner_id,
+        )
+    except Bill.DoesNotExist as exc:
+        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
     if bill.status != Bill.Status.DRAFT:
         raise BillingServiceError("Выдать можно только draft-счёт.")
     bill.status = Bill.Status.ISSUED
@@ -520,18 +527,20 @@ def record_payment(
     external_payment_id: str = "",
     mark_bill_issued: bool = True,
 ) -> Payment:
-    if bill.status == Bill.Status.CANCELED:
-        raise BillingServiceError("Нельзя принять оплату по отменённому счёту.")
-    if bill.status == Bill.Status.PAID:
-        raise BillingServiceError("Счёт уже полностью оплачен.")
-
     amount_value = Decimal(amount).quantize(Decimal("0.01"))
     if amount_value <= 0:
         raise BillingServiceError("Сумма оплаты должна быть больше нуля.")
     if method not in Payment.Method.values:
         raise BillingServiceError("Неизвестный способ оплаты.")
 
-    bill = Bill.objects.select_for_update().prefetch_related("items", "payments").get(id=bill.id)
+    bill = Bill.objects.select_for_update().prefetch_related("items", "payments").get(
+        id=bill.id,
+        partner_id=bill.partner_id,
+    )
+    if bill.status == Bill.Status.CANCELED:
+        raise BillingServiceError("Нельзя принять оплату по отменённому счёту.")
+    if bill.status == Bill.Status.PAID:
+        raise BillingServiceError("Счёт уже полностью оплачен.")
     recalculate_bill_totals(bill)
     remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
     if amount_value > remaining_amount:
@@ -661,17 +670,19 @@ def _partner_auto_closes_table_session_after_payment(*, partner_id) -> bool:
 
 
 def _mark_related_billing_requests_processed(bill: Bill) -> int:
-    return BillingRequest.objects.filter(
+    requests = BillingRequest.objects.filter(
         partner_id=bill.partner_id,
         bill=bill,
         status__in=[
             BillingRequest.Status.OPEN,
             BillingRequest.Status.AUTO_PREPARED,
         ],
-    ).update(
-        status=BillingRequest.Status.PROCESSED,
-        processed_at=timezone.now(),
     )
+    processed_count = 0
+    for billing_request in requests:
+        mark_billing_request_processed(billing_request)
+        processed_count += 1
+    return processed_count
 
 
 def _close_table_sessions_if_fully_settled(*, partner_id, table_id) -> int:
@@ -724,19 +735,18 @@ def _close_table_sessions_if_fully_settled(*, partner_id, table_id) -> int:
         )
     )
     for session in active_sessions:
-        close_table_session(session)
+        close_table_session_if_settled(session)
 
-    BillingRequest.objects.filter(
+    pending_requests = BillingRequest.objects.filter(
         partner_id=partner_id,
         table_id=table_id,
         status__in=[
             BillingRequest.Status.OPEN,
             BillingRequest.Status.AUTO_PREPARED,
         ],
-    ).update(
-        status=BillingRequest.Status.PROCESSED,
-        processed_at=timezone.now(),
     )
+    for billing_request in pending_requests:
+        mark_billing_request_processed(billing_request)
     return len(active_sessions)
 
 
@@ -783,7 +793,17 @@ def _derive_order_payment_method(paid_payments: list[Payment]) -> str | None:
     if len(mapped_methods) == 1:
         return next(iter(mapped_methods))
     return None
+
+
+@transaction.atomic
 def mark_billing_request_processed(billing_request: BillingRequest) -> BillingRequest:
+    try:
+        billing_request = BillingRequest.objects.select_for_update().get(
+            id=billing_request.id,
+            partner_id=billing_request.partner_id,
+        )
+    except BillingRequest.DoesNotExist as exc:
+        raise BillingServiceError("Запрос счёта не найден в этом заведении.") from exc
     if billing_request.status == BillingRequest.Status.CANCELED:
         raise BillingServiceError("Нельзя обработать уже отменённый запрос счёта.")
     if billing_request.status != BillingRequest.Status.PROCESSED:
@@ -793,7 +813,15 @@ def mark_billing_request_processed(billing_request: BillingRequest) -> BillingRe
     return billing_request
 
 
+@transaction.atomic
 def cancel_billing_request(billing_request: BillingRequest) -> BillingRequest:
+    try:
+        billing_request = BillingRequest.objects.select_for_update().get(
+            id=billing_request.id,
+            partner_id=billing_request.partner_id,
+        )
+    except BillingRequest.DoesNotExist as exc:
+        raise BillingServiceError("Запрос счёта не найден в этом заведении.") from exc
     if billing_request.status == BillingRequest.Status.PROCESSED:
         raise BillingServiceError("Нельзя отменить уже обработанный запрос счёта.")
     if billing_request.status != BillingRequest.Status.CANCELED:

@@ -596,6 +596,60 @@ class BillingServiceTests(TestCase):
         self.assertEqual(updated_request.status, BillingRequest.Status.PROCESSED)
         self.assertIsNotNone(updated_request.processed_at)
 
+    def test_mark_billing_request_reloads_current_state_before_transition(self):
+        request = BillingRequest.objects.create(
+            partner=self.partner,
+            table=self.table,
+            guest=self.session.guest,
+            table_session=self.session,
+            request_type=BillingRequest.RequestType.CUSTOM_SPLIT,
+            status=BillingRequest.Status.OPEN,
+        )
+        stale_request = BillingRequest.objects.get(pk=request.pk)
+        request.status = BillingRequest.Status.CANCELED
+        request.processed_at = request.created_at
+        request.save(update_fields=["status", "processed_at", "updated_at"])
+
+        with self.assertRaisesMessage(
+            BillingServiceError,
+            "Нельзя обработать уже отменённый запрос счёта.",
+        ):
+            mark_billing_request_processed(stale_request)
+
+    def test_issue_bill_reloads_current_state_before_transition(self):
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+        stale_bill = Bill.objects.get(pk=bill.pk)
+        issue_bill(bill)
+
+        with self.assertRaisesMessage(
+            BillingServiceError,
+            "Выдать можно только draft-счёт.",
+        ):
+            issue_bill(stale_bill)
+
+    def test_record_payment_rechecks_locked_bill_state(self):
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+        stale_bill = Bill.objects.get(pk=bill.pk)
+        bill.status = Bill.Status.CANCELED
+        bill.save(update_fields=["status", "updated_at"])
+
+        with self.assertRaisesMessage(
+            BillingServiceError,
+            "Нельзя принять оплату по отменённому счёту.",
+        ):
+            record_payment(
+                bill=stale_bill,
+                amount="10.00",
+                method=Payment.Method.CASH,
+            )
+        self.assertFalse(Payment.objects.filter(bill=bill).exists())
+
     def test_cancel_billing_request_updates_status(self):
         request = BillingRequest.objects.create(
             partner=self.partner,

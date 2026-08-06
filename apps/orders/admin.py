@@ -12,11 +12,39 @@ from core.admin_mixins import ScopedAdminMixin
 class CartItemInline(admin.TabularInline):
     model = CartItem
     extra = 0
+    can_delete = False
+    readonly_fields = (
+        "partner",
+        "menu_item",
+        "item_name",
+        "unit_price",
+        "quantity",
+        "comment",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class OrderItemInline(admin.TabularInline):
     model = OrderItem
     extra = 0
+    can_delete = False
+    readonly_fields = (
+        "partner",
+        "menu_item",
+        "item_name",
+        "unit_price",
+        "quantity",
+        "comment",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 class OrderStatusHistoryInline(admin.TabularInline):
@@ -47,7 +75,14 @@ class OrderAdmin(ScopedAdminMixin):
     readonly_fields = (
         "public_id",
         "assigned_employee",
+        "status",
+        "payment_method",
+        "subtotal_amount",
+        "bonus_spent",
+        "discount_amount",
+        "total_amount",
         "accepted_at",
+        "received_at",
         "paid_at",
         "created_at",
         "updated_at",
@@ -152,6 +187,17 @@ class OrderItemAdmin(ScopedAdminMixin):
     list_display = ("item_name", "partner", "order", "quantity", "unit_price")
     list_filter = ("partner",)
     search_fields = ("item_name", "order__id", "partner__name")
+    readonly_fields = (
+        "partner",
+        "order",
+        "menu_item",
+        "item_name",
+        "unit_price",
+        "quantity",
+        "comment",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(Cart)
@@ -169,6 +215,17 @@ class CartAdmin(ScopedAdminMixin):
     )
     list_filter = ("partner", "status")
     search_fields = ("guest__telegram_account__username", "partner__name")
+    readonly_fields = (
+        "partner",
+        "guest",
+        "table_session",
+        "status",
+        "subtotal_amount",
+        "total_amount",
+        "checked_out_at",
+        "created_at",
+        "updated_at",
+    )
     inlines = [CartItemInline]
 
 
@@ -180,6 +237,17 @@ class CartItemAdmin(ScopedAdminMixin):
     list_display = ("item_name", "partner", "cart", "quantity", "unit_price")
     list_filter = ("partner",)
     search_fields = ("item_name", "partner__name")
+    readonly_fields = (
+        "partner",
+        "cart",
+        "menu_item",
+        "item_name",
+        "unit_price",
+        "quantity",
+        "comment",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(OrderStatusHistory)
