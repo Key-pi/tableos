@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from itertools import groupby
 
 from django.db import transaction
@@ -15,14 +15,21 @@ from apps.billing.models import (
     BillOrder,
     Payment,
 )
-from apps.bonuses.models import BonusTransaction
-from apps.bonuses.services import get_redeemable_bonus_amount
+from apps.bonuses.models import BonusProgram, BonusTransaction
+from apps.bonuses.services import (
+    BonusServiceError,
+    apply_bonus_programs,
+    assert_bonus_balance_reconciled,
+    get_redeemable_bonus_amount,
+    sync_bonus_balance_from_ledger,
+)
 from apps.notifications.services import notify_staff_about_billing_request
 from apps.orders.models import Cart, Order, OrderItem
 from apps.orders.services import transition_order_status
 from apps.partners.models import PartnerBotSettings
 from apps.tables.models import TableSession
 from apps.tables.services import close_table_session_if_settled, get_active_table_session
+from apps.users.models import GuestProfile
 
 
 class BillingServiceError(Exception):
@@ -34,6 +41,16 @@ class BillingRequestResult:
     request: BillingRequest
     bill: Bill | None
     notified_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class BonusPaymentResult:
+    """Result of applying the guest's allowed bonus balance to a bill."""
+
+    bill: Bill
+    bonus_spent_amount: Decimal
+    remaining_amount: Decimal
+    payment: Payment | None = None
 
 
 def get_bill_remaining_amount(bill: Bill) -> Decimal:
@@ -79,11 +96,19 @@ def get_table_billable_orders(
     )
 
 
+@transaction.atomic
 def attach_orders_to_bill(
     *,
     bill: Bill,
     order_ids: list[str],
 ) -> Bill:
+    try:
+        bill = Bill.objects.select_for_update().get(
+            id=bill.id,
+            partner_id=bill.partner_id,
+        )
+    except Bill.DoesNotExist as exc:
+        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
     if bill.status in {Bill.Status.CANCELED, Bill.Status.PAID}:
         raise BillingServiceError("Нельзя добавлять заказы в закрытый счёт.")
     if not order_ids:
@@ -128,12 +153,16 @@ def attach_orders_to_bill(
     if not orders:
         return bill
 
+    order_items = list(
+        OrderItem.objects.select_for_update()
+        .filter(order_id__in=[order.id for order in orders])
+        .order_by("id")
+    )
+
     if any(order.status == Order.Status.CANCELED for order in orders):
         raise BillingServiceError("Отменённые заказы нельзя включать в счёт.")
 
-    target_order_item_ids = OrderItem.objects.filter(
-        order_id__in=[order.id for order in orders]
-    ).values("id")
+    target_order_item_ids = [order_item.id for order_item in order_items]
     allocated_order_item_ids = set(
         BillItem.objects.filter(
             partner_id=bill.partner_id,
@@ -177,7 +206,8 @@ def attach_orders_to_bill(
                 comment=order_item.comment,
             )
             for order in orders
-            for order_item in order.items.all()
+            for order_item in order_items
+            if order_item.order_id == order.id
         ]
     )
     bill = Bill.objects.prefetch_related("items", "payments", "bill_orders").get(id=bill.id)
@@ -190,6 +220,7 @@ def recalculate_bill_totals(bill: Bill) -> Bill:
         (
             payment.amount
             for payment in bill.payments.filter(status=Payment.Status.PAID)
+            if payment.method != Payment.Method.BONUSES
         ),
         Decimal("0.00"),
     )
@@ -226,7 +257,8 @@ def create_bill_from_orders(
 
     requested_order_ids = {str(order_id) for order_id in order_ids}
     orders = list(
-        Order.objects.select_related("table", "guest")
+        Order.objects.select_for_update()
+        .select_related("table", "guest")
         .prefetch_related("items")
         .filter(
             partner_id=partner_id,
@@ -249,10 +281,16 @@ def create_bill_from_orders(
             "Заказы без стола можно объединять только в рамках одного гостя."
         )
 
+    order_items = list(
+        OrderItem.objects.select_for_update()
+        .filter(order_id__in=[order.id for order in orders])
+        .order_by("id")
+    )
+
     allocated_order_item_ids = set(
         BillItem.objects.filter(
             partner_id=partner_id,
-            order_item_id__in=OrderItem.objects.filter(order_id__in=requested_order_ids).values("id"),
+            order_item_id__in=[order_item.id for order_item in order_items],
             bill__status__in=[
                 Bill.Status.DRAFT,
                 Bill.Status.ISSUED,
@@ -288,7 +326,9 @@ def create_bill_from_orders(
 
     bill_items: list[BillItem] = []
     for order in orders:
-        for order_item in order.items.all():
+        for order_item in order_items:
+            if order_item.order_id != order.id:
+                continue
             bill_items.append(
                 BillItem(
                     partner_id=partner_id,
@@ -527,11 +567,20 @@ def record_payment(
     external_payment_id: str = "",
     mark_bill_issued: bool = True,
 ) -> Payment:
-    amount_value = Decimal(amount).quantize(Decimal("0.01"))
-    if amount_value <= 0:
-        raise BillingServiceError("Сумма оплаты должна быть больше нуля.")
     if method not in Payment.Method.values:
         raise BillingServiceError("Неизвестный способ оплаты.")
+    if method == Payment.Method.BONUSES:
+        raise BillingServiceError(
+            "Оплату бонусами нужно запускать через команду оплаты бонусами."
+        )
+    try:
+        amount_value = Decimal(amount).quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise BillingServiceError("Сумма оплаты должна быть корректным денежным значением.") from exc
+    if not amount_value.is_finite():
+        raise BillingServiceError("Сумма оплаты должна быть конечным денежным значением.")
+    if amount_value <= 0:
+        raise BillingServiceError("Сумма оплаты должна быть больше нуля.")
 
     bill = Bill.objects.select_for_update().prefetch_related("items", "payments").get(
         id=bill.id,
@@ -583,23 +632,173 @@ def record_payment(
 
 
 @transaction.atomic
+def pay_bill_with_bonuses(
+    *,
+    bill: Bill,
+    created_by=None,
+    comment: str = "",
+) -> BonusPaymentResult:
+    """Apply the allowed bonus amount and close only when it covers the bill."""
+
+    try:
+        bill = Bill.objects.select_for_update().prefetch_related(
+            "items",
+            "payments",
+            "bill_orders",
+        ).get(
+            id=bill.id,
+            partner_id=bill.partner_id,
+        )
+    except Bill.DoesNotExist as exc:
+        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
+
+    if bill.status == Bill.Status.CANCELED:
+        raise BillingServiceError("Нельзя оплатить бонусами отменённый счёт.")
+    if bill.status == Bill.Status.PAID:
+        raise BillingServiceError("Счёт уже полностью оплачен.")
+
+    order_ids = list(
+        BillOrder.objects.filter(
+            partner_id=bill.partner_id,
+            bill_id=bill.id,
+        )
+        .order_by("order_id")
+        .values_list("order_id", flat=True)
+    )
+    locked_orders = list(
+        Order.objects.select_for_update()
+        .filter(partner_id=bill.partner_id, id__in=order_ids)
+        .order_by("id")
+    )
+    if len(locked_orders) != len(order_ids):
+        raise BillingServiceError("Не все заказы счёта принадлежат этому заведению.")
+
+    if bill.primary_guest_id is None:
+        raise BillingServiceError("Оплата бонусами доступна только для персонального счёта.")
+    try:
+        primary_guest = GuestProfile.objects.select_for_update().get(
+            id=bill.primary_guest_id,
+            partner_id=bill.partner_id,
+        )
+    except GuestProfile.DoesNotExist as exc:
+        raise BillingServiceError("Гость счёта не найден в этом заведении.") from exc
+    bill.primary_guest = primary_guest
+    if any(order.guest_id != primary_guest.id for order in locked_orders):
+        raise BillingServiceError("Заказы персонального счёта принадлежат разным гостям.")
+    try:
+        assert_bonus_balance_reconciled(primary_guest)
+    except BonusServiceError as exc:
+        raise BillingServiceError(str(exc)) from exc
+
+    recalculate_bill_totals(bill)
+    if bill.bonus_spent_amount > 0:
+        raise BillingServiceError("Бонусы по этому счёту уже были применены.")
+    if bill.paid_amount > 0:
+        raise BillingServiceError("Оплату бонусами нужно выбрать до первой денежной оплаты.")
+    if bill.total_amount <= 0:
+        raise BillingServiceError("В счёте нет положительной суммы для оплаты бонусами.")
+
+    max_redeemable = get_redeemable_bonus_amount(
+        partner_id=bill.partner_id,
+        guest=primary_guest,
+        purchase_total=bill.total_amount,
+    )
+    if max_redeemable <= 0:
+        raise BillingServiceError("По этому счёту сейчас нечего оплачивать бонусами.")
+
+    bill.bonus_spent_amount = max_redeemable
+    recalculate_bill_totals(bill)
+    BonusTransaction.objects.create(
+        partner_id=bill.partner_id,
+        guest=primary_guest,
+        bill=bill,
+        program=None,
+        order=locked_orders[0] if len(locked_orders) == 1 else None,
+        transaction_type=BonusTransaction.TransactionType.REDEMPTION,
+        amount=max_redeemable,
+        source_type="bill",
+        source_id=str(bill.id),
+        idempotency_key=f"bill:{bill.id}:redemption",
+        comment=(
+            f"Bill #{bill.public_id} bonus payment"
+            f"{f' by {created_by.username}' if created_by else ''}."
+        ),
+    )
+    try:
+        sync_bonus_balance_from_ledger(primary_guest)
+    except BonusServiceError as exc:
+        raise BillingServiceError(str(exc)) from exc
+
+    remaining_amount = bill.total_amount.quantize(Decimal("0.01"))
+    payment = None
+    if remaining_amount == Decimal("0.00"):
+        now = timezone.now()
+        payment = Payment.objects.create(
+            partner_id=bill.partner_id,
+            bill=bill,
+            status=Payment.Status.PAID,
+            method=Payment.Method.BONUSES,
+            amount=max_redeemable,
+            comment=comment or "Paid fully with bonus balance.",
+            paid_at=now,
+            created_by=created_by,
+        )
+        bill.status = Bill.Status.PAID
+        bill.issued_at = bill.issued_at or now
+        bill.closed_at = now
+        bill.save(update_fields=["status", "issued_at", "closed_at", "updated_at"])
+        bill = Bill.objects.prefetch_related(
+            "items",
+            "payments",
+            "bill_orders",
+        ).get(id=bill.id)
+        _process_post_payment_updates(bill)
+    elif bill.status == Bill.Status.DRAFT:
+        bill.status = Bill.Status.ISSUED
+        bill.issued_at = timezone.now()
+        bill.save(update_fields=["status", "issued_at", "updated_at"])
+
+    return BonusPaymentResult(
+        bill=bill,
+        bonus_spent_amount=max_redeemable,
+        remaining_amount=remaining_amount,
+        payment=payment,
+    )
+
+
+@transaction.atomic
 def redeem_bonus_for_bill(
     *,
     bill: Bill,
     created_by=None,
     amount: Decimal | str | None = None,
 ) -> Decimal:
-    bill = Bill.objects.select_for_update().select_related("primary_guest").prefetch_related(
+    bill = Bill.objects.select_for_update().prefetch_related(
         "items",
         "payments",
         "bill_orders",
-    ).get(id=bill.id)
+    ).get(
+        id=bill.id,
+        partner_id=bill.partner_id,
+    )
+    if bill.primary_guest_id is None:
+        raise BillingServiceError("Списание бонусов пока доступно только для персонального счёта.")
+    try:
+        primary_guest = GuestProfile.objects.select_for_update().get(
+            id=bill.primary_guest_id,
+            partner_id=bill.partner_id,
+        )
+    except GuestProfile.DoesNotExist as exc:
+        raise BillingServiceError("Гость счёта не найден в этом заведении.") from exc
+    bill.primary_guest = primary_guest
+    try:
+        assert_bonus_balance_reconciled(primary_guest)
+    except BonusServiceError as exc:
+        raise BillingServiceError(str(exc)) from exc
     recalculate_bill_totals(bill)
 
     if bill.status in {Bill.Status.CANCELED, Bill.Status.PAID}:
         raise BillingServiceError("Нельзя списать бонусы по закрытому счёту.")
-    if bill.primary_guest_id is None:
-        raise BillingServiceError("Списание бонусов пока доступно только для персонального счёта.")
     if bill.bonus_spent_amount > 0:
         raise BillingServiceError("Бонусы по этому счёту уже были списаны.")
     if bill.paid_amount > 0:
@@ -607,7 +806,7 @@ def redeem_bonus_for_bill(
 
     max_redeemable = get_redeemable_bonus_amount(
         partner_id=bill.partner_id,
-        guest=bill.primary_guest,
+        guest=primary_guest,
         purchase_total=bill.total_amount,
     )
     if max_redeemable <= 0:
@@ -626,20 +825,24 @@ def redeem_bonus_for_bill(
 
     BonusTransaction.objects.create(
         partner_id=bill.partner_id,
-        guest=bill.primary_guest,
+        guest=primary_guest,
+        bill=bill,
         program=None,
         order=bill.bill_orders.first().order if bill.bill_orders.count() == 1 else None,
         transaction_type=BonusTransaction.TransactionType.REDEMPTION,
         amount=redeem_amount,
+        source_type="bill",
+        source_id=str(bill.id),
+        idempotency_key=f"bill:{bill.id}:redemption",
         comment=(
             f"Bill #{bill.public_id} redemption"
             f"{f' by {created_by.username}' if created_by else ''}."
         ),
     )
-    bill.primary_guest.loyalty_balance = (
-        Decimal(bill.primary_guest.loyalty_balance) - redeem_amount
-    ).quantize(Decimal("0.01"))
-    bill.primary_guest.save(update_fields=["loyalty_balance", "updated_at"])
+    try:
+        sync_bonus_balance_from_ledger(primary_guest)
+    except BonusServiceError as exc:
+        raise BillingServiceError(str(exc)) from exc
     return redeem_amount
 
 
@@ -752,14 +955,22 @@ def _close_table_sessions_if_fully_settled(*, partner_id, table_id) -> int:
 
 def _sync_orders_after_bill_paid(bill: Bill) -> int:
     paid_payments = list(bill.payments.filter(status=Payment.Status.PAID))
-    order_payment_method = _derive_order_payment_method(paid_payments)
+    order_payment_method = _derive_order_payment_method(
+        paid_payments,
+        bonus_spent_amount=bill.bonus_spent_amount,
+    )
     order_ids = list(bill.bill_orders.values_list("order_id", flat=True))
     orders = list(
-        Order.objects.filter(id__in=order_ids).exclude(status=Order.Status.CANCELED)
+        Order.objects.select_for_update()
+        .select_related("guest")
+        .filter(id__in=order_ids, partner_id=bill.partner_id)
+        .exclude(status=Order.Status.CANCELED)
+        .order_by("id")
     )
     updated_count = 0
     now = timezone.now()
     for order in orders:
+        was_unpaid = order.paid_at is None
         if order_payment_method and order.payment_method != order_payment_method:
             order.payment_method = order_payment_method
             order.save(update_fields=["payment_method", "updated_at"])
@@ -776,20 +987,46 @@ def _sync_orders_after_bill_paid(bill: Bill) -> int:
         if order.paid_at is None:
             order.paid_at = now
             order.save(update_fields=["paid_at", "updated_at"])
+        if was_unpaid:
+            try:
+                apply_bonus_programs(
+                    partner_id=bill.partner_id,
+                    event=BonusProgram.TriggerEvent.ORDER_COMPLETED,
+                    guest=order.guest,
+                    order=order,
+                    purchase_total=order.total_amount,
+                    source_type="order_paid",
+                    source_id=str(order.id),
+                    comment=f"Paid order bonus for order #{order.public_id}.",
+                )
+            except BonusServiceError as exc:
+                raise BillingServiceError(str(exc)) from exc
         updated_count += 1
     return updated_count
 
 
-def _derive_order_payment_method(paid_payments: list[Payment]) -> str | None:
+def _derive_order_payment_method(
+    paid_payments: list[Payment],
+    *,
+    bonus_spent_amount: Decimal = Decimal("0.00"),
+) -> str | None:
     method_map = {
         Payment.Method.CASH: Order.PaymentMethod.CASH,
         Payment.Method.TERMINAL: Order.PaymentMethod.TERMINAL,
+        Payment.Method.MIXED: Order.PaymentMethod.MIXED,
+        Payment.Method.BONUSES: Order.PaymentMethod.BONUSES,
     }
     mapped_methods = {
         method_map[payment.method]
         for payment in paid_payments
         if payment.method in method_map
     }
+    if bonus_spent_amount > 0 and any(
+        payment.method != Payment.Method.BONUSES for payment in paid_payments
+    ):
+        return Order.PaymentMethod.MIXED
+    if len(mapped_methods) > 1:
+        return Order.PaymentMethod.MIXED
     if len(mapped_methods) == 1:
         return next(iter(mapped_methods))
     return None

@@ -66,11 +66,11 @@ def _visit_bonus(program: BonusProgram, context: BonusContext) -> Decimal:
 def _milestone_bonus(program: BonusProgram, context: BonusContext) -> Decimal:
     if context.order is None or program.milestone_order_count <= 0:
         return Decimal("0.00")
-    completed_orders_count = context.guest.orders.filter(
+    paid_orders_count = context.guest.orders.filter(
         partner_id=program.partner_id,
-        status=Order.Status.COMPLETED,
-    ).count()
-    if completed_orders_count % program.milestone_order_count != 0:
+        paid_at__isnull=False,
+    ).exclude(status=Order.Status.CANCELED).count()
+    if paid_orders_count % program.milestone_order_count != 0:
         return Decimal("0.00")
     return Decimal(program.fixed_amount)
 

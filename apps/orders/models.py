@@ -21,6 +21,8 @@ class Order(PartnerBoundModel):
     class PaymentMethod(models.TextChoices):
         CASH = "cash", "Cash"
         TERMINAL = "terminal", "Terminal"
+        MIXED = "mixed", "Mixed"
+        BONUSES = "bonuses", "Bonuses"
 
     public_id = models.CharField(max_length=12, editable=False)
     guest = models.ForeignKey(

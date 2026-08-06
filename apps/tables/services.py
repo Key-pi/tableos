@@ -101,6 +101,8 @@ def activate_table_session(
         partner_id=partner_id,
         event=BonusProgram.TriggerEvent.VISIT,
         guest=guest_profile,
+        source_type="table_session",
+        source_id=str(session.id),
         comment=f"Visit bonus for table #{table.number}.",
     )
     return session

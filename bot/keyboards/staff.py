@@ -537,7 +537,7 @@ def build_staff_bill_actions_keyboard(
     bill_public_id: str,
     can_issue: bool,
     can_take_payment: bool,
-    can_redeem_bonus: bool = False,
+    can_pay_with_bonuses: bool = False,
 ) -> InlineKeyboardMarkup:
     keyboard: list[list[InlineKeyboardButton]] = []
     if can_issue:
@@ -549,12 +549,12 @@ def build_staff_bill_actions_keyboard(
                 )
             ]
         )
-    if can_redeem_bonus:
+    if can_pay_with_bonuses:
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Списать бонусы",
-                    callback_data=f"staffbillredeem:{bill_public_id}",
+                    text="Оплатить бонусами",
+                    callback_data=f"staffbillpaybonus:{bill_public_id}",
                 )
             ]
         )

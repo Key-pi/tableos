@@ -25,13 +25,13 @@ from apps.billing.repositories import (
 from apps.billing.services import (
     BillingServiceError,
     cancel_billing_request,
-    get_bill_context_label,
     create_personal_bills_for_table,
     create_shared_bill_for_table,
+    get_bill_context_label,
     issue_bill,
     mark_billing_request_processed,
+    pay_bill_with_bonuses,
     record_payment,
-    redeem_bonus_for_bill,
 )
 from apps.bonuses.models import WalkInSale
 from apps.bonuses.services import (
@@ -650,27 +650,35 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
     remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
     guest_label = _guest_label(bill.primary_guest) if bill.primary_guest_id else "несколько гостей"
     bonus_hint = ""
-    can_redeem_bonus = False
+    can_pay_with_bonuses = False
     item_lines = [
         f"• {item.item_name} x{item.quantity} = {item.line_total} грн"
         for item in bill.items.all()[:8]
     ]
     if bill.primary_guest_id:
-        redeemable_amount = get_redeemable_bonus_amount(
-            partner_id=bill.partner_id,
-            guest=bill.primary_guest,
-            purchase_total=bill.total_amount,
+        redeemable_amount = (
+            get_redeemable_bonus_amount(
+                partner_id=bill.partner_id,
+                guest=bill.primary_guest,
+                purchase_total=bill.total_amount,
+            )
+            if bill.total_amount > 0
+            else Decimal("0.00")
         )
-        can_redeem_bonus = redeemable_amount > 0
+        can_pay_with_bonuses = redeemable_amount > 0
         bonus_hint = (
-            f"\nБонусами списано: {bill.bonus_spent_amount} грн"
-            f"\nДоступно списать: {redeemable_amount} грн"
-            f"\nБаланс гостя: {bill.primary_guest.loyalty_balance} бонусов"
+            f"\nОплачено бонусами: {bill.bonus_spent_amount} грн"
+            + (
+                f"\nМожно оплатить бонусами: {redeemable_amount} грн"
+                if bill.bonus_spent_amount == 0
+                else ""
+            )
+            + f"\nБаланс гостя: {bill.primary_guest.loyalty_balance} бонусов (1 бонус = 1 грн)"
         )
     if bill.bonus_spent_amount > 0 or bill.paid_amount > 0:
-        can_redeem_bonus = False
+        can_pay_with_bonuses = False
     if bill.status in {Bill.Status.CANCELED, Bill.Status.PAID}:
-        can_redeem_bonus = False
+        can_pay_with_bonuses = False
 
     bill_text = (
         f"<b>Счёт #{bill.public_id}</b>\n"
@@ -686,7 +694,7 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
         f"Позиции:\n{chr(10).join(item_lines) if item_lines else '—'}"
         f"{bonus_hint}"
     )
-    return can_redeem_bonus, bill_text
+    return can_pay_with_bonuses, bill_text
 
 
 def _build_quick_sale_items_payload(items_map: dict[str, int]) -> list[dict]:
@@ -914,14 +922,14 @@ async def _send_billing_feed(
         )
     for bill in bills:
         remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
-        can_redeem_bonus, bill_text = await sync_to_async(_build_bill_card_view)(bill)
+        can_pay_with_bonuses, bill_text = await sync_to_async(_build_bill_card_view)(bill)
         await message.answer(
             bill_text,
             reply_markup=build_staff_bill_actions_keyboard(
                 bill_public_id=bill.public_id,
                 can_issue=bill.status == Bill.Status.DRAFT,
                 can_take_payment=remaining_amount > 0,
-                can_redeem_bonus=can_redeem_bonus,
+                can_pay_with_bonuses=can_pay_with_bonuses,
             ),
         )
 
@@ -1728,7 +1736,7 @@ async def staff_bill_open_or_refresh_callback_handler(callback: CallbackQuery, b
         return
 
     remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
-    can_redeem_bonus, bill_text = await sync_to_async(_build_bill_card_view)(bill)
+    can_pay_with_bonuses, bill_text = await sync_to_async(_build_bill_card_view)(bill)
     updated = await _safe_edit_message_text(
         callback.message,
         bill_text,
@@ -1736,7 +1744,7 @@ async def staff_bill_open_or_refresh_callback_handler(callback: CallbackQuery, b
             bill_public_id=bill.public_id,
             can_issue=bill.status == Bill.Status.DRAFT,
             can_take_payment=remaining_amount > 0,
-            can_redeem_bonus=can_redeem_bonus,
+            can_pay_with_bonuses=can_pay_with_bonuses,
         ),
     )
     await callback.answer("Карточка счёта обновлена" if updated else "Без изменений")
@@ -1770,7 +1778,7 @@ async def staff_bill_issue_callback_handler(callback: CallbackQuery, bot: Bot) -
     remaining_amount = (refreshed_bill.total_amount - refreshed_bill.paid_amount).quantize(
         Decimal("0.01")
     )
-    can_redeem_bonus, bill_text = await sync_to_async(_build_bill_card_view)(refreshed_bill)
+    can_pay_with_bonuses, bill_text = await sync_to_async(_build_bill_card_view)(refreshed_bill)
     await _safe_edit_message_text(
         callback.message,
         bill_text,
@@ -1778,7 +1786,7 @@ async def staff_bill_issue_callback_handler(callback: CallbackQuery, bot: Bot) -
             bill_public_id=refreshed_bill.public_id,
             can_issue=False,
             can_take_payment=remaining_amount > 0,
-            can_redeem_bonus=can_redeem_bonus,
+            can_pay_with_bonuses=can_pay_with_bonuses,
         ),
     )
     await callback.answer("Счёт выдан")
@@ -1786,7 +1794,11 @@ async def staff_bill_issue_callback_handler(callback: CallbackQuery, bot: Bot) -
 
 @router.callback_query(lambda c: c.data and c.data.startswith("staffbillpaycash:"))
 @router.callback_query(lambda c: c.data and c.data.startswith("staffbillpayterminal:"))
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbillpaymixed:"))
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbillpaybonus:"))
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbillredeem:"))
 async def staff_bill_pay_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    notice = "Оплата зафиксирована"
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
         if not _can_manage_billing(employee):
@@ -1794,19 +1806,39 @@ async def staff_bill_pay_callback_handler(callback: CallbackQuery, bot: Bot) -> 
                 "Работа со счетами доступна только владельцу, менеджеру или кассиру."
             )
         prefix, bill_public_id = (callback.data or "").split(":", 1)
-        method = Payment.Method.CASH if prefix == "staffbillpaycash" else Payment.Method.TERMINAL
         bill = await sync_to_async(BillRepository.by_public_id_for_partner)(
             partner.id,
             bill_public_id,
         )
-        remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
-        await sync_to_async(record_payment)(
-            bill=bill,
-            amount=remaining_amount,
-            method=method,
-            created_by=employee.user,
-            comment=f"Recorded via staff bot ({method}).",
-        )
+        if prefix in {"staffbillpaybonus", "staffbillredeem"}:
+            bonus_result = await sync_to_async(pay_bill_with_bonuses)(
+                bill=bill,
+                created_by=employee.user,
+                comment="Paid via staff bot with bonus balance.",
+            )
+            if bonus_result.remaining_amount > 0:
+                notice = (
+                    f"Списано бонусами: {bonus_result.bonus_spent_amount} грн. "
+                    f"Остаток к оплате: {bonus_result.remaining_amount} грн."
+                )
+            else:
+                notice = "Счёт полностью оплачен бонусами"
+        else:
+            method = {
+                "staffbillpaycash": Payment.Method.CASH,
+                "staffbillpayterminal": Payment.Method.TERMINAL,
+                "staffbillpaymixed": Payment.Method.MIXED,
+            }[prefix]
+            remaining_amount = (bill.total_amount - bill.paid_amount).quantize(
+                Decimal("0.01")
+            )
+            await sync_to_async(record_payment)(
+                bill=bill,
+                amount=remaining_amount,
+                method=method,
+                created_by=employee.user,
+                comment=f"Recorded via staff bot ({method}).",
+            )
     except Bill.DoesNotExist:
         await callback.answer("Счёт не найден.", show_alert=True)
         return
@@ -1822,12 +1854,12 @@ async def staff_bill_pay_callback_handler(callback: CallbackQuery, bot: Bot) -> 
         remaining_amount = (refreshed_bill.total_amount - refreshed_bill.paid_amount).quantize(
             Decimal("0.01")
         )
-        can_redeem_bonus, text = await sync_to_async(_build_bill_card_view)(refreshed_bill)
+        can_pay_with_bonuses, text = await sync_to_async(_build_bill_card_view)(refreshed_bill)
         markup = build_staff_bill_actions_keyboard(
             bill_public_id=refreshed_bill.public_id,
             can_issue=False,
             can_take_payment=remaining_amount > 0,
-            can_redeem_bonus=can_redeem_bonus,
+            can_pay_with_bonuses=can_pay_with_bonuses,
         )
     except Bill.DoesNotExist:
         text = (
@@ -1837,52 +1869,7 @@ async def staff_bill_pay_callback_handler(callback: CallbackQuery, bot: Bot) -> 
         markup = None
 
     await _safe_edit_message_text(callback.message, text, reply_markup=markup)
-    await callback.answer("Оплата зафиксирована")
-
-
-@router.callback_query(lambda c: c.data and c.data.startswith("staffbillredeem:"))
-async def staff_bill_redeem_bonus_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
-    try:
-        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
-        if not _can_manage_billing(employee):
-            raise OrderFlowError(
-                "Работа со счетами доступна только владельцу, менеджеру или кассиру."
-            )
-        _, bill_public_id = (callback.data or "").split(":", 1)
-        bill = await sync_to_async(BillRepository.by_public_id_for_partner)(
-            partner.id,
-            bill_public_id,
-        )
-        await sync_to_async(redeem_bonus_for_bill)(
-            bill=bill,
-            created_by=employee.user,
-        )
-    except Bill.DoesNotExist:
-        await callback.answer("Счёт не найден.", show_alert=True)
-        return
-    except (OrderFlowError, BillingServiceError) as exc:
-        await callback.answer(str(exc), show_alert=True)
-        return
-
-    refreshed_bill = await sync_to_async(BillRepository.by_public_id_for_partner)(
-        partner.id,
-        bill_public_id,
-    )
-    remaining_amount = (refreshed_bill.total_amount - refreshed_bill.paid_amount).quantize(
-        Decimal("0.01")
-    )
-    can_redeem_bonus, bill_text = await sync_to_async(_build_bill_card_view)(refreshed_bill)
-    await _safe_edit_message_text(
-        callback.message,
-        bill_text,
-        reply_markup=build_staff_bill_actions_keyboard(
-            bill_public_id=refreshed_bill.public_id,
-            can_issue=refreshed_bill.status == Bill.Status.DRAFT,
-            can_take_payment=remaining_amount > 0,
-            can_redeem_bonus=can_redeem_bonus,
-        ),
-    )
-    await callback.answer("Бонусы списаны")
+    await callback.answer(notice)
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("staffbillreqrefresh:"))

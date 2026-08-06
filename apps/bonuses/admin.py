@@ -46,6 +46,34 @@ class BonusTransactionAdmin(ScopedAdminMixin):
         "partner__name",
         "comment",
     )
+    readonly_fields = (
+        "partner",
+        "guest",
+        "program",
+        "order",
+        "bill",
+        "walk_in_sale",
+        "transaction_type",
+        "amount",
+        "expires_at",
+        "comment",
+        "source_type",
+        "source_id",
+        "idempotency_key",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None:
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(WalkInSale)
@@ -59,6 +87,7 @@ class WalkInSaleAdmin(ScopedAdminMixin):
         "partner",
         "amount",
         "bonus_awarded_amount",
+        "bonus_spent_amount",
         "created_by",
         "created_at",
     )
@@ -74,6 +103,7 @@ class WalkInSaleAdmin(ScopedAdminMixin):
         "guest",
         "customer_code_snapshot",
         "bonus_awarded_amount",
+        "bonus_spent_amount",
         "created_by",
         "created_at",
         "updated_at",

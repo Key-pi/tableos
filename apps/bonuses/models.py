@@ -1,4 +1,8 @@
+from decimal import Decimal
+
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
 
@@ -32,7 +36,13 @@ class BonusProgram(PartnerBoundModel):
     percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     min_order_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     milestone_order_count = models.PositiveIntegerField(default=0)
-    max_redeem_share = models.DecimalField(max_digits=5, decimal_places=2, default=30)
+    max_redeem_share = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=30,
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Maximum percentage of a bill payable with bonuses (0-100).",
+    )
     expires_in_days = models.PositiveIntegerField(default=90)
     config = models.JSONField(
         default=dict,
@@ -76,13 +86,37 @@ class BonusTransaction(PartnerBoundModel):
         blank=True,
         related_name="bonus_transactions",
     )
+    bill = models.ForeignKey(
+        "billing.Bill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bonus_transactions",
+    )
+    walk_in_sale = models.ForeignKey(
+        "bonuses.WalkInSale",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bonus_transactions",
+    )
     transaction_type = models.CharField(max_length=16, choices=TransactionType.choices)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     expires_at = models.DateTimeField(null=True, blank=True)
     comment = models.CharField(max_length=255, blank=True)
+    source_type = models.CharField(max_length=32, blank=True)
+    source_id = models.CharField(max_length=64, blank=True)
+    idempotency_key = models.CharField(max_length=128, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["partner", "idempotency_key"],
+                condition=~Q(idempotency_key=""),
+                name="unique_bonus_idempotency_per_partner",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.partner.name} / {self.transaction_type} / {self.amount}"
@@ -99,7 +133,11 @@ class WalkInSale(PartnerBoundModel):
         related_name="walk_in_sales",
     )
     customer_code_snapshot = models.CharField(max_length=12, blank=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01"))],
+    )
     bonus_awarded_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     bonus_spent_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     comment = models.CharField(max_length=255, blank=True)
@@ -113,6 +151,12 @@ class WalkInSale(PartnerBoundModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount__gt=0),
+                name="walk_in_sale_amount_positive",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.partner.name} / walk-in {self.amount}"

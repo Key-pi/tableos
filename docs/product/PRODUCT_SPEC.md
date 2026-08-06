@@ -60,9 +60,9 @@ TableOS — multi-tenant white-label B2B платформа для заведе�
 | Menu browsing | Active categories/items, configurable label, optional browse without table | Menu | CONFIRMED_CURRENT |
 | Tables and QR sessions | Stable QR payload, many guests per table, one active session per guest/partner | Tables | CODE_IS_BEHIND_SPEC — concurrency invariant не закреплён |
 | Cart and table ordering | Guest-owned cart, order snapshots, staff notification | Menu + orders; table journey requires tables | CONFIRMED_CURRENT for main journey; integrity work remains |
-| Billing | Personal/shared bill, custom split request, partial/full payment | Orders | CONFIRMED_CURRENT for MVP; allocation integrity gap |
+| Billing | Personal/shared bill, custom split request, partial/full payment, partner-defined bonus payment with a monetary remainder | Orders + loyalty | PARTIAL_CURRENT; allocation and PostgreSQL rollout gates remain |
 | Staff call | Role-directed notification from active table | Tables | CONFIRMED_CURRENT, cooldown race requires fix |
-| Bonus programmes | Visit, manual purchase, order-completed reward; auditable ledger | Guest profile | CODE_IS_BEHIND_SPEC for order-completed trigger |
+| Bonus programmes | Visit, manual purchase, and extensible partner-defined reward triggers; auditable ledger | Guest profile + billing settlement | PARTIAL_CURRENT; paid settlement is the current order-reward baseline, while programme trigger expansion remains future work |
 | Quick sale | Staff sale with optional customer code and bonus redemption | Menu; staff capability | CONFIRMED_CURRENT |
 | Staff operations | Orders, notifications, tables, billing, quick sale, reports by capability | Employee + Telegram binding | CODE_IS_BEHIND_SPEC for inactive user revocation and stale capability callbacks |
 | Daily report | Operational day summary, tails, bills/quick sales | Billing and/or quick sale | CONFIRMED_CURRENT as on-demand MVP |
@@ -111,8 +111,8 @@ Several guests may use one table. Their carts and orders remain personal; shared
 1. Guest asks for personal, shared, or custom-split settlement.
 2. Personal/shared request prepares or extends an eligible draft bill; custom split creates a request for staff handling.
 3. A bill contains only same-partner eligible order items in a compatible table/guest context.
-4. Staff issues the bill, records valid payment(s), optionally redeems bonus balance for a personal bill, and sees remaining amount.
-5. Full payment updates related orders and requests through the same use case; table session closes only when settlement and receipt conditions are clean.
+4. Staff issues the bill and may choose “pay with bonuses”; the command applies the partner-allowed amount at 1 bonus = 1 UAH and leaves any monetary remainder on the bill.
+5. Staff records the remaining cash/terminal payment, or the bonus command closes a fully covered bill with the normal `bonuses` payment method; table session closes only when settlement and receipt conditions are clean.
 
 ### 5.5 Staff operations
 
@@ -156,12 +156,12 @@ The following are not silently “normalised” in this product document; implem
 | Inactive `User` must not retain staff access | `TABLEOS_TZ.md:284-295`; `apps/employees/selectors.py:get_staff_employee_by_telegram` filters `EmployeeProfile.is_active` only; `bot/handlers/staff.py:_resolve_staff_employee_by_telegram_id` uses it | CODE_IS_BEHIND_SPEC | Revoke access when either profile or user is inactive; characterize `/staff` and callback paths first |
 | Suspended partner must not serve ongoing flows | `TABLEOS_TZ.md:1880-1892`; `bot/services/runtime.py:load_active_bot_configs` checks status only at startup; `bot/services/context.py:resolve_partner_for_bot_token` returns partner without status gate | CODE_IS_BEHIND_SPEC | Decide and implement runtime-time suspension behavior |
 | One active session per guest/partner | `TABLEOS_TZ.md:1900-1907`; `apps/tables/models.py:TableSession.Meta` has no uniqueness constraint; `apps/tables/services.py:activate_table_session` locks `Table`, then creates session | CODE_IS_BEHIND_SPEC | Add a PostgreSQL-safe concurrency design after characterization tests |
-| A bill item cannot appear in two active/paid bills | `TABLEOS_TZ.md:763-947`; `apps/billing/services.py:create_bill_from_orders` checks then bulk-creates without locking order items or DB uniqueness | DEFECT / CODE_IS_BEHIND_SPEC | Define allocation invariant and transactional enforcement before financial changes |
+| A bill item cannot appear in two active/paid bills | `apps/billing/services.py:create_bill_from_orders` and `attach_orders_to_bill` lock `OrderItem` rows; `BillItem.unique_order_item_bill_allocation` guards `(partner, order_item)` | PARTIALLY_RESOLVED_FOR_B3 | Repeat the duplicate audit and run PostgreSQL concurrency tests before rollout; bill-cancel/release semantics remain deferred |
 | Order status transition is serialized | `TABLEOS_TZ.md:531-691`; `apps/orders/services.py:transition_order_status` mutates caller-provided order without fresh `select_for_update()` | DEFECT | Serialize callback transitions and prevent duplicate history/notifications |
-| Order-completed programmes accrue | `TABLEOS_TZ.md:1012-1097`; `apps/bonuses/services.py:apply_bonus_programs` supports event, but only table activation invokes it for `VISIT`; no production order completion call is present | CODE_IS_BEHIND_SPEC | Owner must choose completed vs paid vs both, then add one controlled trigger |
+| Order reward programmes accrue | `apps/billing/services.py:_sync_orders_after_bill_paid` dispatches the existing programme event after first paid settlement with source-linked idempotency | PARTIALLY_RESOLVED_FOR_B3 | Paid is the current baseline; partner-specific trigger expansion and refund/cancellation treatment remain deferred |
 | Labels cannot misroute guest actions | `TABLEOS_TZ.md:1512-1537`; `bot/filters/content.py:PartnerButtonFilter` compares raw message text; `apps/partners/models.py:PartnerBotSettings.clean` validates dependencies but not label uniqueness | DEFECT / CODE_IS_BEHIND_SPEC | Validate collisions or route with stable command/intent identifiers |
 | Telegram I/O is outside transaction and broadcasts are retry-safe | `TABLEOS_TZ.md:1852-1877`; `apps/notifications/services.py:send_broadcast_campaign_now` is `@transaction.atomic` and calls `_send_telegram_messages` at line 503; `apps/notifications/tasks.py:send_broadcast_campaign_task` has no durable lease/idempotency cursor | DEFECT | Separate claim/send/finalize phases; decide delivery guarantee explicitly |
-| Admin cannot bypass operational transition rules | `TABLEOS_TZ.md:1752-1808`; actual admins expose mutable order/bill/session fields and `apps/billing/admin.py` uses direct `queryset.update` actions | CODE_IS_BEHIND_SPEC | Restrict direct editing and route mutations through safe services |
+| Admin cannot bypass operational transition rules | B2/B3 make lifecycle, allocation, bonus balance and ledger fields readonly; payment/bonus commands remain owner services and no special bonus-settlement Admin action exists | PARTIALLY_RESOLVED_FOR_B3 | Correction policy (PQ-018), remaining admin scope review and PostgreSQL rollout gate remain open |
 | Delivery/pickup are usable journeys | `TABLEOS_TZ.md:2220-2245`; `PartnerBotSettings.clean` accepts delivery/pickup flags at `apps/partners/models.py:264-272`, but there is no established delivery/pickup order journey | CODE_IS_BEHIND_SPEC | Keep flags as capability groundwork; do not market as implemented flows |
 
 ## 9. Future scope and exclusions

@@ -1,10 +1,11 @@
 from decimal import Decimal
 from unittest.mock import patch
 
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
-from apps.billing.models import Bill, BillingRequest, Payment
-from apps.billing.repositories import BillRepository, BillingRequestRepository
+from apps.billing.models import Bill, BillingRequest, BillItem, Payment
+from apps.billing.repositories import BillingRequestRepository, BillRepository
 from apps.billing.services import (
     BillingServiceError,
     attach_orders_to_bill,
@@ -13,12 +14,15 @@ from apps.billing.services import (
     create_billing_request_for_telegram_user,
     create_personal_bills_for_table,
     create_shared_bill_for_table,
+    get_bill_remaining_amount,
     issue_bill,
     mark_billing_request_processed,
+    pay_bill_with_bonuses,
     record_payment,
     redeem_bonus_for_bill,
 )
 from apps.bonuses.models import BonusProgram, BonusTransaction
+from apps.bonuses.services import apply_bonus_programs
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
 from apps.notifications.models import StaffNotification
@@ -102,6 +106,13 @@ class BillingServiceTests(TestCase):
             max_redeem_share="30.00",
             is_active=True,
         )
+        BonusTransaction.objects.create(
+            partner=self.partner,
+            guest=self.session.guest,
+            transaction_type=BonusTransaction.TransactionType.MANUAL,
+            amount="250.00",
+            comment="Seeded test balance",
+        )
         self.session.guest.loyalty_balance = Decimal("250.00")
         self.session.guest.save(update_fields=["loyalty_balance", "updated_at"])
         manager_user = User.objects.create_user(
@@ -135,6 +146,26 @@ class BillingServiceTests(TestCase):
         self.assertEqual(bill.bill_orders.count(), 1)
         self.assertEqual(bill.items.count(), 1)
         self.assertEqual(bill.total_amount, Decimal("300.00"))
+
+    def test_order_item_cannot_be_allocated_to_two_bills(self):
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+        order_item = self.order.items.get()
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                BillItem.objects.create(
+                    partner=self.partner,
+                    bill=bill,
+                    order=self.order,
+                    order_item=order_item,
+                    item_name=order_item.item_name,
+                    unit_price=order_item.unit_price,
+                    quantity=order_item.quantity,
+                    line_total=order_item.unit_price * order_item.quantity,
+                )
 
     def test_create_bill_from_orders_allows_personal_bill_without_table(self):
         order = create_order(
@@ -232,6 +263,99 @@ class BillingServiceTests(TestCase):
         self.session.refresh_from_db()
         self.assertEqual(self.session.status, self.session.Status.ACTIVE)
 
+    def test_paid_bill_awards_order_bonus_once_and_records_source(self):
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+        record_payment(
+            bill=bill,
+            amount=bill.total_amount,
+            method=Payment.Method.CASH,
+        )
+
+        transactions = BonusTransaction.objects.filter(
+            partner=self.partner,
+            guest=self.session.guest,
+            order=self.order,
+            transaction_type=BonusTransaction.TransactionType.ACCRUAL,
+        )
+        self.assertEqual(transactions.count(), 1)
+        self.assertEqual(transactions.get().amount, Decimal("15.00"))
+
+        apply_bonus_programs(
+            partner_id=self.partner.id,
+            event=BonusProgram.TriggerEvent.ORDER_COMPLETED,
+            guest=self.session.guest,
+            order=self.order,
+            purchase_total=self.order.total_amount,
+            source_type="order_paid",
+            source_id=str(self.order.id),
+        )
+        self.assertEqual(transactions.count(), 1)
+
+    def test_pay_bill_with_bonuses_closes_fully_covered_bill(self):
+        program = BonusProgram.objects.get(partner=self.partner)
+        program.max_redeem_share = Decimal("100.00")
+        program.save(update_fields=["max_redeem_share", "updated_at"])
+        BonusTransaction.objects.create(
+            partner=self.partner,
+            guest=self.session.guest,
+            transaction_type=BonusTransaction.TransactionType.MANUAL,
+            amount="50.00",
+            comment="Top up test balance for full bonus settlement",
+        )
+        self.session.guest.loyalty_balance = Decimal("300.00")
+        self.session.guest.save(update_fields=["loyalty_balance", "updated_at"])
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+            kind=Bill.Kind.PERSONAL,
+        )
+
+        result = pay_bill_with_bonuses(
+            bill=bill,
+            created_by=self.manager.user,
+        )
+
+        bill.refresh_from_db()
+        self.order.refresh_from_db()
+        self.assertIsNotNone(result.payment)
+        self.assertEqual(result.payment.method, Payment.Method.BONUSES)
+        self.assertEqual(result.payment.amount, Decimal("300.00"))
+        self.assertEqual(bill.status, Bill.Status.PAID)
+        self.assertEqual(bill.total_amount, Decimal("0.00"))
+        self.assertEqual(bill.paid_amount, Decimal("0.00"))
+        self.assertEqual(self.order.payment_method, Order.PaymentMethod.BONUSES)
+
+    def test_pay_bill_with_bonuses_leaves_remainder_for_mixed_payment(self):
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+            kind=Bill.Kind.PERSONAL,
+        )
+        result = pay_bill_with_bonuses(bill=bill, created_by=self.manager.user)
+        self.assertEqual(result.bonus_spent_amount, Decimal("90.00"))
+        self.assertEqual(result.remaining_amount, Decimal("210.00"))
+        self.assertIsNone(result.payment)
+        bill.refresh_from_db()
+        self.assertEqual(bill.status, Bill.Status.ISSUED)
+        with self.assertRaisesMessage(
+            BillingServiceError,
+            "Бонусы по этому счёту уже были применены.",
+        ):
+            pay_bill_with_bonuses(bill=bill, created_by=self.manager.user)
+        remaining = get_bill_remaining_amount(bill)
+        record_payment(
+            bill=bill,
+            amount=remaining,
+            method=Payment.Method.MIXED,
+            created_by=self.manager.user,
+        )
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.payment_method, Order.PaymentMethod.MIXED)
+
     def test_record_payment_rejects_unknown_method(self):
         bill = create_bill_from_orders(
             partner_id=self.partner.id,
@@ -243,6 +367,22 @@ class BillingServiceTests(TestCase):
                 bill=bill,
                 amount="100.00",
                 method="crypto",
+            )
+
+    def test_record_payment_rejects_zero_money_for_non_bonus_method(self):
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+
+        with self.assertRaisesMessage(
+            BillingServiceError,
+            "Сумма оплаты должна быть больше нуля.",
+        ):
+            record_payment(
+                bill=bill,
+                amount="0.00",
+                method=Payment.Method.CASH,
             )
 
     def test_bill_repository_can_load_paid_bill_by_public_id(self):

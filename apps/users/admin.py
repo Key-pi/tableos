@@ -163,6 +163,16 @@ class GuestProfileAdmin(ScopedAdminMixin):
         "partner__name",
     )
     allow_partner_delete = False
+    readonly_fields = (
+        "partner",
+        "telegram_account",
+        "customer_code",
+        "first_visit_at",
+        "last_visit_at",
+        "loyalty_balance",
+        "created_at",
+        "updated_at",
+    )
 
 
 @admin.register(AdminAccessProfile)

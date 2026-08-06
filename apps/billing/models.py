@@ -166,6 +166,12 @@ class BillItem(PartnerBoundModel):
 
     class Meta:
         ordering = ["created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["partner", "order_item"],
+                name="unique_order_item_bill_allocation",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.bill.public_id} / {self.item_name} x{self.quantity}"
@@ -191,6 +197,7 @@ class Payment(PartnerBoundModel):
         TERMINAL = "terminal", "Terminal"
         ONLINE = "online", "Online"
         MIXED = "mixed", "Mixed"
+        BONUSES = "bonuses", "Bonuses"
 
     bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name="payments")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)

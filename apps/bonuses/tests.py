@@ -104,6 +104,19 @@ class WalkInSaleServiceTests(TestCase):
         self.assertEqual(sale.guest_id, self.guest.id)
         self.assertEqual(sale.customer_code_snapshot, self.guest.customer_code)
 
+    def test_register_walk_in_sale_rejects_non_positive_amount(self):
+        from apps.bonuses.services import BonusServiceError
+
+        with self.assertRaisesMessage(
+            BonusServiceError,
+            "Сумма быстрой продажи должна быть больше нуля.",
+        ):
+            register_walk_in_sale(
+                partner_id=self.partner.id,
+                guest=self.guest,
+                amount="0.00",
+            )
+
     def test_preview_walk_in_sale_by_customer_code_returns_total_and_bonus(self):
         preview = preview_walk_in_sale_by_customer_code(
             partner_id=self.partner.id,
@@ -175,6 +188,13 @@ class WalkInSaleServiceTests(TestCase):
     def test_quick_sale_redeems_bonus_when_requested(self):
         self.program.max_redeem_share = Decimal("50.00")
         self.program.save(update_fields=["max_redeem_share"])
+        BonusTransaction.objects.create(
+            partner=self.partner,
+            guest=self.guest,
+            transaction_type=BonusTransaction.TransactionType.MANUAL,
+            amount="100.00",
+            comment="Seeded test balance",
+        )
         self.guest.loyalty_balance = Decimal("100.00")
         self.guest.save(update_fields=["loyalty_balance"])
 
@@ -205,6 +225,13 @@ class WalkInSaleServiceTests(TestCase):
     def test_quick_sale_without_redeem_flag_keeps_balance(self):
         self.program.max_redeem_share = Decimal("50.00")
         self.program.save(update_fields=["max_redeem_share"])
+        BonusTransaction.objects.create(
+            partner=self.partner,
+            guest=self.guest,
+            transaction_type=BonusTransaction.TransactionType.MANUAL,
+            amount="100.00",
+            comment="Seeded test balance",
+        )
         self.guest.loyalty_balance = Decimal("100.00")
         self.guest.save(update_fields=["loyalty_balance"])
 
@@ -230,6 +257,13 @@ class WalkInSaleServiceTests(TestCase):
     def test_preview_exposes_redeemable_bonus_amount(self):
         self.program.max_redeem_share = Decimal("50.00")
         self.program.save(update_fields=["max_redeem_share"])
+        BonusTransaction.objects.create(
+            partner=self.partner,
+            guest=self.guest,
+            transaction_type=BonusTransaction.TransactionType.MANUAL,
+            amount="100.00",
+            comment="Seeded test balance",
+        )
         self.guest.loyalty_balance = Decimal("100.00")
         self.guest.save(update_fields=["loyalty_balance"])
 

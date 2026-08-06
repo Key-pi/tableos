@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.utils import timezone
@@ -29,6 +29,59 @@ class WalkInSalePreview:
     redeemable_bonus_amount: Decimal = Decimal("0.00")
 
 
+def get_bonus_ledger_balance(*, partner_id, guest_id) -> Decimal:
+    """Calculate a guest balance from the immutable bonus ledger."""
+
+    balance = Decimal("0.00")
+    transactions = BonusTransaction.objects.filter(
+        partner_id=partner_id,
+        guest_id=guest_id,
+    ).only("transaction_type", "amount")
+    for bonus_transaction in transactions.iterator():
+        amount = Decimal(bonus_transaction.amount).quantize(Decimal("0.01"))
+        if bonus_transaction.transaction_type in {
+            BonusTransaction.TransactionType.ACCRUAL,
+            BonusTransaction.TransactionType.MANUAL,
+        }:
+            balance += amount
+        else:
+            balance -= abs(amount)
+    return balance.quantize(Decimal("0.01"))
+
+
+def assert_bonus_balance_reconciled(guest: GuestProfile) -> None:
+    stored_balance = Decimal(guest.loyalty_balance).quantize(Decimal("0.01"))
+    ledger_balance = get_bonus_ledger_balance(
+        partner_id=guest.partner_id,
+        guest_id=guest.id,
+    )
+    if stored_balance != ledger_balance:
+        raise BonusServiceError(
+            "Баланс бонусов требует сверки с историей операций перед изменением."
+        )
+
+
+def sync_bonus_balance_from_ledger(guest: GuestProfile) -> GuestProfile:
+    ledger_balance = get_bonus_ledger_balance(
+        partner_id=guest.partner_id,
+        guest_id=guest.id,
+    )
+    if Decimal(guest.loyalty_balance).quantize(Decimal("0.01")) != ledger_balance:
+        guest.loyalty_balance = ledger_balance
+        guest.save(update_fields=["loyalty_balance", "updated_at"])
+    return guest
+
+
+def _parse_positive_money(value: Decimal | str, *, label: str) -> Decimal:
+    try:
+        amount = Decimal(value).quantize(Decimal("0.01"))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise BonusServiceError(f"{label} должна быть корректным денежным значением.") from exc
+    if not amount.is_finite() or amount <= 0:
+        raise BonusServiceError(f"{label} должна быть больше нуля.")
+    return amount
+
+
 @transaction.atomic
 def apply_bonus_programs(
     *,
@@ -36,9 +89,31 @@ def apply_bonus_programs(
     event: str,
     guest: GuestProfile,
     order: Order | None = None,
+    bill=None,
+    walk_in_sale: WalkInSale | None = None,
     purchase_total: Decimal | None = None,
+    source_type: str = "",
+    source_id: str = "",
     comment: str = "",
 ) -> list[BonusTransaction]:
+    if guest.partner_id != partner_id:
+        raise BonusServiceError("Guest profile does not belong to the selected venue.")
+    guest = GuestProfile.objects.select_for_update().get(
+        id=guest.id,
+        partner_id=partner_id,
+    )
+    assert_bonus_balance_reconciled(guest)
+    if order is not None:
+        order = Order.objects.get(
+            id=order.id,
+            partner_id=partner_id,
+            guest_id=guest.id,
+        )
+    if bill is not None and bill.partner_id != partner_id:
+        raise BonusServiceError("Bill does not belong to the selected venue.")
+    if walk_in_sale is not None and walk_in_sale.partner_id != partner_id:
+        raise BonusServiceError("Walk-in sale does not belong to the selected venue.")
+
     transactions: list[BonusTransaction] = []
     context = BonusContext(
         event=event,
@@ -49,8 +124,17 @@ def apply_bonus_programs(
     )
     total_awarded = Decimal("0.00")
     programs = BonusProgramRepository.active_for_partner_event(partner_id, event)
+    source_prefix = f"{source_type}:{source_id}" if source_type and source_id else ""
 
     for program in programs:
+        idempotency_key = (
+            f"{source_prefix}:program:{program.id}" if source_prefix else ""
+        )
+        if idempotency_key and BonusTransaction.objects.filter(
+            partner_id=partner_id,
+            idempotency_key=idempotency_key,
+        ).exists():
+            continue
         strategy = resolve_bonus_strategy(program)
         amount = Decimal(strategy(program, context)).quantize(Decimal("0.01"))
         if amount <= 0:
@@ -60,22 +144,26 @@ def apply_bonus_programs(
         if program.expires_in_days > 0:
             expires_at = timezone.now() + timedelta(days=program.expires_in_days)
 
-        transaction = BonusTransaction.objects.create(
+        bonus_transaction = BonusTransaction.objects.create(
             partner_id=partner_id,
             guest=guest,
             program=program,
             order=order,
+            bill=bill,
+            walk_in_sale=walk_in_sale,
             transaction_type=BonusTransaction.TransactionType.ACCRUAL,
             amount=amount,
             expires_at=expires_at,
+            source_type=source_type,
+            source_id=str(source_id),
+            idempotency_key=idempotency_key,
             comment=comment or f"Auto accrual via `{program.name}`.",
         )
-        transactions.append(transaction)
+        transactions.append(bonus_transaction)
         total_awarded += amount
 
     if total_awarded > 0:
-        guest.loyalty_balance += total_awarded
-        guest.save(update_fields=["loyalty_balance", "updated_at"])
+        sync_bonus_balance_from_ledger(guest)
 
     return transactions
 
@@ -88,7 +176,7 @@ def apply_manual_purchase_bonus(
     comment: str = "",
 ) -> list[BonusTransaction]:
     guest = get_guest_profile_by_customer_code(partner_id, customer_code)
-    total = Decimal(purchase_total).quantize(Decimal("0.01"))
+    total = _parse_positive_money(purchase_total, label="Сумма покупки")
     return apply_bonus_programs(
         partner_id=partner_id,
         event=BonusProgram.TriggerEvent.MANUAL_PURCHASE,
@@ -109,9 +197,15 @@ def register_walk_in_sale(
     created_by=None,
     redeem_bonus: bool = False,
 ) -> WalkInSale:
-    total = Decimal(amount).quantize(Decimal("0.01"))
+    total = _parse_positive_money(amount, label="Сумма быстрой продажи")
     if guest is not None and guest.partner_id != partner_id:
         raise BonusServiceError("Guest profile does not belong to the selected venue.")
+    if guest is not None:
+        guest = GuestProfile.objects.select_for_update().get(
+            id=guest.id,
+            partner_id=partner_id,
+        )
+        assert_bonus_balance_reconciled(guest)
     sale = WalkInSale.objects.create(
         partner_id=partner_id,
         guest=guest,
@@ -136,17 +230,18 @@ def register_walk_in_sale(
                 guest=guest,
                 program=None,
                 order=None,
+                walk_in_sale=sale,
                 transaction_type=BonusTransaction.TransactionType.REDEMPTION,
                 amount=bonus_spent,
+                source_type="walk_in_sale",
+                source_id=str(sale.id),
+                idempotency_key=f"walk_in_sale:{sale.id}:redemption",
                 comment=(
                     comment
                     or f"Walk-in sale redemption for customer code {guest.customer_code}."
                 ),
             )
-            guest.loyalty_balance = (
-                Decimal(guest.loyalty_balance) - bonus_spent
-            ).quantize(Decimal("0.01"))
-            guest.save(update_fields=["loyalty_balance", "updated_at"])
+            sync_bonus_balance_from_ledger(guest)
 
     transactions = []
     if guest is not None:
@@ -154,7 +249,10 @@ def register_walk_in_sale(
             partner_id=partner_id,
             event=BonusProgram.TriggerEvent.MANUAL_PURCHASE,
             guest=guest,
+            walk_in_sale=sale,
             purchase_total=total,
+            source_type="walk_in_sale",
+            source_id=str(sale.id),
             comment=comment or f"Walk-in sale bonus for customer code {guest.customer_code}.",
         )
     sale.bonus_awarded_amount = sum(
@@ -310,7 +408,7 @@ def get_redeemable_bonus_amount(
     guest: GuestProfile,
     purchase_total: Decimal | str,
 ) -> Decimal:
-    total = Decimal(purchase_total).quantize(Decimal("0.01"))
+    total = _parse_positive_money(purchase_total, label="Сумма покупки")
     if total <= 0:
         return Decimal("0.00")
 

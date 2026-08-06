@@ -128,6 +128,15 @@ BillingRequest → TableSession`. Partial unique constraint на активну�
 применяется только после duplicate-data audit. SQLite-тесты не заменяют
 PostgreSQL concurrency evidence.
 
+B3 adds the billing/bonus command boundary: `pay_bill_with_bonuses` locks
+`Bill → Order → GuestProfile`, verifies the partner-scoped ledger balance,
+applies the partner-program cap at a 1:1 bonus-to-UAH rate, and either leaves
+the monetary remainder payable or writes the ordinary `bonuses` payment for
+the nominal bonus value when the bill is fully covered. `Bill.paid_amount`
+counts money payments only. The bot exposes this as one payment intent; Admin has no alternate bonus-settlement action. The current paid-order
+reward trigger is a baseline compatibility mapping, not a universal limit on
+future partner programme triggers.
+
 ### 6.2. Внешние эффекты
 
 Telegram и другой network I/O запускаются **после successful commit**. `transaction.on_commit()` публикует durable command/job, а task доставляет её с идемпотентным ключом. Запрещены `sleep`, retry loop и сетевой запрос внутри открытой транзакции.

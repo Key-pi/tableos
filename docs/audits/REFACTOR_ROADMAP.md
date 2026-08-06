@@ -1,7 +1,7 @@
 # TableOS — Refactor roadmap
 
-**Status:** B0 and B1 are complete; B2 was owner-approved on 2026-08-06 and its
-implementation update is recorded below. B3–B5 remain proposals and require
+**Status:** B0–B2 are complete; B3 was owner-approved on 2026-08-06 and its
+implementation update is recorded below. B4–B5 remain proposals and require
 owner approval before any application-code, migration, dependency, or runtime
 change begins.
 
@@ -115,13 +115,36 @@ production rollout of the migration.
 | **Rollback** | Expand/validate before enforcing constraints; retain reversible migrations where safe; do not auto-delete conflicting legacy records; pause rollout if data audit finds exceptions. |
 | **Exit criterion** | No item is allocated twice, balance derives/reconciles from immutable source-linked entries, money mutation uses a documented lock order, and product metric/lifecycle choices are testable. |
 
-**Required owner decisions before implementation:**
+**Owner decisions captured for B3:**
 
-1. Is order bonus earned at `completed`, `paid`, or another terminal event?
-2. What is the policy for refund/cancellation after earned/redeemed bonuses?
-3. Is a 100% bonus redemption allowed, and how does a zero-total bill settle?
-4. Which dashboard labels/values represent gross sales, net cash/payment revenue,
-   and bonus discount?
+1. Paid settlement is the current baseline for order bonus accrual. Existing
+   `ORDER_COMPLETED` programme values remain as a compatibility name; the
+   partner programme model remains extensible for future trigger-specific
+   dispatch instead of imposing one universal trigger.
+2. Refund/cancellation after earned or redeemed bonuses is explicitly deferred.
+3. A partner may configure up to 100% bonus coverage through its programme.
+   One bonus equals one UAH. The single “pay with bonuses” command applies the
+   allowed amount, leaves any monetary remainder for cash/terminal payment, and
+   writes a `bonuses` payment for the nominal bonus value only when the bill is
+   fully covered; `Bill.paid_amount` counts money payments only.
+4. Gross/net/payment/bonus dashboard definitions remain deferred until the
+   owner reviews concrete report examples.
+5. Verification is intentionally risk-weighted: critical money, ledger,
+   allocation, Admin and PostgreSQL concurrency paths are covered; no blanket
+   test is added for every presentation branch.
+
+**B3 implementation update — 2026-08-06:** B3 adds locked/source-linked bonus
+ledger mutations, guest-balance reconciliation guards and per-partner
+idempotency keys; dispatches the approved paid-order bonus event once after
+settlement; validates positive quick-sale amounts; serializes `OrderItem`
+allocation and adds a database uniqueness guard after a local audit found 36
+active allocations with no duplicates; restricts direct bonus ledger/balance
+Admin edits; and exposes one service-backed bonus-payment command that applies
+partial coverage or closes a fully covered bill. The separate zero-total Admin
+action was removed. Refund/cancellation semantics and revenue metric
+definitions remain out of scope. PostgreSQL-only allocation, redemption and
+accrual tests are included but require the production-like PostgreSQL
+verification gate.
 
 ## Batch B4 — Durable async delivery and operational runtime
 

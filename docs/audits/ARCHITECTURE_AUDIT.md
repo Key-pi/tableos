@@ -297,3 +297,21 @@ and records the bounded remediation:
 The local data audit immediately before the migration found 2 active
 `TableSession` rows and no duplicate active `(partner, guest)` scopes. The
 migration does not repair or delete data.
+
+## B3 payment-flow update — 2026-08-06
+
+The owner clarified the bonus-payment UX after the initial B3 shape. The
+canonical command is now `apps/billing/services.py:pay_bill_with_bonuses`:
+it applies the partner-program cap at a 1:1 bonus-to-UAH rate, persists a
+source-linked redemption, and leaves any monetary remainder for ordinary
+cash/terminal payment. Full coverage creates the normal
+`Payment.Method.BONUSES` record for the nominal bonus value in that same
+command; `Bill.paid_amount` counts money payments only. The bot exposes one
+“Оплатить бонусами” intent; the previous separate redeem/zero-settlement Admin
+path is removed (the old callback remains only as a compatibility alias).
+
+The paid-order reward trigger remains a baseline compatibility mapping. The
+partner programme model already carries trigger values, and future batches may
+add partner-specific trigger dispatch; no universal product rule is inferred
+from the current paid baseline. Refund/cancellation and revenue semantics stay
+deferred.
