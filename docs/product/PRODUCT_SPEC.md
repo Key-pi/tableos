@@ -66,7 +66,7 @@ TableOS — multi-tenant white-label B2B платформа для заведе�
 | Quick sale | Staff sale with optional customer code and bonus redemption | Menu; staff capability | CONFIRMED_CURRENT |
 | Staff operations | Orders, notifications, tables, billing, quick sale, reports by capability | Employee + Telegram binding | PARTIAL_CURRENT — B1 rechecks active user/profile/partner and capability on every callback; formal role matrix is PQ-004 |
 | Daily report | Operational day summary, tails, bills/quick sales | Billing and/or quick sale | CONFIRMED_CURRENT as on-demand MVP |
-| Broadcasts | Partner-scoped marketing respecting preferences; scheduled delivery | Celery + Telegram | CODE_IS_BEHIND_SPEC for delivery transaction/idempotency semantics |
+| Broadcasts | Partner-scoped marketing respecting preferences; scheduled delivery | Celery + Telegram | CONFIRMED_CURRENT since B4: at most once per guest and campaign (PQ-014, ADR-0008) |
 | Delivery / pickup | Separate journeys, not merely flags | Product design required | CODE_IS_BEHIND_SPEC / future scope |
 | Webhook runtime | Explicit production runtime with observability | Product/ops decision | CODE_IS_BEHIND_SPEC / future scope |
 
@@ -141,7 +141,7 @@ Several guests may use one table. Their carts and orders remain personal; a shar
 | Bill | `draft -> issued -> partially_paid -> paid` or `canceled` (void, owner-granted permission, releases allocations); a paid/canceled bill cannot accept an ordinary payment; line changes are audited and never drop the total below the paid amount |
 | BillingRequest | `open`, `auto_prepared`, `processed`, `canceled`; only legal service transitions |
 | BonusTransaction | immutable ledger rows for accrual, redemption, expiration and manual adjustment |
-| BroadcastCampaign | explicit queued/sending/sent/failed behavior with a retry/idempotency contract |
+| BroadcastCampaign | `draft -> scheduled -> sending -> sent/failed`; per-guest `BroadcastDelivery` `pending -> sending -> sent/failed/skipped/unknown`, never resent (ADR-0008) |
 
 ## 7. Content and configuration contract
 
@@ -162,7 +162,7 @@ The following are not silently “normalised” in this product document; implem
 | Order status transition is serialized | `TABLEOS_TZ.md:531-691`; B2: `apps/orders/services.py:transition_order_status` reloads the order under `select_for_update()`; guest confirmation still bypasses the transition table (AA-025) | RESOLVED_IN_B2; guest rule RESOLVED_IN_B3.1 | Guest may confirm from any non-final status (PQ-029) |
 | Order reward programmes accrue | `apps/billing/services.py:_sync_orders_after_bill_paid` dispatches the existing programme event after first paid settlement with source-linked idempotency | PARTIALLY_RESOLVED_FOR_B3 | Paid is the current baseline; partner-specific trigger expansion and refund/cancellation treatment remain deferred |
 | Labels cannot misroute guest actions | `TABLEOS_TZ.md:1512-1537`; `bot/filters/content.py:PartnerButtonFilter` compares raw message text; B1: `apps/partners/models.py:PartnerBotSettings.clean` rejects empty and duplicate routed labels | RESOLVED_IN_B1 (validation) | Stable intent routing remains a future choice (PQ-016) |
-| Telegram I/O is outside transaction and broadcasts are retry-safe | `TABLEOS_TZ.md:1852-1877`; `apps/notifications/services.py:send_broadcast_campaign_now` is `@transaction.atomic` and calls `_send_telegram_messages` inside it; `apps/notifications/tasks.py:send_broadcast_campaign_task` has no durable lease/idempotency cursor | DEFECT | Separate claim/send/finalize phases; decide delivery guarantee explicitly |
+| Telegram I/O is outside transaction and broadcasts are retry-safe | `TABLEOS_TZ.md:1852-1877`; B4: `apps/notifications/services.py:send_broadcast_campaign_now` claims `BroadcastDelivery` rows, sends with no transaction open and records each outcome; `recover_stalled_broadcast_campaigns` | RESOLVED_IN_B4 (AA-008, AA-030) | At most once for broadcasts, at least once for operational notifications (PQ-014, PQ-015) |
 | Admin cannot bypass operational transition rules | B2/B3 make lifecycle, allocation, bonus balance and ledger fields readonly; payment/bonus commands remain owner services and no special bonus-settlement Admin action exists | PARTIALLY_RESOLVED_FOR_B3 | Correction policy (PQ-018), order relations read-only since B3.1, PostgreSQL rollout gate remain open |
 | Delivery/pickup are usable journeys | `TABLEOS_TZ.md:2220-2245`; `apps/partners/models.py:PartnerBotSettings.clean` accepts delivery/pickup flags, but there is no established delivery/pickup order journey | CODE_IS_BEHIND_SPEC | Keep flags as capability groundwork; do not market as implemented flows |
 | A bill contains only the current visit's orders | B3.2 part B: `apps/billing/services.py:get_table_billable_orders` filters by `TableSession.visit`; `create_bill_from_orders` rejects orders of different visits; `bot/services/navigation.py` checks the guest's visit | RESOLVED_IN_B3.2B (AA-020) | Guest chooses to join a party or start a new visit (PQ-026); staff close leftover visits |

@@ -36,10 +36,10 @@ DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q broadcasts --
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery beat --loglevel=info
 ```
 
-Если запускаешь через Docker Compose (в compose нет сервисов `runbot` и `beat` — их запускай отдельно):
+Через Docker Compose поднимаются все нужные процессы — `db`, `redis`, `web`, `worker`, `beat`, `bot` (с B4). `beat` и `bot` должны быть в одном экземпляре:
 
 ```bash
-docker compose up db redis web worker
+docker compose up
 ```
 
 Для реального Telegram-бота также нужен валидный `BOT_TOKEN_ENCRYPTION_KEY` и активный `BotInstance` с настоящим токеном.
@@ -74,7 +74,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 - `makemigrations --check --dry-run`: no changes detected.
 - `ruff check --no-cache .`: 21 pre-existing violations; `ruff format --check --no-cache .`: 54 files would reformat. Это не green baseline.
 
-После B1–B3.2 тестов стало 265, они зелёные на SQLite и PostgreSQL 16; актуальные команды и журнал прогонов — в [TESTING.md](docs/engineering/TESTING.md).
+После B1–B4 тестов стало 286, они зелёные на SQLite и PostgreSQL 16; актуальные команды и журнал прогонов — в [TESTING.md](docs/engineering/TESTING.md).
 
 ## Как работает Celery
 
@@ -88,10 +88,11 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 6. Worker отправляет сообщение через Telegram API.
 7. Результат пишется обратно в модель: `delivery_status`, `delivered_at`, `delivery_error`.
 
-Важно: это целевой безопасный паттерн для обычных уведомлений. Broadcast
-реализация имеет зафиксированное исключение — Telegram I/O внутри транзакции и
-отсутствие durable recipient lease; см.
-[ARCHITECTURE_AUDIT.md](docs/audits/ARCHITECTURE_AUDIT.md#aa-008--broadcast-delivery-mixes-transaction-with-network-io-and-has-no-durable-lease).
+Гарантии доставки (B4, [ADR-0008](docs/decisions/ADR-0008.md)): рабочие
+уведомления — хотя бы один раз (временные ошибки Telegram повторяются, уже
+отправленное не шлётся снова); рассылки — не больше одного раза на гостя
+(строки `BroadcastDelivery`, отправка вне транзакции, зависшие отправки после
+падения воркера помечаются `unknown` и не повторяются).
 
 Ключевые файлы:
 
@@ -115,6 +116,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python -c "import os; os.environ.setdefault('
 ```text
 notifications.deliver_staff_notification
 notifications.process_scheduled_broadcast_campaigns
+notifications.recover_stalled_broadcast_campaigns
 notifications.send_broadcast_campaign
 notifications.send_guest_order_status_update
 ```

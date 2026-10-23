@@ -245,19 +245,24 @@ key, so re-running it accrues again.
 
 ### Notifications and broadcasts
 
-- Staff notifications and guest order-status updates are queued with
-  `transaction.on_commit` and delivered by Celery tasks that create a new
-  aiogram `Bot` per call. Telegram errors are captured as a failed result and
-  not re-raised, so `autoretry_for=(Exception,)` retries only unexpected
-  errors. Neither task skips work that was already sent (AA-030).
+- Delivery contract (ADR-0008, B4): no Telegram call runs inside a database
+  transaction. Staff notifications and guest order-status updates are queued
+  with `transaction.on_commit` and delivered **at least once**: transient
+  Telegram failures raise `RetryableDeliveryError` and the task retries
+  (`acks_late`); a staff notification already `sent` is skipped, and an
+  inactive or opted-out employee/user gets nothing.
 - Guest calls (`request_staff_assistance`) target roles by `User.role` and use
   a check-then-create cooldown on recent notifications for the same table.
-- Broadcasts: `send_broadcast_campaign` marks the campaign `scheduled` and
-  enqueues it after commit. `send_broadcast_campaign_now` is
-  `@transaction.atomic` and sends a batch of up to 250 recipients to Telegram
-  **inside** that transaction (with `RetryAfter` sleeps), then chains the next
-  batch by guest ID cursor. There is no lease, per-recipient delivery record or
-  idempotency key (AA-008, open for B4).
+- Broadcasts are delivered **at most once** per guest and campaign:
+  `send_broadcast_campaign` locks the campaign, marks it `scheduled` and
+  enqueues it after commit. The task records the audience as
+  `BroadcastDelivery` rows, claims a batch (`pending → sending`, skip-locked),
+  rechecks eligibility (opted out/blocked → `skipped`), sends with no
+  transaction open and stores each outcome (`sent`, `failed`, or `unknown`
+  for ambiguous network/server errors), then queues the next batch or
+  finalizes. `recover_stalled_broadcast_campaigns` (beat) turns claims older
+  than 30 minutes into `unknown` and resumes or finalizes stalled campaigns.
+  Counters come from the delivery rows.
 
 ## Data ownership, tenancy and authorization
 
@@ -295,8 +300,9 @@ transactions; allowed operations are actions that call owner services.
 
 ## Tests and checks
 
-- 265 tests after B3.2 part C, green on SQLite and on PostgreSQL 16. Nine
-  are PostgreSQL-only and skipped on SQLite: concurrent order transition
+- 286 tests after B4, green on SQLite and on PostgreSQL 16. Ten are
+  PostgreSQL-only and skipped on SQLite: parallel broadcast workers
+  (`apps/notifications/test_delivery.py`); concurrent order transition
   (`apps/orders/test_concurrency.py`); concurrent QR scans, two guests
   scanning an empty table, and paying a visit while a guest joins it
   (`apps/tables/test_concurrency.py`); concurrent bill allocation, bonus

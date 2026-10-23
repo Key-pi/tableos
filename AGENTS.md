@@ -16,7 +16,7 @@ Read [README.md](README.md) for onboarding. The canonical governance map is:
   `MODULE_BOUNDARIES.md`, `LAYERING_RULES.md`;
 - security/runtime/tasks: `TENANCY_AND_PERMISSIONS.md`, `BOT_RUNTIME.md`,
   `BACKGROUND_JOBS.md` in `docs/architecture/`;
-- decisions: `docs/decisions/ADR-0001.md` through `ADR-0007.md`;
+- decisions: `docs/decisions/ADR-0001.md` through `ADR-0008.md`;
 - engineering: `docs/engineering/`;
 - evidence/roadmap: `docs/audits/` (open findings: `ARCHITECTURE_AUDIT.md`;
   batch status: `REFACTOR_ROADMAP.md`).
@@ -93,7 +93,7 @@ canonical docs, or an approved ADR.
 Use the exact commands in `docs/engineering/TESTING.md`. At the 2026-07-27
 audited baseline, `manage.py check`, migration dry-run, tests (139), and compose
 config passed in local SQLite mode; Ruff had pre-existing failures. The suite
-has grown since (265 tests after B3.2 part C, green on SQLite and PostgreSQL 16); record every full run in
+has grown since (286 tests after B4, green on SQLite and PostgreSQL 16); record every full run in
 `TESTING.md`. Do not claim a green test or lint baseline without rerunning it,
 and do not claim PostgreSQL coverage that is not in the repository.
 

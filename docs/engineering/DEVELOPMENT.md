@@ -60,8 +60,8 @@ Scheduled broadcasts and daily metric snapshots need Celery beat as well:
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery beat --loglevel=info
 ```
 
-`docker-compose.yml` starts only `db`, `redis`, `web` and `worker`; it does not
-start `runbot` or beat. Non-web processes use `core.settings.local`
+`docker compose up` starts every required process: `db`, `redis`, `web`,
+`worker`, `beat` and `bot` (since B4). Run exactly one `beat` and one `bot`. Non-web processes use `core.settings.local`
 (`DEBUG=True`) unless `DJANGO_SETTINGS_MODULE` is set.
 
 ## Seeds and local data

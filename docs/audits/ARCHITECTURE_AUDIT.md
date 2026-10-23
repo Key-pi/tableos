@@ -29,7 +29,7 @@ Severity is the impact if a supported/authorized flow is exercised: **High** can
 | AA-005 | BUG / CONCURRENCY | High | High | One guest can obtain concurrent active table sessions. | B2 |
 | AA-006 | BUG / FINANCIAL_INTEGRITY | High | High | One order item can be allocated to two bills. | B3 |
 | AA-007 | BUG / FINANCIAL_INTEGRITY | High | High | Loyalty wallet is not serialized or source-idempotent. | B3 |
-| AA-008 | BUG / ASYNC | High | High | Broadcast holds transaction over Telegram I/O and lacks lease/idempotency. | B4 |
+| AA-008 | BUG / ASYNC | High | High | Broadcast holds transaction over Telegram I/O and lacks lease/idempotency. | B4 — resolved |
 | AA-009 | BUG / PERMISSION | Medium | High | Suspension and stale staff capability are not rechecked at execution. | B1 |
 | AA-010 | BUG / ROUTING | Medium | High | Partner button-label collisions are nondeterministic. | B1 |
 | AA-011 | CODE_IS_BEHIND_SPEC | Medium | High | `ORDER_COMPLETED` loyalty trigger has no runtime dispatch. | B3 |
@@ -348,7 +348,7 @@ by `AGENTS.md`.
 | AA-027 | BUG / DATA_QUALITY | Low | High (executed) | Checking out via the reply button stores part of the button label as the order comment. | B3.1 — resolved |
 | AA-028 | BUG / PERFORMANCE | Low | High | The Bill changelist recalculates and saves every listed bill on a GET. | B3.1 — resolved |
 | AA-029 | BUG / TIME_BOUNDARY | Low | High | Visit bonus "once per day" uses the UTC day; the daily metric snapshot never revisits the previous day. | B3.1 — resolved |
-| AA-030 | BUG / ASYNC | Low | High | Notification tasks re-send on retry and do not recheck the recipient at delivery time. | B4 |
+| AA-030 | BUG / ASYNC | Low | High | Notification tasks re-send on retry and do not recheck the recipient at delivery time. | B4 — resolved |
 | AA-031 | NAMING_PLACEMENT / LAYERING | Low | High | `core` imports domain apps; unused unscoped selectors and a legacy bonus service remain. | B5 |
 | AA-032 | DOCUMENTATION_DRIFT | Medium | High | Canonical docs described pre-B1 runtime, cited moved line numbers and claimed PostgreSQL tests that do not exist. | B0.1 (resolved by this review) |
 | AA-033 | BUG / FINANCIAL_INTEGRITY | High | High (executed) | On PostgreSQL every bill creation failed: `FOR UPDATE` on a nullable outer join. | B3.1 (resolved) |
@@ -500,7 +500,8 @@ PostgreSQL 16 (199 tests; 5 PostgreSQL-only tests skipped on SQLite).
 | AA-024 | Dynamic text escaped in bot messages, partner template values and notifications; broadcast text remains partner markup (B4). |
 | AA-032 (tests) | PostgreSQL concurrency tests for bill allocation, bonus payment and final payment; a mutation check confirms they fail without the locks. |
 
-Remaining from the post-B3 review: AA-030 (B4), AA-031 and AA-034 (B5).
+Remaining from the post-B3 review: AA-031 and AA-034 (B5). AA-030 is resolved
+in B4.
 AA-020 is resolved in B3.2 part B and AA-022 in B3.2 part A (see below).
 
 ## B3.2 part A implementation update — 2026-10-23
@@ -574,3 +575,27 @@ programmes are unchanged. The staff quick-sale preview projects the accrual
 for the chosen redemption. Verified: 265 tests on SQLite and PostgreSQL 16,
 mutation checks for the order and quick-sale paths, `bonuses.0008`
 backward/forward on PostgreSQL. B3.2 is complete.
+
+## B4 implementation update — 2026-10-23
+
+Branch `b4-delivery`; owner decisions PQ-014 (broadcasts at most once) and
+PQ-015 (operational notifications at least once), recorded in ADR-0008.
+
+| Finding | Result |
+|---|---|
+| AA-008 | `BroadcastDelivery` per guest and campaign; claim in a short transaction (skip-locked, `pending` only), Telegram call with no transaction open, one short transaction per outcome; ambiguous failures `unknown`, never resent; eligibility rechecked before sending; counters derived from rows; `recover_stalled_broadcast_campaigns` (beat) for lost workers and tasks. |
+| AA-030 | Sent staff notifications are skipped; inactive/opted-out employees and inactive users get nothing; transient Telegram failures retry (`RetryableDeliveryError`, `acks_late`). |
+| AA-018 (deployment part) | `docker-compose.yml` declares `beat` and `bot`; the worker consumes `default` and `broadcasts`. |
+
+Verified: 286 tests on SQLite and PostgreSQL 16; the PostgreSQL race test of
+three parallel workers repeated 10× with no duplicate; mutation checks (claim
+without the `pending` filter and lock → duplicates; ambiguous result reset to
+`pending` → resend loop; no `sent` guard → staff resend) fail the tests;
+`notifications.0004` backward/forward on PostgreSQL. A first version
+finalized a campaign with stale counters under the race; reading open rows
+before counters fixed it.
+
+Deviation from the roadmap rollback note: instead of an opt-in per campaign
+version, tasks queued by the old sender resume after their cursor, and an
+old campaign mid-way without a cursor is marked failed rather than resent.
+Counters of such a campaign count only messages sent after the upgrade.

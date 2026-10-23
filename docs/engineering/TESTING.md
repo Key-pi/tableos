@@ -14,7 +14,7 @@ docker compose config --quiet
 ```
 
 At the 2026-07-27 baseline, Django check/migration check/tests/compose config
-passed; the test suite ran **139 tests**. After B3.2 part C the suite has **265 tests**; it passes on SQLite (9
+passed; the test suite ran **139 tests**. After B4 the suite has **286 tests**; it passes on SQLite (10
 PostgreSQL-only tests skipped) and on PostgreSQL 16. Record every full run in
 the table at the end of this document.
 
@@ -42,7 +42,8 @@ and tool versions are recorded in [`../audits/BASELINE.md`](../audits/BASELINE.m
 
 ## Running the PostgreSQL-gated tests
 
-Nine tests run only on PostgreSQL and are skipped on SQLite:
+Ten tests run only on PostgreSQL and are skipped on SQLite:
+`apps/notifications/test_delivery.py` (parallel broadcast workers),
 `apps/orders/test_concurrency.py`, `apps/tables/test_concurrency.py` (QR
 scans, two guests at an empty table, visit close vs join) and
 `apps/billing/test_concurrency.py` (bill allocation, bonus payment, final
@@ -103,3 +104,5 @@ There is no CI; every run is manual. Add a row for each full run.
 | 2026-10-23 | B3.2 part B branch | PostgreSQL 16 | full suite | 250 tests OK; visit race test repeated 6× |
 | 2026-10-23 | B3.2 part C branch | SQLite | full suite | 265 tests OK (9 skipped); Ruff: no new findings in changed files |
 | 2026-10-23 | B3.2 part C branch | PostgreSQL 16 | full suite + `bonuses.0008` backward/forward | 265 tests OK |
+| 2026-10-23 | B4 branch | SQLite | full suite | 286 tests OK (10 skipped); Ruff: no new findings in changed files |
+| 2026-10-23 | B4 branch | PostgreSQL 16 | full suite + `notifications.0004` backward/forward | 286 tests OK; broadcast race test repeated 10× |

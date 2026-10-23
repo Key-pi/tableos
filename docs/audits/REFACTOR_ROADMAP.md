@@ -5,8 +5,8 @@
 PostgreSQL-gated test, passes on PostgreSQL 16 in a development environment;
 the production data audits for the B2/B3 migrations are still required before
 rollout. B3.2 is complete: parts A (bill changes and void), B (table visits)
-and C (cashback base). B4 and B5 are proposals
-and require owner approval before any application-code, migration,
+and C (cashback base). B4 (durable delivery, ADR-0008) is complete. B5 is a
+proposal and requires owner approval before any application-code, migration,
 dependency, or runtime change begins.
 
 ## Operating rules for every batch
@@ -202,6 +202,7 @@ PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implem
 
 | Field | Proposal |
 |---|---|
+| **Status** | **Complete** (2026-10-23, branch `b4-delivery`, ADR-0008). Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b4-implementation-update--2026-10-23). |
 | **Goal** | Make notification/broadcast delivery recoverable without database transactions spanning Telegram I/O. |
 | **Scope** | Separate commit from send; introduce the smallest durable delivery/lease/idempotency record necessary for campaign fan-out; align exception/retry policy; recheck recipient eligibility as product requires; document/deploy actual bot/worker/scheduler topology. |
 | **Not in scope** | A generic event bus, message broker replacement, microservice extraction, unmeasured caching. |
@@ -233,8 +234,7 @@ PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implem
 | Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
 | Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
 
-B3.2 is complete. The next step is owner approval of B4 (broadcast delivery
-durability, AA-030/AA-008) or B5 (AA-031, AA-034). Before production rollout
-of B2/B3/B3.1/B3.2:
+B3.2 and B4 are complete. The next step is owner approval of B5 (AA-031,
+AA-034, AA-017, AA-019). Before production rollout of B2/B3/B3.1/B3.2/B4:
 run the duplicate-data audits on a production copy and the full suite on
 PostgreSQL.
