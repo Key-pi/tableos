@@ -366,9 +366,15 @@ def _render_day_report(report) -> str:
         f"Создано заказов: {report.created_orders_count}",
         f"Открытых заказов: {report.open_orders_count}",
         f"Открытых счетов: {report.open_bills_count}",
-        "",
-        "<b>Методы оплаты</b>",
     ]
+    if report.channel_breakdown:
+        lines.extend(["", "<b>По способам заказа</b>"])
+        for item in report.channel_breakdown:
+            lines.append(
+                f"• {escape_html(item['label'])}: заказов {item['orders_count']}, "
+                f"оплачено {item['revenue']} грн"
+            )
+    lines.extend(["", "<b>Методы оплаты</b>"])
     for method, amount in report.payment_method_totals.items():
         count = report.payment_method_counts.get(method, 0)
         if amount <= 0 and count == 0:

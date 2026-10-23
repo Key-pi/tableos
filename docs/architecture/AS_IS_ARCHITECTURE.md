@@ -66,7 +66,7 @@ crypto, logging and settings.
 | Users / identity | `User`, global `TelegramAccount`, partner `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile` | One Telegram identity → one guest profile per partner. |
 | Tables | `Table`, `TableSession` | `tables/services.py` | QR activation, settlement-gated close. `timed_out` and `expires_at` exist but nothing sets them. |
 | Menu | `MenuCategory`, `MenuItem` | `menu/repositories.py` reads; Admin writes | Price must be positive (`menu_item_price_positive`). |
-| Orders | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py`; pickup in `billing/pickup.py` | Cart lifecycle, order creation by channel (table / pickup), status machine, guest receipt confirmation. |
+| Orders | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py`; remote prepaid channels in `billing/remote_orders.py` | Cart lifecycle, order creation by channel (table / pickup), status machine, guest receipt confirmation. |
 | Billing | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment` | `billing/services.py` | Bill creation/extension, payment, bonus payment, post-payment settlement. |
 | Bonuses | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Ledger-backed balance with reconciliation guard; quick sale. |
 | Employees | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | Writes go through Admin. |
@@ -182,9 +182,9 @@ partner-authored markup.
    `delivering → completed|canceled`. Completion sets `received_at`.
 5. **Pickup** (`Order.channel = pickup`, [PICKUP.md](PICKUP.md)): checkout
    of a pickup cart runs
-   `apps/billing/pickup.py:place_pickup_order` — phone required, only within
+   `apps/billing/remote_orders.py:place_remote_order` — phone required, only within
    `OpeningHours`, a personal bill issued at once, optional bonuses; the
-   guest prepays by transfer to `PartnerBotSettings.pickup_payment_details`.
+   guest prepays by transfer to `PartnerBotSettings.transfer_payment_details`.
    Staff (owner/manager/cashier) confirm (`transfer` payment, `accepted`) or
    reject (bill voided with `payment_not_received`, bonuses returned,
    `canceled`); an unpaid pickup order cannot be accepted otherwise.
@@ -195,6 +195,13 @@ partner-authored markup.
    history records it as a guest action.
 
 ### Billing and settlement
+
+Billing is split by channel (ADR-0009): the channel-agnostic core is
+`apps/billing/services.py` (bills from orders, payments, bonuses, bill
+changes, void); the table channel's settlement is
+`apps/billing/table_bills.py` (visit selection, table bills, guest bill
+requests, the table follow-up of a paid bill); remote prepaid channels are
+`apps/billing/remote_orders.py`. The core does not import `apps.tables`.
 
 1. A guest billing request (`create_billing_request_for_telegram_user`)
    either prepares a draft personal/shared bill (`auto_prepared`) or records a
@@ -233,7 +240,7 @@ partner-authored markup.
    once per order (key `order_paid:<order_id>:program:<id>`), marks the bill's
    billing requests processed and, if
    `PartnerBotSettings.auto_close_table_session_after_payment` is on, runs
-   `_close_settled_sessions_of_bill`: only sessions that own orders of this
+   `table_bills.after_table_bill_paid` → `_close_settled_sessions_of_bill`: only sessions that own orders of this
    bill are candidates; a fully settled candidate has its pending requests
    marked processed and is closed; any other session stays open. This step
    never raises into the payment (PQ-027, fixed in B3.1).
@@ -318,7 +325,7 @@ transactions; allowed operations are actions that call owner services.
 
 ## Tests and checks
 
-- 330 tests after pickup, green on SQLite and on PostgreSQL 16. Ten are
+- 331 tests after the channel cleanup (ADR-0009), green on SQLite and on PostgreSQL 16. Ten are
   PostgreSQL-only and skipped on SQLite: parallel broadcast workers
   (`apps/notifications/test_delivery.py`); concurrent order transition
   (`apps/orders/test_concurrency.py`); concurrent QR scans, two guests

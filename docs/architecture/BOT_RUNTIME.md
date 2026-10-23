@@ -59,14 +59,14 @@ live guard again.
   (`stafftvshared`, `stafftvpersonal`, `stafftvclose`) reload the visit within
   the employee's partner.
 
-- Pickup (PICKUP.md): guest steps are stateless `pk:` callbacks; the final
-  `pk:p:…` carries the total and the amount to pay that the guest saw, and
+- Remote checkout (pickup; PICKUP.md, ADR-0009): guest steps are stateless
+  `rc:<channel code>:…` callbacks (`p` = pickup); the final `rc:p:p:…` carries the total and the amount to pay that the guest saw, and
   the service refuses to place the order if either changed. The ordering
   flow is chosen first (the «Самовывоз» button or a table QR scan) and kept
   in `Cart.channel`; a table cart offers `cart:mode:pickup`, and the only
   way back to the table flow is scanning the table QR again. A shared contact is accepted
-  only when `contact.user_id` is the sender. Staff `staffpkok`, `staffpkno`
-  (asks first) and `staffpknoy` reload the order within the employee's
+  only when `contact.user_id` is the sender. Staff `stafftxok`, `stafftxno`
+  (asks first) and `stafftxnoy` reload the order within the employee's
   partner; the service checks the role (owner/manager/cashier).
 
 ## Callback and content design

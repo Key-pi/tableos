@@ -36,6 +36,8 @@ class DailyOperationsReport:
     payment_method_totals: dict[str, Decimal]
     payment_method_counts: dict[str, int]
     staff_breakdown: list[dict]
+    # ADR-0009: orders created today and money of the day by ordering channel.
+    channel_breakdown: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -216,6 +218,32 @@ def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOpera
         reverse=True,
     )
 
+    channel_breakdown = []
+    for channel, label in Order.Channel.choices:
+        orders_count = Order.objects.filter(
+            partner_id=partner_id,
+            channel=channel,
+            created_at__gte=day_start,
+            created_at__lte=day_end,
+        ).count()
+        # A bill holds orders of one channel, so its payments belong to it.
+        channel_bill_ids = Bill.objects.filter(
+            partner_id=partner_id,
+            bill_orders__order__channel=channel,
+        ).values("id")
+        revenue = paid_payments.filter(bill_id__in=channel_bill_ids).aggregate(
+            total=Coalesce(Sum("amount"), Decimal("0.00")),
+        )["total"]
+        if orders_count or revenue:
+            channel_breakdown.append(
+                {
+                    "channel": channel,
+                    "label": str(label),
+                    "orders_count": orders_count,
+                    "revenue": Decimal(revenue).quantize(Decimal("0.01")),
+                }
+            )
+
     return DailyOperationsReport(
         partner_name=partner.name,
         local_date_label=day_start_local.strftime("%d.%m.%Y"),
@@ -233,6 +261,7 @@ def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOpera
         },
         payment_method_counts=payment_method_counts,
         staff_breakdown=staff_breakdown,
+        channel_breakdown=tuple(channel_breakdown),
     )
 
 
@@ -729,6 +758,8 @@ def _bill_payment_method_label(bill: Bill) -> str:
 
 
 def _order_context_label(order: Order) -> str:
+    if order.channel != Order.Channel.TABLE:
+        return order.get_channel_display().lower()
     if order.table_id is not None:
         return f"стол {order.table.number}"
     return "заказ без привязки к столу"

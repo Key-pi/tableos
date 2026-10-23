@@ -54,7 +54,7 @@
 
 ## Модель данных
 
-- `Order.channel` (`table` / `pickup`) и `Order.pickup_at` (пусто — как
+- `Order.channel` (`table` / `pickup`) и `Order.requested_for` (пусто — как
   можно скорее). У самовывоза нет стола и сессии.
 - `Cart.channel` — выбранный гостем способ; `switch_cart_channel_for_telegram_user`
   меняет его и убирает позиции, которых нет в этом способе.
@@ -62,7 +62,7 @@
   `available_for_delivery` (по умолчанию всё включено).
 - `Payment.Method.TRANSFER`, `Order.PaymentMethod.TRANSFER`.
 - `GuestProfile.phone`.
-- `PartnerBotSettings.pickup_payment_details`.
+- `PartnerBotSettings.transfer_payment_details`.
 - `OpeningHours` (`apps/partners/models.py`): день недели, открытие,
   закрытие во времени заведения (`Partner.timezone`); закрытие раньше
   открытия — интервал после полуночи; нет строк — всегда открыто.
@@ -70,28 +70,28 @@
 
 ## Команды
 
-`apps/billing/pickup.py`:
+`apps/billing/remote_orders.py` (общий для удалённых каналов, ADR-0009):
 
-- `get_pickup_quote` — сумма, доступные бонусы, к оплате, реквизиты, слоты.
-- `place_pickup_order` — в одной транзакции: блокировка гостя и корзины,
+- `get_remote_quote` — сумма, доступные бонусы, к оплате, реквизиты, слоты.
+- `place_remote_order` — в одной транзакции: блокировка гостя и корзины,
   проверка часов и сумм, `create_order(channel=pickup)`, персональный
   счёт (`issue_bill`), при выборе — `pay_bill_with_bonuses`, уведомление
   персонала.
-- `confirm_pickup_payment` — `record_payment(method=transfer)` на остаток,
+- `confirm_transfer` — `record_payment(method=transfer)` на остаток,
   затем `accepted`.
-- `reject_pickup_payment` — аннулирование счёта с причиной «Оплата не
+- `reject_transfer` — аннулирование счёта с причиной «Оплата не
   поступила» (бонусы возвращаются записью `reversal`), затем `canceled`.
 
 Порядок блокировок подтверждения и отказа: `Bill → Order → GuestProfile`,
 как у оплаты. `transition_order_status` не даёт перевести неоплаченный
 самовывоз в `accepted` в обход подтверждения.
 
-Бот (`bot/handlers/pickup.py`) не хранит состояние: шаги идут через
-callback-и `pk:t:<slot>`, `pk:b:<slot>:<0|1>`,
-`pk:p:<slot>:<0|1>:<итог в копейках>:<к оплате в копейках>`, `pk:x`; выбор
+Бот (`bot/handlers/remote_checkout.py`) не хранит состояние: шаги идут через
+callback-и `rc:p:t:<slot>`, `rc:p:b:<slot>:<0|1>`,
+`rc:p:p:<slot>:<0|1>:<итог в копейках>:<к оплате в копейках>`, `rc:x` (`p` — код канала «самовывоз»); выбор
 на самовывоз из корзины — `cart:mode:pickup`; персонал —
-`staffpkok:<заказ>`,
-`staffpkno:<заказ>`, `staffpknoy:<заказ>`.
+`stafftxok:<заказ>`,
+`stafftxno:<заказ>`, `stafftxnoy:<заказ>`.
 
 ## Что не сделано
 

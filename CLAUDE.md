@@ -24,6 +24,14 @@
   `pickup`; дальше доставка, затем отправка почтой. Способ заказа гость
   выбирает сначала (кнопка или QR стола), он хранится в `Cart.channel`; у
   позиций меню отметки, в каких способах они продаются.
+- **ADR-0009:** одна модель заказа/счёта/оплаты для всех каналов; никаких
+  «ЗаказДоставки»/«СчётДоставки». Данные канала — поля заказа
+  (`requested_for`, позже адрес), поведение — модуль на семейство: стол —
+  `apps/tables` + `apps/billing/table_bills.py`; удалённые каналы с
+  предоплатой — `apps/billing/remote_orders.py` (`REMOTE_CHANNELS`,
+  `Order.PREPAID_CHANNELS`) и бот `bot/handlers/remote_checkout.py`. Ядро
+  счёта `apps/billing/services.py` про каналы не знает. Различать каналы по
+  `order.channel`, а не по `order.table_id`.
 
 ## Карта документов (что читать перед работой)
 
@@ -34,7 +42,7 @@
 | Решения владельца и открытые вопросы | `docs/product/OPEN_PRODUCT_QUESTIONS.md` (PQ-…) |
 | Направление сети Botera | `docs/product/ECOSYSTEM_DIRECTION.md` |
 | Визиты стола, правка/аннулирование счёта, кешбэк | `docs/architecture/B3_2_VISITS_AND_BILL_CHANGES.md`, ADR-0007 |
-| Самовывоз | `docs/architecture/PICKUP.md` |
+| Каналы заказа (стол, самовывоз, доставка) | ADR-0009, `docs/architecture/PICKUP.md` |
 | Доставка уведомлений и рассылок | `docs/architecture/BACKGROUND_JOBS.md`, ADR-0008 |
 | Бот, callback-и | `docs/architecture/BOT_RUNTIME.md` |
 | Находки аудита и что сделано по батчам | `docs/audits/ARCHITECTURE_AUDIT.md`, `REFACTOR_ROADMAP.md` |

@@ -378,3 +378,22 @@ class PickupPaymentCheckTests(PickupFixtureMixin, TestCase):
         self.assertEqual(adjustment.reason_code, BillAdjustment.ReasonCode.PAYMENT_NOT_RECEIVED)
         self.guest.refresh_from_db()
         self.assertEqual(self.guest.loyalty_balance, Decimal("100.00"))
+
+
+class ChannelReportTests(PickupFixtureMixin, TestCase):
+    """ADR-0009: the day report splits orders and money by ordering channel."""
+
+    def test_day_report_shows_pickup_separately(self):
+        from apps.analytics.services import build_daily_operations_report
+
+        save_guest_phone(partner_id=self.partner.id, telegram_id=TG, phone="+380501112233")
+        self._cart()
+        order = self._place()
+        confirm_transfer(order=order, actor=self.cashier)
+
+        report = build_daily_operations_report(partner_id=self.partner.id)
+
+        pickup = next(item for item in report.channel_breakdown if item["channel"] == "pickup")
+        self.assertEqual(pickup["orders_count"], 1)
+        self.assertEqual(pickup["revenue"], Decimal("400.00"))
+        self.assertFalse([item for item in report.channel_breakdown if item["channel"] == "table"])
