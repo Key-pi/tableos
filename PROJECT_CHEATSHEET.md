@@ -48,7 +48,7 @@ docker compose up
 
 ```bash
 DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py migrate
-DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py ensure_admin --username admin --email admin@tableos.local --password "$TABLEOS_LOCAL_ADMIN_PASSWORD"
+DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py ensure_admin --username admin --email admin@botera.local --password "$TABLEOS_LOCAL_ADMIN_PASSWORD"
 DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py seed_baseline_demo
 ```
 

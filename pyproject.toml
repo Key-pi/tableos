@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "tableos"
 version = "0.1.0"
-description = "Multi-tenant Telegram platform for hospitality venues."
+description = "Botera Shop: multi-tenant Telegram ordering and loyalty platform for venues and shops."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

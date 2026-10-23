@@ -55,11 +55,11 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--admin-username", default="platform_admin")
-        parser.add_argument("--admin-email", default="admin@tableos.local")
-        parser.add_argument("--admin-password", default="tableos12345")
+        parser.add_argument("--admin-email", default="admin@botera.local")
+        parser.add_argument("--admin-password", default="botera12345")
         parser.add_argument(
             "--staff-password",
-            default="tableos12345",
+            default="botera12345",
             help="Password assigned to all seeded venue staff users.",
         )
 

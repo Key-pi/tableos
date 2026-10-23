@@ -1,1 +1,1 @@
-"""Business domain apps for tableos."""
+"""Business domain apps of Botera Shop."""

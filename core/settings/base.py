@@ -90,9 +90,9 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGGING = LOGGING
 
 UNFOLD = {
-    "SITE_TITLE": "tableos",
-    "SITE_HEADER": "tableos admin",
-    "SITE_SYMBOL": "table_restaurant",
+    "SITE_TITLE": "Botera Shop",
+    "SITE_HEADER": "Botera Shop",
+    "SITE_SYMBOL": "storefront",
 }
 
 BOT_TOKEN_ENCRYPTION_KEY = app_settings.bot_token_encryption_key

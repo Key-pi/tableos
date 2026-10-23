@@ -24,9 +24,10 @@ def demo_home(_: HttpRequest) -> HttpResponse:
     # Keep the landing page template-free so the backend is demoable even
     # before we introduce a separate frontend or Telegram WebApp shell.
     html = f"""
-    <html>
+    <html lang="ru">
       <head>
-        <title>TableOS Demo</title>
+        <meta charset="utf-8">
+        <title>Botera Shop — демо</title>
         <style>
           body {{
             font-family: Georgia, serif;
@@ -55,16 +56,16 @@ def demo_home(_: HttpRequest) -> HttpResponse:
       </head>
       <body>
         <div class="card">
-          <h1>TableOS backend is running</h1>
-          <p>White-label Telegram platform demo environment for venue partners.</p>
+          <h1>Botera Shop работает</h1>
+          <p>Демо-окружение: Telegram-боты заказов и лояльности для заведений и магазинов.</p>
           <div class="stats">
-            <div class="stat"><strong>Partners</strong><br>{partners_count}</div>
-            <div class="stat"><strong>Active bots</strong><br>{bots_count}</div>
-            <div class="stat"><strong>Tables</strong><br>{tables_count}</div>
-            <div class="stat"><strong>Orders</strong><br>{orders_count}</div>
+            <div class="stat"><strong>Заведений</strong><br>{partners_count}</div>
+            <div class="stat"><strong>Активных ботов</strong><br>{bots_count}</div>
+            <div class="stat"><strong>Столов</strong><br>{tables_count}</div>
+            <div class="stat"><strong>Заказов</strong><br>{orders_count}</div>
           </div>
-          <p><a href="/admin/">Open Django admin</a> · <a href="/health/">Healthcheck</a></p>
-          <p>Recommended local bootstrap:</p>
+          <p><a href="/admin/">Открыть Admin</a> · <a href="/health/">Проверка работы</a></p>
+          <p>Быстрый старт локально:</p>
           <p>
             <code>
               python manage.py seed_demo --with-admin --with-manager

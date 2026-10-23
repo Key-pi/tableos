@@ -7,7 +7,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--username", default="admin")
-        parser.add_argument("--email", default="admin@tableos.local")
+        parser.add_argument("--email", default="admin@botera.local")
         parser.add_argument("--password", default="")
 
     def handle(self, *args, **options):
