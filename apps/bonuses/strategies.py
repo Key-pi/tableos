@@ -30,6 +30,9 @@ class BonusContext:
     guest: GuestProfile
     order: Order | None = None
     purchase_total: Decimal | None = None
+    # Part of the purchase paid with bonuses; cashback programmes with the
+    # `money_paid` accrual base subtract it (PQ-030).
+    bonus_paid_amount: Decimal = Decimal("0.00")
     comment: str = ""
 
 
@@ -45,7 +48,10 @@ def _cashback_bonus(program: BonusProgram, context: BonusContext) -> Decimal:
     total = _purchase_total(context)
     if total < program.min_order_total:
         return Decimal("0.00")
-    return (total * program.percent / Decimal("100")).quantize(Decimal("0.01"))
+    base = total
+    if program.accrual_base == BonusProgram.AccrualBase.MONEY_PAID:
+        base = max(Decimal("0.00"), total - Decimal(context.bonus_paid_amount))
+    return (base * program.percent / Decimal("100")).quantize(Decimal("0.01"))
 
 
 def _visit_bonus(program: BonusProgram, context: BonusContext) -> Decimal:

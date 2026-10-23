@@ -93,12 +93,16 @@ def apply_bonus_programs(
     bill=None,
     walk_in_sale: WalkInSale | None = None,
     purchase_total: Decimal | None = None,
+    bonus_paid_amount: Decimal | str = Decimal("0.00"),
     source_type: str = "",
     source_id: str = "",
     comment: str = "",
 ) -> list[BonusTransaction]:
     if guest.partner_id != partner_id:
         raise BonusServiceError("Guest profile does not belong to the selected venue.")
+    bonus_paid_amount = Decimal(bonus_paid_amount).quantize(Decimal("0.01"))
+    if not bonus_paid_amount.is_finite() or bonus_paid_amount < 0:
+        raise BonusServiceError("Bonus-paid amount cannot be negative.")
     guest = GuestProfile.objects.select_for_update().get(
         id=guest.id,
         partner_id=partner_id,
@@ -121,6 +125,7 @@ def apply_bonus_programs(
         guest=guest,
         order=order,
         purchase_total=purchase_total,
+        bonus_paid_amount=bonus_paid_amount,
         comment=comment,
     )
     total_awarded = Decimal("0.00")
@@ -252,6 +257,7 @@ def register_walk_in_sale(
             guest=guest,
             walk_in_sale=sale,
             purchase_total=total,
+            bonus_paid_amount=bonus_spent,
             source_type="walk_in_sale",
             source_id=str(sale.id),
             comment=comment or f"Walk-in sale bonus for customer code {guest.customer_code}.",
@@ -297,6 +303,7 @@ def preview_walk_in_sale_by_customer_code(
     partner_id,
     customer_code: str,
     items: list[dict],
+    redeem_bonus: bool = False,
 ) -> WalkInSalePreview:
     # Empty code is allowed: this is an anonymous walk-in sale with no loyalty guest.
     normalized_customer_code = customer_code.strip().upper()
@@ -318,18 +325,18 @@ def preview_walk_in_sale_by_customer_code(
             (item["unit_price"] * item["quantity"] for item in normalized_items),
             Decimal("0.00"),
         )
-        if guest is not None:
-            projected_bonus_amount = _preview_bonus_amount(
-                partner_id=partner_id,
-                guest=guest,
-                purchase_total=total_amount,
-            )
     redeemable_bonus_amount = Decimal("0.00")
     if guest is not None and total_amount > 0:
         redeemable_bonus_amount = get_redeemable_bonus_amount(
             partner_id=partner_id,
             guest=guest,
             purchase_total=total_amount,
+        )
+        projected_bonus_amount = _preview_bonus_amount(
+            partner_id=partner_id,
+            guest=guest,
+            purchase_total=total_amount,
+            bonus_paid_amount=redeemable_bonus_amount if redeem_bonus else Decimal("0.00"),
         )
     return WalkInSalePreview(
         guest=guest,
@@ -354,6 +361,7 @@ def register_walk_in_sale_from_menu_items_by_customer_code(
         partner_id=partner_id,
         customer_code=customer_code,
         items=items,
+        redeem_bonus=redeem_bonus,
     )
     sale = register_walk_in_sale(
         partner_id=partner_id,
@@ -385,11 +393,13 @@ def _preview_bonus_amount(
     partner_id,
     guest: GuestProfile,
     purchase_total: Decimal,
+    bonus_paid_amount: Decimal = Decimal("0.00"),
 ) -> Decimal:
     context = BonusContext(
         event=BonusProgram.TriggerEvent.MANUAL_PURCHASE,
         guest=guest,
         purchase_total=purchase_total,
+        bonus_paid_amount=bonus_paid_amount,
     )
     total_awarded = Decimal("0.00")
     for program in BonusProgramRepository.active_for_partner_event(

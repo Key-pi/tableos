@@ -20,6 +20,10 @@ class BonusProgram(PartnerBoundModel):
         VISIT = "visit", "Visit"
         MILESTONE = "milestone", "Milestone"
 
+    class AccrualBase(models.TextChoices):
+        FULL_TOTAL = "full_total", "Full purchase total"
+        MONEY_PAID = "money_paid", "Money paid (without the bonus-paid part)"
+
     name = models.CharField(max_length=255)
     trigger_event = models.CharField(
         max_length=32,
@@ -35,6 +39,16 @@ class BonusProgram(PartnerBoundModel):
     fixed_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     min_order_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    accrual_base = models.CharField(
+        max_length=16,
+        choices=AccrualBase.choices,
+        default=AccrualBase.FULL_TOTAL,
+        help_text=(
+            "Cashback programmes only: accrue on the full purchase total or only "
+            "on the part paid with money (PQ-030). The minimum order total is "
+            "always compared with the full total."
+        ),
+    )
     milestone_order_count = models.PositiveIntegerField(default=0)
     max_redeem_share = models.DecimalField(
         max_digits=5,

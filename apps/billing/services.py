@@ -1060,6 +1060,7 @@ def _sync_orders_after_bill_paid(bill: Bill) -> int:
         .exclude(status=Order.Status.CANCELED)
         .order_by("id")
     )
+    bonus_shares = _bill_bonus_share_by_order(bill)
     updated_count = 0
     now = timezone.now()
     for order in orders:
@@ -1088,6 +1089,7 @@ def _sync_orders_after_bill_paid(bill: Bill) -> int:
                     guest=order.guest,
                     order=order,
                     purchase_total=order.total_amount,
+                    bonus_paid_amount=bonus_shares.get(order.id, Decimal("0.00")),
                     source_type="order_paid",
                     source_id=str(order.id),
                     comment=f"Paid order bonus for order #{order.public_id}.",
@@ -1096,6 +1098,36 @@ def _sync_orders_after_bill_paid(bill: Bill) -> int:
                 raise BillingServiceError(str(exc)) from exc
         updated_count += 1
     return updated_count
+
+
+def _bill_bonus_share_by_order(bill: Bill) -> dict:
+    """Split the bill's bonus payment between its orders (PQ-030).
+
+    Shares are proportional to each order's active lines in this bill; the
+    rounding remainder goes to the last order, so the shares always add up to
+    ``bill.bonus_spent_amount``.
+    """
+
+    bonus_spent = Decimal(bill.bonus_spent_amount).quantize(Decimal("0.01"))
+    if bonus_spent <= 0:
+        return {}
+    line_totals: dict = {}
+    for item in bill.items.filter(is_active=True).order_by("order_id"):
+        line_totals[item.order_id] = line_totals.get(item.order_id, Decimal("0.00")) + Decimal(
+            item.line_total
+        )
+    order_ids = sorted((order_id for order_id, total in line_totals.items() if total > 0), key=str)
+    lines_sum = sum((line_totals[order_id] for order_id in order_ids), Decimal("0.00"))
+    if lines_sum <= 0:
+        return {}
+    shares: dict = {}
+    allocated = Decimal("0.00")
+    for order_id in order_ids[:-1]:
+        share = (bonus_spent * line_totals[order_id] / lines_sum).quantize(Decimal("0.01"))
+        shares[order_id] = share
+        allocated += share
+    shares[order_ids[-1]] = bonus_spent - allocated
+    return shares
 
 
 def _derive_order_payment_method(

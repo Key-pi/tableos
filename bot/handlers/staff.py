@@ -867,6 +867,7 @@ def _compose_staff_sale_view(
         guest_preview = preview_walk_in_sale_by_customer_code(
             partner_id=partner_id,
             customer_code=customer_code,
+            redeem_bonus=redeem_bonus,
             items=draft_payload,
         )
     else:

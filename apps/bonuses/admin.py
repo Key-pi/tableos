@@ -25,6 +25,7 @@ class BonusProgramAdmin(ScopedAdminMixin):
         "trigger_event",
         "program_type",
         "percent",
+        "accrual_base",
         "fixed_amount",
         "milestone_order_count",
         "is_active",
