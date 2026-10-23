@@ -88,6 +88,7 @@ from bot.keyboards.staff import (
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.states.staff_sale import StaffQuickSaleStates
+from bot.utils.html import escape_html
 
 router = Router()
 
@@ -149,7 +150,9 @@ def _order_short_context_label(order: Order) -> str:
 
 
 def _render_order_card(order: Order) -> str:
-    items_text = ", ".join(f"{item.item_name} x{item.quantity}" for item in order.items.all())
+    items_text = ", ".join(
+        f"{escape_html(item.item_name)} x{item.quantity}" for item in order.items.all()
+    )
     guest_label = order.guest.telegram_account.username or order.guest.telegram_account.telegram_id
     comment_text = order.comment or "Без комментария"
     assignee_label = _employee_label(order.assigned_employee) or "Пока не назначен"
@@ -158,14 +161,14 @@ def _render_order_card(order: Order) -> str:
     return (
         f"<b>Заказ #{order.public_id}</b>\n"
         f"{_order_context_label(order)}\n"
-        f"Гость: {guest_label}\n"
-        f"Ответственный: {assignee_label}\n"
+        f"Гость: {escape_html(guest_label)}\n"
+        f"Ответственный: {escape_html(assignee_label)}\n"
         f"Статус: {order.get_status_display()}\n"
         f"Оплата: {payment_label}\n"
         f"Получение: {received_label}\n"
         f"Сумма: {order.total_amount} грн\n"
         f"Позиции: {items_text or '-'}\n"
-        f"Комментарий: {comment_text}"
+        f"Комментарий: {escape_html(comment_text)}"
     )
 
 
@@ -209,8 +212,8 @@ def _render_staff_notifications(notifications) -> str:
 def _render_staff_notification_card(notification) -> str:
     order_label = f"#{notification.order.public_id}" if notification.order_id else "-"
     return (
-        f"<b>{notification.title}</b>\n"
-        f"{notification.message}\n"
+        f"<b>{escape_html(notification.title)}</b>\n"
+        f"{escape_html(notification.message)}\n"
         f"Заказ: {order_label}"
     )
 
@@ -307,7 +310,7 @@ def _build_staff_home_markup(employee: EmployeeProfile | None):
 def _render_day_report(report) -> str:
     lines = [
         "<b>Отчёт дня</b>",
-        f"Заведение: {report.partner_name}",
+        f"Заведение: {escape_html(report.partner_name)}",
         f"Дата: {report.local_date_label}",
         "",
         "<b>Деньги</b>",
@@ -334,7 +337,7 @@ def _render_day_report(report) -> str:
         lines.extend(["", "<b>По сотрудникам</b>"])
         for item in report.staff_breakdown[:8]:
             lines.append(
-                f"• {item['label']}: {item['total_amount']} грн "
+                f"• {escape_html(item['label'])}: {item['total_amount']} грн "
                 f"(платежей {item['payments_count']}, быстрых продаж {item['walk_in_sales_count']})"
             )
     return "\n".join(lines)
@@ -360,8 +363,8 @@ def _render_report_section(page_result) -> str:
         lines.extend(
             [
                 "",
-                item["label"],
-                item["subtitle"],
+                escape_html(item["label"]),
+                escape_html(item["subtitle"]),
             ]
         )
     return "\n".join(lines)
@@ -416,13 +419,15 @@ def _render_walk_in_sale_card(sale: WalkInSale) -> str:
         f"Код клиента: {sale.loyalty_label}",
         f"Сумма: {sale.amount} грн",
         f"Бонусов начислено: {sale.bonus_awarded_amount}",
-        f"Сотрудник: {staff_label}",
-        f"Комментарий: {sale.comment or '—'}",
+        f"Сотрудник: {escape_html(staff_label)}",
+        f"Комментарий: {escape_html(sale.comment) or '—'}",
     ]
     if sale_items:
         lines.extend(["", "Позиции:"])
         for item in sale_items:
-            lines.append(f"• {item.item_name} x{item.quantity} • {item.unit_price} грн")
+            lines.append(
+                f"• {escape_html(item.item_name)} x{item.quantity} • {item.unit_price} грн"
+            )
     return "\n".join(lines)
 
 
@@ -442,7 +447,7 @@ def _render_report_table_detail(detail) -> str:
         lines.extend(["", "Сессии:"])
         for session in detail.sessions[:6]:
             lines.append(
-                f"• {session['started_at']} • {session['guest']} • {session['status']}"
+                f"• {session['started_at']} • {escape_html(session['guest'])} • {session['status']}"
             )
 
     if detail.orders:
@@ -451,11 +456,11 @@ def _render_report_table_detail(detail) -> str:
             payment_label = "опл." if order["paid"] else "не опл."
             receive_label = "получен" if order["received"] else "не получен"
             lines.append(
-                f"• #{order['public_id']} • {order['guest']} • {order['status']} • "
+                f"• #{order['public_id']} • {escape_html(order['guest'])} • {order['status']} • "
                 f"{order['total_amount']} грн • {payment_label} • {receive_label}"
             )
             positions = ", ".join(
-                f"{item['name']} x{item['quantity']}"
+                f"{escape_html(item['name'])} x{item['quantity']}"
                 for item in order["positions"][:4]
             )
             if positions:
@@ -465,7 +470,7 @@ def _render_report_table_detail(detail) -> str:
         lines.extend(["", "Оплаченные счета:"])
         for bill in detail.paid_bills[:6]:
             lines.append(
-                f"• #{bill['public_id']} • {bill['kind']} • {bill['guest']} • "
+                f"• #{bill['public_id']} • {bill['kind']} • {escape_html(bill['guest'])} • "
                 f"{bill['total_amount']} грн • {bill['payment_method']} • {bill['paid_at']}"
             )
 
@@ -473,7 +478,7 @@ def _render_report_table_detail(detail) -> str:
         lines.extend(["", "Открытые счета:"])
         for bill in detail.open_bills[:6]:
             lines.append(
-                f"• #{bill['public_id']} • {bill['kind']} • {bill['guest']} • "
+                f"• #{bill['public_id']} • {bill['kind']} • {escape_html(bill['guest'])} • "
                 f"остаток {bill['remaining_amount']} грн • {bill['status']}"
             )
 
@@ -588,7 +593,8 @@ def _render_table_card(
         guest_lines = []
         for session in active_sessions[:4]:
             guest_lines.append(
-                f"• {_guest_label(session.guest)} c {session.started_at.strftime('%H:%M')}"
+                f"• {escape_html(_guest_label(session.guest))} c "
+                f"{session.started_at.strftime('%H:%M')}"
             )
         lines.extend(["", "Гости:"] + guest_lines)
     return "\n".join(lines)
@@ -633,11 +639,11 @@ def _render_billing_request_card(billing_request: BillingRequest) -> str:
     return (
         "<b>Запрос счёта</b>\n"
         f"Стол: #{billing_request.table.number}\n"
-        f"Гость: {_guest_label(billing_request.guest)}\n"
+        f"Гость: {escape_html(_guest_label(billing_request.guest))}\n"
         f"Тип: {request_type_label}\n"
         f"Статус: {billing_request.get_status_display()}\n"
         f"Счёт: {linked_bill}\n"
-        f"Комментарий: {billing_request.note or 'без комментария'}"
+        f"Комментарий: {escape_html(billing_request.note) or 'без комментария'}"
     )
 
 
@@ -652,7 +658,7 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
     bonus_hint = ""
     can_pay_with_bonuses = False
     item_lines = [
-        f"• {item.item_name} x{item.quantity} = {item.line_total} грн"
+        f"• {escape_html(item.item_name)} x{item.quantity} = {item.line_total} грн"
         for item in bill.items.all()[:8]
     ]
     if bill.primary_guest_id:
@@ -682,15 +688,15 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
 
     bill_text = (
         f"<b>Счёт #{bill.public_id}</b>\n"
-        f"Контекст: {get_bill_context_label(bill)}\n"
-        f"Гость: {guest_label}\n"
+        f"Контекст: {escape_html(get_bill_context_label(bill))}\n"
+        f"Гость: {escape_html(guest_label)}\n"
         f"Тип: {bill.get_kind_display()}\n"
         f"Статус: {bill.get_status_display()}\n"
         f"Заказов в счёте: {bill.bill_orders.count()}\n"
         f"Сумма: {bill.total_amount} грн\n"
         f"Оплачено: {bill.paid_amount} грн\n"
         f"Остаток: {remaining_amount} грн\n"
-        f"Комментарий: {bill.label or 'без комментария'}\n"
+        f"Комментарий: {escape_html(bill.label) or 'без комментария'}\n"
         f"Позиции:\n{chr(10).join(item_lines) if item_lines else '—'}"
         f"{bonus_hint}"
     )
@@ -809,7 +815,7 @@ def _compose_staff_sale_view(
         lines = [
             "<b>Быстрая продажа</b>",
             f"Код клиента: {guest_preview.guest.customer_code}",
-            f"Telegram: {guest_identity}",
+            f"Telegram: {escape_html(guest_identity)}",
             f"Текущий баланс: {guest_preview.guest.loyalty_balance} бонусов",
             f"Первый визит: {first_visit}",
             f"Последний визит: {last_visit}",
@@ -818,7 +824,7 @@ def _compose_staff_sale_view(
     if comment:
         lines.extend(
             [
-                f"Комментарий: {comment}",
+                f"Комментарий: {escape_html(comment)}",
                 "",
             ]
         )
@@ -827,7 +833,7 @@ def _compose_staff_sale_view(
         for item in guest_preview.items:
             line_total = item["unit_price"] * item["quantity"]
             lines.append(
-                f"• {item['item_name']} x{item['quantity']} = {line_total} грн"
+                f"• {escape_html(item['item_name'])} x{item['quantity']} = {line_total} грн"
             )
         lines.extend(
             [
@@ -2359,7 +2365,7 @@ async def staff_sale_confirm_handler(
         [
             f"Начислено бонусов: +{sale.bonus_awarded_amount}",
             f"Позиций: {items_count}",
-            f"Комментарий: {sale.comment or 'без комментария'}",
+            f"Комментарий: {escape_html(sale.comment) or 'без комментария'}",
         ]
     )
     await _safe_edit_message_text(callback.message, "\n".join(result_lines))

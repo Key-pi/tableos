@@ -16,6 +16,7 @@ from bot.keyboards.menu import build_menu_keyboard
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
+from bot.utils.html import escape_html
 
 router = Router()
 
@@ -39,7 +40,7 @@ async def _safe_edit_menu_message(message: Message, text: str, *, reply_markup) 
 
 def _render_menu_category_view(*, partner, content, category, menu_items, session) -> str:
     lines = [content.menu_header(partner_name=partner.name)]
-    lines.append(f"Категория: <b>{category.name}</b>")
+    lines.append(f"Категория: <b>{escape_html(category.name)}</b>")
     lines.append("")
     if not menu_items:
         lines.append("В этой категории сейчас нет доступных позиций.")
@@ -47,11 +48,13 @@ def _render_menu_category_view(*, partner, content, category, menu_items, sessio
     else:
         for item in menu_items:
             category_name = item.category.name if item.category_id else "Без категории"
-            lines.append(f"{item.name} • {item.price} грн • {category_name}")
+            lines.append(
+                f"{escape_html(item.name)} • {item.price} грн • {escape_html(category_name)}"
+            )
             # If category chips become visually enough later, we can trim the
             # repeated category label here without changing add-to-cart behavior.
             if item.description:
-                lines.append(_trim_menu_description(item.description))
+                lines.append(escape_html(_trim_menu_description(item.description)))
             lines.append("")
 
     if session is None:

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from apps.partners.models import Partner, PartnerBotSettings
+from bot.utils.html import escape_html
 
 
 def _render_template(template: str, **context) -> str:
@@ -9,8 +10,10 @@ def _render_template(template: str, **context) -> str:
         return ""
     # Keep formatting narrow and explicit so partner-defined templates cannot
     # accidentally depend on arbitrary runtime objects or hidden fields.
+    # The template is trusted partner markup; substituted values are escaped.
+    escaped_context = {key: escape_html(value) for key, value in context.items()}
     try:
-        return template.format(**context)
+        return template.format(**escaped_context)
     except (KeyError, ValueError):
         # Bad partner template text must not break bot delivery at runtime.
         return template
@@ -341,7 +344,7 @@ class BotContent:
             actions.append(self.button_request_bill_label)
         if actions:
             lines.append("Доступные действия:")
-            lines.extend(f"• {action}" for action in actions)
+            lines.extend(f"• {escape_html(action)}" for action in actions)
         return lines
 
     def supports_staff_call(self) -> bool:
@@ -392,17 +395,17 @@ class BotContent:
         if self.supports_staff_call():
             add_step(
                 f"После активации стола можно позвать персонал кнопкой "
-                f'"{self.button_call_staff_label}".'
+                f'"{escape_html(self.button_call_staff_label)}".'
             )
         if self.supports_billing_request():
             add_step(
                 f"Когда будете готовы к оплате, используйте "
-                f'"{self.button_request_bill_label}".'
+                f'"{escape_html(self.button_request_bill_label)}".'
             )
         if not lines:
             return (
                 "В этом боте сейчас доступен профиль клиента. "
-                f"Откройте его кнопкой «{self.button_my_profile}»."
+                f"Откройте его кнопкой «{escape_html(self.button_my_profile)}»."
             )
         return "\n".join(lines)
 
@@ -416,14 +419,14 @@ class BotContent:
         ):
             return ["Сканируйте QR-код стола, чтобы открыть сессию и оформить заказ."]
         if self.supports_menu():
-            return [f"Можно открыть меню кнопкой «{self.button_menu_label}»."]
+            return [f"Можно открыть меню кнопкой «{escape_html(self.button_menu_label)}»."]
         return []
 
     def table_activated_message(self, *, partner_name: str, table_number: int) -> str:
         if not self.table_activated_message_template:
             lines = [
                 f"Ваш стол: #{table_number}",
-                f"Заведение: {partner_name}",
+                f"Заведение: {escape_html(partner_name)}",
                 "",
             ]
             if self.supports_cart():

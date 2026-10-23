@@ -11,6 +11,7 @@ from bot.keyboards.main import build_main_keyboard
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
+from bot.utils.html import escape_html
 
 router = Router()
 
@@ -93,7 +94,7 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
             [
                 content.welcome_message(partner_name=partner.name),
                 "",
-                f"Вы зарегистрированы в программе лояльности {partner.name}.",
+                f"Вы зарегистрированы в программе лояльности {escape_html(partner.name)}.",
                 f"Ваш код клиента: <code>{guest_profile.customer_code}</code>",
                 "Этот код можно назвать на баре или кассе для начисления бонусов.",
             ]

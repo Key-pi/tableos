@@ -17,6 +17,7 @@ from bot.keyboards.menu import build_cart_keyboard
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
+from bot.utils.html import escape_html
 
 router = Router()
 
@@ -31,7 +32,10 @@ def _render_cart(cart) -> str:
     ]
     for item in preview_items:
         line_total = item.unit_price * item.quantity
-        lines.append(f"{item.item_name} • {item.quantity} x {item.unit_price} = {line_total} грн")
+        lines.append(
+            f"{escape_html(item.item_name)} • {item.quantity} x {item.unit_price} "
+            f"= {line_total} грн"
+        )
     hidden_items_count = cart.items.count() - len(preview_items)
     if hidden_items_count > 0:
         lines.append(f"И ещё позиций: {hidden_items_count}")

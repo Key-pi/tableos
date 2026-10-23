@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 from datetime import timedelta
 
 from aiogram import Bot
@@ -35,6 +36,12 @@ class NotificationDeliveryError(Exception):
 
 class GuestCallError(Exception):
     """Raised when a guest cannot safely request staff assistance."""
+
+
+def _escape_html(value) -> str:
+    """Escape a dynamic value for Telegram HTML parse mode (AA-024)."""
+
+    return html.escape("" if value is None else str(value), quote=False)
 
 
 def _active_partner_bot(partner_id) -> BotInstance:
@@ -156,7 +163,10 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
             [
                 (
                     employee.telegram_account.telegram_id,
-                    f"<b>{notification.title}</b>\n{notification.message}",
+                    # Title and message are plain text built from venue and
+                    # guest data; only the <b> wrapper is markup (AA-024).
+                    f"<b>{_escape_html(notification.title)}</b>\n"
+                    f"{_escape_html(notification.message)}",
                 )
             ],
         )
@@ -263,12 +273,16 @@ def send_guest_order_status_update_now(
         f"Получение: {'подтверждено' if order.received_at else 'ещё не подтверждено'}",
     ]
     if to_status == order.Status.ACCEPTED and order.assigned_employee_id:
-        lines.append(f"Заказ взял в работу: {_employee_display_name(order.assigned_employee)}")
+        lines.append(
+            f"Заказ взял в работу: {_escape_html(_employee_display_name(order.assigned_employee))}"
+        )
     elif order.assigned_employee_id:
-        lines.append(f"Ответственный: {_employee_display_name(order.assigned_employee)}")
+        lines.append(
+            f"Ответственный: {_escape_html(_employee_display_name(order.assigned_employee))}"
+        )
 
     if order.comment:
-        lines.append(f"Комментарий: {order.comment}")
+        lines.append(f"Комментарий: {_escape_html(order.comment)}")
 
     results = async_to_sync(_send_telegram_messages)(
         bot_instance.token,

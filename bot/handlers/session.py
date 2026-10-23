@@ -23,6 +23,7 @@ from bot.keyboards.session import (
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
+from bot.utils.html import escape_html
 
 router = Router()
 
@@ -61,7 +62,7 @@ def _build_guest_session_view(
     preview_orders = visible_orders[:6]
     lines = [
         f"Ваш стол: #{session.table.number}",
-        f"Заведение: {partner.name}",
+        f"Заведение: {escape_html(partner.name)}",
     ]
 
     if not visible_orders:
@@ -121,7 +122,7 @@ def _build_guest_order_card_text(order: Order) -> str:
         f"Новый статус: {order.get_status_display()}",
         f"Оплата: {payment_label}",
         f"Получение: {received_label}",
-        f"Заказ взял в работу: {_employee_label(order)}",
+        f"Заказ взял в работу: {escape_html(_employee_label(order))}",
     ]
     if not is_order_paid(order):
         lines.extend(

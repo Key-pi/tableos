@@ -94,6 +94,43 @@ class NotificationDeliveryTests(TestCase):
         self.assertEqual(notification.delivery_status, StaffNotification.DeliveryStatus.SENT)
         self.assertIsNotNone(notification.delivered_at)
 
+    def test_staff_notification_text_is_escaped_for_html_mode(self):
+        # AA-024: venue and guest text must not break Telegram's HTML parser.
+        user = User.objects.create_user(
+            username="escape_staff",
+            password="pass12345",
+            partner=self.partner,
+            role=User.Role.MANAGER,
+        )
+        account = TelegramAccount.objects.create(telegram_id=501099, username="escape_staff")
+        employee = EmployeeProfile.objects.create(
+            partner=self.partner,
+            user=user,
+            telegram_account=account,
+            bot_notifications_enabled=True,
+        )
+        notification = StaffNotification.objects.create(
+            partner=self.partner,
+            employee=employee,
+            category=StaffNotification.Category.GUEST_CALL,
+            title="Вызов: Бар & <касса>",
+            message="Заведение: Bar & Grill",
+        )
+        sent_texts = []
+
+        async def _capturing_send(_token, messages):
+            sent_texts.extend(text for _chat_id, text in messages)
+            return [(chat_id, True, "") for chat_id, _text in messages]
+
+        with patch("apps.notifications.services._send_telegram_messages", new=_capturing_send):
+            with self.captureOnCommitCallbacks(execute=True):
+                deliver_staff_notification(notification)
+
+        self.assertEqual(
+            sent_texts,
+            ["<b>Вызов: Бар &amp; &lt;касса&gt;</b>\nЗаведение: Bar &amp; Grill"],
+        )
+
     def test_send_broadcast_campaign_runs_after_commit_and_updates_delivery_counters(self):
         guest_account_a = TelegramAccount.objects.create(
             telegram_id=601001,

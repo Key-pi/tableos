@@ -18,6 +18,7 @@ from bot.keyboards.profile import (
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
+from bot.utils.html import escape_html
 
 router = Router()
 
@@ -43,7 +44,7 @@ def _render_profile_summary(
     )
     lines = [
         "<b>Мой профиль</b>",
-        f"Заведение: {partner_name}",
+        f"Заведение: {escape_html(partner_name)}",
         f"Telegram: {identity_line}",
         f"Код клиента: <code>{guest_profile.customer_code}</code>",
         f"Баланс: {guest_profile.loyalty_balance} бонусов",
@@ -87,7 +88,7 @@ def _render_profile_bonuses(
         preview_programs = active_programs[:_BONUS_PROGRAMS_PREVIEW_LIMIT]
         for program in preview_programs:
             lines.append(
-                f"• {program.name} — {program.get_program_type_display()} / "
+                f"• {escape_html(program.name)} — {program.get_program_type_display()} / "
                 f"{program.get_trigger_event_display()}"
             )
         hidden_programs = len(active_programs) - len(preview_programs)
@@ -102,7 +103,7 @@ def _render_profile_bonuses(
             program_name = transaction.program.name if transaction.program_id else "Ручная операция"
             sign = "+" if transaction.amount >= 0 else ""
             lines.append(
-                f"• {sign}{transaction.amount} через {program_name} "
+                f"• {sign}{transaction.amount} через {escape_html(program_name)} "
                 f"({transaction.created_at:%d.%m %H:%M})"
             )
     else:
