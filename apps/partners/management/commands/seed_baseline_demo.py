@@ -151,13 +151,13 @@ class Command(BaseCommand):
             slug=slug,
             defaults={
                 "name": name,
-                "timezone": "Europe/Kiev",
+                "timezone": "Europe/Kyiv",
                 "contact_phone": phone,
                 "status": Partner.Status.ACTIVE,
             },
         )
         partner.name = name
-        partner.timezone = "Europe/Kiev"
+        partner.timezone = "Europe/Kyiv"
         partner.contact_phone = phone
         partner.status = Partner.Status.ACTIVE
         partner.save()

@@ -352,7 +352,7 @@ class VisitBonusDayBoundaryTests(TestCase):
             name="Night Venue",
             slug="night-venue",
             status=Partner.Status.ACTIVE,
-            timezone="Europe/Kiev",
+            timezone="Europe/Kyiv",
         )
         account = TelegramAccount.objects.create(telegram_id=12345901, username="night_guest")
         self.guest = GuestProfile.objects.create(partner=self.partner, telegram_account=account)
@@ -368,7 +368,7 @@ class VisitBonusDayBoundaryTests(TestCase):
     def test_once_per_day_uses_the_venue_local_day(self):
         # AA-029: 00:30 and 10:00 in Kyiv are the same venue day, although the
         # first one is still the previous day in UTC.
-        kyiv = ZoneInfo("Europe/Kiev")
+        kyiv = ZoneInfo("Europe/Kyiv")
         accrual = BonusTransaction.objects.create(
             partner=self.partner,
             guest=self.guest,

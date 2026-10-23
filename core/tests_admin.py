@@ -32,7 +32,7 @@ class OwnerFacingAdminTests(TestCase):
         self.partner = Partner.objects.create(
             name="Owner Venue",
             slug="owner-venue",
-            timezone="Europe/Kiev",
+            timezone="Europe/Kyiv",
             contact_phone="+380670000000",
             status=Partner.Status.ACTIVE,
         )

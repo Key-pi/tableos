@@ -17,7 +17,7 @@ class AppSettings(BaseSettings):
         default_factory=list,
         validation_alias="DJANGO_CSRF_TRUSTED_ORIGINS",
     )
-    timezone: str = Field(default="Europe/Kiev", validation_alias="DJANGO_TIMEZONE")
+    timezone: str = Field(default="Europe/Kyiv", validation_alias="DJANGO_TIMEZONE")
     language_code: str = Field(default="ru-ru", validation_alias="DJANGO_LANGUAGE_CODE")
     use_sqlite: bool = Field(default=False, validation_alias="DJANGO_USE_SQLITE")
     sqlite_path: str = Field(default="db.sqlite3", validation_alias="DJANGO_SQLITE_PATH")
@@ -48,6 +48,15 @@ class AppSettings(BaseSettings):
         default=250,
         validation_alias="NOTIFICATIONS_BROADCAST_BATCH_SIZE",
     )
+
+    @field_validator("timezone", mode="before")
+    @classmethod
+    def modern_timezone_name(cls, value: Any) -> Any:
+        # Existing .env files still say Europe/Kiev, which newer tz databases
+        # drop (AA-034); read it as the current IANA name.
+        if isinstance(value, str) and value.strip() == "Europe/Kiev":
+            return "Europe/Kyiv"
+        return value
 
     @field_validator("allowed_hosts", "csrf_trusted_origins", mode="before")
     @classmethod

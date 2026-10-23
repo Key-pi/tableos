@@ -35,7 +35,7 @@ class DailyOperationsReportTests(TestCase):
             name="Report Venue",
             slug="report-venue",
             status=Partner.Status.ACTIVE,
-            timezone="Europe/Kiev",
+            timezone="Europe/Kyiv",
         )
         self.table = Table.objects.create(
             partner=self.partner,
@@ -237,7 +237,7 @@ class DailyOperationsReportTests(TestCase):
             name="Suspended Report Venue",
             slug="suspended-report-venue",
             status=Partner.Status.SUSPENDED,
-            timezone="Europe/Kiev",
+            timezone="Europe/Kyiv",
         )
 
         refreshed_count = refresh_daily_partner_metrics()
@@ -249,7 +249,7 @@ class DailyOperationsReportTests(TestCase):
     def test_refresh_daily_partner_metrics_finalises_the_previous_day(self):
         # AA-029: a payment after the last run of a day must reach that day's
         # snapshot once the next day starts.
-        kyiv = ZoneInfo("Europe/Kiev")
+        kyiv = ZoneInfo("Europe/Kyiv")
         late_evening = datetime(2026, 10, 22, 23, 55, tzinfo=kyiv)
         bill = create_bill_from_orders(
             partner_id=self.partner.id,

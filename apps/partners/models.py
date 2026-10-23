@@ -1,4 +1,5 @@
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import models
@@ -31,12 +32,25 @@ class Partner(TimeStampedModel):
 
     name = models.CharField(max_length=255)
     slug = models.SlugField(unique=True)
-    timezone = models.CharField(max_length=64, default="Europe/Kiev")
+    timezone = models.CharField(
+        max_length=64,
+        default="Europe/Kyiv",
+        help_text="IANA timezone of the venue, e.g. Europe/Kyiv (AA-034).",
+    )
     contact_phone = models.CharField(max_length=32, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
 
     class Meta:
         ordering = ["name"]
+
+    def clean(self) -> None:
+        super().clean()
+        # Reports and bonus rules build ZoneInfo(partner.timezone); an unknown
+        # name would break them at runtime.
+        try:
+            ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValidationError({"timezone": "Unknown timezone name."}) from exc
 
     def __str__(self) -> str:
         return self.name
