@@ -338,12 +338,12 @@ by `AGENTS.md`.
 
 | ID | Category | Severity | Confidence | Short conclusion | Roadmap batch |
 |---|---|---:|---:|---|---|
-| AA-020 | BUG / FINANCIAL_INTEGRITY | High | High | Billing, bill-request visibility and auto-close are scoped to the table's whole history, not the current visit. | B3.1 (needs PQ-026) |
-| AA-021 | BUG / FINANCIAL_INTEGRITY | High | Medium–High | Post-payment auto-close can raise `TableSessionError` and roll back a payment; adapters do not handle it. | B3.1 (PQ-027) |
-| AA-022 | BUG / FINANCIAL_INTEGRITY | High | High | A cancelled order stays charged in its bill; bills cannot be cancelled and allocations cannot be released. | B3.1 (PQ-028) |
+| AA-020 | BUG / FINANCIAL_INTEGRITY | High | High | Billing, bill-request visibility and auto-close are scoped to the table's whole history, not the current visit. | B3.2 (PQ-026 decided, ADR-0007) |
+| AA-021 | BUG / FINANCIAL_INTEGRITY | High | Medium–High | Post-payment auto-close can raise `TableSessionError` and roll back a payment; adapters do not handle it. | B3.1 (PQ-027 decided) |
+| AA-022 | BUG / FINANCIAL_INTEGRITY | High | High | A cancelled order stays charged in its bill; bills cannot be cancelled and allocations cannot be released. | B3.2 (PQ-028 decided) |
 | AA-023 | BUG / ADMIN_BYPASS | Medium | High | `OrderAdmin` leaves `guest`, `table`, `table_session` editable. | B3.1 |
 | AA-024 | BUG / RELIABILITY | Medium | High | Text is sent with HTML parse mode but never escaped. | B3.1 |
-| AA-025 | BUG / STATE_MACHINE | Medium | High | Guest receipt confirmation bypasses `ORDER_STATUS_TRANSITIONS`. | B3.1 (PQ-006) |
+| AA-025 | BUG / STATE_MACHINE | Medium | High | Guest receipt confirmation bypasses `ORDER_STATUS_TRANSITIONS`. | B3.1 (PQ-029 decided) |
 | AA-026 | SECURITY / PERMISSION | Medium | High (conditional) | Tenant `UserAdmin` does not exclude superusers that carry the tenant's `partner`. | B3.1 |
 | AA-027 | BUG / DATA_QUALITY | Low | High (executed) | Checking out via the reply button stores part of the button label as the order comment. | B3.1 |
 | AA-028 | BUG / PERFORMANCE | Low | High | The Bill changelist recalculates and saves every listed bill on a GET. | B3.1 |
@@ -359,7 +359,7 @@ by `AGENTS.md`.
 - **Current behavior:** unpaid orders of a guest who left or moved to another table remain attached to the table. The next party's shared bill includes them, a guest re-scanning the same table later gets them in a personal bill, and auto-close after payment never succeeds again for that table.
 - **Why it matters:** guests can be charged for other people's orders, and staff see permanent "unsettled" tables.
 - **Target behavior:** billing eligibility and settlement checks are scoped to an explicit visit (active session or sessions), and orphaned unpaid orders follow an owner-approved policy.
-- **Roadmap batch:** B3.1, after PQ-026 (and PQ-007) are decided.
+- **Roadmap batch:** B3.2. PQ-026 is decided (ADR-0007: join-or-new visit on scan, staff closes the old visit); PQ-007 stays open.
 - **Verification:** two consecutive parties at one table with an unpaid order from the first; assert the second party's shared bill, request button and auto-close behaviour.
 
 ### AA-021 — post-payment auto-close can roll back a payment
@@ -369,7 +369,7 @@ by `AGENTS.md`.
 - **Current behavior:** the payment transaction rolls back; the staff callback raises an unhandled exception without answering; the Admin returns an error page.
 - **Why it matters:** cash that was physically taken cannot be recorded, and the cashier receives no explanation.
 - **Target behavior:** recording a payment never fails because of a secondary session-closing step. Auto-close either skips non-closable sessions or follows an owner-approved rule.
-- **Roadmap batch:** B3.1 (PQ-027 decides which sessions auto-close).
+- **Roadmap batch:** B3.1. PQ-027 decided: auto-close only sessions whose orders are all paid, never failing the payment.
 - **Verification:** table with an open custom-split request; record the final payment through the service, staff callback and Admin; assert the payment persists and the session outcome follows PQ-027.
 
 ### AA-022 — cancelled orders remain charged; bills cannot be cancelled
@@ -379,7 +379,7 @@ by `AGENTS.md`.
 - **Current behavior:** cancelling an order that is already in a draft/issued bill leaves its lines in the bill total; the guest is asked to pay for it. A wrong bill cannot be voided, and its items cannot be re-billed.
 - **Why it matters:** overcharging customers and no correction path for staff.
 - **Target behavior:** an owner-approved policy for cancelling an allocated order (block, or remove lines and recalculate before payment) and an explicit bill cancel/release command that frees allocations.
-- **Roadmap batch:** B3.1, after PQ-028.
+- **Roadmap batch:** B3.2. PQ-028 decided: owner-granted bill change/void with audit history; total never below the paid amount.
 - **Verification:** cancel an order inside a draft bill and inside a partially paid bill; cancel a draft bill and re-bill its orders; PostgreSQL constraint behaviour if the allocation constraint becomes conditional.
 
 ### AA-023 — order relations are editable in Admin
@@ -406,7 +406,7 @@ by `AGENTS.md`.
 - **Category / severity / confidence:** `BUG / STATE_MACHINE`, Medium, High.
 - **Evidence:** `apps/orders/services.py:confirm_order_received_by_guest` moves any order that is not `new`, `completed` or `canceled` to `completed`. `ORDER_STATUS_TRANSITIONS` does not allow `accepted → completed` or `preparing → completed`.
 - **Current behavior:** two sources of truth for the order state machine; a guest can complete an order the kitchen has not marked ready.
-- **Target behavior:** one transition policy that explicitly states what a guest confirmation may do (PQ-006).
+- **Target behavior:** an explicit guest rule: confirmation from any non-final status, including `new`, recorded as a guest action (PQ-029, decided).
 - **Roadmap batch:** B3.1.
 - **Verification:** state-matrix test covering staff and guest paths.
 

@@ -2,7 +2,7 @@
 
 **Status (2026-10-23):** B0–B3 are complete in application code. B0.1, a
 documentation refresh after the post-B3 review, is complete. B3.1 (post-B3
-correctness fixes), B4 and B5 are proposals and require owner approval before
+correctness fixes), B3.2 (table visits and bill changes), B4 and B5 are proposals and require owner approval before
 any application-code, migration, dependency, or runtime change begins. The
 PostgreSQL verification gate for B2/B3 has not been passed yet.
 
@@ -155,24 +155,37 @@ PostgreSQL verification gate and of B3.1.)*
 | Field | Result |
 |---|---|
 | **Goal** | Bring canonical documents back in line with the code after B1–B3 and record the post-B3 review. |
-| **Scope** | Rewrote `AS_IS_ARCHITECTURE.md` for commit `ddb7dce`; replaced line-number citations in current-state documents with `path:symbol`; marked audit-time snapshots as historical; corrected the PostgreSQL-test claims and the payment lock order; added AA-020–AA-032, PQ-026–PQ-030 and batch B3.1; updated engineering, runtime and background-job documents. |
+| **Scope** | Rewrote `AS_IS_ARCHITECTURE.md` for commit `ddb7dce`; replaced line-number citations in current-state documents with `path:symbol`; marked audit-time snapshots as historical; corrected the PostgreSQL-test claims and the payment lock order; added AA-020–AA-032, PQ-026–PQ-030, ADR-0007 and batches B3.1/B3.2; updated engineering, runtime and background-job documents. |
 | **Not in scope** | Application code, migrations, dependencies, runtime configuration. |
 | **Verification** | Repository-wide check that every cited file exists and that `path:symbol` citations resolve; `git diff --check`. Tests were not executed (no environment); the recorded test baseline remains the 2026-07-27 run. |
 | **Rollback** | Revert the documentation commit. |
 
-## Batch B3.1 — Post-B3 correctness fixes
+## Batch B3.1 — Post-B3 correctness fixes (no schema change)
 
 | Field | Proposal |
 |---|---|
-| **Goal** | Fix the money, state and presentation defects found after B3 without redesigning the billing model. |
-| **Scope** | AA-021 (payment never fails because of auto-close); AA-022 (cancelled order inside a bill; bill void/release command); AA-020 (visit-scoped billing eligibility, request button and auto-close); AA-023 (order relations read-only in Admin); AA-024 (HTML escaping at the presentation boundary); AA-025 (one transition policy for guest confirmation); AA-026 (exclude superusers from tenant `UserAdmin`); AA-027 (no comment from the checkout reply button); AA-028 (no write on Bill changelist); AA-029 (venue-timezone day boundaries, previous-day snapshot). Also: the missing PostgreSQL tests for allocation, bonus redemption and paid-order accrual. |
-| **Not in scope** | Broadcast delivery redesign (B4), refunds, revenue definitions, module moves. |
-| **Evidence / risks** | AA-020–AA-029, AA-032. |
-| **Dependencies** | PQ-026 for AA-020, PQ-027 for the auto-close part of AA-021, PQ-028 for AA-022, PQ-029 for AA-025. AA-021's "payment must persist" part, AA-023, AA-024, AA-026–AA-029 need no product decision. A working Python environment and a PostgreSQL instance. |
-| **Suggested order** | 1) characterization tests reproducing each defect; 2) decision-free fixes (AA-021 persistence, AA-023, AA-024, AA-026, AA-027, AA-028, AA-029); 3) decision-dependent fixes once PQ-026–PQ-029 are answered; 4) PostgreSQL tests and run. |
-| **Required verification** | Each finding's verification line in the audit register; full test suite in SQLite and the PostgreSQL-gated tests on PostgreSQL. |
-| **Rollback** | One finding per commit; a constraint change (if PQ-028 makes allocation conditional) ships as a reversible migration after a data audit. |
-| **Exit criterion** | Each finding has a regression test that failed before and passes after; no adapter can record a payment that later rolls back because of session handling. |
+| **Goal** | Fix the post-B3 defects that need no new data model, applying the owner decisions of 2026-10-23 where they apply. |
+| **Scope** | AA-021: a payment always persists; auto-close (when enabled) closes only sessions whose orders are all paid by settled bills and never raises into the payment (PQ-027). AA-025: explicit guest transition rule — receipt confirmation from any non-final status, including `new`, recorded as a guest action (PQ-029). AA-023: order `guest`/`table`/`table_session` read-only in Admin. AA-024: HTML escaping at the presentation boundary. AA-026: tenant `UserAdmin` excludes superusers. AA-027: the checkout reply button never produces a comment. AA-028: no write on the Bill changelist. AA-029: venue-timezone day for visit bonus; snapshot finalises the previous day. Missing PostgreSQL tests for allocation, bonus redemption and paid-order accrual. |
+| **Not in scope** | Visit model, bill editing/void, programme flags (B3.2); broadcast delivery (B4). |
+| **Evidence / risks** | AA-021, AA-023–AA-029, AA-032. |
+| **Dependencies** | PQ-027 and PQ-029 (decided). A working Python environment; PostgreSQL for the gated tests. |
+| **Order** | One finding per commit: characterization test that reproduces the defect → fix → full suite. AA-021 first. |
+| **Required verification** | Each finding's verification line in the audit register; full suite on SQLite; PostgreSQL-gated tests on PostgreSQL. |
+| **Rollback** | Revert the individual commit; no migrations. |
+| **Exit criterion** | Each finding has a regression test that failed before and passes after. |
+
+## Batch B3.2 — Table visits, bill changes and programme options (schema change)
+
+| Field | Proposal |
+|---|---|
+| **Goal** | Implement the owner decisions that need new data: visit-scoped billing, auditable bill changes, cashback base option. |
+| **Scope** | 1) **Table visit** (ADR-0007, PQ-026, AA-020): visit model and backfill migration; join-or-new choice when scanning a table with an active visit; staff flag for tables with several visits and manual close of the old visit; billing eligibility, "request bill" button and settlement checks scoped to the visit. 2) **Bill changes and void** (PQ-028, AA-022): owner-granted permission to change or void bills; remove/add lines, including lines of a cancelled order; recalculation; audit history with actor, time and reason; total may not fall below the paid amount; void releases allocations (the unconditional `unique_order_item_bill_allocation` becomes conditional on the bill not being void). 3) **Cashback base option** (PQ-030): per-programme flag, default = accrue on the full total. |
+| **Not in scope** | Refunds, guest table moves (PQ-007), broadcast delivery. |
+| **Evidence / risks** | AA-020, AA-022, ADR-0007. Open design points to settle in the batch plan: how a bill with applied bonuses is changed (block vs. compensating ledger entry), and how historical sessions are grouped into visits by the backfill. |
+| **Dependencies** | B3.1 merged; data audit on a production-like copy before the migrations; PostgreSQL. |
+| **Required verification** | Two parties at one table with an unpaid order from the first; join and new-visit flows; concurrent scans on PostgreSQL; bill change/void with history and permission checks for owner, granted and non-granted staff; constraint migration forward/backward. |
+| **Rollback** | Reversible migrations; feature can be shipped behind a partner setting until verified. |
+| **Exit criterion** | No order can be billed outside its visit; every bill change is attributable; a voided bill's orders can be billed again. |
 
 ## Batch B4 — Durable async delivery and operational runtime
 
@@ -204,11 +217,12 @@ PostgreSQL verification gate and of B3.1.)*
 
 | Gate | Required before |
 |---|---|
-| Product owner decision | B1 stale callbacks/global identity; B3 bonus timing, zero bill, revenue semantics, refund policy; B3.1 visit scope, auto-close, bill void, guest confirmation (PQ-026–PQ-029); B4 delivery guarantee/preference policy. |
+| Product owner decision | B1 stale callbacks/global identity; B3 bonus timing, zero bill, revenue semantics, refund policy; B3.1/B3.2 decisions PQ-026–PQ-030 (approved 2026-10-23); B4 delivery guarantee/preference policy. |
 | Data owner review | Any migration or constraint in B2/B3, after reporting invalid existing rows. |
 | Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
 | Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
 
-The next safe action is to start B3.1 with characterization tests and the
-decision-free fixes, while the owner answers PQ-026–PQ-029. The PostgreSQL
-verification gate for B2/B3 must be passed before production rollout.
+The next safe action is B3.1: characterization tests and fixes, starting
+with AA-021. B3.2 follows with a written design for the visit model and bill
+changes. The PostgreSQL verification gate for B2/B3 must be passed before
+production rollout.

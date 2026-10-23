@@ -99,20 +99,22 @@ TableOS — multi-tenant white-label B2B платформа для заведе�
 
 1. Guest scans `table_<number>_<token>` QR deep link.
 2. System validates partner, table, token and table availability; it resolves/creates the guest profile.
+   - If the table already has an active visit of other guests, the bot asks whether to **join** that visit or **start a new one** (ADR-0007, approved 2026-10-23). Starting a new visit leaves the previous visit open and flags the table to staff, who close it manually.
 3. A new session closes that guest’s prior active session in the same partner only after defined settlement rules are considered.
 4. Guest builds a personal cart; price/name snapshots are written to order items at checkout.
 5. Staff receives a durable operational notification; staff accepts, prepares, marks ready/completed through the allowed state machine.
-6. Guest can view only their active-session orders and may confirm receipt only when transition rules allow it.
+6. Guest can view only their active-session orders and may confirm receipt from any non-final status, including `new`; the confirmation completes the order and is recorded as a guest action (PQ-029).
 
-Several guests may use one table. Their carts and orders remain personal; shared bill aggregates eligible orders only after explicit selection.
+Several guests may use one table. Their carts and orders remain personal; a shared bill aggregates only orders of the same visit.
 
 ### 5.4 Billing and payment
 
 1. Guest asks for personal, shared, or custom-split settlement.
 2. Personal/shared request prepares or extends an eligible draft bill; custom split creates a request for staff handling.
-3. A bill contains only same-partner eligible order items in a compatible table/guest context.
+3. A bill contains only same-partner eligible order items of one visit (personal: one guest within the visit).
 4. Staff issues the bill and may choose “pay with bonuses”; the command applies the partner-allowed amount at 1 bonus = 1 UAH and leaves any monetary remainder on the bill.
-5. Staff records the remaining cash/terminal payment, or the bonus command closes a fully covered bill with the normal `bonuses` payment method; table session closes only when settlement and receipt conditions are clean.
+5. Staff records the remaining cash/terminal payment, or the bonus command closes a fully covered bill with the normal `bonuses` payment method; if the partner enables auto-close, only sessions whose orders are all paid are closed, and auto-close never blocks the payment (PQ-027).
+6. Staff with a bill-change permission granted by the venue owner may change a bill (remove/add lines, including a cancelled order's lines) or void it. Each change recalculates the bill and is kept in an audit history with actor, time and reason. A change may not reduce the total below the amount already paid; voiding releases the orders for re-billing (PQ-028).
 
 ### 5.5 Staff operations
 
@@ -133,10 +135,10 @@ Several guests may use one table. Their carts and orders remain personal; shared
 | Aggregate | Expected states / rule |
 | --- | --- |
 | Partner | `draft -> active -> suspended`; a suspended partner must not serve traffic or delivery |
-| TableSession | `active`, `closed`, `timed_out`; exactly one active session per guest/partner, many active guests per table |
+| TableSession | `active`, `closed`, `timed_out`; exactly one active session per guest/partner, many active guests per table; every session belongs to one table visit (ADR-0007) |
 | Cart | `active -> checked_out` or `abandoned`; stale cart must not silently migrate to a new table session |
 | Order | `new -> accepted -> preparing? -> ready -> delivering? -> completed`, with cancellation only through allowed paths; `completed` does not necessarily mean paid |
-| Bill | `draft -> issued -> partially_paid -> paid` or `canceled`; a paid/canceled bill cannot accept an ordinary payment |
+| Bill | `draft -> issued -> partially_paid -> paid` or `canceled` (void, owner-granted permission, releases allocations); a paid/canceled bill cannot accept an ordinary payment; line changes are audited and never drop the total below the paid amount |
 | BillingRequest | `open`, `auto_prepared`, `processed`, `canceled`; only legal service transitions |
 | BonusTransaction | immutable ledger rows for accrual, redemption, expiration and manual adjustment |
 | BroadcastCampaign | explicit queued/sending/sent/failed behavior with a retry/idempotency contract |
@@ -157,15 +159,15 @@ The following are not silently “normalised” in this product document; implem
 | Suspended partner must not serve ongoing flows | `TABLEOS_TZ.md:1880-1892`; B1: `bot/middlewares/partner_runtime.py:PartnerRuntimeMiddleware` and `bot/services/context.py:resolve_partner_for_bot_token` recheck partner and bot status on every update | RESOLVED_IN_B1 | Polling transport stops only on process restart (PQ-013) |
 | One active session per guest/partner | `TABLEOS_TZ.md:1900-1907`; B2: `TableSession.unique_active_table_session_per_partner_guest`; `apps/tables/services.py:activate_table_session` locks `GuestProfile → Table → active sessions` | RESOLVED_IN_B2 | Run the duplicate audit and the PostgreSQL test before production migration |
 | A bill item cannot appear in two active/paid bills | `apps/billing/services.py:create_bill_from_orders` and `attach_orders_to_bill` lock `OrderItem` rows; `BillItem.unique_order_item_bill_allocation` guards `(partner, order_item)` | PARTIALLY_RESOLVED_FOR_B3 | Repeat the duplicate audit; a PostgreSQL allocation test still has to be written; bill void/release is PQ-028 (AA-022) |
-| Order status transition is serialized | `TABLEOS_TZ.md:531-691`; B2: `apps/orders/services.py:transition_order_status` reloads the order under `select_for_update()`; guest confirmation still bypasses the transition table (AA-025) | RESOLVED_IN_B2 / DEFECT for guest path | Single transition policy for staff and guest paths (PQ-029) |
+| Order status transition is serialized | `TABLEOS_TZ.md:531-691`; B2: `apps/orders/services.py:transition_order_status` reloads the order under `select_for_update()`; guest confirmation still bypasses the transition table (AA-025) | RESOLVED_IN_B2 / DEFECT for guest path | Explicit guest rule: confirm from any non-final status (PQ-029, B3.1) |
 | Order reward programmes accrue | `apps/billing/services.py:_sync_orders_after_bill_paid` dispatches the existing programme event after first paid settlement with source-linked idempotency | PARTIALLY_RESOLVED_FOR_B3 | Paid is the current baseline; partner-specific trigger expansion and refund/cancellation treatment remain deferred |
 | Labels cannot misroute guest actions | `TABLEOS_TZ.md:1512-1537`; `bot/filters/content.py:PartnerButtonFilter` compares raw message text; B1: `apps/partners/models.py:PartnerBotSettings.clean` rejects empty and duplicate routed labels | RESOLVED_IN_B1 (validation) | Stable intent routing remains a future choice (PQ-016) |
 | Telegram I/O is outside transaction and broadcasts are retry-safe | `TABLEOS_TZ.md:1852-1877`; `apps/notifications/services.py:send_broadcast_campaign_now` is `@transaction.atomic` and calls `_send_telegram_messages` inside it; `apps/notifications/tasks.py:send_broadcast_campaign_task` has no durable lease/idempotency cursor | DEFECT | Separate claim/send/finalize phases; decide delivery guarantee explicitly |
 | Admin cannot bypass operational transition rules | B2/B3 make lifecycle, allocation, bonus balance and ledger fields readonly; payment/bonus commands remain owner services and no special bonus-settlement Admin action exists | PARTIALLY_RESOLVED_FOR_B3 | Correction policy (PQ-018), order relation fields still editable (AA-023), PostgreSQL rollout gate remain open |
 | Delivery/pickup are usable journeys | `TABLEOS_TZ.md:2220-2245`; `apps/partners/models.py:PartnerBotSettings.clean` accepts delivery/pickup flags, but there is no established delivery/pickup order journey | CODE_IS_BEHIND_SPEC | Keep flags as capability groundwork; do not market as implemented flows |
-| A bill contains only the current visit's orders | `apps/billing/services.py:get_table_billable_orders` selects every unbilled order ever placed at the table; `bot/services/navigation.py` and `_close_table_sessions_if_fully_settled` use the same table-wide scope | DEFECT (AA-020) | Decide the visit scope (PQ-026), then scope billing, the request button and auto-close to it |
-| Recording a payment does not fail because of follow-up steps | `apps/billing/services.py:_close_table_sessions_if_fully_settled` can raise `TableSessionError` inside the payment transaction; staff and Admin adapters do not handle it | DEFECT (AA-021) | Payment always persists; auto-close semantics per PQ-027 |
-| A guest is not charged for a cancelled order | `apps/orders/services.py:transition_order_status` cancels allocated orders; `recalculate_bill_totals` keeps their lines; no bill void command exists | DEFECT (AA-022) | Policy per PQ-028; explicit bill void/release command |
+| A bill contains only the current visit's orders | `apps/billing/services.py:get_table_billable_orders` selects every unbilled order ever placed at the table; `bot/services/navigation.py` and `_close_table_sessions_if_fully_settled` use the same table-wide scope | DEFECT (AA-020) | Scope billing, the request button and settlement checks to the table visit (ADR-0007, B3.2) |
+| Recording a payment does not fail because of follow-up steps | `apps/billing/services.py:_close_table_sessions_if_fully_settled` can raise `TableSessionError` inside the payment transaction; staff and Admin adapters do not handle it | DEFECT (AA-021) | Payment always persists; auto-close closes only fully paid sessions (PQ-027, B3.1) |
+| A guest is not charged for a cancelled order | `apps/orders/services.py:transition_order_status` cancels allocated orders; `recalculate_bill_totals` keeps their lines; no bill void command exists | DEFECT (AA-022) | Owner-granted, audited bill change/void; void releases allocations (PQ-028, B3.2) |
 | Messages render any venue/guest text | All messages use HTML parse mode; no dynamic value is escaped | DEFECT (AA-024) | Escape at the presentation boundary |
 
 ## 9. Future scope and exclusions

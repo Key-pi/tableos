@@ -16,7 +16,7 @@ Read [README.md](README.md) for onboarding. The canonical governance map is:
   `MODULE_BOUNDARIES.md`, `LAYERING_RULES.md`;
 - security/runtime/tasks: `TENANCY_AND_PERMISSIONS.md`, `BOT_RUNTIME.md`,
   `BACKGROUND_JOBS.md` in `docs/architecture/`;
-- decisions: `docs/decisions/ADR-0001.md` through `ADR-0006.md`;
+- decisions: `docs/decisions/ADR-0001.md` through `ADR-0007.md`;
 - engineering: `docs/engineering/`;
 - evidence/roadmap: `docs/audits/` (open findings: `ARCHITECTURE_AUDIT.md`;
   batch status: `REFACTOR_ROADMAP.md`).
