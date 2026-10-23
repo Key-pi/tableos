@@ -3,7 +3,12 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
-from apps.billing.remote_orders import available_slots, closed_message
+from apps.billing.remote_orders import (
+    RemoteOrderError,
+    available_slots,
+    closed_message,
+    get_delivery_terms,
+)
 from apps.orders.models import Order
 from apps.orders.services import (
     OrderFlowError,
@@ -31,6 +36,8 @@ router = Router()
 def _cart_place(cart) -> str:
     if cart.channel == Order.Channel.PICKUP:
         return "самовывоз"
+    if cart.channel == Order.Channel.DELIVERY:
+        return "доставка"
     if cart.table_session is not None:
         return f"стол #{cart.table_session.table.number}"
     return "за столом"
@@ -152,14 +159,76 @@ async def _send_navigation_keyboard_message(
             pass
 
 
-@router.message(PartnerButtonFilter("button_delivery_label"))
-async def delivery_handler(message: Message, bot: Bot) -> None:
+# Remote flows chosen by a main-menu button (ADR-0009): the cart switches to
+# the channel and the menu shows only what is sold there.
+REMOTE_FLOW_INTROS = {
+    Order.Channel.PICKUP: (
+        "<b>Самовывоз</b>",
+        "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
+        "«Оформить»: выберете время и оплатите переводом.",
+        "не продаётся на вынос",
+    ),
+    Order.Channel.DELIVERY: (
+        "<b>Доставка</b>",
+        "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
+        "«Оформить»: адрес, время и оплата переводом.",
+        "не доставляем",
+    ),
+}
+
+
+def _remote_flow_supported(content: BotContent, channel: str) -> bool:
+    if channel == Order.Channel.PICKUP:
+        return content.supports_pickup_orders()
+    return content.supports_delivery_orders()
+
+
+async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
-    if not content.supports_delivery_orders():
-        text = "Доставка сейчас отключена для этого бота."
+    title, how_to, removed_reason = REMOTE_FLOW_INTROS[channel]
+    if not (_remote_flow_supported(content, channel) and content.supports_cart()):
+        text = (
+            "Самовывоз сейчас отключён для этого бота."
+            if channel == Order.Channel.PICKUP
+            else "Доставка сейчас отключена для этого бота."
+        )
+    elif not await sync_to_async(available_slots)(partner):
+        text = await sync_to_async(closed_message)(partner)
     else:
-        text = "Сценарий доставки включён в настройках и будет доступен в следующем шаге."
+        try:
+            _cart, removed = await sync_to_async(switch_cart_channel_for_telegram_user)(
+                partner_id=partner.id,
+                telegram_id=message.from_user.id,
+                channel=channel,
+            )
+            terms = (
+                (await sync_to_async(get_delivery_terms)(partner.id)).describe()
+                if channel == Order.Channel.DELIVERY
+                else ""
+            )
+        except (OrderFlowError, RemoteOrderError) as exc:
+            text = str(exc)
+        else:
+            lines = [title]
+            if terms:
+                lines.append(terms)
+            lines.append(how_to)
+            if removed:
+                lines.append(
+                    f"Убрали из корзины — {removed_reason}: " + escape_html(", ".join(removed))
+                )
+            if await _has_active_session(partner, content, message.from_user.id):
+                lines.append("Чтобы снова заказывать к столу, отсканируйте QR-код стола.")
+            await _send_navigation_keyboard_message(
+                message=message,
+                partner_id=partner.id,
+                telegram_id=message.from_user.id,
+                content=content,
+                text="\n".join(lines),
+            )
+            await send_menu_view(target=message, bot=bot)
+            return
     await _send_navigation_keyboard_message(
         message=message,
         partner_id=partner.id,
@@ -167,59 +236,16 @@ async def delivery_handler(message: Message, bot: Bot) -> None:
         content=content,
         text=text,
     )
+
+
+@router.message(PartnerButtonFilter("button_delivery_label"))
+async def delivery_handler(message: Message, bot: Bot) -> None:
+    await _choose_remote_flow(message, bot, Order.Channel.DELIVERY)
 
 
 @router.message(PartnerButtonFilter("button_pickup_label"))
 async def pickup_handler(message: Message, bot: Bot) -> None:
-    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
-    content = await sync_to_async(BotContent.for_partner)(partner)
-    if content.supports_pickup_orders() and content.supports_cart():
-        if not await sync_to_async(available_slots)(partner):
-            text = await sync_to_async(closed_message)(partner)
-        else:
-            # Pressing «Самовывоз» chooses the pickup flow: the cart switches
-            # to pickup and the menu shows only what can be taken away.
-            try:
-                _cart, removed = await sync_to_async(switch_cart_channel_for_telegram_user)(
-                    partner_id=partner.id,
-                    telegram_id=message.from_user.id,
-                    channel=Order.Channel.PICKUP,
-                )
-            except OrderFlowError as exc:
-                text = str(exc)
-            else:
-                lines = [
-                    "<b>Самовывоз</b>",
-                    "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
-                    "«Оформить»: выберете время и оплатите переводом.",
-                ]
-                if removed:
-                    lines.append(
-                        "Убрали из корзины — не продаётся на вынос: "
-                        + escape_html(", ".join(removed))
-                    )
-                if await _has_active_session(partner, content, message.from_user.id):
-                    lines.append(
-                        "Чтобы снова заказывать к столу, отсканируйте QR-код стола."
-                    )
-                await _send_navigation_keyboard_message(
-                    message=message,
-                    partner_id=partner.id,
-                    telegram_id=message.from_user.id,
-                    content=content,
-                    text="\n".join(lines),
-                )
-                await send_menu_view(target=message, bot=bot)
-                return
-    else:
-        text = "Самовывоз сейчас отключён для этого бота."
-    await _send_navigation_keyboard_message(
-        message=message,
-        partner_id=partner.id,
-        telegram_id=message.from_user.id,
-        content=content,
-        text=text,
-    )
+    await _choose_remote_flow(message, bot, Order.Channel.PICKUP)
 
 
 @router.message(PartnerButtonFilter("button_cart_label"))

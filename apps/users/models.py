@@ -70,8 +70,12 @@ class GuestProfile(PartnerBoundModel):
     phone = models.CharField(
         max_length=32,
         blank=True,
-        help_text="Shared by the guest through Telegram (needed for pickup).",
+        help_text="Shared by the guest through Telegram (needed for pickup and delivery).",
     )
+    # The last delivery address (PQ-032), offered again at the next checkout.
+    delivery_address = models.TextField(blank=True)
+    delivery_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    delivery_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
     class Meta:
         constraints = [

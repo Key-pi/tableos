@@ -337,7 +337,12 @@ class Command(BaseCommand):
         settings.module_staff_call_enabled = True
         settings.module_quick_sale_enabled = True
         settings.module_reports_enabled = True
-        settings.module_delivery_enabled = False
+        # Riverstone delivers (60 грн, free from 800, minimum 200); Night Owl
+        # does not, so the two venues show both setups.
+        settings.module_delivery_enabled = not is_hookah
+        settings.delivery_fee = Decimal("60.00")
+        settings.delivery_free_from = Decimal("800.00")
+        settings.delivery_min_order = Decimal("200.00")
         settings.module_pickup_enabled = True
         settings.transfer_payment_details = TRANSFER_DETAILS
         settings.button_my_profile = "Мой профиль"
@@ -505,6 +510,14 @@ class Command(BaseCommand):
                     else "открыто всегда"
                 )
                 out(f"  самовывоз: включён, {hours_text}")
+            if pickup is not None and pickup.module_delivery_enabled:
+                fee = pickup.delivery_fee
+                free = pickup.delivery_free_from
+                out(
+                    f"  доставка: включена, {fee:.0f} грн"
+                    + (f", бесплатно от {free:.0f} грн" if free is not None else "")
+                    + f", минимальный заказ {pickup.delivery_min_order:.0f} грн"
+                )
             if venue["tester"]:
                 out(f"  ваш Telegram: {venue['tester']}")
             sources = TrafficSource.objects.filter(partner=partner, is_active=True)

@@ -44,13 +44,18 @@ class PartnerBotSettingsInline(admin.StackedInline):
             {
                 "description": (
                     "Столы, доставка и самовывоз — независимые сценарии. "
-                    "Можно включить любой набор; для заказов нужен хотя бы один."
+                    "Можно включить любой набор; для заказов нужен хотя бы один. "
+                    "Самовывоз и доставка оплачиваются заранее переводом на "
+                    "реквизиты ниже; часы работы — в карточке партнёра."
                 ),
                 "fields": (
                     "module_tables_enabled",
                     "module_delivery_enabled",
                     "module_pickup_enabled",
                     "transfer_payment_details",
+                    "delivery_fee",
+                    "delivery_free_from",
+                    "delivery_min_order",
                 ),
             },
         ),

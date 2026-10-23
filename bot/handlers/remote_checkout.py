@@ -1,10 +1,15 @@
-"""Guest checkout for remote channels (pickup; delivery next): phone, time,
-bonuses, transfer details, "I paid" (ADR-0009).
+"""Guest checkout for remote channels (pickup, delivery): phone, address
+(delivery), time, bonuses, transfer details, "I paid" (ADR-0009, PQ-032).
 
 The flow is stateless: every step carries the channel and its choices in
 ``rc:<channel>:…`` callback data, so a bot restart does not lose it. The
 amounts the guest saw travel in the final callback and are rechecked when
 the order is placed (apps/billing/remote_orders.py:place_remote_order).
+
+The delivery address is free text, so it is asked with a ForceReply prompt:
+the guest's answer is recognised as a reply to that prompt, with no state
+kept between messages. A Telegram location is optional and can be sent at any
+time while the cart is a delivery cart.
 """
 
 from __future__ import annotations
@@ -15,6 +20,7 @@ from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import (
     CallbackQuery,
+    ForceReply,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
@@ -30,6 +36,8 @@ from apps.billing.remote_orders import (
     closed_message,
     get_remote_quote,
     place_remote_order,
+    save_guest_delivery_address,
+    save_guest_delivery_location,
     save_guest_phone,
 )
 from apps.orders.models import Cart, Order
@@ -49,11 +57,17 @@ SLOT_LABELS = {
     "60": "Через 1 час",
 }
 SHARE_PHONE_LABEL = "📱 Поделиться номером"
+SHARE_LOCATION_LABEL = "📍 Отправить геолокацию"
+# The guest's answer to this prompt is their delivery address (ForceReply).
+ADDRESS_PROMPT = "🏠 Адрес доставки"
 
 # One-letter channel codes keep callback_data short.
-CHANNEL_CODES = {"p": Order.Channel.PICKUP}
+CHANNEL_CODES = {"p": Order.Channel.PICKUP, "d": Order.Channel.DELIVERY}
 CODE_OF = {channel: code for code, channel in CHANNEL_CODES.items()}
-TIME_QUESTIONS = {Order.Channel.PICKUP: "Когда заберёте заказ?"}
+TIME_QUESTIONS = {
+    Order.Channel.PICKUP: "Когда заберёте заказ?",
+    Order.Channel.DELIVERY: "Когда доставить?",
+}
 
 
 def _cents(value: Decimal) -> int:
@@ -73,7 +87,11 @@ def _title(channel: str) -> str:
 
 
 def _supports(content: BotContent, channel: str) -> bool:
-    return channel == Order.Channel.PICKUP and content.supports_pickup_orders()
+    if channel == Order.Channel.PICKUP:
+        return content.supports_pickup_orders()
+    if channel == Order.Channel.DELIVERY:
+        return content.supports_delivery_orders()
+    return False
 
 
 def _cart_channel(partner_id, telegram_id: int) -> str | None:
@@ -89,11 +107,15 @@ def _cart_channel(partner_id, telegram_id: int) -> str | None:
     return cart.channel if cart is not None else None
 
 
-def _guest_phone(partner_id, telegram_id: int) -> str:
-    guest = GuestProfile.objects.filter(
+def _guest(partner_id, telegram_id: int) -> GuestProfile | None:
+    return GuestProfile.objects.filter(
         partner_id=partner_id,
         telegram_account__telegram_id=telegram_id,
     ).first()
+
+
+def _guest_phone(partner_id, telegram_id: int) -> str:
+    guest = _guest(partner_id, telegram_id)
     return guest.phone if guest is not None else ""
 
 
@@ -152,7 +174,56 @@ async def start_remote_checkout(target, bot: Bot, channel: str) -> None:
             ),
         )
         return
-    await _send_time_step(target, partner, channel)
+    await _after_phone(target, partner, channel)
+
+
+async def _after_phone(target, partner, channel: str) -> None:
+    if channel == Order.Channel.DELIVERY:
+        await _send_address_step(target, partner)
+    else:
+        await _send_time_step(target, partner, channel)
+
+
+async def _ask_address(target) -> None:
+    await message_of(target).answer(
+        f"{ADDRESS_PROMPT}\nНапишите в ответ на это сообщение улицу, дом, квартиру, "
+        "подъезд и этаж.",
+        reply_markup=ForceReply(input_field_placeholder="Улица, дом, квартира"),
+    )
+
+
+async def _send_address_step(target, partner, *, edit: bool = False) -> None:
+    """Offer the remembered address, or ask for one."""
+
+    guest = await sync_to_async(_guest)(partner.id, target.from_user.id)
+    if guest is None or not guest.delivery_address:
+        await _ask_address(target)
+        return
+    code = CODE_OF[Order.Channel.DELIVERY]
+    point = "\n📍 Точка на карте сохранена." if guest.delivery_latitude is not None else ""
+    await _reply(
+        target,
+        f"<b>Доставка</b>\nДоставить сюда?\n{escape_html(guest.delivery_address)}{point}",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Доставить сюда", callback_data=f"rc:{code}:a:ok")],
+                [InlineKeyboardButton(text="✏️ Другой адрес", callback_data=f"rc:{code}:a:new")],
+                _cancel_row(),
+            ]
+        ),
+        edit=edit,
+    )
+
+
+def _is_address_answer(message: Message) -> bool:
+    replied = message.reply_to_message
+    return bool(
+        message.text
+        and replied is not None
+        and replied.from_user is not None
+        and replied.from_user.is_bot
+        and (replied.text or "").startswith(ADDRESS_PROMPT)
+    )
 
 
 async def _send_time_step(target, partner, channel: str, *, edit: bool = False) -> None:
@@ -177,11 +248,14 @@ async def _send_time_step(target, partner, channel: str, *, edit: bool = False) 
 def _summary(
     quote, channel: str, slot: str, use_bonuses: bool
 ) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [
-        f"<b>{_title(channel)}</b>",
-        f"Время: {SLOT_LABELS[slot].lower()}",
-        f"Сумма заказа: {quote.total} грн",
-    ]
+    lines = [f"<b>{_title(channel)}</b>", f"Время: {SLOT_LABELS[slot].lower()}"]
+    if channel == Order.Channel.DELIVERY:
+        lines.append(f"Адрес: {escape_html(quote.delivery_address)}")
+        lines.append(f"Позиции: {quote.items_total} грн")
+        lines.append(
+            f"Доставка: {quote.delivery_fee} грн" if quote.delivery_fee else "Доставка: бесплатно"
+        )
+    lines.append(f"Сумма заказа: {quote.total} грн")
     if quote.bonus_to_spend:
         lines.append(f"Бонусами: −{quote.bonus_to_spend} грн")
     if quote.to_pay > 0:
@@ -256,7 +330,65 @@ async def contact_handler(message: Message, bot: Bot) -> None:
     )
     channel = await sync_to_async(_cart_channel)(partner.id, message.from_user.id)
     if channel in CODE_OF and _supports(content, channel):
-        await _send_time_step(message, partner, channel)
+        await _after_phone(message, partner, channel)
+
+
+@router.message(_is_address_answer)
+async def address_handler(message: Message, bot: Bot) -> None:
+    """The guest answered the address prompt: remember it, go on to the time."""
+
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    if not _supports(content, Order.Channel.DELIVERY):
+        await message.answer("Доставка сейчас отключена.")
+        return
+    try:
+        await sync_to_async(save_guest_delivery_address)(
+            partner_id=partner.id,
+            telegram_id=message.from_user.id,
+            address=message.text,
+        )
+    except RemoteOrderError as exc:
+        await message.answer(str(exc))
+        await _ask_address(message)
+        return
+    await message.answer(
+        "Адрес сохранён. Курьеру поможет точка на карте — отправьте геолокацию кнопкой "
+        "ниже (по желанию).",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text=SHARE_LOCATION_LABEL, request_location=True)]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        ),
+    )
+    await _send_time_step(message, partner, Order.Channel.DELIVERY)
+
+
+@router.message(F.location)
+async def location_handler(message: Message, bot: Bot) -> None:
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    channel = await sync_to_async(_cart_channel)(partner.id, message.from_user.id)
+    if channel != Order.Channel.DELIVERY or not _supports(content, channel):
+        await message.answer(
+            "Геолокация нужна только для доставки.",
+            reply_markup=await _main_keyboard(partner, content, message.from_user.id),
+        )
+        return
+    try:
+        await sync_to_async(save_guest_delivery_location)(
+            partner_id=partner.id,
+            telegram_id=message.from_user.id,
+            latitude=message.location.latitude,
+            longitude=message.location.longitude,
+        )
+    except RemoteOrderError as exc:
+        await message.answer(str(exc))
+        return
+    await message.answer(
+        "📍 Точка сохранена — курьер увидит её на карте.",
+        reply_markup=await _main_keyboard(partner, content, message.from_user.id),
+    )
 
 
 @router.callback_query(F.data.startswith("rc:"))
@@ -279,6 +411,14 @@ async def checkout_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     code = CODE_OF[channel]
 
     try:
+        if action == "a" and len(parts) == 3 and channel == Order.Channel.DELIVERY:
+            if parts[2] == "ok":
+                await _send_time_step(callback, partner, channel, edit=True)
+            else:
+                await _reply(callback, "<b>Доставка</b>\nУкажите новый адрес.", edit=True)
+                await _ask_address(callback)
+            await callback.answer()
+            return
         if action == "t" and len(parts) == 3 and parts[2] in SLOT_LABELS:
             slot = parts[2]
             quote = await sync_to_async(get_remote_quote)(
@@ -349,6 +489,8 @@ async def checkout_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
 async def _send_placed(callback: CallbackQuery, partner, content, order, *, paid: bool) -> None:
     time_label = await sync_to_async(requested_time_label)(order)
     title = CHANNEL_TITLES[order.channel]
+    if order.channel == Order.Channel.DELIVERY:
+        time_label = f"{time_label}, {escape_html(order.delivery_address)}"
     if paid:
         text = (
             f"Заказ #{order.public_id} ({title}) оформлен и оплачен бонусами "

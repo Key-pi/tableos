@@ -291,6 +291,13 @@ def _order_delivery_context_label(order) -> str:
         from apps.orders.services import requested_time_label
 
         return f"Самовывоз: {requested_time_label(order)}"
+    if order.channel == order.Channel.DELIVERY:
+        from apps.orders.services import requested_time_label
+
+        return (
+            f"Доставка: {requested_time_label(order)}, "
+            f"{_escape_html(order.delivery_address)}"
+        )
     if order.table_id is not None:
         return f"Стол: #{order.table.number}"
     return "Сценарий: заказ без привязки к столу"
@@ -303,6 +310,13 @@ def _remote_status_note(order, to_status: str) -> str:
         return "Оплата подтверждена — готовим ваш заказ."
     if to_status == order.Status.READY and order.channel == order.Channel.PICKUP:
         return "Заказ готов — можно забирать."
+    if order.channel == order.Channel.DELIVERY:
+        if to_status == order.Status.READY:
+            return "Заказ собран — скоро передадим курьеру."
+        if to_status == order.Status.DELIVERING:
+            return "Заказ в пути — курьер уже едет к вам."
+        if to_status == order.Status.COMPLETED:
+            return "Заказ доставлен. Приятного аппетита!"
     if to_status == order.Status.CANCELED and order.paid_at is None:
         return (
             "Оплата не поступила, заказ отменён. Если вы переводили деньги, "

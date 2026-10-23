@@ -23,6 +23,7 @@ from apps.billing.remote_orders import (
     RemoteOrderError,
     awaits_transfer_check,
     confirm_transfer,
+    map_link,
     reject_transfer,
 )
 from apps.billing.repositories import (
@@ -84,6 +85,7 @@ from apps.tables.services import (
     close_table_visit,
 )
 from bot.keyboards.staff import (
+    DELIVERY_STATUS_LABELS,
     STATUS_LABELS,
     build_staff_adjustment_done_keyboard,
     build_staff_adjustment_reason_keyboard,
@@ -162,6 +164,17 @@ def _order_context_label(order: Order) -> str:
     if order.channel == Order.Channel.PICKUP:
         phone = order.guest.phone or "не указан"
         return f"Самовывоз: {requested_time_label(order)}\nТелефон: {escape_html(phone)}"
+    if order.channel == Order.Channel.DELIVERY:
+        phone = order.guest.phone or "не указан"
+        lines = [
+            f"Доставка: {requested_time_label(order)}",
+            f"Адрес: {escape_html(order.delivery_address)}",
+        ]
+        if order.delivery_latitude is not None:
+            link = map_link(order.delivery_latitude, order.delivery_longitude)
+            lines.append(f'<a href="{escape_html(link)}">Открыть на карте</a>')
+        lines.append(f"Телефон: {escape_html(phone)}")
+        return "\n".join(lines)
     if order.table_id is not None:
         return f"Стол: #{order.table.number}"
     return "Сценарий: заказ без привязки к столу"
@@ -170,9 +183,16 @@ def _order_context_label(order: Order) -> str:
 def _order_actions_keyboard(order: Order):
     return build_staff_order_actions_keyboard(
         order_public_id=order.public_id,
-        available_statuses=get_available_staff_actions(order.status),
+        available_statuses=get_available_staff_actions(order.status, channel=order.channel),
         transfer_check_pending=awaits_transfer_check(order),
+        status_labels=_status_labels(order),
     )
+
+
+def _status_labels(order: Order) -> dict[str, str]:
+    if order.channel == Order.Channel.DELIVERY:
+        return DELIVERY_STATUS_LABELS
+    return STATUS_LABELS
 
 
 def _order_payment_label(order: Order) -> str:
@@ -186,6 +206,8 @@ def _order_payment_label(order: Order) -> str:
 def _order_short_context_label(order: Order) -> str:
     if order.channel == Order.Channel.PICKUP:
         return "Самовывоз"
+    if order.channel == Order.Channel.DELIVERY:
+        return "Доставка"
     if order.table_id is not None:
         return f"T{order.table.number}"
     return "Вне стола"
@@ -1785,7 +1807,7 @@ async def staff_order_status_callback_handler(callback: CallbackQuery, bot: Bot)
         _render_order_card(refreshed_order),
         reply_markup=_order_actions_keyboard(refreshed_order),
     )
-    await callback.answer(f"Статус: {STATUS_LABELS.get(to_status, to_status)}")
+    await callback.answer(f"Статус: {_status_labels(refreshed_order).get(to_status, to_status)}")
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("stafforderrefresh:"))

@@ -385,7 +385,11 @@ class BotContent:
         if self.supports_table_orders():
             add_step("Активируйте стол по QR-коду, чтобы оформить заказ.")
         if self.supports_delivery_orders():
-            add_step("Доставка будет доступна в отдельном сценарии заказа.")
+            add_step(
+                f"Для доставки нажмите «{escape_html(self.button_delivery_label)}», "
+                "добавьте позиции из меню, затем в корзине «Оформить»: адрес, время, "
+                "бонусы, оплата переводом."
+            )
         if self.supports_pickup_orders():
             add_step(
                 f"Для самовывоза нажмите «{escape_html(self.button_pickup_label)}», "

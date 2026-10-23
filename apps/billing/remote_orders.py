@@ -1,9 +1,14 @@
 """Remote prepaid orders: quote, place, confirm or reject the guest's transfer.
 
 One flow for every channel where the guest is not at a table (ADR-0009):
-pickup today, delivery next. The channel only changes its own details
-(pickup: when; delivery: when and where) — the order, bill and payment are
-the same models for every channel.
+pickup and delivery. The channel only changes its own details (pickup:
+when; delivery: when, where and the delivery fee) — the order, bill and
+payment are the same models for every channel.
+
+Delivery (PQ-032, docs/architecture/DELIVERY.md): the guest gives an address
+as text (a Telegram location is optional), the last one is remembered; the
+fee is the venue's fixed price, free from a set order sum, with an optional
+minimum order; the fee is an ordinary order line «Доставка».
 
 Owner decisions (2026-10-23, docs/architecture/PICKUP.md):
 
@@ -41,6 +46,7 @@ from apps.billing.services import (
 from apps.bonuses.services import get_redeemable_bonus_amount
 from apps.orders.models import Cart, Order
 from apps.orders.services import (
+    CHANNEL_OFF_MESSAGES,
     create_order,
     notify_staff_about_new_order,
     requested_time_label,
@@ -54,9 +60,13 @@ from apps.users.models import GuestProfile, User
 TIME_SLOTS = {"now": 0, "30": 30, "60": 60}
 
 # Remote channels and the PartnerBotSettings flag that turns each one on.
-# Delivery joins here once its address step exists.
-REMOTE_CHANNELS = {Order.Channel.PICKUP: "module_pickup_enabled"}
-CHANNEL_TITLES = {Order.Channel.PICKUP: "самовывоз"}
+REMOTE_CHANNELS = {
+    Order.Channel.PICKUP: "module_pickup_enabled",
+    Order.Channel.DELIVERY: "module_delivery_enabled",
+}
+CHANNEL_TITLES = {Order.Channel.PICKUP: "самовывоз", Order.Channel.DELIVERY: "доставка"}
+
+MAX_ADDRESS_LENGTH = 500
 
 # Staff roles that may confirm or reject a guest's transfer.
 PAYMENT_CHECK_ROLES = frozenset({User.Role.OWNER, User.Role.MANAGER, User.Role.CASHIER})
@@ -68,12 +78,16 @@ class RemoteOrderError(BillingServiceError):
 
 @dataclass(frozen=True)
 class RemoteQuote:
-    total: Decimal
+    total: Decimal  # what the order costs, the delivery fee included
     bonus_available: Decimal
     bonus_to_spend: Decimal
     to_pay: Decimal
     payment_details: str
     slots: tuple[str, ...]
+    items_total: Decimal = Decimal("0.00")
+    delivery_fee: Decimal = Decimal("0.00")
+    delivery_address: str = ""
+    has_delivery_location: bool = False
 
 
 def _money(value) -> Decimal:
@@ -95,7 +109,7 @@ def _settings(partner_id, channel: str) -> PartnerBotSettings:
         and settings.module_orders_enabled
         and settings.module_menu_enabled
     ):
-        raise RemoteOrderError(f"Сейчас {CHANNEL_TITLES[channel]} отключён.")
+        raise RemoteOrderError(CHANNEL_OFF_MESSAGES[channel])
     if not settings.transfer_payment_details.strip():
         raise RemoteOrderError("Заведение ещё не указало реквизиты для оплаты переводом.")
     return settings
@@ -139,6 +153,60 @@ def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = 
     return cart
 
 
+def delivery_fee_for(settings: PartnerBotSettings, items_total: Decimal) -> Decimal:
+    """The venue's delivery fee for an order of ``items_total``."""
+
+    free_from = settings.delivery_free_from
+    if free_from is not None and _money(items_total) >= _money(free_from):
+        return Decimal("0.00")
+    return _money(settings.delivery_fee or 0)
+
+
+def _channel_fee(settings: PartnerBotSettings, channel: str, items_total: Decimal) -> Decimal:
+    if channel != Order.Channel.DELIVERY:
+        return Decimal("0.00")
+    minimum = _money(settings.delivery_min_order or 0)
+    if _money(items_total) < minimum:
+        raise RemoteOrderError(
+            f"Минимальная сумма заказа на доставку — {minimum} грн. Сейчас в корзине "
+            f"{_money(items_total)} грн."
+        )
+    return delivery_fee_for(settings, items_total)
+
+
+@dataclass(frozen=True)
+class DeliveryTerms:
+    fee: Decimal
+    free_from: Decimal | None
+    min_order: Decimal
+
+    def describe(self) -> str:
+        """«Доставка 60 грн, бесплатно от 1000 грн. Минимальный заказ 150 грн.»"""
+
+        if self.fee <= 0:
+            text = "Доставка бесплатная."
+        elif self.free_from is not None:
+            text = f"Доставка {self.fee} грн, бесплатно от {self.free_from} грн."
+        else:
+            text = f"Доставка {self.fee} грн."
+        if self.min_order > 0:
+            text += f" Минимальный заказ {self.min_order} грн."
+        return text
+
+
+def get_delivery_terms(partner_id) -> DeliveryTerms:
+    settings = _settings(partner_id, Order.Channel.DELIVERY)
+    return DeliveryTerms(
+        fee=_money(settings.delivery_fee or 0),
+        free_from=(
+            _money(settings.delivery_free_from)
+            if settings.delivery_free_from is not None
+            else None
+        ),
+        min_order=_money(settings.delivery_min_order or 0),
+    )
+
+
 def closed_message(partner: Partner) -> str:
     hours = describe_opening_hours(partner)
     if hours:
@@ -169,7 +237,9 @@ def get_remote_quote(
     settings = _settings(partner_id, channel)
     guest = _guest(partner_id, telegram_id)
     cart = _active_cart(partner_id, guest, channel)
-    total = _money(cart.total_amount)
+    items_total = _money(cart.total_amount)
+    fee = _channel_fee(settings, channel, items_total)
+    total = _money(items_total + fee)
     bonus_available = get_redeemable_bonus_amount(
         partner_id=partner_id,
         guest=guest,
@@ -183,6 +253,12 @@ def get_remote_quote(
         to_pay=_money(total - bonus_to_spend),
         payment_details=settings.transfer_payment_details.strip(),
         slots=available_slots(settings.partner),
+        items_total=items_total,
+        delivery_fee=fee,
+        delivery_address=guest.delivery_address if channel == Order.Channel.DELIVERY else "",
+        has_delivery_location=(
+            channel == Order.Channel.DELIVERY and guest.delivery_latitude is not None
+        ),
     )
 
 
@@ -195,6 +271,55 @@ def save_guest_phone(*, partner_id, telegram_id: int, phone: str) -> GuestProfil
     guest.phone = phone[:32]
     guest.save(update_fields=["phone", "updated_at"])
     return guest
+
+
+@transaction.atomic
+def save_guest_delivery_address(*, partner_id, telegram_id: int, address: str) -> GuestProfile:
+    """Remember the guest's delivery address; a new text drops an old map point."""
+
+    address = " ".join((address or "").split())
+    if not address:
+        raise RemoteOrderError("Напишите адрес: улица, дом, квартира.")
+    if len(address) > MAX_ADDRESS_LENGTH:
+        raise RemoteOrderError("Адрес слишком длинный — сократите, пожалуйста.")
+    guest = _guest(partner_id, telegram_id, lock=True)
+    if guest.delivery_address != address:
+        guest.delivery_latitude = None
+        guest.delivery_longitude = None
+    guest.delivery_address = address
+    guest.save(
+        update_fields=[
+            "delivery_address",
+            "delivery_latitude",
+            "delivery_longitude",
+            "updated_at",
+        ]
+    )
+    return guest
+
+
+@transaction.atomic
+def save_guest_delivery_location(
+    *, partner_id, telegram_id: int, latitude, longitude
+) -> GuestProfile:
+    """Attach a Telegram location to the guest's delivery address."""
+
+    try:
+        lat = Decimal(str(latitude)).quantize(Decimal("0.000001"))
+        lon = Decimal(str(longitude)).quantize(Decimal("0.000001"))
+    except ArithmeticError as exc:
+        raise RemoteOrderError("Не удалось прочитать геолокацию.") from exc
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise RemoteOrderError("Не удалось прочитать геолокацию.")
+    guest = _guest(partner_id, telegram_id, lock=True)
+    guest.delivery_latitude = lat
+    guest.delivery_longitude = lon
+    guest.save(update_fields=["delivery_latitude", "delivery_longitude", "updated_at"])
+    return guest
+
+
+def map_link(latitude, longitude) -> str:
+    return f"https://maps.google.com/?q={latitude},{longitude}"
 
 
 @transaction.atomic
@@ -226,9 +351,16 @@ def place_remote_order(
     guest = _guest(partner_id, telegram_id, lock=True)
     if not guest.phone:
         raise RemoteOrderError("Поделитесь номером телефона, чтобы оформить заказ.")
+    is_delivery = channel == Order.Channel.DELIVERY
+    if is_delivery and not guest.delivery_address:
+        raise RemoteOrderError("Укажите адрес доставки.")
     cart = _active_cart(partner_id, guest, channel, lock=True)
     cart_items = list(cart.items.all())
-    total = _money(sum((item.unit_price * item.quantity for item in cart_items), Decimal("0")))
+    items_total = _money(
+        sum((item.unit_price * item.quantity for item in cart_items), Decimal("0"))
+    )
+    fee = _channel_fee(settings, channel, items_total)
+    total = _money(items_total + fee)
     if total != _money(expected_total):
         raise RemoteOrderError("Корзина изменилась — проверьте новую сумму.")
 
@@ -250,6 +382,16 @@ def place_remote_order(
         channel=channel,
         requested_for=now + timedelta(minutes=minutes) if minutes else None,
         notify_staff=False,
+        **(
+            {
+                "delivery_address": guest.delivery_address,
+                "delivery_latitude": guest.delivery_latitude,
+                "delivery_longitude": guest.delivery_longitude,
+                "delivery_fee": fee,
+            }
+            if is_delivery
+            else {}
+        ),
     )
     cart.status = Cart.Status.CHECKED_OUT
     cart.checked_out_at = now
@@ -284,7 +426,12 @@ def place_remote_order(
         )
     else:
         note = "Оплачен бонусами полностью."
-    notify_staff_about_new_order(order, note=f"Телефон: {guest.phone}. {note}")
+    contact = f"Телефон: {guest.phone}."
+    if is_delivery:
+        contact += f"\nАдрес: {guest.delivery_address}."
+        if guest.delivery_latitude is not None:
+            contact += f"\nНа карте: {map_link(guest.delivery_latitude, guest.delivery_longitude)}"
+    notify_staff_about_new_order(order, note=f"{contact}\n{note}")
     return Order.objects.select_related("partner").get(id=order.id)
 
 
@@ -394,10 +541,16 @@ __all__ = [
     "available_slots",
     "closed_message",
     "confirm_transfer",
+    "DeliveryTerms",
+    "delivery_fee_for",
+    "get_delivery_terms",
+    "map_link",
     "get_remote_quote",
     "awaits_transfer_check",
     "requested_time_label",
     "place_remote_order",
     "reject_transfer",
+    "save_guest_delivery_address",
+    "save_guest_delivery_location",
     "save_guest_phone",
 ]

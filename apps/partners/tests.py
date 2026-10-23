@@ -124,6 +124,8 @@ class PartnerBotSettingsModuleTests(TestCase):
             partner=self.partner,
             module_tables_enabled=False,
             module_delivery_enabled=True,
+            # Delivery is prepaid by transfer (PQ-032): requisites are required.
+            transfer_payment_details="Карта 4149 0000 0000 0000",
             module_menu_enabled=True,
             module_orders_enabled=True,
             module_cart_enabled=True,

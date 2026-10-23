@@ -35,6 +35,7 @@ class OrderItemInline(admin.TabularInline):
     can_delete = False
     readonly_fields = (
         "partner",
+        "kind",
         "menu_item",
         "item_name",
         "unit_price",
@@ -83,6 +84,9 @@ class OrderAdmin(ScopedAdminMixin):
         "table_session",
         "channel",
         "requested_for",
+        "delivery_address",
+        "delivery_latitude",
+        "delivery_longitude",
         "assigned_employee",
         "status",
         "payment_method",
@@ -230,6 +234,7 @@ class OrderItemAdmin(ScopedAdminMixin):
     readonly_fields = (
         "partner",
         "order",
+        "kind",
         "menu_item",
         "item_name",
         "unit_price",

@@ -8,6 +8,12 @@ STATUS_LABELS = {
     "completed": "Завершить",
     "canceled": "Отменить",
 }
+# Delivery (PQ-032): a ready order is handed to the courier, then delivered.
+DELIVERY_STATUS_LABELS = {
+    **STATUS_LABELS,
+    "delivering": "🚚 В пути",
+    "completed": "✅ Доставлено",
+}
 
 
 def build_staff_order_actions_keyboard(
@@ -15,10 +21,12 @@ def build_staff_order_actions_keyboard(
     order_public_id: str,
     available_statuses: list[str],
     transfer_check_pending: bool = False,
+    status_labels: dict[str, str] | None = None,
 ) -> InlineKeyboardMarkup | None:
+    labels = status_labels or STATUS_LABELS
     keyboard = []
     if transfer_check_pending:
-        # A pickup order goes into work only after the transfer is checked.
+        # A prepaid order goes into work only after the transfer is checked.
         keyboard.append(
             [
                 InlineKeyboardButton(
@@ -34,7 +42,7 @@ def build_staff_order_actions_keyboard(
         available_statuses = []
     status_buttons = [
         InlineKeyboardButton(
-            text=STATUS_LABELS.get(status, status),
+            text=labels.get(status, status),
             callback_data=f"stafforder:{order_public_id}:{status}",
         )
         for status in available_statuses

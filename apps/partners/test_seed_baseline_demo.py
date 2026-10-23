@@ -53,6 +53,11 @@ class SeedBaselineDemoTests(TestCase):
             self.assertFalse(bot.is_active)
             self.assertEqual(bot.token_status_label, "placeholder")
         self.assertEqual(OpeningHours.objects.filter(partner=hookah).count(), 7)
+        cafe_settings = PartnerBotSettings.objects.get(partner=cafe)
+        self.assertTrue(cafe_settings.module_delivery_enabled)
+        self.assertEqual(cafe_settings.delivery_fee, Decimal("60.00"))
+        self.assertFalse(PartnerBotSettings.objects.get(partner=hookah).module_delivery_enabled)
+        self.assertIn("доставка: включена, 60 грн, бесплатно от 800 грн", output)
         self.assertFalse(OpeningHours.objects.filter(partner=cafe).exists())
         self.assertFalse(
             MenuItem.objects.get(partner=hookah, public_id="SMKHK001").available_for_pickup

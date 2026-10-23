@@ -68,13 +68,19 @@ def get_available_next_statuses(current_status: str) -> list[str]:
     return [status for status in ordered_statuses if status in allowed]
 
 
-def get_available_staff_actions(current_status: str) -> list[str]:
-    """Return compact operational actions for staff-facing bot screens."""
+def get_available_staff_actions(current_status: str, channel: str | None = None) -> list[str]:
+    """Return compact operational actions for staff-facing bot screens.
+
+    Delivery (PQ-032) adds a step: a ready order goes «в пути» first, then
+    «доставлено».
+    """
 
     if current_status == Order.Status.NEW:
         return [Order.Status.ACCEPTED, Order.Status.CANCELED]
     if current_status in {Order.Status.ACCEPTED, Order.Status.PREPARING}:
         return [Order.Status.READY, Order.Status.CANCELED]
+    if channel == Order.Channel.DELIVERY and current_status == Order.Status.READY:
+        return [Order.Status.DELIVERING, Order.Status.CANCELED]
     if current_status in {Order.Status.READY, Order.Status.DELIVERING}:
         return [Order.Status.COMPLETED, Order.Status.CANCELED]
     return []
@@ -191,15 +197,26 @@ def create_order(
     channel: str = Order.Channel.TABLE,
     requested_for=None,
     notify_staff: bool = True,
+    delivery_address: str = "",
+    delivery_latitude=None,
+    delivery_longitude=None,
+    delivery_fee: Decimal | str | None = None,
 ) -> Order:
     if not items:
         raise OrderFlowError("Нельзя создать заказ без позиций.")
     if channel not in Order.Channel.values:
         raise OrderFlowError("Неизвестный способ получения заказа.")
     if channel != Order.Channel.TABLE and (table is not None or table_session is not None):
-        raise OrderFlowError("Заказ на самовывоз не привязывается к столу.")
+        raise OrderFlowError("Заказ навынос не привязывается к столу.")
     if channel == Order.Channel.TABLE and requested_for is not None:
-        raise OrderFlowError("Время самовывоза указывается только для самовывоза.")
+        raise OrderFlowError("Время получения указывается только для заказов навынос.")
+    is_delivery = channel == Order.Channel.DELIVERY
+    if is_delivery and not delivery_address.strip():
+        raise OrderFlowError("Для доставки нужен адрес.")
+    if not is_delivery and (
+        delivery_address or delivery_latitude is not None or delivery_fee is not None
+    ):
+        raise OrderFlowError("Адрес и стоимость доставки бывают только у доставки.")
     if table_session is not None:
         if table is None:
             table = table_session.table
@@ -219,6 +236,9 @@ def create_order(
         comment=comment,
         channel=channel,
         requested_for=requested_for,
+        delivery_address=delivery_address.strip(),
+        delivery_latitude=delivery_latitude,
+        delivery_longitude=delivery_longitude,
     )
 
     subtotal = Decimal("0.00")
@@ -234,6 +254,22 @@ def create_order(
             unit_price=unit_price,
             quantity=quantity,
             comment=item_payload.get("comment", ""),
+        )
+    fee = Decimal(delivery_fee or 0).quantize(Decimal("0.01"))
+    if fee < 0:
+        raise OrderFlowError("Стоимость доставки не может быть отрицательной.")
+    if fee > 0:
+        # The fee is an ordinary order line (PQ-032), so bills, bonuses and
+        # reports treat it like any other line.
+        subtotal += fee
+        OrderItem.objects.create(
+            partner_id=partner_id,
+            order=order,
+            kind=OrderItem.Kind.DELIVERY_FEE,
+            menu_item=None,
+            item_name="Доставка",
+            unit_price=fee,
+            quantity=1,
         )
 
     order.subtotal_amount = subtotal
@@ -283,7 +319,8 @@ def transition_order_status(
         and to_status == Order.Status.ACCEPTED
         and order.paid_at is None
     ):
-        # A pickup order goes into work only after its transfer is confirmed
+        # A prepaid order (pickup, delivery) goes into work only after its
+        # transfer is confirmed
         # (apps/billing/remote_orders.py:confirm_transfer).
         raise OrderFlowError("Сначала подтвердите оплату переводом.")
     if to_status == Order.Status.CANCELED and BillItem.objects.filter(
@@ -404,28 +441,42 @@ def _resolve_actor_employee(*, order: Order, actor_user: User | None) -> Employe
     return employee
 
 
-def _pickup_cart_allowed(partner_id) -> bool:
-    return PartnerBotSettings.objects.filter(
+# Channels where the guest is not at a table, in the order a cart without a
+# table falls back to them, and the setting that turns each one on.
+REMOTE_CART_CHANNELS = {
+    Order.Channel.PICKUP: "module_pickup_enabled",
+    Order.Channel.DELIVERY: "module_delivery_enabled",
+}
+
+
+def _enabled_remote_channels(partner_id) -> list[str]:
+    settings = PartnerBotSettings.objects.filter(
         partner_id=partner_id,
         module_menu_enabled=True,
         module_orders_enabled=True,
         module_cart_enabled=True,
-        module_pickup_enabled=True,
-    ).exists()
+    ).first()
+    if settings is None:
+        return []
+    return [channel for channel, flag in REMOTE_CART_CHANNELS.items() if getattr(settings, flag)]
+
+
+def _default_remote_channel(partner_id) -> str:
+    channels = _enabled_remote_channels(partner_id)
+    return channels[0] if channels else Order.Channel.PICKUP
 
 
 def _resolve_cart_guest(*, partner_id, telegram_id: int):
     """The guest whose cart is used, and their active table session if any.
 
     At a table the cart belongs to the table session. Without a session a
-    cart is allowed only when the venue offers pickup (the channel is then
-    chosen at checkout).
+    cart is allowed only when the venue offers pickup or delivery.
     """
 
     table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
     if table_session is not None:
         return table_session.guest, table_session
-    if not _pickup_cart_allowed(partner_id):
+    if not _enabled_remote_channels(partner_id):
         raise OrderFlowError(
             "Корзина доступна только после сканирования QR-кода стола. Сначала откройте сессию."
         )
@@ -442,6 +493,11 @@ def _resolve_cart_guest(*, partner_id, telegram_id: int):
 CHANNEL_NAMES = {
     Order.Channel.TABLE: "к столу",
     Order.Channel.PICKUP: "на самовывоз",
+    Order.Channel.DELIVERY: "на доставку",
+}
+CHANNEL_OFF_MESSAGES = {
+    Order.Channel.PICKUP: "Самовывоз сейчас отключён.",
+    Order.Channel.DELIVERY: "Доставка сейчас отключена.",
 }
 
 
@@ -452,13 +508,13 @@ def _align_cart_with_session(cart: Cart, table_session: TableSession | None) -> 
 
     - table channel at a table: a cart of another session is abandoned if it
       has items, otherwise moved to the current session;
-    - pickup channel: never tied to a session, even while the guest sits at a
-      table (they ordered to take away);
+    - pickup and delivery: never tied to a session, even while the guest
+      sits at a table (they ordered to take away);
     - table channel without a session (the guest left): the cart becomes a
-      pickup cart and keeps its items.
+      pickup cart (or delivery when only delivery is on) and keeps its items.
     """
 
-    if cart.channel == Order.Channel.PICKUP:
+    if cart.channel in REMOTE_CART_CHANNELS:
         if cart.table_session_id is not None:
             cart.table_session = None
             cart.save(update_fields=["table_session", "updated_at"])
@@ -474,13 +530,15 @@ def _align_cart_with_session(cart: Cart, table_session: TableSession | None) -> 
         cart.save(update_fields=["table_session", "updated_at"])
         return cart
     cart.table_session = None
-    cart.channel = Order.Channel.PICKUP
+    cart.channel = _default_remote_channel(cart.partner_id)
     cart.save(update_fields=["table_session", "channel", "updated_at"])
     return cart
 
 
-def _new_cart_channel(table_session: TableSession | None) -> str:
-    return Order.Channel.TABLE if table_session is not None else Order.Channel.PICKUP
+def _new_cart_channel(table_session: TableSession | None, partner_id) -> str:
+    if table_session is not None:
+        return Order.Channel.TABLE
+    return _default_remote_channel(partner_id)
 
 
 @transaction.atomic
@@ -511,7 +569,7 @@ def get_or_create_active_cart_for_telegram_user(
                 partner_id=partner_id,
                 guest=guest,
                 table_session=table_session,
-                channel=_new_cart_channel(table_session),
+                channel=_new_cart_channel(table_session, partner_id),
             )
     except IntegrityError:
         cart = locked_active_cart()
@@ -524,7 +582,7 @@ def get_or_create_active_cart_for_telegram_user(
             partner_id=partner_id,
             guest=guest,
             table_session=table_session,
-            channel=_new_cart_channel(table_session),
+            channel=_new_cart_channel(table_session, partner_id),
         )
 
 
@@ -548,11 +606,11 @@ def switch_cart_channel_for_telegram_user(
     telegram_id: int,
     channel: str,
 ) -> tuple[Cart, list[str]]:
-    """The guest picks a flow (table or pickup). Returns the cart and the
-    names of items removed because they are not sold in that channel."""
+    """The guest picks a flow (table, pickup or delivery). Returns the cart
+    and the names of items removed because they are not sold in that channel."""
 
-    if channel == Order.Channel.PICKUP and not _pickup_cart_allowed(partner_id):
-        raise OrderFlowError("Самовывоз сейчас отключён.")
+    if channel in REMOTE_CART_CHANNELS and channel not in _enabled_remote_channels(partner_id):
+        raise OrderFlowError(CHANNEL_OFF_MESSAGES[channel])
     table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
     if channel == Order.Channel.TABLE and table_session is None:
         raise OrderFlowError("Сначала отсканируйте QR-код стола.")
@@ -837,6 +895,8 @@ def _refresh_cart_totals(cart: Cart) -> Cart:
 def _order_location_label(order: Order) -> str:
     if order.channel == Order.Channel.PICKUP:
         return f"самовывоз, {requested_time_label(order)}"
+    if order.channel == Order.Channel.DELIVERY:
+        return f"доставка, {requested_time_label(order)}, {order.delivery_address}"
     if order.table_id is not None:
         return f"стол #{order.table.number}"
     return "заказ без привязки к столу"

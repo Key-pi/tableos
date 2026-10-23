@@ -162,10 +162,32 @@ class PartnerBotSettings(TimeStampedModel):
         blank=True,
         verbose_name="Реквизиты для оплаты переводом",
         help_text=(
-            "Куда гость переводит деньги за заказы с предоплатой (самовывоз, позже "
+            "Куда гость переводит деньги за заказы с предоплатой (самовывоз, "
             "доставка): номер карты или IBAN, получатель. Гость видит этот текст "
             "перед оплатой."
         ),
+    )
+    delivery_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Стоимость доставки, грн",
+        help_text="Добавляется к заказу отдельной строкой «Доставка». 0 — бесплатно.",
+    )
+    delivery_free_from = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Бесплатная доставка от суммы, грн",
+        help_text="Если сумма заказа не меньше этой, доставка бесплатна. Пусто — всегда платная.",
+    )
+    delivery_min_order = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Минимальная сумма заказа на доставку, грн",
+        help_text="0 — без минимума.",
     )
     module_cart_enabled = models.BooleanField(
         default=True,
@@ -311,6 +333,15 @@ class PartnerBotSettings(TimeStampedModel):
                 "transfer_payment_details",
                 "Для самовывоза укажите реквизиты для оплаты переводом.",
             )
+        if self.module_delivery_enabled and not self.transfer_payment_details.strip():
+            add_error(
+                "transfer_payment_details",
+                "Для доставки укажите реквизиты для оплаты переводом.",
+            )
+        for field in ("delivery_fee", "delivery_free_from", "delivery_min_order"):
+            value = getattr(self, field)
+            if value is not None and value < 0:
+                add_error(field, "Сумма не может быть отрицательной.")
         if self.module_billing_enabled and not self.module_orders_enabled:
             add_error("module_billing_enabled", "Billing module requires orders module.")
         if self.module_staff_call_enabled and not self.module_tables_enabled:

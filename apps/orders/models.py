@@ -30,9 +30,10 @@ class Order(PartnerBoundModel):
         # is one channel among others.
         TABLE = "table", "За столом"
         PICKUP = "pickup", "Самовывоз"
+        DELIVERY = "delivery", "Доставка"
 
     # Channels paid in advance by transfer and checked by staff (ADR-0009).
-    PREPAID_CHANNELS = frozenset({Channel.PICKUP})
+    PREPAID_CHANNELS = frozenset({Channel.PICKUP, Channel.DELIVERY})
 
     public_id = models.CharField(max_length=12, editable=False)
     guest = models.ForeignKey(
@@ -67,9 +68,17 @@ class Order(PartnerBoundModel):
         null=True,
         blank=True,
         help_text=(
-            "Remote orders (pickup, later delivery): the requested time; empty "
+            "Remote orders (pickup, delivery): the requested time; empty "
             "means as soon as possible."
         ),
+    )
+    # Delivery (PQ-032): where to bring the order, a snapshot taken at checkout.
+    delivery_address = models.TextField(blank=True, verbose_name="Адрес доставки")
+    delivery_latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="Широта"
+    )
+    delivery_longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="Долгота"
     )
     payment_method = models.CharField(
         max_length=16,
@@ -176,13 +185,24 @@ class Cart(PartnerBoundModel):
 
 
 class OrderItem(PartnerBoundModel):
-    """Snapshot of a purchased menu item inside a confirmed order."""
+    """A line of a confirmed order: a menu item snapshot, or a service charge.
+
+    Service lines (the delivery fee, PQ-032) have no menu item; they are
+    ordinary order lines for totals, bills, bonuses and reports.
+    """
+
+    class Kind(models.TextChoices):
+        ITEM = "item", "Позиция меню"
+        DELIVERY_FEE = "delivery_fee", "Доставка"
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.ITEM)
     menu_item = models.ForeignKey(
         "menu.MenuItem",
         on_delete=models.PROTECT,
         related_name="order_items",
+        null=True,
+        blank=True,
     )
     item_name = models.CharField(max_length=255)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -191,6 +211,15 @@ class OrderItem(PartnerBoundModel):
 
     class Meta:
         ordering = ["created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(kind="item", menu_item__isnull=False)
+                    | models.Q(kind="delivery_fee", menu_item__isnull=True)
+                ),
+                name="order_item_menu_item_matches_kind",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.item_name} x{self.quantity}"

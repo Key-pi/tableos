@@ -211,6 +211,18 @@ apps.notifications.tasks` — цикл, разорванный только им
    отклоняет (счёт аннулируется с причиной `payment_not_received`, бонусы
    возвращаются, статус `canceled`); неоплаченный заказ самовывоза иначе
    принять нельзя.
+   **Доставка** (`Order.channel = delivery`, [DELIVERY.md](DELIVERY.md), PQ-032)
+   идёт тем же путём, плюс адрес: текст обязателен
+   (`remote_orders.py:save_guest_delivery_address`), геолокация по желанию
+   (`save_guest_delivery_location`); последний адрес хранится в
+   `GuestProfile.delivery_*`, снимок — в `Order.delivery_*`. Цена — по
+   `PartnerBotSettings.delivery_fee` / `delivery_free_from`, проверяется
+   `delivery_min_order` (`remote_orders.py:delivery_fee_for`); цена доставки
+   — строка заказа `OrderItem.kind = delivery_fee` без позиции меню (ограничение
+   `order_item_menu_item_matches_kind`), поэтому счёт, бонусы и отчёты её
+   видят без отдельной логики. У персонала после `ready` — `delivering`
+   («🚚 В пути»), затем `completed` («✅ Доставлено»)
+   (`orders/services.py:get_available_staff_actions`).
 6. Подтверждение получения гостем (`confirm_order_received_by_guest`)
    блокирует заказ и переводит его в `completed` из любого статуса из
    `GUEST_RECEIPT_CONFIRMABLE_STATUSES` (все нефинальные, включая `new`;
@@ -375,7 +387,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 362 теста после источников переходов, зелёные на SQLite и на
+- 389 тестов после доставки, зелёные на SQLite и на
   PostgreSQL 16. Десять выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа
