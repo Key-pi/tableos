@@ -175,10 +175,15 @@ partner-authored markup.
    `get_table_billable_orders` returns every non-cancelled order on the table
    that has no bill yet, from any time (AA-020).
 3. `create_bill_from_orders` locks `Order → OrderItem`; `attach_orders_to_bill`
-   locks `Bill → OrderItem`. `BillItem.unique_order_item_bill_allocation`
-   allows an `OrderItem` to be allocated **once per partner forever**; there is
-   no bill-cancel or release command, so `Bill.Status.CANCELED` is unreachable,
-   and a cancelled order stays charged in its bill (AA-022, planned for B3.2).
+   locks `Bill → OrderItem`. `BillItem.unique_active_order_item_bill_allocation`
+   allows one **active** allocation per `OrderItem`. Since B3.2 part A,
+   staff with the owner-granted permission (or the owner) can remove lines
+   (`remove_bill_lines`), void a bill without money payments (`void_bill`,
+   which returns applied bonuses as a `reversal` ledger credit and reopens its
+   requests) and cancel a billed order (`cancel_order`). Removed lines stay
+   inactive for history; every change is a `BillAdjustment`. A bill with
+   applied bonuses can only be voided; totals never drop below money paid;
+   orders in paid bills cannot be cancelled.
    Bill creation locks orders with `select_for_update(of=("self",))`, because
    PostgreSQL rejects `FOR UPDATE` on the nullable `table` join (AA-033).
 4. `record_payment` locks the bill, rejects bonus method, non-positive and
@@ -199,7 +204,8 @@ partner-authored markup.
    never raises into the payment (PQ-027, fixed in B3.1).
 
 Effective lock order of the payment path:
-`Bill → Order → GuestProfile → BillingRequest → TableSession`.
+`Bill → Order → GuestProfile → BillingRequest → TableSession`. Bill changes:
+`Bill → BillItem → GuestProfile → Order`.
 
 ### Loyalty and quick sale
 
@@ -249,10 +255,10 @@ excludes superusers and `OrderAdmin` keeps `guest`, `table` and
 
 | Concept | Transition mechanism | Durable or locked protection today |
 |---|---|---|
-| Order status | `transition_order_status`; guest confirmation; post-payment completion | Locked reload; staff transition table plus explicit guest confirmation rule |
+| Order status | `transition_order_status`; `cancel_order`; guest confirmation; post-payment completion | Locked reload; staff transition table plus explicit guest confirmation rule; cancelling an order with active bill lines is refused |
 | Table session | `activate_table_session`, `close_table_session_if_settled`, post-payment auto-close | Partial unique active session per guest; locks; no expiry processor |
 | Cart | cart services, checkout | Partial unique active cart per guest; cart row lock |
-| Bill | create/attach/issue/payment services | Bill lock; `unique_order_item_bill_allocation`; no cancel/release path |
+| Bill | create/attach/issue/payment/change/void services | Bill lock; one active allocation per order item; audited changes; void releases allocations |
 | Billing request | `mark_billing_request_processed`, `cancel_billing_request` | Locked reload; processed and cancelled are terminal |
 | Payment | `record_payment`, `pay_bill_with_bonuses` | Bill lock; positive and ≤ remaining; Admin cannot edit existing payments |
 | Bonus ledger | bonus services, billing bonus payment | Guest lock; reconciliation guard; idempotency key unique per partner |
@@ -264,11 +270,12 @@ transactions; allowed operations are actions that call owner services.
 
 ## Tests and checks
 
-- 199 tests after B3.1, green on SQLite and on PostgreSQL 16. Five are
-  PostgreSQL-only and skipped on SQLite: concurrent order transition
+- 227 tests after B3.2 part A, green on SQLite and on PostgreSQL 16. Seven
+  are PostgreSQL-only and skipped on SQLite: concurrent order transition
   (`apps/orders/test_concurrency.py`), concurrent QR scans
   (`apps/tables/test_concurrency.py`), and concurrent bill allocation, bonus
-  payment and final payment (`apps/billing/test_concurrency.py`).
+  payment, final payment, void-vs-payment and cancel-vs-billing
+  (`apps/billing/test_concurrency.py`).
 - Recorded runs are listed in
   [`../engineering/TESTING.md`](../engineering/TESTING.md).
 - There is no CI pipeline; every check is run by hand.

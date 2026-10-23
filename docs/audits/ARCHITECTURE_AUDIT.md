@@ -340,7 +340,7 @@ by `AGENTS.md`.
 |---|---|---:|---:|---|---|
 | AA-020 | BUG / FINANCIAL_INTEGRITY | High | High | Billing, bill-request visibility and auto-close are scoped to the table's whole history, not the current visit. | B3.2 (PQ-026 decided, ADR-0007) |
 | AA-021 | BUG / FINANCIAL_INTEGRITY | High | Medium–High | Post-payment auto-close can raise `TableSessionError` and roll back a payment; adapters do not handle it. | B3.1 — resolved |
-| AA-022 | BUG / FINANCIAL_INTEGRITY | High | High | A cancelled order stays charged in its bill; bills cannot be cancelled and allocations cannot be released. | B3.2 (PQ-028 decided) |
+| AA-022 | BUG / FINANCIAL_INTEGRITY | High | High | A cancelled order stays charged in its bill; bills cannot be cancelled and allocations cannot be released. | B3.2 part A — resolved |
 | AA-023 | BUG / ADMIN_BYPASS | Medium | High | `OrderAdmin` leaves `guest`, `table`, `table_session` editable. | B3.1 — resolved |
 | AA-024 | BUG / RELIABILITY | Medium | High | Text is sent with HTML parse mode but never escaped. | B3.1 — resolved |
 | AA-025 | BUG / STATE_MACHINE | Medium | High | Guest receipt confirmation bypasses `ORDER_STATUS_TRANSITIONS`. | B3.1 — resolved |
@@ -500,5 +500,31 @@ PostgreSQL 16 (199 tests; 5 PostgreSQL-only tests skipped on SQLite).
 | AA-024 | Dynamic text escaped in bot messages, partner template values and notifications; broadcast text remains partner markup (B4). |
 | AA-032 (tests) | PostgreSQL concurrency tests for bill allocation, bonus payment and final payment; a mutation check confirms they fail without the locks. |
 
-Remaining from the post-B3 review: AA-020 and AA-022 (B3.2, schema change),
-AA-030 (B4), AA-031 and AA-034 (B5).
+Remaining from the post-B3 review: AA-020 (B3.2 part B), AA-030 (B4),
+AA-031 and AA-034 (B5).
+
+## B3.2 part A implementation update — 2026-10-23
+
+AA-022 is resolved on branch `b3.2a-bill-changes`:
+
+- `BillItem.is_active` keeps removed lines for history; the allocation
+  constraint is now `unique_active_order_item_bill_allocation` (active lines
+  only), so released order items can be billed again.
+- `BillAdjustment` is the append-only change log (kind, actor, reason code,
+  optional comment, totals before/after, payload). Only the author can fill
+  an empty comment, within 30 minutes.
+- `remove_bill_lines`, `void_bill` and `cancel_order` in
+  `apps/billing/services.py` enforce the owner decisions: owner-granted
+  permission (`EmployeeProfile.can_adjust_bills`, editable only by the venue
+  owner) or the owner; reason required; no change below the paid amount; no
+  line changes on a bill with applied bonuses (void only, which returns the
+  bonuses as a `reversal` ledger credit); no cancellation of an order in a
+  paid bill.
+- `transition_order_status` refuses to cancel an order that still has active
+  bill lines, checked after the order lock, so no adapter can leave a
+  cancelled order charged.
+- Bot: bill card buttons, edit view, reason buttons and optional comment;
+  Admin: void and remove-line actions with a reason page, order cancel through
+  the bill, adjustment history.
+- Verified: 227 tests green on SQLite and PostgreSQL 16, including PostgreSQL
+  races void-vs-payment and cancel-vs-billing.

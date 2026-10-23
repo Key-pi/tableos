@@ -93,7 +93,7 @@ canonical docs, or an approved ADR.
 Use the exact commands in `docs/engineering/TESTING.md`. At the 2026-07-27
 audited baseline, `manage.py check`, migration dry-run, tests (139), and compose
 config passed in local SQLite mode; Ruff had pre-existing failures. The suite
-has grown since (199 tests after B3.1, green on SQLite and PostgreSQL 16); record every full run in
+has grown since (227 tests after B3.2 part A, green on SQLite and PostgreSQL 16); record every full run in
 `TESTING.md`. Do not claim a green test or lint baseline without rerunning it,
 and do not claim PostgreSQL coverage that is not in the repository.
 

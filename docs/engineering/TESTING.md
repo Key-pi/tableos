@@ -42,10 +42,10 @@ and tool versions are recorded in [`../audits/BASELINE.md`](../audits/BASELINE.m
 
 ## Running the PostgreSQL-gated tests
 
-Five tests run only on PostgreSQL and are skipped on SQLite:
+Seven tests run only on PostgreSQL and are skipped on SQLite:
 `apps/orders/test_concurrency.py`, `apps/tables/test_concurrency.py` and
 `apps/billing/test_concurrency.py` (bill allocation, bonus payment, final
-payment). SQLite also ignores `select_for_update`, so a lock that PostgreSQL
+payment, void vs payment, cancel vs billing). SQLite also ignores `select_for_update`, so a lock that PostgreSQL
 rejects (AA-033) is invisible there: **run the whole suite on PostgreSQL
 before closing any batch that touches locks, constraints or queries with
 `select_for_update`.**
@@ -96,3 +96,5 @@ There is no CI; every run is manual. Add a row for each full run.
 | 2026-10-23 | `ddb7dce` | PostgreSQL 16 | full suite | **29 errors** — AA-033 |
 | 2026-10-23 | B3.1 branch | SQLite | full suite | 199 tests OK (5 skipped); Ruff: no new findings in changed files |
 | 2026-10-23 | B3.1 branch | PostgreSQL 16 | full suite | 199 tests OK |
+| 2026-10-23 | B3.2 part A branch | SQLite | full suite | 227 tests OK (7 skipped) |
+| 2026-10-23 | B3.2 part A branch | PostgreSQL 16 | full suite | 227 tests OK |
