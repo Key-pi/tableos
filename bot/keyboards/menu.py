@@ -42,7 +42,12 @@ def build_menu_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def build_cart_keyboard(*, cart=None, supports_cart: bool) -> InlineKeyboardMarkup | None:
+def build_cart_keyboard(
+    *,
+    cart=None,
+    supports_cart: bool,
+    mode_switch: tuple[str, str] | None = None,
+) -> InlineKeyboardMarkup | None:
     if not supports_cart:
         return None
 
@@ -78,5 +83,8 @@ def build_cart_keyboard(*, cart=None, supports_cart: bool) -> InlineKeyboardMark
                 InlineKeyboardButton(text="Очистить", callback_data="cart:clear"),
             ]
         )
+    if mode_switch is not None:
+        text, callback_data = mode_switch
+        rows.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
     rows.append([InlineKeyboardButton(text="Обновить корзину", callback_data="cart:refresh")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

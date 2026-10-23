@@ -14,7 +14,7 @@ docker compose config --quiet
 ```
 
 At the 2026-07-27 baseline, Django check/migration check/tests/compose config
-passed; the test suite ran **139 tests**. After pickup the suite has **327 tests**; it passes on SQLite (10
+passed; the test suite ran **139 tests**. After pickup the suite has **330 tests**; it passes on SQLite (10
 PostgreSQL-only tests skipped) and on PostgreSQL 16. Record every full run in
 the table at the end of this document.
 
@@ -113,3 +113,5 @@ There is no CI; every run is manual. Add a row for each full run.
 | 2026-10-23 | B5 (`clean-project-rules`) | PostgreSQL 16 | full suite + `partners.0006` backward/forward | 296 tests OK |
 | 2026-10-23 | Pickup (`clean-project-rules`) | SQLite | full suite | 327 tests OK (10 skipped) |
 | 2026-10-23 | Pickup (`clean-project-rules`) | PostgreSQL 16 | full suite + pickup migrations (orders 0005, billing 0008, users 0002, partners 0007) backward/forward | 327 tests OK |
+| 2026-10-23 | Flow-first channels | SQLite | full suite | 330 tests OK (10 skipped) |
+| 2026-10-23 | Flow-first channels | PostgreSQL 16 | full suite + `orders.0006`, `menu.0004` backward/forward | 330 tests OK |

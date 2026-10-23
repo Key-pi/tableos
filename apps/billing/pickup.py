@@ -97,7 +97,7 @@ def _guest(partner_id, telegram_id: int, *, lock: bool = False) -> GuestProfile:
 
 
 def _active_cart(partner_id, guest: GuestProfile, *, lock: bool = False) -> Cart:
-    queryset = Cart.objects.prefetch_related("items")
+    queryset = Cart.objects.prefetch_related("items__menu_item")
     if lock:
         queryset = queryset.select_for_update(of=("self",))
     cart = (
@@ -107,6 +107,15 @@ def _active_cart(partner_id, guest: GuestProfile, *, lock: bool = False) -> Cart
     )
     if cart is None or not cart.items.all():
         raise PickupError("Корзина пуста. Добавьте позиции из меню.")
+    if cart.channel != Order.Channel.PICKUP:
+        raise PickupError("Корзина собрана для стола. Нажмите «Самовывоз», чтобы перейти.")
+    not_sold = [
+        item.item_name
+        for item in cart.items.all()
+        if not (item.menu_item.is_available and item.menu_item.is_sold_in(Order.Channel.PICKUP))
+    ]
+    if not_sold:
+        raise PickupError(f"Недоступно на самовывоз: {', '.join(not_sold)}.")
     return cart
 
 

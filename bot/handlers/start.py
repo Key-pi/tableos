@@ -8,6 +8,8 @@ from asgiref.sync import sync_to_async
 
 from apps.employees.models import EmployeeProfile
 from apps.employees.selectors import get_staff_employee_by_telegram
+from apps.orders.models import Order
+from apps.orders.services import OrderFlowError, switch_cart_channel_for_telegram_user
 from apps.tables.models import Table, TableVisit
 from apps.tables.services import (
     VISIT_CHOICE_ASK,
@@ -134,6 +136,17 @@ async def _activate_and_reply(*, message: Message, user, partner, content, paylo
         return
 
     guest_profile = session.guest
+    removed: list[str] = []
+    if content.supports_cart():
+        # Scanning a table QR is choosing the table flow.
+        try:
+            _cart, removed = await sync_to_async(switch_cart_channel_for_telegram_user)(
+                partner_id=partner.id,
+                telegram_id=user.id,
+                channel=Order.Channel.TABLE,
+            )
+        except OrderFlowError:
+            removed = []
     await message.answer(
         "\n".join(
             [
@@ -144,6 +157,15 @@ async def _activate_and_reply(*, message: Message, user, partner, content, paylo
                 "",
                 f"Ваш код клиента: <code>{guest_profile.customer_code}</code>",
             ]
+            + (
+                [
+                    "",
+                    "Убрали из корзины — не подаётся за столом: "
+                    + escape_html(", ".join(removed)),
+                ]
+                if removed
+                else []
+            )
         ),
         reply_markup=build_main_keyboard(
             content,

@@ -388,8 +388,9 @@ class BotContent:
             add_step("Доставка будет доступна в отдельном сценарии заказа.")
         if self.supports_pickup_orders():
             add_step(
-                "Для самовывоза соберите заказ в меню, в корзине нажмите «Оформить» и "
-                "выберите самовывоз: время, бонусы, затем оплата переводом."
+                f"Для самовывоза нажмите «{escape_html(self.button_pickup_label)}», "
+                "добавьте позиции из меню, затем в корзине «Оформить»: время, бонусы, "
+                "оплата переводом."
             )
         if self.supports_cart():
             add_step("Добавьте позиции кнопками из меню.")
@@ -416,14 +417,16 @@ class BotContent:
         return _render_template(self.welcome_message_template, partner_name=partner_name)
 
     def start_hint_lines(self) -> list[str]:
-        if (
-            self.supports_tables()
-            and self.supports_table_orders()
-        ):
-            return ["Сканируйте QR-код стола, чтобы открыть сессию и оформить заказ."]
-        if self.supports_menu():
-            return [f"Можно открыть меню кнопкой «{escape_html(self.button_menu_label)}»."]
-        return []
+        lines: list[str] = []
+        if self.supports_tables() and self.supports_table_orders():
+            lines.append("Сканируйте QR-код стола, чтобы открыть сессию и оформить заказ.")
+        if self.supports_pickup_orders() and self.supports_cart():
+            lines.append(
+                f"Забрать заказ с собой — кнопка «{escape_html(self.button_pickup_label)}»."
+            )
+        if not lines and self.supports_menu():
+            lines.append(f"Можно открыть меню кнопкой «{escape_html(self.button_menu_label)}».")
+        return lines
 
     def table_activated_message(self, *, partner_name: str, table_number: int) -> str:
         if not self.table_activated_message_template:

@@ -107,6 +107,7 @@ class CartRenderingTests(SimpleTestCase):
             (),
             {
                 "table_session": session,
+                "channel": "table",
                 "total_amount": "800.00",
                 "items": type(
                     "Items",

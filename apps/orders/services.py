@@ -439,16 +439,30 @@ def _resolve_cart_guest(*, partner_id, telegram_id: int):
     return guest, None
 
 
+CHANNEL_NAMES = {
+    Order.Channel.TABLE: "к столу",
+    Order.Channel.PICKUP: "на самовывоз",
+}
+
+
 def _align_cart_with_session(cart: Cart, table_session: TableSession | None) -> Cart | None:
     """Keep the cart consistent with where the guest is now.
 
-    - at a table: a cart without a session (built for pickup) joins the
-      session with its items; a cart of another session is abandoned if it
-      has items, otherwise reused;
-    - without a session: a cart left from a closed session is detached and
-      kept for pickup.
+    The cart's channel is the flow the guest chose (``switch_cart_channel``).
+
+    - table channel at a table: a cart of another session is abandoned if it
+      has items, otherwise moved to the current session;
+    - pickup channel: never tied to a session, even while the guest sits at a
+      table (they ordered to take away);
+    - table channel without a session (the guest left): the cart becomes a
+      pickup cart and keeps its items.
     """
 
+    if cart.channel == Order.Channel.PICKUP:
+        if cart.table_session_id is not None:
+            cart.table_session = None
+            cart.save(update_fields=["table_session", "updated_at"])
+        return cart
     if table_session is not None:
         if cart.table_session_id == table_session.id:
             return cart
@@ -459,10 +473,14 @@ def _align_cart_with_session(cart: Cart, table_session: TableSession | None) -> 
         cart.table_session = table_session
         cart.save(update_fields=["table_session", "updated_at"])
         return cart
-    if cart.table_session_id is not None:
-        cart.table_session = None
-        cart.save(update_fields=["table_session", "updated_at"])
+    cart.table_session = None
+    cart.channel = Order.Channel.PICKUP
+    cart.save(update_fields=["table_session", "channel", "updated_at"])
     return cart
+
+
+def _new_cart_channel(table_session: TableSession | None) -> str:
+    return Order.Channel.TABLE if table_session is not None else Order.Channel.PICKUP
 
 
 @transaction.atomic
@@ -493,6 +511,7 @@ def get_or_create_active_cart_for_telegram_user(
                 partner_id=partner_id,
                 guest=guest,
                 table_session=table_session,
+                channel=_new_cart_channel(table_session),
             )
     except IntegrityError:
         cart = locked_active_cart()
@@ -505,7 +524,56 @@ def get_or_create_active_cart_for_telegram_user(
             partner_id=partner_id,
             guest=guest,
             table_session=table_session,
+            channel=_new_cart_channel(table_session),
         )
+
+
+def _remove_items_not_sold_in(cart: Cart) -> list[str]:
+    removed = []
+    for item in cart.items.select_related("menu_item"):
+        menu_item = item.menu_item
+        if menu_item.is_available and menu_item.is_sold_in(cart.channel):
+            continue
+        removed.append(item.item_name)
+        item.delete()
+    if removed:
+        _refresh_cart_totals(cart)
+    return removed
+
+
+@transaction.atomic
+def switch_cart_channel_for_telegram_user(
+    *,
+    partner_id: UUID | str,
+    telegram_id: int,
+    channel: str,
+) -> tuple[Cart, list[str]]:
+    """The guest picks a flow (table or pickup). Returns the cart and the
+    names of items removed because they are not sold in that channel."""
+
+    if channel == Order.Channel.PICKUP and not _pickup_cart_allowed(partner_id):
+        raise OrderFlowError("Самовывоз сейчас отключён.")
+    table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
+    if channel == Order.Channel.TABLE and table_session is None:
+        raise OrderFlowError("Сначала отсканируйте QR-код стола.")
+    if channel not in CHANNEL_NAMES:
+        raise OrderFlowError("Этот способ заказа пока недоступен.")
+    cart = get_or_create_active_cart_for_telegram_user(
+        partner_id=partner_id,
+        telegram_id=telegram_id,
+    )
+    if cart.channel != channel:
+        cart.channel = channel
+        cart.table_session = table_session if channel == Order.Channel.TABLE else None
+        cart.save(update_fields=["channel", "table_session", "updated_at"])
+        cart = _align_cart_with_session(cart, table_session) or cart
+    removed = _remove_items_not_sold_in(cart)
+    return (
+        Cart.objects.select_related("table_session__table")
+        .prefetch_related("items", "items__menu_item")
+        .get(id=cart.id),
+        removed,
+    )
 
 
 @transaction.atomic
@@ -521,6 +589,17 @@ def add_items_to_cart_for_telegram_user(
     )
     parsed_entries = parse_order_input(raw_items)
     items_payload = _build_items_payload(partner_id=partner_id, parsed_entries=parsed_entries)
+    not_sold = [
+        item.name
+        for item in MenuItem.objects.filter(
+            id__in=[payload["menu_item_id"] for payload in items_payload]
+        )
+        if not item.is_sold_in(cart.channel)
+    ]
+    if not_sold:
+        raise OrderFlowError(
+            f"Недоступно для заказа {CHANNEL_NAMES[cart.channel]}: {', '.join(not_sold)}."
+        )
 
     for item_payload in items_payload:
         cart_item, created = CartItem.objects.get_or_create(
@@ -665,13 +744,18 @@ def checkout_active_cart_for_telegram_user(
         partner_id=partner_id,
         telegram_id=telegram_id,
     )
-    cart_items = list(cart.items.all())
+    cart_items = list(cart.items.select_related("menu_item"))
     if not cart_items:
         raise OrderFlowError("Корзина пуста. Добавьте позиции перед оформлением.")
-    if cart.table_session_id is None:
+    if cart.channel != Order.Channel.TABLE or cart.table_session_id is None:
         raise OrderFlowError(
-            "Вы не за столом. Оформите заказ на самовывоз или отсканируйте QR-код стола."
+            "Корзина собрана не для стола. Оформите самовывоз или отсканируйте QR-код стола."
         )
+    not_sold = [
+        item.item_name for item in cart_items if not item.menu_item.is_sold_in(Order.Channel.TABLE)
+    ]
+    if not_sold:
+        raise OrderFlowError(f"Недоступно для заказа к столу: {', '.join(not_sold)}.")
 
     order = create_order(
         partner_id=partner_id,

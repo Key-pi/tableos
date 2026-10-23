@@ -5,9 +5,11 @@ from asgiref.sync import sync_to_async
 
 from apps.menu.models import MenuCategory
 from apps.menu.repositories import MenuItemRepository
+from apps.orders.models import Order
 from apps.orders.services import (
     OrderFlowError,
     add_items_to_cart_for_telegram_user,
+    get_active_cart_for_telegram_user,
 )
 from apps.tables.services import get_active_table_session
 from bot.filters.content import PartnerButtonFilter
@@ -38,7 +40,24 @@ async def _safe_edit_menu_message(message: Message, text: str, *, reply_markup) 
         raise
 
 
-def _render_menu_category_view(*, partner, content, category, menu_items, session) -> str:
+def _menu_channel(content, session, cart) -> str | None:
+    """The flow the menu is shown for: the cart's channel, else where the guest
+    is. ``None`` means browsing only (no ordering possible)."""
+
+    if not content.supports_cart():
+        return None
+    if cart is not None:
+        return cart.channel
+    if session is not None:
+        return Order.Channel.TABLE
+    if content.supports_pickup_orders():
+        return Order.Channel.PICKUP
+    return None
+
+
+def _render_menu_category_view(
+    *, partner, content, category, menu_items, session, channel=None
+) -> str:
     lines = [content.menu_header(partner_name=partner.name)]
     lines.append(f"Категория: <b>{escape_html(category.name)}</b>")
     lines.append("")
@@ -57,14 +76,13 @@ def _render_menu_category_view(*, partner, content, category, menu_items, sessio
                 lines.append(escape_html(_trim_menu_description(item.description)))
             lines.append("")
 
-    if session is None:
-        # Without a table session ordering is possible only as pickup.
-        if content.supports_cart() and content.supports_pickup_orders():
-            lines.append(
-                "Нажмите кнопку с позицией ниже, чтобы добавить её в корзину — "
-                "заказ можно забрать самовывозом."
-            )
-        elif content.supports_cart():
+    if channel == Order.Channel.PICKUP:
+        lines.append(
+            "Самовывоз: показаны позиции на вынос. Нажмите кнопку с позицией, чтобы "
+            "добавить её в корзину."
+        )
+    elif session is None:
+        if content.supports_cart():
             lines.append(content.menu_requires_session_hint())
     else:
         if content.supports_cart():
@@ -73,7 +91,7 @@ def _render_menu_category_view(*, partner, content, category, menu_items, sessio
     return "\n".join(lines).strip()
 
 
-async def _send_menu_view(*, target, bot: Bot, category_id: str | None = None) -> None:
+async def send_menu_view(*, target, bot: Bot, category_id: str | None = None) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
     navigation_state = await sync_to_async(resolve_guest_navigation_state)(
@@ -140,10 +158,15 @@ async def _send_menu_view(*, target, bot: Bot, category_id: str | None = None) -
         (item for item in categories if str(item.id) == str(category_id)),
         categories[0],
     )
+    cart = await sync_to_async(get_active_cart_for_telegram_user)(
+        partner_id=partner.id,
+        telegram_id=target.from_user.id,
+    )
+    channel = _menu_channel(content, session, cart)
     menu_items = await sync_to_async(list)(
-        MenuItemRepository.active_for_partner(partner.id).filter(category=category)[
-            : content.max_menu_items_per_category_message
-        ]
+        MenuItemRepository.active_for_partner(partner.id, channel=channel).filter(
+            category=category
+        )[: content.max_menu_items_per_category_message]
     )
     text = _render_menu_category_view(
         partner=partner,
@@ -151,12 +174,13 @@ async def _send_menu_view(*, target, bot: Bot, category_id: str | None = None) -
         category=category,
         menu_items=menu_items,
         session=session,
+        channel=channel,
     )
     keyboard = build_menu_keyboard(
         categories=categories,
         active_category_id=category.id,
         items=menu_items,
-        has_session=session is not None or content.supports_pickup_orders(),
+        has_session=channel is not None,
         supports_cart=content.supports_cart(),
     )
     if isinstance(target, CallbackQuery):
@@ -175,18 +199,18 @@ async def _send_menu_view(*, target, bot: Bot, category_id: str | None = None) -
 
 @router.message(PartnerButtonFilter("button_menu_label"))
 async def menu_handler(message: Message, bot: Bot) -> None:
-    await _send_menu_view(target=message, bot=bot)
+    await send_menu_view(target=message, bot=bot)
 
 
 @router.callback_query(F.data.startswith("menucat:"))
 async def menu_category_callback(callback: CallbackQuery, bot: Bot) -> None:
     category_id = (callback.data or "").split(":", 1)[1]
-    await _send_menu_view(target=callback, bot=bot, category_id=category_id)
+    await send_menu_view(target=callback, bot=bot, category_id=category_id)
 
 
 @router.callback_query(F.data == "menurefresh")
 async def menu_refresh_callback(callback: CallbackQuery, bot: Bot) -> None:
-    await _send_menu_view(target=callback, bot=bot)
+    await send_menu_view(target=callback, bot=bot)
 
 
 @router.callback_query(F.data.startswith("menuadd:"))

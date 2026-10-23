@@ -24,6 +24,14 @@ class MenuItemAdmin(ScopedAdminMixin):
         "price",
         "item_type",
         "is_available",
+        "available_at_table",
+        "available_for_pickup",
     )
-    list_filter = ("partner", "item_type", "is_available")
+    list_filter = (
+        "partner",
+        "item_type",
+        "is_available",
+        "available_at_table",
+        "available_for_pickup",
+    )
     search_fields = ("public_id", "name", "category__name", "partner__name")

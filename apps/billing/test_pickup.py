@@ -29,6 +29,7 @@ from apps.orders.services import (
     OrderFlowError,
     add_items_to_cart_for_telegram_user,
     get_active_cart_for_telegram_user,
+    switch_cart_channel_for_telegram_user,
     transition_order_status,
 )
 from apps.partners.models import OpeningHours, Partner, PartnerBotSettings
@@ -128,15 +129,58 @@ class PickupCartTests(PickupFixtureMixin, TestCase):
         with self.assertRaisesMessage(OrderFlowError, "QR-кода стола"):
             self._cart()
 
-    def test_pickup_cart_joins_the_table_with_its_items(self):
+    def test_pickup_cart_stays_pickup_at_a_table_until_switched(self):
         self._cart()
         table = Table.objects.create(partner=self.partner, number=3, qr_token="pickup-t3")
         session = activate_table_session(
             partner_id=self.partner.id, telegram_id=TG, payload=table.deep_link_payload
         )
         cart = get_active_cart_for_telegram_user(partner_id=self.partner.id, telegram_id=TG)
+        self.assertEqual(cart.channel, Order.Channel.PICKUP)
+        self.assertIsNone(cart.table_session_id)
+
+        cart, removed = switch_cart_channel_for_telegram_user(
+            partner_id=self.partner.id, telegram_id=TG, channel=Order.Channel.TABLE
+        )
         self.assertEqual(cart.table_session_id, session.id)
         self.assertEqual(cart.total_amount, Decimal("400.00"))
+        self.assertEqual(removed, [])
+
+    def test_switching_flow_removes_items_not_sold_there(self):
+        hookah = MenuItem.objects.create(
+            partner=self.partner,
+            category=self.item.category,
+            public_id="PICKHOOK",
+            name="Кальян",
+            price="500.00",
+            available_for_pickup=False,
+        )
+        table = Table.objects.create(partner=self.partner, number=4, qr_token="pickup-t4")
+        activate_table_session(
+            partner_id=self.partner.id, telegram_id=TG, payload=table.deep_link_payload
+        )
+        self._cart()
+        add_items_to_cart_for_telegram_user(
+            partner_id=self.partner.id, telegram_id=TG, raw_items=f"{hookah.public_id}x1"
+        )
+
+        cart, removed = switch_cart_channel_for_telegram_user(
+            partner_id=self.partner.id, telegram_id=TG, channel=Order.Channel.PICKUP
+        )
+
+        self.assertEqual(removed, ["Кальян"])
+        self.assertEqual(cart.channel, Order.Channel.PICKUP)
+        self.assertEqual(cart.total_amount, Decimal("400.00"))
+        with self.assertRaisesMessage(OrderFlowError, "Недоступно для заказа на самовывоз"):
+            add_items_to_cart_for_telegram_user(
+                partner_id=self.partner.id, telegram_id=TG, raw_items=f"{hookah.public_id}x1"
+            )
+
+    def test_table_flow_requires_a_table(self):
+        with self.assertRaisesMessage(OrderFlowError, "QR-код стола"):
+            switch_cart_channel_for_telegram_user(
+                partner_id=self.partner.id, telegram_id=TG, channel=Order.Channel.TABLE
+            )
 
 
 class OpeningHoursTests(PickupFixtureMixin, TestCase):

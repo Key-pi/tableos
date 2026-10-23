@@ -159,12 +159,16 @@ partner-authored markup.
    itself when nobody sits in it and it is settled (no unpaid orders, no open
    bill); `close_table_visit` is the staff command.
 2. Cart commands in `orders/services.py` lock the guest's active `Cart`.
-   At a table the cart belongs to the session: a cart with items of an older
-   session is abandoned, an empty one is moved, and a cart without a session
-   (built for pickup) joins the session with its items. Without a session a
-   cart exists only when the venue offers pickup; a cart left from a closed
-   session is detached and kept. `unique_active_cart_per_partner_guest`
-   allows one active cart per guest and partner.
+   The guest chooses the flow first: a table QR scan or the «Самовывоз»
+   button sets `Cart.channel` (`switch_cart_channel_for_telegram_user`,
+   which removes items not sold in that flow — `MenuItem.available_at_table`
+   / `available_for_pickup`); the menu shows only items of the cart's flow
+   and checkout follows it. A table cart belongs to the session: one with
+   items of an older session is abandoned, an empty one is moved; a table
+   cart whose guest left becomes a pickup cart. A pickup cart never ties to
+   a session. Without a session a cart exists only when the venue offers
+   pickup. `unique_active_cart_per_partner_guest` allows one active cart per
+   guest and partner.
 3. Checkout → `create_order`, which validates that guest, table, session and
    every menu item belong to the partner, snapshots item names and the prices
    stored in the cart, writes `OrderStatusHistory` and creates
@@ -177,7 +181,7 @@ partner-authored markup.
    `preparing → ready|canceled`, `ready → delivering|completed|canceled`,
    `delivering → completed|canceled`. Completion sets `received_at`.
 5. **Pickup** (`Order.channel = pickup`, [PICKUP.md](PICKUP.md)): checkout
-   without a table, or «Самовывоз» at a table, runs
+   of a pickup cart runs
    `apps/billing/pickup.py:place_pickup_order` — phone required, only within
    `OpeningHours`, a personal bill issued at once, optional bonuses; the
    guest prepays by transfer to `PartnerBotSettings.pickup_payment_details`.
@@ -314,7 +318,7 @@ transactions; allowed operations are actions that call owner services.
 
 ## Tests and checks
 
-- 327 tests after pickup, green on SQLite and on PostgreSQL 16. Ten are
+- 330 tests after pickup, green on SQLite and on PostgreSQL 16. Ten are
   PostgreSQL-only and skipped on SQLite: parallel broadcast workers
   (`apps/notifications/test_delivery.py`); concurrent order transition
   (`apps/orders/test_concurrency.py`); concurrent QR scans, two guests

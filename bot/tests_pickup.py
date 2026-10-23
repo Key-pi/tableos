@@ -11,15 +11,16 @@ from apps.billing.models import Bill
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
-from apps.orders.models import Order
+from apps.orders.models import Cart, Order
 from apps.orders.services import add_items_to_cart_for_telegram_user
 from apps.partners.models import BotInstance, Partner, PartnerBotSettings
 from apps.tables.models import Table
-from apps.tables.services import activate_table_session
 from apps.users.models import GuestProfile, TelegramAccount, User
 from apps.users.services import get_or_create_guest_profile
 from bot.handlers import order as order_handlers
 from bot.handlers import pickup, staff
+from bot.handlers.menu import send_menu_view
+from bot.handlers.start import start_handler
 from bot.services.runtime import BotRuntimeConfig, register_runtime_configs
 
 GUEST = 7400001
@@ -27,7 +28,9 @@ STAFF = 7400901
 
 
 def _user(telegram_id):
-    return SimpleNamespace(id=telegram_id, username="", first_name="G", last_name="")
+    return SimpleNamespace(
+        id=telegram_id, username="", first_name="G", last_name="", language_code=""
+    )
 
 
 def _buttons(markup):
@@ -189,22 +192,55 @@ class GuestPickupFlowTests(PickupBotFixture):
         summary = self._press("pk:b:now:1")
         self.assertIn("К оплате переводом: 270.00 грн", summary.message.edit_text.call_args.args[0])
 
-    def test_guest_at_a_table_chooses_the_channel(self):
+    def test_the_flow_is_chosen_by_buttons_not_at_checkout(self):
+        hookah = MenuItem.objects.create(
+            partner=self.partner,
+            category=MenuCategory.objects.get(partner=self.partner),
+            public_id="PBHOOKAH",
+            name="Кальян",
+            price="500.00",
+            available_for_pickup=False,
+        )
         table = Table.objects.create(partner=self.partner, number=2, qr_token="pickup-bot-t2")
-        activate_table_session(
-            partner_id=self.partner.id, telegram_id=GUEST, payload=table.deep_link_payload
+        scan = SimpleNamespace(from_user=_user(GUEST), answer=AsyncMock())
+        async_to_sync(start_handler)(
+            scan, SimpleNamespace(args=table.deep_link_payload), self.bot
         )
-        callback = self._callback("cart:checkout")
-        async_to_sync(order_handlers.cart_checkout_callback)(callback, self.bot)
+        # Scanning the QR chose the table flow; the soup stays in the cart.
+        cart = Cart.objects.get(guest=self.guest, status=Cart.Status.ACTIVE)
+        self.assertEqual(cart.channel, Order.Channel.TABLE)
+        add_items_to_cart_for_telegram_user(
+            partner_id=self.partner.id, telegram_id=GUEST, raw_items="PBHOOKAHx1"
+        )
 
-        markup = callback.message.answer.call_args.kwargs["reply_markup"]
-        self.assertEqual(
-            [button.callback_data for button in _buttons(markup)], ["co:table", "co:pickup"]
+        switch = self._press("cart:mode:pickup", handler=order_handlers.cart_mode_callback)
+
+        text = switch.message.edit_text.call_args.args[0]
+        self.assertIn("самовывоз", text)
+        self.assertIn("Кальян", text)  # reported as removed
+        cart.refresh_from_db()
+        self.assertEqual(cart.channel, Order.Channel.PICKUP)
+        self.assertFalse(cart.items.filter(menu_item=hookah).exists())
+
+        checkout = self._callback("cart:checkout")
+        async_to_sync(order_handlers.cart_checkout_callback)(checkout, self.bot)
+        self.assertIn("номер телефона", checkout.message.answer.call_args.args[0])
+
+    def test_pickup_menu_hides_table_only_items(self):
+        MenuItem.objects.create(
+            partner=self.partner,
+            category=MenuCategory.objects.get(partner=self.partner),
+            public_id="PBHOOK02",
+            name="Кальян",
+            price="500.00",
+            available_for_pickup=False,
         )
-        self._press("co:table", handler=order_handlers.checkout_table_choice_callback)
-        order = Order.objects.get(guest=self.guest)
-        self.assertEqual(order.channel, Order.Channel.TABLE)
-        self.assertEqual(order.table_id, table.id)
+        message = SimpleNamespace(from_user=_user(GUEST), answer=AsyncMock())
+        async_to_sync(send_menu_view)(target=message, bot=self.bot)
+
+        text = message.answer.call_args.args[0]
+        self.assertIn("Суп", text)
+        self.assertNotIn("Кальян", text)
 
 
 class StaffPickupPaymentTests(PickupBotFixture):

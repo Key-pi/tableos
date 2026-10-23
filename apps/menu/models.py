@@ -47,7 +47,18 @@ class MenuItem(PartnerBoundModel):
     image_url = models.URLField(blank=True)
     item_type = models.CharField(max_length=16, choices=ItemType.choices, default=ItemType.INTERNAL)
     is_available = models.BooleanField(default=True)
+    # Ordering channels the item is sold in (ECOSYSTEM_DIRECTION.md): a hookah
+    # may be table-only, a bottled drink pickup-only.
+    available_at_table = models.BooleanField(default=True, verbose_name="За столом")
+    available_for_pickup = models.BooleanField(default=True, verbose_name="Самовывоз")
+    available_for_delivery = models.BooleanField(default=True, verbose_name="Доставка")
     sort_order = models.PositiveIntegerField(default=100)
+
+    CHANNEL_FIELDS = {
+        "table": "available_at_table",
+        "pickup": "available_for_pickup",
+        "delivery": "available_for_delivery",
+    }
 
     class Meta:
         ordering = ["category__sort_order", "sort_order", "name"]
@@ -64,6 +75,9 @@ class MenuItem(PartnerBoundModel):
 
     def __str__(self) -> str:
         return f"{self.partner.name} / {self.name}"
+
+    def is_sold_in(self, channel: str) -> bool:
+        return bool(getattr(self, self.CHANNEL_FIELDS[channel]))
 
     def save(self, *args, **kwargs):
         if not self.public_id:

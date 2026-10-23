@@ -144,6 +144,12 @@ class Cart(PartnerBoundModel):
         blank=True,
     )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    # The flow the guest chose: at the table or pickup. Checkout follows it.
+    channel = models.CharField(
+        max_length=16,
+        choices=Order.Channel.choices,
+        default=Order.Channel.TABLE,
+    )
     comment = models.TextField(blank=True)
     subtotal_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
