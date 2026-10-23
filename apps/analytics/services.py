@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from decimal import Decimal
 from math import ceil
@@ -303,9 +303,30 @@ def refresh_daily_partner_metrics() -> int:
         flat=True,
     )
     for partner_id in active_partner_ids:
+        _finalise_previous_day_metric(partner_id=partner_id)
         refresh_partner_daily_metric(partner_id=partner_id)
         refreshed += 1
     return refreshed
+
+
+def _finalise_previous_day_metric(*, partner_id) -> None:
+    """Refresh yesterday's snapshot once after the venue's local midnight.
+
+    The task runs periodically, so activity after its last run of a day would
+    otherwise never reach that day's snapshot (AA-029).
+    """
+
+    _partner, today_start_local, today_start, _today_end = _resolve_partner_day_bounds(
+        partner_id=partner_id,
+    )
+    previous_day = (today_start_local - timedelta(days=1)).date()
+    already_final = PartnerDailyMetric.objects.filter(
+        partner_id=partner_id,
+        bucket_date=previous_day,
+        updated_at__gte=today_start,
+    ).exists()
+    if not already_final:
+        refresh_partner_daily_metric(partner_id=partner_id, bucket_date=previous_day)
 
 
 def build_daily_paid_bills_page(*, partner_id, page: int = 1) -> ReportPage:

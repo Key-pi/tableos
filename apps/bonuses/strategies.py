@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.utils import timezone
 
@@ -50,7 +51,9 @@ def _cashback_bonus(program: BonusProgram, context: BonusContext) -> Decimal:
 def _visit_bonus(program: BonusProgram, context: BonusContext) -> Decimal:
     once_per_day = program.config.get("once_per_day", True)
     if once_per_day:
-        started_at = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        # The "day" is the venue's local day, not the UTC day (AA-029).
+        venue_now = timezone.now().astimezone(ZoneInfo(program.partner.timezone))
+        started_at = venue_now.replace(hour=0, minute=0, second=0, microsecond=0)
         already_awarded = BonusTransaction.objects.filter(
             partner_id=program.partner_id,
             guest=context.guest,

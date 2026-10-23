@@ -1,4 +1,8 @@
+from datetime import datetime
+from datetime import timezone as dt_timezone
 from decimal import Decimal
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.contrib.admin.sites import AdminSite
 from django.test import TestCase
@@ -11,6 +15,7 @@ from apps.bonuses.services import (
     register_walk_in_sale_by_customer_code,
     register_walk_in_sale_from_menu_items_by_customer_code,
 )
+from apps.bonuses.strategies import BonusContext, _visit_bonus
 from apps.menu.models import MenuCategory, MenuItem
 from apps.partners.models import Partner
 from apps.users.constants import AdminSection
@@ -339,3 +344,48 @@ class WalkInSaleAdminPermissionTests(TestCase):
 
         self.assertFalse(self.admin.has_change_permission(request, self.sale))
         self.assertTrue(self.admin.has_view_permission(request, self.sale))
+
+
+class VisitBonusDayBoundaryTests(TestCase):
+    def setUp(self):
+        self.partner = Partner.objects.create(
+            name="Night Venue",
+            slug="night-venue",
+            status=Partner.Status.ACTIVE,
+            timezone="Europe/Kiev",
+        )
+        account = TelegramAccount.objects.create(telegram_id=12345901, username="night_guest")
+        self.guest = GuestProfile.objects.create(partner=self.partner, telegram_account=account)
+        self.program = BonusProgram.objects.create(
+            partner=self.partner,
+            name="Visit bonus",
+            trigger_event=BonusProgram.TriggerEvent.VISIT,
+            program_type=BonusProgram.ProgramType.VISIT,
+            fixed_amount="10.00",
+            is_active=True,
+        )
+
+    def test_once_per_day_uses_the_venue_local_day(self):
+        # AA-029: 00:30 and 10:00 in Kyiv are the same venue day, although the
+        # first one is still the previous day in UTC.
+        kyiv = ZoneInfo("Europe/Kiev")
+        accrual = BonusTransaction.objects.create(
+            partner=self.partner,
+            guest=self.guest,
+            program=self.program,
+            transaction_type=BonusTransaction.TransactionType.ACCRUAL,
+            amount="10.00",
+        )
+        BonusTransaction.objects.filter(id=accrual.id).update(
+            created_at=datetime(2026, 10, 23, 0, 30, tzinfo=kyiv)
+        )
+        context = BonusContext(event=BonusProgram.TriggerEvent.VISIT, guest=self.guest)
+
+        with patch(
+            "apps.bonuses.strategies.timezone.now",
+            # timezone.now() is always UTC: 07:00 UTC == 10:00 in Kyiv.
+            return_value=datetime(2026, 10, 23, 7, 0, tzinfo=dt_timezone.utc),
+        ):
+            amount = _visit_bonus(self.program, context)
+
+        self.assertEqual(amount, Decimal("0.00"))

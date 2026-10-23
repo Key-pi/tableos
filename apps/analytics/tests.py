@@ -1,9 +1,13 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
+from datetime import timezone as dt_timezone
 from decimal import Decimal
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 from django.utils import timezone
 
+from apps.analytics.models import PartnerDailyMetric
 from apps.analytics.services import (
     build_daily_operations_report,
     build_daily_paid_bills_page,
@@ -14,7 +18,6 @@ from apps.analytics.services import (
     refresh_daily_partner_metrics,
     refresh_partner_daily_metric,
 )
-from apps.analytics.models import PartnerDailyMetric
 from apps.billing.models import Payment
 from apps.billing.services import create_bill_from_orders, record_payment
 from apps.bonuses.services import register_walk_in_sale
@@ -242,6 +245,40 @@ class DailyOperationsReportTests(TestCase):
         self.assertEqual(refreshed_count, 1)
         self.assertTrue(PartnerDailyMetric.objects.filter(partner=self.partner).exists())
         self.assertFalse(PartnerDailyMetric.objects.filter(partner=suspended_partner).exists())
+
+    def test_refresh_daily_partner_metrics_finalises_the_previous_day(self):
+        # AA-029: a payment after the last run of a day must reach that day's
+        # snapshot once the next day starts.
+        kyiv = ZoneInfo("Europe/Kiev")
+        late_evening = datetime(2026, 10, 22, 23, 55, tzinfo=kyiv)
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+        payment = record_payment(
+            bill=bill,
+            amount="200.00",
+            method=Payment.Method.CASH,
+            created_by=self.cashier,
+        )
+        Payment.objects.filter(id=payment.id).update(paid_at=late_evening)
+        stale_metric = PartnerDailyMetric.objects.create(
+            partner=self.partner,
+            bucket_date=late_evening.date(),
+            revenue=Decimal("0.00"),
+        )
+        PartnerDailyMetric.objects.filter(id=stale_metric.id).update(
+            updated_at=datetime(2026, 10, 22, 23, 50, tzinfo=kyiv)
+        )
+
+        with patch(
+            "apps.analytics.services.timezone.now",
+            return_value=datetime(2026, 10, 23, 0, 5, tzinfo=kyiv).astimezone(dt_timezone.utc),
+        ):
+            refresh_daily_partner_metrics()
+
+        stale_metric.refresh_from_db()
+        self.assertEqual(stale_metric.revenue, Decimal("200.00"))
 
     def test_refresh_partner_daily_metric_uses_requested_bucket_date(self):
         bill = create_bill_from_orders(
