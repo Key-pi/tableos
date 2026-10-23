@@ -2,18 +2,27 @@ from __future__ import annotations
 
 import asyncio
 import html
+import uuid
 from datetime import timedelta
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
-from asgiref.sync import async_to_sync
+from aiogram.exceptions import (
+    TelegramAPIError,
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramNetworkError,
+    TelegramRetryAfter,
+    TelegramServerError,
+)
+from asgiref.sync import async_to_sync, sync_to_async
 from django.db import transaction
+from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from apps.employees.models import EmployeeProfile
-from apps.notifications.models import BroadcastCampaign, StaffNotification
+from apps.notifications.models import BroadcastCampaign, BroadcastDelivery, StaffNotification
 from apps.notifications.repositories import (
     BroadcastCampaignRepository,
     NotificationPreferenceRepository,
@@ -27,11 +36,19 @@ DELIVER_STAFF_NOTIFICATION_TASK = "notifications.deliver_staff_notification"
 SEND_GUEST_ORDER_STATUS_UPDATE_TASK = "notifications.send_guest_order_status_update"
 SEND_BROADCAST_CAMPAIGN_TASK = "notifications.send_broadcast_campaign"
 PROCESS_SCHEDULED_BROADCAST_CAMPAIGNS_TASK = "notifications.process_scheduled_broadcast_campaigns"
+RECOVER_STALLED_BROADCASTS_TASK = "notifications.recover_stalled_broadcast_campaigns"
+# A claimed broadcast message whose result is not recorded within this time is
+# treated as lost by its worker: it becomes ``unknown`` and is never resent.
+BROADCAST_CLAIM_LEASE = timedelta(minutes=30)
 BROADCAST_BATCH_SIZE = max(1, app_settings.notification_broadcast_batch_size)
 
 
 class NotificationDeliveryError(Exception):
     """Raised when partner bot delivery cannot be performed safely."""
+
+
+class RetryableDeliveryError(NotificationDeliveryError):
+    """A transient Telegram failure: the Celery task retries (PQ-015)."""
 
 
 class GuestCallError(Exception):
@@ -67,12 +84,23 @@ def _active_partner_bot(partner_id) -> BotInstance:
 async def _send_telegram_messages(
     token: str,
     messages: list[tuple[int, str]],
-) -> list[tuple[int, bool, str, bool]]:
+    *,
+    on_result=None,
+) -> list[tuple[int, bool, str, bool, bool]]:
+    """Send messages one by one; never call this inside a database transaction.
+
+    Each result is ``(chat_id, sent, error, blocked, retryable)``. ``retryable``
+    marks failures where Telegram may or may not have delivered the message
+    (network or server errors): operational notifications retry them, a
+    broadcast records them as ``unknown``. ``on_result`` (async) is awaited
+    after every message so callers can persist each outcome immediately.
+    """
+
     bot = Bot(
         token=token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    results: list[tuple[int, bool, str, bool]] = []
+    results: list[tuple[int, bool, str, bool, bool]] = []
     try:
         for chat_id, text in messages:
             while True:
@@ -82,16 +110,21 @@ async def _send_telegram_messages(
                     await asyncio.sleep(max(float(exc.retry_after), 1.0))
                     continue
                 except TelegramForbiddenError as exc:
-                    results.append((chat_id, False, str(exc), True))
+                    result = (chat_id, False, str(exc), True, False)
+                except (TelegramNetworkError, TelegramServerError) as exc:
+                    result = (chat_id, False, str(exc), False, True)
                 except TelegramBadRequest as exc:
-                    results.append((chat_id, False, str(exc), False))
+                    result = (chat_id, False, str(exc), False, False)
                 except TelegramAPIError as exc:
-                    results.append((chat_id, False, str(exc), False))
+                    result = (chat_id, False, str(exc), False, False)
                 except Exception as exc:  # noqa: BLE001
-                    results.append((chat_id, False, str(exc), False))
+                    result = (chat_id, False, str(exc), False, True)
                 else:
-                    results.append((chat_id, True, "", False))
+                    result = (chat_id, True, "", False, False)
                 break
+            results.append(result)
+            if on_result is not None:
+                await on_result(result)
     finally:
         await bot.session.close()
     return results
@@ -103,6 +136,10 @@ def _unpack_delivery_result(result) -> tuple[int, bool, str, bool]:
     error_message = result[2]
     should_mark_blocked = result[3] if len(result) > 3 else False
     return chat_id, is_sent, error_message, should_mark_blocked
+
+
+def _is_retryable_result(result) -> bool:
+    return bool(result[4]) if len(result) > 4 else False
 
 
 @transaction.atomic
@@ -149,7 +186,39 @@ def deliver_staff_notification(notification: StaffNotification):
 
 
 def deliver_staff_notification_now(notification: StaffNotification) -> StaffNotification:
+    """Deliver one staff notification at least once (PQ-015).
+
+    Already sent notifications are not sent again. The employee must still be
+    active, linked to the partner and opted in to bot notifications. Transient
+    Telegram failures (network/server errors) are recorded and raised as
+    ``RetryableDeliveryError`` so the Celery task retries; definite failures
+    are recorded and not retried.
+    """
+
+    notification = (
+        StaffNotification.objects.select_related(
+            "employee__telegram_account",
+            "employee__user",
+        )
+        .filter(id=notification.id)
+        .first()
+    )
+    if notification is None:
+        return None
+    if notification.delivery_status == StaffNotification.DeliveryStatus.SENT:
+        return notification
     employee = notification.employee
+    if employee is not None and not (
+        employee.is_active
+        and employee.bot_notifications_enabled
+        and employee.partner_id == notification.partner_id
+        and employee.user.is_active
+        and employee.user.partner_id == notification.partner_id
+    ):
+        notification.delivery_status = StaffNotification.DeliveryStatus.FAILED
+        notification.delivery_error = "Employee is no longer an active notification recipient."
+        notification.save(update_fields=["delivery_status", "delivery_error", "updated_at"])
+        return notification
     if employee is None or employee.telegram_account_id is None:
         notification.delivery_status = StaffNotification.DeliveryStatus.FAILED
         notification.delivery_error = "Employee Telegram account is not linked."
@@ -195,6 +264,8 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
             "updated_at",
         ]
     )
+    if not is_sent and _is_retryable_result(results[0]):
+        raise RetryableDeliveryError(error_message or "Transient Telegram delivery failure.")
     return notification
 
 
@@ -288,10 +359,14 @@ def send_guest_order_status_update_now(
         bot_instance.token,
         [(guest_chat_id, "\n".join(lines))],
     )
-    _chat_id, is_sent, _error_message, should_mark_blocked = _unpack_delivery_result(results[0])
+    _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
     if should_mark_blocked:
         order.guest.telegram_account.is_blocked = True
         order.guest.telegram_account.save(update_fields=["is_blocked", "updated_at"])
+    if not is_sent and _is_retryable_result(results[0]):
+        # At least once (PQ-015): only a transient failure is retried; nothing
+        # after a successful send raises, so a sent update is not repeated.
+        raise RetryableDeliveryError(error_message or "Transient Telegram delivery failure.")
     return is_sent
 
 
@@ -460,6 +535,9 @@ def notify_staff_about_billing_request(billing_request) -> int:
 
 @transaction.atomic
 def send_broadcast_campaign(campaign: BroadcastCampaign) -> BroadcastCampaign:
+    """Queue a campaign. Re-queueing reaches only guests not yet attempted."""
+
+    campaign = BroadcastCampaign.objects.select_for_update().get(id=campaign.id)
     if campaign.status in {
         BroadcastCampaign.Status.SCHEDULED,
         BroadcastCampaign.Status.SENDING,
@@ -470,45 +548,76 @@ def send_broadcast_campaign(campaign: BroadcastCampaign) -> BroadcastCampaign:
     campaign.status = BroadcastCampaign.Status.SCHEDULED
     campaign.delivery_started_at = None
     campaign.sent_at = None
-    campaign.delivered_count = 0
-    campaign.failed_count = 0
     campaign.last_error = ""
     campaign.save(
         update_fields=[
             "status",
             "delivery_started_at",
             "sent_at",
-            "delivered_count",
-            "failed_count",
             "last_error",
             "updated_at",
         ]
     )
-    from apps.notifications.tasks import send_broadcast_campaign_task
-
-    transaction.on_commit(
-        lambda: send_broadcast_campaign_task.delay(str(campaign.id), "")
-    )
+    _enqueue_broadcast_task(campaign.id)
     return campaign
 
 
-@transaction.atomic
+def _enqueue_broadcast_task(campaign_id) -> None:
+    from apps.notifications.tasks import send_broadcast_campaign_task
+
+    transaction.on_commit(lambda: send_broadcast_campaign_task.delay(str(campaign_id), ""))
+
+
 def send_broadcast_campaign_now(
     campaign: BroadcastCampaign,
     *,
     after_guest_id: str = "",
 ) -> BroadcastCampaign:
-    recipient_batch = NotificationPreferenceRepository.marketing_guests_batch(
-        campaign.partner_id,
-        after_guest_id=after_guest_id or None,
-        limit=BROADCAST_BATCH_SIZE + 1,
-    )
-    has_more_batches = len(recipient_batch) > BROADCAST_BATCH_SIZE
-    recipients = recipient_batch[:BROADCAST_BATCH_SIZE]
+    """Send one batch of a campaign; queue the next batch if work remains.
 
-    if after_guest_id:
-        campaign = BroadcastCampaign.objects.get(id=campaign.id)
-    elif campaign.status != BroadcastCampaign.Status.SENDING:
+    Delivery contract (PQ-014, AA-008): every guest receives a campaign at most
+    once. The audience is recorded as ``BroadcastDelivery`` rows when sending
+    starts; a batch is claimed in a short transaction, sent with no
+    transaction open, and every outcome is stored in its own short
+    transaction. Duplicate or retried tasks and parallel workers only claim
+    rows that are still ``pending``.
+
+    ``after_guest_id`` is accepted for tasks queued before this contract (the
+    old cursor); it limits the recorded audience to guests after it.
+    """
+
+    started = _start_broadcast(campaign.id, legacy_after_guest_id=after_guest_id)
+    if started is None:
+        return BroadcastCampaign.objects.get(id=campaign.id)
+
+    try:
+        bot_instance = _active_partner_bot(started.partner_id)
+    except NotificationDeliveryError as exc:
+        return _fail_broadcast(started.id, str(exc))
+
+    claim_token, deliveries = _claim_broadcast_batch(started.id)
+    if deliveries:
+        _send_claimed_broadcast_batch(
+            campaign=started,
+            token=bot_instance.token,
+            claim_token=claim_token,
+            deliveries=deliveries,
+        )
+
+    return _advance_broadcast(started.id)
+
+
+@transaction.atomic
+def _start_broadcast(campaign_id, *, legacy_after_guest_id: str = ""):
+    """Lock the campaign, record its audience once, return it if sendable."""
+
+    campaign = BroadcastCampaign.objects.select_for_update().get(id=campaign_id)
+    if campaign.status in {BroadcastCampaign.Status.SENT, BroadcastCampaign.Status.FAILED}:
+        return None
+
+    has_deliveries = campaign.deliveries.exists()
+    if campaign.status != BroadcastCampaign.Status.SENDING:
+        _record_broadcast_audience(campaign)
         campaign.status = BroadcastCampaign.Status.SENDING
         campaign.delivery_started_at = timezone.now()
         campaign.last_error = ""
@@ -522,88 +631,234 @@ def send_broadcast_campaign_now(
                 "updated_at",
             ]
         )
-
-    if not recipients:
-        if after_guest_id:
-            _finalize_broadcast_campaign(campaign)
-        else:
-            campaign.status = BroadcastCampaign.Status.FAILED
-            campaign.delivered_count = 0
-            campaign.failed_count = 0
-            campaign.last_error = "No eligible recipients for this campaign."
-            campaign.save(
-                update_fields=[
-                    "status",
-                    "delivered_count",
-                    "failed_count",
-                    "last_error",
-                    "updated_at",
-                ]
+    elif not has_deliveries:
+        # A campaign that was mid-way under the old cursor-based sender.
+        if legacy_after_guest_id:
+            _record_broadcast_audience(campaign, after_guest_id=legacy_after_guest_id)
+        elif campaign.delivered_count or campaign.failed_count:
+            _fail_locked_broadcast(
+                campaign,
+                "Sending was interrupted by the delivery upgrade; not resumed to "
+                "avoid duplicate messages.",
             )
-        return campaign
-
-    try:
-        bot_instance = _active_partner_bot(campaign.partner_id)
-    except NotificationDeliveryError as exc:
-        campaign.status = BroadcastCampaign.Status.FAILED
-        campaign.last_error = str(exc)
-        campaign.failed_count = 0
-        campaign.save(update_fields=["status", "last_error", "failed_count", "updated_at"])
-        return campaign
-
-    message_payloads = [
-        (guest.telegram_account.telegram_id, campaign.message)
-        for guest in recipients
-    ]
-    results = async_to_sync(_send_telegram_messages)(bot_instance.token, message_payloads)
-    delivered_count = 0
-    failed_count = 0
-    failed_results: list[tuple[int, bool, str, bool]] = []
-    blocked_chat_ids: list[int] = []
-    for result in results:
-        chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(result)
-        if is_sent:
-            delivered_count += 1
+            return None
         else:
-            failed_count += 1
-            failed_results.append((chat_id, is_sent, error_message, should_mark_blocked))
-        if should_mark_blocked:
-            blocked_chat_ids.append(chat_id)
+            _record_broadcast_audience(campaign)
 
-    if blocked_chat_ids:
-        TelegramAccount.objects.filter(telegram_id__in=blocked_chat_ids).update(
-            is_blocked=True,
-            updated_at=timezone.now(),
+    if not campaign.deliveries.exists():
+        _fail_locked_broadcast(campaign, "No eligible recipients for this campaign.")
+        return None
+    return campaign
+
+
+def _record_broadcast_audience(campaign: BroadcastCampaign, *, after_guest_id: str = "") -> int:
+    created = 0
+    cursor = after_guest_id or None
+    while True:
+        guests = NotificationPreferenceRepository.marketing_guests_batch(
+            campaign.partner_id,
+            after_guest_id=cursor,
+            limit=1000,
         )
+        if not guests:
+            return created
+        BroadcastDelivery.objects.bulk_create(
+            [
+                BroadcastDelivery(
+                    partner_id=campaign.partner_id,
+                    campaign=campaign,
+                    guest=guest,
+                )
+                for guest in guests
+            ],
+            ignore_conflicts=True,
+        )
+        created += len(guests)
+        cursor = str(guests[-1].id)
 
-    campaign.delivered_count += delivered_count
-    campaign.failed_count += failed_count
-    if failed_results:
-        campaign.last_error = failed_results[0][2]
+
+def _fail_broadcast(campaign_id, error: str) -> BroadcastCampaign:
+    with transaction.atomic():
+        campaign = BroadcastCampaign.objects.select_for_update().get(id=campaign_id)
+        if campaign.status != BroadcastCampaign.Status.SENDING:
+            return campaign
+        _fail_locked_broadcast(campaign, error)
+        return campaign
+
+
+def _fail_locked_broadcast(campaign: BroadcastCampaign, error: str) -> None:
+    _refresh_broadcast_counters(campaign)
+    campaign.status = BroadcastCampaign.Status.FAILED
+    campaign.last_error = error
     campaign.save(
         update_fields=[
+            "status",
+            "last_error",
             "delivered_count",
             "failed_count",
-            "last_error",
+            "unknown_count",
             "updated_at",
         ]
     )
 
-    if has_more_batches:
-        from apps.notifications.tasks import send_broadcast_campaign_task
 
-        next_after_guest_id = str(recipients[-1].id)
-        transaction.on_commit(
-            lambda: send_broadcast_campaign_task.delay(str(campaign.id), next_after_guest_id)
+@transaction.atomic
+def _claim_broadcast_batch(campaign_id):
+    claim_token = uuid.uuid4()
+    pending_ids = list(
+        BroadcastDelivery.objects.select_for_update(skip_locked=True)
+        .filter(campaign_id=campaign_id, status=BroadcastDelivery.Status.PENDING)
+        .order_by("guest_id")
+        .values_list("id", flat=True)[:BROADCAST_BATCH_SIZE]
+    )
+    if not pending_ids:
+        return claim_token, []
+    BroadcastDelivery.objects.filter(
+        id__in=pending_ids,
+        status=BroadcastDelivery.Status.PENDING,
+    ).update(
+        status=BroadcastDelivery.Status.SENDING,
+        claim_token=claim_token,
+        claimed_at=timezone.now(),
+        updated_at=timezone.now(),
+    )
+    deliveries = list(
+        BroadcastDelivery.objects.select_related("guest__telegram_account")
+        .filter(claim_token=claim_token, status=BroadcastDelivery.Status.SENDING)
+        .order_by("guest_id")
+    )
+    return claim_token, deliveries
+
+
+def _send_claimed_broadcast_batch(*, campaign, token, claim_token, deliveries) -> None:
+    # Eligibility is rechecked right before sending: a guest who opted out or
+    # blocked the bot since the audience was recorded is skipped.
+    eligible_ids = set(
+        NotificationPreferenceRepository.marketing_guests(campaign.partner_id)
+        .filter(id__in=[delivery.guest_id for delivery in deliveries])
+        .exclude(telegram_account__is_blocked=True)
+        .values_list("id", flat=True)
+    )
+    to_send = []
+    for delivery in deliveries:
+        if delivery.guest_id in eligible_ids:
+            to_send.append(delivery)
+        else:
+            _finish_broadcast_delivery(
+                delivery.id,
+                claim_token,
+                status=BroadcastDelivery.Status.SKIPPED,
+                error="Guest is no longer eligible for marketing messages.",
+            )
+    if not to_send:
+        return
+
+    by_chat_id = {delivery.guest.telegram_account.telegram_id: delivery for delivery in to_send}
+    recorded: set = set()
+
+    def record(result) -> None:
+        chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(result)
+        delivery = by_chat_id.get(chat_id)
+        if delivery is None or delivery.id in recorded:
+            return
+        recorded.add(delivery.id)
+        if is_sent:
+            status = BroadcastDelivery.Status.SENT
+        elif _is_retryable_result(result):
+            # Telegram may have delivered it; at most once means no resend.
+            status = BroadcastDelivery.Status.UNKNOWN
+        else:
+            status = BroadcastDelivery.Status.FAILED
+        _finish_broadcast_delivery(delivery.id, claim_token, status=status, error=error_message)
+        if should_mark_blocked:
+            TelegramAccount.objects.filter(telegram_id=chat_id).update(
+                is_blocked=True,
+                updated_at=timezone.now(),
+            )
+
+    results = async_to_sync(_send_telegram_messages)(
+        token,
+        [(chat_id, campaign.message) for chat_id in by_chat_id],
+        on_result=sync_to_async(record),
+    )
+    for result in results:
+        record(result)
+
+
+def _finish_broadcast_delivery(delivery_id, claim_token, *, status, error: str = "") -> None:
+    BroadcastDelivery.objects.filter(
+        id=delivery_id,
+        claim_token=claim_token,
+        status=BroadcastDelivery.Status.SENDING,
+    ).update(
+        status=status,
+        error=error,
+        finished_at=timezone.now(),
+        updated_at=timezone.now(),
+    )
+
+
+def _advance_broadcast(campaign_id) -> BroadcastCampaign:
+    """Update counters; queue the next batch or finalize the campaign."""
+
+    with transaction.atomic():
+        campaign = BroadcastCampaign.objects.select_for_update().get(id=campaign_id)
+        if campaign.status != BroadcastCampaign.Status.SENDING:
+            return campaign
+        # Rows only move from open to finished, so read the open rows first:
+        # counters read afterwards include every row seen as finished here.
+        open_statuses = set(
+            campaign.deliveries.filter(
+                status__in=[BroadcastDelivery.Status.PENDING, BroadcastDelivery.Status.SENDING]
+            ).values_list("status", flat=True)
         )
+        _refresh_broadcast_counters(campaign)
+        if BroadcastDelivery.Status.PENDING in open_statuses:
+            campaign.save(
+                update_fields=["delivered_count", "failed_count", "unknown_count", "updated_at"]
+            )
+            _enqueue_next_broadcast_batch(campaign.id)
+            return campaign
+        if BroadcastDelivery.Status.SENDING in open_statuses:
+            # Another worker still owns a batch; it finalizes when done, and
+            # recovery handles it if that worker died.
+            campaign.save(
+                update_fields=["delivered_count", "failed_count", "unknown_count", "updated_at"]
+            )
+            return campaign
+        _finalize_locked_broadcast(campaign)
         return campaign
 
-    _finalize_broadcast_campaign(campaign)
-    return campaign
+
+def _enqueue_next_broadcast_batch(campaign_id) -> None:
+    from apps.notifications.tasks import send_broadcast_campaign_task
+
+    transaction.on_commit(lambda: send_broadcast_campaign_task.delay(str(campaign_id), ""))
 
 
-def _finalize_broadcast_campaign(campaign: BroadcastCampaign) -> BroadcastCampaign:
-    campaign = BroadcastCampaign.objects.get(id=campaign.id)
+def _refresh_broadcast_counters(campaign: BroadcastCampaign) -> None:
+    counts = campaign.deliveries.aggregate(
+        sent=Count("id", filter=Q(status=BroadcastDelivery.Status.SENT)),
+        failed=Count("id", filter=Q(status=BroadcastDelivery.Status.FAILED)),
+        unknown=Count("id", filter=Q(status=BroadcastDelivery.Status.UNKNOWN)),
+    )
+    campaign.delivered_count = counts["sent"]
+    campaign.failed_count = counts["failed"]
+    campaign.unknown_count = counts["unknown"]
+    last_failure = (
+        campaign.deliveries.filter(
+            status__in=[BroadcastDelivery.Status.FAILED, BroadcastDelivery.Status.UNKNOWN]
+        )
+        .exclude(error="")
+        .order_by("-finished_at")
+        .values_list("error", flat=True)
+        .first()
+    )
+    if last_failure:
+        campaign.last_error = last_failure
+
+
+def _finalize_locked_broadcast(campaign: BroadcastCampaign) -> None:
     campaign.sent_at = timezone.now()
     if campaign.delivered_count == 0:
         campaign.status = BroadcastCampaign.Status.FAILED
@@ -616,10 +871,50 @@ def _finalize_broadcast_campaign(campaign: BroadcastCampaign) -> BroadcastCampai
             "sent_at",
             "status",
             "last_error",
+            "delivered_count",
+            "failed_count",
+            "unknown_count",
             "updated_at",
         ]
     )
-    return campaign
+
+
+def recover_stalled_broadcast_campaigns(*, now=None) -> int:
+    """Periodic recovery for broadcasts whose worker or task was lost.
+
+    Expired ``sending`` claims become ``unknown`` (never resent). A sending
+    campaign with pending rows and no recent claim gets a new task; one with
+    no open rows is finalized. Returns the number of campaigns touched.
+    """
+
+    now = now or timezone.now()
+    expired_before = now - BROADCAST_CLAIM_LEASE
+    BroadcastDelivery.objects.filter(
+        status=BroadcastDelivery.Status.SENDING,
+        claimed_at__lt=expired_before,
+    ).update(
+        status=BroadcastDelivery.Status.UNKNOWN,
+        error="The worker stopped before recording the result; not resent.",
+        finished_at=now,
+        updated_at=now,
+    )
+    touched = 0
+    sending = BroadcastCampaign.objects.filter(status=BroadcastCampaign.Status.SENDING).annotate(
+        last_claim=Max("deliveries__claimed_at"),
+        open_sending=Count(
+            "deliveries",
+            filter=Q(deliveries__status=BroadcastDelivery.Status.SENDING),
+        ),
+    )
+    for campaign in sending:
+        if campaign.open_sending:
+            continue
+        last_activity = campaign.last_claim or campaign.delivery_started_at or campaign.updated_at
+        if last_activity and last_activity >= expired_before:
+            continue
+        _advance_broadcast(campaign.id)
+        touched += 1
+    return touched
 
 
 def process_scheduled_broadcast_campaigns() -> int:

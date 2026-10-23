@@ -86,6 +86,13 @@ class BroadcastCampaign(PartnerBoundModel):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     delivered_count = models.PositiveIntegerField(default=0)
     failed_count = models.PositiveIntegerField(default=0)
+    unknown_count = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Messages whose outcome is unknown after a worker failure. They are "
+            "never resent: each guest receives a campaign at most once (PQ-014)."
+        ),
+    )
     last_error = models.TextField(blank=True)
     delivery_started_at = models.DateTimeField(null=True, blank=True)
     scheduled_at = models.DateTimeField(null=True, blank=True)
@@ -96,3 +103,51 @@ class BroadcastCampaign(PartnerBoundModel):
 
     def __str__(self) -> str:
         return f"{self.partner.name} / {self.name}"
+
+
+class BroadcastDelivery(PartnerBoundModel):
+    """One guest's delivery of one campaign: the at-most-once ledger (PQ-014).
+
+    A row is claimed (``sending``) in a short transaction before the Telegram
+    call and finished in another one afterwards. A ``sending`` row is never
+    claimed again; if its worker dies, recovery marks it ``unknown``.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SENDING = "sending", "Sending"
+        SENT = "sent", "Sent"
+        FAILED = "failed", "Failed"
+        SKIPPED = "skipped", "Skipped (no longer eligible)"
+        UNKNOWN = "unknown", "Unknown (worker stopped)"
+
+    campaign = models.ForeignKey(
+        BroadcastCampaign,
+        on_delete=models.CASCADE,
+        related_name="deliveries",
+    )
+    guest = models.ForeignKey(
+        "users.GuestProfile",
+        on_delete=models.CASCADE,
+        related_name="broadcast_deliveries",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    claim_token = models.UUIDField(null=True, blank=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["campaign_id", "guest_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["campaign", "guest"],
+                name="unique_broadcast_delivery_per_guest",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["campaign", "status"], name="broadcast_delivery_status_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.campaign_id} / {self.guest_id} / {self.status}"

@@ -1,7 +1,12 @@
 from django.contrib import admin, messages
 from django.utils.translation import gettext_lazy as _
 
-from apps.notifications.models import BroadcastCampaign, NotificationPreference, StaffNotification
+from apps.notifications.models import (
+    BroadcastCampaign,
+    BroadcastDelivery,
+    NotificationPreference,
+    StaffNotification,
+)
 from apps.notifications.services import send_broadcast_campaign
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
@@ -30,6 +35,7 @@ class BroadcastCampaignAdmin(ScopedAdminMixin):
         "status",
         "delivered_count",
         "failed_count",
+        "unknown_count",
         "scheduled_at",
         "sent_at",
     )
@@ -38,6 +44,7 @@ class BroadcastCampaignAdmin(ScopedAdminMixin):
     readonly_fields = (
         "delivered_count",
         "failed_count",
+        "unknown_count",
         "last_error",
         "delivery_started_at",
         "sent_at",
@@ -51,6 +58,41 @@ class BroadcastCampaignAdmin(ScopedAdminMixin):
             send_broadcast_campaign(campaign)
             queued_count += 1
         self.message_user(request, f"Campaigns queued: {queued_count}.", level=messages.INFO)
+
+
+@admin.register(BroadcastDelivery)
+class BroadcastDeliveryAdmin(ScopedAdminMixin):
+    """Read-only per-guest delivery log of broadcasts (PQ-014)."""
+
+    admin_section = AdminSection.NOTIFICATIONS
+    allow_partner_add = False
+    allow_partner_delete = False
+    list_display = ("campaign", "guest", "status", "finished_at", "partner")
+    list_filter = ("partner", "status")
+    search_fields = ("campaign__name", "guest__customer_code", "error")
+    readonly_fields = (
+        "partner",
+        "campaign",
+        "guest",
+        "status",
+        "claim_token",
+        "claimed_at",
+        "finished_at",
+        "error",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None:
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(StaffNotification)

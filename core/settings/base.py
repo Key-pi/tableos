@@ -120,6 +120,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "notifications.process_scheduled_broadcast_campaigns",
         "schedule": timedelta(minutes=1),
     },
+    "recover-stalled-broadcast-campaigns": {
+        "task": "notifications.recover_stalled_broadcast_campaigns",
+        "schedule": timedelta(minutes=5),
+    },
     "refresh-daily-partner-metrics": {
         "task": "analytics.refresh_daily_partner_metrics",
         "schedule": timedelta(minutes=15),

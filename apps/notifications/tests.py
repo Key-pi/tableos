@@ -24,11 +24,11 @@ from apps.tables.services import activate_table_session
 from apps.users.models import GuestProfile, TelegramAccount, User
 
 
-async def _successful_send(_token, messages):
+async def _successful_send(_token, messages, **_kwargs):
     return [(chat_id, True, "") for chat_id, _text in messages]
 
 
-async def _partially_failed_send(_token, messages):
+async def _partially_failed_send(_token, messages, **_kwargs):
     results = []
     for index, (chat_id, _text) in enumerate(messages):
         if index == 0:
@@ -38,7 +38,7 @@ async def _partially_failed_send(_token, messages):
     return results
 
 
-async def _blocked_send(_token, messages):
+async def _blocked_send(_token, messages, **_kwargs):
     return [(chat_id, False, "bot was blocked by the user", True) for chat_id, _text in messages]
 
 
@@ -118,7 +118,7 @@ class NotificationDeliveryTests(TestCase):
         )
         sent_texts = []
 
-        async def _capturing_send(_token, messages):
+        async def _capturing_send(_token, messages, **_kwargs):
             sent_texts.extend(text for _chat_id, text in messages)
             return [(chat_id, True, "") for chat_id, _text in messages]
 

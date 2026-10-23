@@ -444,3 +444,51 @@ class TableVisitAdminTests(TestCase):
         visit.refresh_from_db()
         self.assertEqual(visit.status, TableVisit.Status.CLOSED)
         self.assertEqual(visit.closed_by, self.owner)
+
+
+class BroadcastDeliveryAdminTests(TestCase):
+    """PQ-014: the per-guest broadcast log is read-only and partner-scoped."""
+
+    def setUp(self):
+        from apps.notifications.models import BroadcastCampaign, BroadcastDelivery
+        from apps.users.models import GuestProfile, TelegramAccount
+
+        self.factory = RequestFactory()
+        self.partners = []
+        self.deliveries = []
+        for slug in ("delivery-admin-a", "delivery-admin-b"):
+            partner = Partner.objects.create(name=slug, slug=slug, status=Partner.Status.ACTIVE)
+            account = TelegramAccount.objects.create(telegram_id=990700 + len(self.partners))
+            guest = GuestProfile.objects.create(partner=partner, telegram_account=account)
+            campaign = BroadcastCampaign.objects.create(partner=partner, name="Promo", message="Hi")
+            self.deliveries.append(
+                BroadcastDelivery.objects.create(partner=partner, campaign=campaign, guest=guest)
+            )
+            self.partners.append(partner)
+        self.owner = User.objects.create_user(
+            username="delivery_owner",
+            password="pass12345",
+            partner=self.partners[0],
+            role=User.Role.OWNER,
+            is_staff=True,
+        )
+        AdminAccessProfile.objects.create(
+            user=self.owner,
+            partner=self.partners[0],
+            preset=AdminAccessPreset.OWNER,
+            is_partner_owner=True,
+            can_access_admin=True,
+        )
+
+    def test_delivery_log_is_read_only_and_scoped(self):
+        from apps.notifications.admin import BroadcastDeliveryAdmin
+        from apps.notifications.models import BroadcastDelivery
+
+        request = self.factory.get("/admin/")
+        request.user = self.owner
+        model_admin = BroadcastDeliveryAdmin(BroadcastDelivery, admin.site)
+
+        self.assertEqual(list(model_admin.get_queryset(request)), [self.deliveries[0]])
+        self.assertFalse(model_admin.has_add_permission(request))
+        self.assertFalse(model_admin.has_change_permission(request, self.deliveries[0]))
+        self.assertFalse(model_admin.has_delete_permission(request, self.deliveries[0]))

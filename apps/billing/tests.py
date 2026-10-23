@@ -34,7 +34,7 @@ from apps.tables.services import activate_table_session
 from apps.users.models import TelegramAccount, User
 
 
-async def _successful_send(_token, messages):
+async def _successful_send(_token, messages, **_kwargs):
     return [(chat_id, True, "") for chat_id, _text in messages]
 
 

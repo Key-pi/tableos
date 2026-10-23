@@ -36,7 +36,38 @@ services:
       dockerfile: infrastructure/docker/Dockerfile
     env_file:
       - .env
-    command: celery -A core.celery worker --loglevel=info
+    command: celery -A core.celery worker -Q default,broadcasts --loglevel=info
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+
+  # Periodic jobs: scheduled broadcasts, stalled-broadcast recovery, daily
+  # metrics (core/settings/base.py:CELERY_BEAT_SCHEDULE). Run exactly one.
+  beat:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+    env_file:
+      - .env
+    command: celery -A core.celery beat --loglevel=info --schedule /tmp/celerybeat-schedule
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+
+  # Telegram polling for every active partner bot (bot/management/commands/runbot.py).
+  # Run exactly one: two pollers of the same token conflict.
+  bot:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/Dockerfile
+    env_file:
+      - .env
+    command: python manage.py runbot
+    restart: unless-stopped
     volumes:
       - .:/app
     depends_on:
