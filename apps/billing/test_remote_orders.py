@@ -10,14 +10,14 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from apps.billing.models import Bill, BillAdjustment, Payment
-from apps.billing.pickup import (
-    PickupError,
+from apps.billing.remote_orders import (
+    RemoteOrderError,
     available_slots,
-    confirm_pickup_payment,
-    get_pickup_quote,
-    pickup_awaits_payment,
-    place_pickup_order,
-    reject_pickup_payment,
+    awaits_transfer_check,
+    confirm_transfer,
+    get_remote_quote,
+    place_remote_order,
+    reject_transfer,
     save_guest_phone,
 )
 from apps.bonuses.models import BonusProgram, BonusTransaction
@@ -59,7 +59,7 @@ class PickupFixtureMixin:
             module_cart_enabled=True,
             module_tables_enabled=True,
             module_pickup_enabled=True,
-            pickup_payment_details="Карта 4149 0000 0000 0000, ФОП Тест",
+            transfer_payment_details="Карта 4149 0000 0000 0000, ФОП Тест",
         )
         category = MenuCategory.objects.create(partner=self.partner, name="Еда", sort_order=1)
         self.item = MenuItem.objects.create(
@@ -93,7 +93,7 @@ class PickupFixtureMixin:
         )
 
     def _place(self, *, slot="now", use_bonuses=False, total="400.00", to_pay="400.00", now=NOON):
-        return place_pickup_order(
+        return place_remote_order(
             partner_id=self.partner.id,
             telegram_id=TG,
             slot=slot,
@@ -228,8 +228,8 @@ class PickupPlacementTests(PickupFixtureMixin, TestCase):
             percent="5.00",
             max_redeem_share="20.00",
         )
-        with patch("apps.billing.pickup.timezone.now", return_value=NOON):
-            quote = get_pickup_quote(partner_id=self.partner.id, telegram_id=TG, use_bonuses=True)
+        with patch("apps.billing.remote_orders.timezone.now", return_value=NOON):
+            quote = get_remote_quote(partner_id=self.partner.id, telegram_id=TG, use_bonuses=True)
         self.assertEqual(quote.total, Decimal("400.00"))
         self.assertEqual(quote.bonus_to_spend, Decimal("80.00"))
         self.assertEqual(quote.to_pay, Decimal("320.00"))
@@ -240,8 +240,8 @@ class PickupPlacementTests(PickupFixtureMixin, TestCase):
 
         self.assertEqual(order.channel, Order.Channel.PICKUP)
         self.assertIsNone(order.table_id)
-        self.assertEqual(order.pickup_at, NOON + timedelta(minutes=30))
-        self.assertTrue(pickup_awaits_payment(order))
+        self.assertEqual(order.requested_for, NOON + timedelta(minutes=30))
+        self.assertTrue(awaits_transfer_check(order))
         bill = self._bill(order)
         self.assertEqual(bill.status, Bill.Status.ISSUED)
         self.assertEqual(bill.total_amount, Decimal("400.00"))
@@ -252,26 +252,26 @@ class PickupPlacementTests(PickupFixtureMixin, TestCase):
         self.assertIn("перевод", notification.message.lower())
 
     def test_changed_cart_creates_nothing(self):
-        with self.assertRaisesMessage(PickupError, "Корзина изменилась"):
+        with self.assertRaisesMessage(RemoteOrderError, "Корзина изменилась"):
             self._place(total="200.00", to_pay="200.00")
         self.assertFalse(Order.objects.exists())
         self.assertTrue(Cart.objects.filter(guest=self.guest, status=Cart.Status.ACTIVE).exists())
 
     def test_phone_is_required(self):
         type(self.guest).objects.filter(id=self.guest.id).update(phone="")
-        with self.assertRaisesMessage(PickupError, "номером телефона"):
+        with self.assertRaisesMessage(RemoteOrderError, "номером телефона"):
             self._place()
 
     def test_payment_details_are_required(self):
-        PartnerBotSettings.objects.filter(id=self.settings.id).update(pickup_payment_details="")
-        with self.assertRaisesMessage(PickupError, "реквизиты"):
+        PartnerBotSettings.objects.filter(id=self.settings.id).update(transfer_payment_details="")
+        with self.assertRaisesMessage(RemoteOrderError, "реквизиты"):
             self._place()
 
     def test_closed_venue_refuses_with_hours(self):
         OpeningHours.objects.create(
             partner=self.partner, weekday=2, opens_at=time(18, 0), closes_at=time(23, 0)
         )
-        with self.assertRaisesMessage(PickupError, "Ср 18:00–23:00"):
+        with self.assertRaisesMessage(RemoteOrderError, "Ср 18:00–23:00"):
             self._place()
         self.assertFalse(Order.objects.exists())
 
@@ -302,7 +302,7 @@ class PickupPlacementTests(PickupFixtureMixin, TestCase):
         )
         order = self._place(use_bonuses=True, to_pay="0.00")
         self.assertIsNotNone(order.paid_at)
-        self.assertFalse(pickup_awaits_payment(order))
+        self.assertFalse(awaits_transfer_check(order))
         self.assertIn("бонусами полностью", StaffNotification.objects.get(order=order).message)
 
 
@@ -325,7 +325,7 @@ class PickupPaymentCheckTests(PickupFixtureMixin, TestCase):
             percent="5.00",
         )
         order = self._place()
-        order = confirm_pickup_payment(order=order, actor=self.cashier)
+        order = confirm_transfer(order=order, actor=self.cashier)
 
         self.assertEqual(order.status, Order.Status.ACCEPTED)
         self.assertIsNotNone(order.paid_at)
@@ -341,22 +341,22 @@ class PickupPaymentCheckTests(PickupFixtureMixin, TestCase):
                 order=order, transaction_type=BonusTransaction.TransactionType.ACCRUAL
             ).exists()
         )
-        with self.assertRaisesMessage(PickupError, "уже обработана"):
-            confirm_pickup_payment(order=order, actor=self.cashier)
+        with self.assertRaisesMessage(RemoteOrderError, "уже обработана"):
+            confirm_transfer(order=order, actor=self.cashier)
 
     def test_only_cash_handling_roles_check_payments(self):
         waiter = User.objects.create_user(
             username="pickup_waiter", password="x", partner=self.partner, role=User.Role.WAITER
         )
         order = self._place()
-        with self.assertRaisesMessage(PickupError, "владелец, менеджер или кассир"):
-            confirm_pickup_payment(order=order, actor=waiter)
+        with self.assertRaisesMessage(RemoteOrderError, "владелец, менеджер или кассир"):
+            confirm_transfer(order=order, actor=waiter)
         other = Partner.objects.create(name="Other", slug="other-pickup")
         foreign = User.objects.create_user(
             username="foreign_cashier", password="x", partner=other, role=User.Role.CASHIER
         )
-        with self.assertRaises(PickupError):
-            reject_pickup_payment(order=order, actor=foreign)
+        with self.assertRaises(RemoteOrderError):
+            reject_transfer(order=order, actor=foreign)
 
     def test_missing_transfer_cancels_and_returns_bonuses(self):
         self._seed_bonuses("100.00")
@@ -369,7 +369,7 @@ class PickupPaymentCheckTests(PickupFixtureMixin, TestCase):
         )
         order = self._place(use_bonuses=True, to_pay="320.00")
         bill = self._bill(order)
-        order = reject_pickup_payment(order=order, actor=self.cashier)
+        order = reject_transfer(order=order, actor=self.cashier)
 
         self.assertEqual(order.status, Order.Status.CANCELED)
         bill.refresh_from_db()

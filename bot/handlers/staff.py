@@ -19,11 +19,11 @@ from apps.analytics.services import (
     build_daily_walk_in_sales_page,
 )
 from apps.billing.models import Bill, BillAdjustment, BillingRequest, BillItem, Payment
-from apps.billing.pickup import (
-    PickupError,
-    confirm_pickup_payment,
-    pickup_awaits_payment,
-    reject_pickup_payment,
+from apps.billing.remote_orders import (
+    RemoteOrderError,
+    awaits_transfer_check,
+    confirm_transfer,
+    reject_transfer,
 )
 from apps.billing.repositories import (
     BillingOperationsRepository,
@@ -71,7 +71,7 @@ from apps.orders.services import (
     get_available_staff_actions,
     is_order_paid,
     is_order_received,
-    pickup_time_label,
+    requested_time_label,
     transition_order_status,
 )
 from apps.tables.models import Table, TableSession, TableVisit
@@ -94,7 +94,6 @@ from bot.keyboards.staff import (
     build_staff_notifications_keyboard,
     build_staff_order_actions_keyboard,
     build_staff_orders_overview_keyboard,
-    build_staff_pickup_reject_confirm_keyboard,
     build_staff_report_section_keyboard,
     build_staff_report_summary_keyboard,
     build_staff_report_table_detail_keyboard,
@@ -103,6 +102,7 @@ from bot.keyboards.staff import (
     build_staff_sale_keyboard,
     build_staff_table_actions_keyboard,
     build_staff_tables_overview_keyboard,
+    build_staff_transfer_reject_confirm_keyboard,
 )
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
@@ -159,7 +159,7 @@ def _employee_label(employee: EmployeeProfile | None) -> str:
 def _order_context_label(order: Order) -> str:
     if order.channel == Order.Channel.PICKUP:
         phone = order.guest.phone or "не указан"
-        return f"Самовывоз: {pickup_time_label(order)}\nТелефон: {escape_html(phone)}"
+        return f"Самовывоз: {requested_time_label(order)}\nТелефон: {escape_html(phone)}"
     if order.table_id is not None:
         return f"Стол: #{order.table.number}"
     return "Сценарий: заказ без привязки к столу"
@@ -169,12 +169,12 @@ def _order_actions_keyboard(order: Order):
     return build_staff_order_actions_keyboard(
         order_public_id=order.public_id,
         available_statuses=get_available_staff_actions(order.status),
-        pickup_payment_pending=pickup_awaits_payment(order),
+        transfer_check_pending=awaits_transfer_check(order),
     )
 
 
 def _order_payment_label(order: Order) -> str:
-    if pickup_awaits_payment(order):
+    if awaits_transfer_check(order):
         to_transfer = order.total_amount - order.bonus_spent
         bonus_note = f" (ещё {order.bonus_spent} бонусами)" if order.bonus_spent else ""
         return f"ждёт подтверждения перевода {to_transfer} грн{bonus_note}"
@@ -1807,8 +1807,8 @@ async def staff_order_refresh_callback_handler(callback: CallbackQuery, bot: Bot
     await callback.answer("Карточка обновлена" if updated else "Без изменений")
 
 
-@router.callback_query(lambda c: c.data and c.data.startswith("staffpk"))
-async def staff_pickup_payment_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+@router.callback_query(lambda c: c.data and c.data.startswith("stafftx"))
+async def staff_transfer_check_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     """Pickup prepayment check: confirm, ask to confirm a rejection, reject."""
 
     try:
@@ -1819,7 +1819,7 @@ async def staff_pickup_payment_callback_handler(callback: CallbackQuery, bot: Bo
         return
 
     action, _, order_public_id = (callback.data or "").partition(":")
-    if action not in {"staffpkok", "staffpkno", "staffpknoy"} or not order_public_id:
+    if action not in {"stafftxok", "stafftxno", "stafftxnoy"} or not order_public_id:
         await callback.answer("Неизвестное действие.", show_alert=True)
         return
     try:
@@ -1831,8 +1831,8 @@ async def staff_pickup_payment_callback_handler(callback: CallbackQuery, bot: Bo
         await callback.answer("Заказ не найден.", show_alert=True)
         return
 
-    if action == "staffpkno":
-        if not pickup_awaits_payment(order):
+    if action == "stafftxno":
+        if not awaits_transfer_check(order):
             await callback.answer("Оплата по этому заказу уже обработана.", show_alert=True)
             return
         await _safe_edit_message_text(
@@ -1840,15 +1840,15 @@ async def staff_pickup_payment_callback_handler(callback: CallbackQuery, bot: Bo
             _render_order_card(order)
             + "\n\n<b>Отменить заказ, потому что оплата не поступила?</b> "
             "Списанные бонусы вернутся гостю, гость получит сообщение.",
-            reply_markup=build_staff_pickup_reject_confirm_keyboard(order.public_id),
+            reply_markup=build_staff_transfer_reject_confirm_keyboard(order.public_id),
         )
         await callback.answer()
         return
 
-    service = confirm_pickup_payment if action == "staffpkok" else reject_pickup_payment
+    service = confirm_transfer if action == "stafftxok" else reject_transfer
     try:
         await sync_to_async(service)(order=order, actor=employee.user)
-    except (PickupError, BillingServiceError, OrderFlowError) as exc:
+    except (RemoteOrderError, BillingServiceError, OrderFlowError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
@@ -1863,7 +1863,7 @@ async def staff_pickup_payment_callback_handler(callback: CallbackQuery, bot: Bo
     )
     await callback.answer(
         "Оплата подтверждена, заказ в работе."
-        if action == "staffpkok"
+        if action == "stafftxok"
         else "Заказ отменён: оплата не поступила."
     )
 

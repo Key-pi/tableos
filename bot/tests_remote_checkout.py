@@ -18,7 +18,7 @@ from apps.tables.models import Table
 from apps.users.models import GuestProfile, TelegramAccount, User
 from apps.users.services import get_or_create_guest_profile
 from bot.handlers import order as order_handlers
-from bot.handlers import pickup, staff
+from bot.handlers import remote_checkout, staff
 from bot.handlers.menu import send_menu_view
 from bot.handlers.start import start_handler
 from bot.services.runtime import BotRuntimeConfig, register_runtime_configs
@@ -51,7 +51,7 @@ class PickupBotFixture(TestCase):
             module_cart_enabled=True,
             module_tables_enabled=True,
             module_pickup_enabled=True,
-            pickup_payment_details="Карта 5375 0000 0000 0000 <Тест & Ко>",
+            transfer_payment_details="Карта 5375 0000 0000 0000 <Тест & Ко>",
         )
         bot_instance = BotInstance.objects.create(
             partner=self.partner,
@@ -93,7 +93,7 @@ class PickupBotFixture(TestCase):
 
     def _press(self, data, handler=None):
         callback = self._callback(data)
-        async_to_sync(handler or pickup.pickup_callback_handler)(callback, self.bot)
+        async_to_sync(handler or remote_checkout.checkout_callback_handler)(callback, self.bot)
         return callback
 
     def _set_phone(self):
@@ -119,42 +119,42 @@ class GuestPickupFlowTests(PickupBotFixture):
             )
 
         foreign = contact_message(999)
-        async_to_sync(pickup.pickup_contact_handler)(foreign, self.bot)
+        async_to_sync(remote_checkout.contact_handler)(foreign, self.bot)
         self.guest.refresh_from_db()
         self.assertEqual(self.guest.phone, "")
 
         own = contact_message(GUEST)
-        async_to_sync(pickup.pickup_contact_handler)(own, self.bot)
+        async_to_sync(remote_checkout.contact_handler)(own, self.bot)
         self.guest.refresh_from_db()
         self.assertEqual(self.guest.phone, "+380501112233")
         time_markup = own.answer.call_args.kwargs["reply_markup"]
-        self.assertIn("pk:t:now", [button.callback_data for button in _buttons(time_markup)])
+        self.assertIn("rc:p:t:now", [button.callback_data for button in _buttons(time_markup)])
 
     def test_summary_shows_requisites_and_placing_creates_the_order(self):
         self._set_phone()
-        callback = self._press("pk:t:30")
+        callback = self._press("rc:p:t:30")
 
         text = callback.message.edit_text.call_args.args[0]
         self.assertIn("К оплате переводом: 300.00 грн", text)
         self.assertIn("&lt;Тест &amp; Ко&gt;", text)
         buttons = _buttons(callback.message.edit_text.call_args.kwargs["reply_markup"])
         self.assertTrue(all(len(button.callback_data) <= 64 for button in buttons))
-        paid = next(button for button in buttons if button.callback_data.startswith("pk:p:"))
+        paid = next(button for button in buttons if button.callback_data.startswith("rc:p:p:"))
 
         placed = self._press(paid.callback_data)
 
         order = Order.objects.get(guest=self.guest)
         self.assertEqual(order.channel, Order.Channel.PICKUP)
-        self.assertIsNotNone(order.pickup_at)
+        self.assertIsNotNone(order.requested_for)
         self.assertIn(f"#{order.public_id}", placed.message.edit_text.call_args.args[0])
 
     def test_changed_cart_is_caught_before_ordering(self):
         self._set_phone()
-        summary = self._press("pk:t:now")
+        summary = self._press("rc:p:t:now")
         paid = next(
             button
             for button in _buttons(summary.message.edit_text.call_args.kwargs["reply_markup"])
-            if button.callback_data.startswith("pk:p:")
+            if button.callback_data.startswith("rc:p:p:")
         )
         add_items_to_cart_for_telegram_user(
             partner_id=self.partner.id, telegram_id=GUEST, raw_items="PB000001x1"
@@ -183,13 +183,13 @@ class GuestPickupFlowTests(PickupBotFixture):
         )
         GuestProfile.objects.filter(id=self.guest.id).update(loyalty_balance=Decimal("100.00"))
 
-        callback = self._press("pk:t:now")
+        callback = self._press("rc:p:t:now")
 
         data = [b.callback_data for b in _buttons(callback.message.edit_text.call_args.kwargs[
             "reply_markup"
         ])]
-        self.assertIn("pk:b:now:1", data)
-        summary = self._press("pk:b:now:1")
+        self.assertIn("rc:p:b:now:1", data)
+        summary = self._press("rc:p:b:now:1")
         self.assertIn("К оплате переводом: 270.00 грн", summary.message.edit_text.call_args.args[0])
 
     def test_the_flow_is_chosen_by_buttons_not_at_checkout(self):
@@ -280,11 +280,11 @@ class StaffPickupPaymentTests(PickupBotFixture):
             user=cashier,
             telegram_account=TelegramAccount.objects.create(telegram_id=STAFF),
         )
-        summary = self._press("pk:t:now")
+        summary = self._press("rc:p:t:now")
         paid = next(
             button
             for button in _buttons(summary.message.edit_text.call_args.kwargs["reply_markup"])
-            if button.callback_data.startswith("pk:p:")
+            if button.callback_data.startswith("rc:p:p:")
         )
         self._press(paid.callback_data)
         self.order = Order.objects.get(guest=self.guest)
@@ -292,7 +292,7 @@ class StaffPickupPaymentTests(PickupBotFixture):
     def _staff(self, data):
         callback = self._callback(data, telegram_id=STAFF)
         with patch.object(staff, "resolve_partner_for_bot_token", return_value=self.partner):
-            async_to_sync(staff.staff_pickup_payment_callback_handler)(callback, self.bot)
+            async_to_sync(staff.staff_transfer_check_callback_handler)(callback, self.bot)
         return callback
 
     def test_card_offers_payment_check_instead_of_accepting(self):
@@ -300,11 +300,11 @@ class StaffPickupPaymentTests(PickupBotFixture):
             Order.objects.select_related("partner", "guest").get(id=self.order.id)
         )
         data = [button.callback_data for button in _buttons(markup)]
-        self.assertIn(f"staffpkok:{self.order.public_id}", data)
+        self.assertIn(f"stafftxok:{self.order.public_id}", data)
         self.assertNotIn(f"stafforder:{self.order.public_id}:accepted", data)
 
     def test_confirm_takes_the_order_into_work(self):
-        callback = self._staff(f"staffpkok:{self.order.public_id}")
+        callback = self._staff(f"stafftxok:{self.order.public_id}")
 
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.ACCEPTED)
@@ -312,12 +312,12 @@ class StaffPickupPaymentTests(PickupBotFixture):
         self.assertIn("подтверждена", callback.answer.call_args.args[0])
 
     def test_reject_asks_first_then_cancels(self):
-        ask = self._staff(f"staffpkno:{self.order.public_id}")
+        ask = self._staff(f"stafftxno:{self.order.public_id}")
         self.assertIn("Отменить заказ", ask.message.edit_text.call_args.args[0])
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.NEW)
 
-        self._staff(f"staffpknoy:{self.order.public_id}")
+        self._staff(f"stafftxnoy:{self.order.public_id}")
 
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.CANCELED)

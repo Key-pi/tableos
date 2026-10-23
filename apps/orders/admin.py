@@ -82,7 +82,7 @@ class OrderAdmin(ScopedAdminMixin):
         "table",
         "table_session",
         "channel",
-        "pickup_at",
+        "requested_for",
         "assigned_employee",
         "status",
         "payment_method",

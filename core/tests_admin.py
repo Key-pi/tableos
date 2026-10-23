@@ -506,10 +506,10 @@ class PickupAdminTests(TestCase):
             for _name, options in PartnerBotSettingsInline.fieldsets
             for field in options["fields"]
         ]
-        self.assertIn("pickup_payment_details", fields)
+        self.assertIn("transfer_payment_details", fields)
 
     def test_order_admin_shows_channel_read_only(self):
         from apps.orders.admin import OrderAdmin
 
         self.assertIn("channel", OrderAdmin.readonly_fields)
-        self.assertIn("pickup_at", OrderAdmin.readonly_fields)
+        self.assertIn("requested_for", OrderAdmin.readonly_fields)

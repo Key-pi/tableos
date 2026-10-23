@@ -158,12 +158,13 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name="Самовывоз",
         help_text="Сценарий заказа на самовывоз. Включается независимо от столов.",
     )
-    pickup_payment_details = models.TextField(
+    transfer_payment_details = models.TextField(
         blank=True,
-        verbose_name="Реквизиты для оплаты самовывоза",
+        verbose_name="Реквизиты для оплаты переводом",
         help_text=(
-            "Куда гость переводит деньги за заказ на самовывоз: номер карты или "
-            "IBAN, получатель. Гость видит этот текст перед оплатой."
+            "Куда гость переводит деньги за заказы с предоплатой (самовывоз, позже "
+            "доставка): номер карты или IBAN, получатель. Гость видит этот текст "
+            "перед оплатой."
         ),
     )
     module_cart_enabled = models.BooleanField(
@@ -305,10 +306,10 @@ class PartnerBotSettings(TimeStampedModel):
                 "module_orders_enabled",
                 "Orders module requires tables, delivery, or pickup module.",
             )
-        if self.module_pickup_enabled and not self.pickup_payment_details.strip():
+        if self.module_pickup_enabled and not self.transfer_payment_details.strip():
             add_error(
-                "pickup_payment_details",
-                "Для самовывоза укажите реквизиты, на которые гость переводит оплату.",
+                "transfer_payment_details",
+                "Для самовывоза укажите реквизиты для оплаты переводом.",
             )
         if self.module_billing_enabled and not self.module_orders_enabled:
             add_error("module_billing_enabled", "Billing module requires orders module.")

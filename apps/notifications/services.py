@@ -288,20 +288,20 @@ def _employee_display_name(employee) -> str:
 
 def _order_delivery_context_label(order) -> str:
     if order.channel == order.Channel.PICKUP:
-        from apps.orders.services import pickup_time_label
+        from apps.orders.services import requested_time_label
 
-        return f"Самовывоз: {pickup_time_label(order)}"
+        return f"Самовывоз: {requested_time_label(order)}"
     if order.table_id is not None:
         return f"Стол: #{order.table.number}"
     return "Сценарий: заказ без привязки к столу"
 
 
-def _pickup_status_note(order, to_status: str) -> str:
-    if order.channel != order.Channel.PICKUP:
+def _remote_status_note(order, to_status: str) -> str:
+    if order.channel not in order.PREPAID_CHANNELS:
         return ""
     if to_status == order.Status.ACCEPTED:
         return "Оплата подтверждена — готовим ваш заказ."
-    if to_status == order.Status.READY:
+    if to_status == order.Status.READY and order.channel == order.Channel.PICKUP:
         return "Заказ готов — можно забирать."
     if to_status == order.Status.CANCELED and order.paid_at is None:
         return (
@@ -374,9 +374,9 @@ def send_guest_order_status_update_now(
 
     if order.comment:
         lines.append(f"Комментарий: {_escape_html(order.comment)}")
-    pickup_note = _pickup_status_note(order, to_status)
-    if pickup_note:
-        lines.append(pickup_note)
+    remote_note = _remote_status_note(order, to_status)
+    if remote_note:
+        lines.append(remote_note)
 
     results = async_to_sync(_send_telegram_messages)(
         bot_instance.token,

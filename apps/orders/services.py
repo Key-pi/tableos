@@ -189,7 +189,7 @@ def create_order(
     table_session: TableSession | None = None,
     comment: str = "",
     channel: str = Order.Channel.TABLE,
-    pickup_at=None,
+    requested_for=None,
     notify_staff: bool = True,
 ) -> Order:
     if not items:
@@ -198,7 +198,7 @@ def create_order(
         raise OrderFlowError("Неизвестный способ получения заказа.")
     if channel != Order.Channel.TABLE and (table is not None or table_session is not None):
         raise OrderFlowError("Заказ на самовывоз не привязывается к столу.")
-    if channel == Order.Channel.TABLE and pickup_at is not None:
+    if channel == Order.Channel.TABLE and requested_for is not None:
         raise OrderFlowError("Время самовывоза указывается только для самовывоза.")
     if table_session is not None:
         if table is None:
@@ -218,7 +218,7 @@ def create_order(
         table_session=table_session,
         comment=comment,
         channel=channel,
-        pickup_at=pickup_at,
+        requested_for=requested_for,
     )
 
     subtotal = Decimal("0.00")
@@ -279,12 +279,12 @@ def transition_order_status(
     if to_status not in allowed_statuses:
         raise OrderFlowError(f"Нельзя перевести заказ из `{order.status}` в `{to_status}`.")
     if (
-        order.channel == Order.Channel.PICKUP
+        order.channel in Order.PREPAID_CHANNELS
         and to_status == Order.Status.ACCEPTED
         and order.paid_at is None
     ):
         # A pickup order goes into work only after its transfer is confirmed
-        # (apps/billing/pickup.py:confirm_pickup_payment).
+        # (apps/billing/pickup.py:confirm_transfer).
         raise OrderFlowError("Сначала подтвердите оплату переводом.")
     if to_status == Order.Status.CANCELED and BillItem.objects.filter(
         partner_id=order.partner_id,
@@ -836,16 +836,16 @@ def _refresh_cart_totals(cart: Cart) -> Cart:
 
 def _order_location_label(order: Order) -> str:
     if order.channel == Order.Channel.PICKUP:
-        return f"самовывоз, {pickup_time_label(order)}"
+        return f"самовывоз, {requested_time_label(order)}"
     if order.table_id is not None:
         return f"стол #{order.table.number}"
     return "заказ без привязки к столу"
 
 
-def pickup_time_label(order: Order) -> str:
-    if order.pickup_at is None:
+def requested_time_label(order: Order) -> str:
+    if order.requested_for is None:
         return "как можно скорее"
-    local = order.pickup_at.astimezone(ZoneInfo(order.partner.timezone))
+    local = order.requested_for.astimezone(ZoneInfo(order.partner.timezone))
     return f"к {local:%H:%M}"
 
 

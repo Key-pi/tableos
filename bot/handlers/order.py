@@ -3,7 +3,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
-from apps.billing.pickup import available_slots, closed_message
+from apps.billing.remote_orders import available_slots, closed_message
 from apps.orders.models import Order
 from apps.orders.services import (
     OrderFlowError,
@@ -17,7 +17,7 @@ from apps.orders.services import (
 from apps.tables.services import get_active_table_session
 from bot.filters.content import PartnerButtonFilter
 from bot.handlers.menu import send_menu_view
-from bot.handlers.pickup import start_pickup_checkout
+from bot.handlers.remote_checkout import start_remote_checkout
 from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.menu import build_cart_keyboard
 from bot.services.content import BotContent
@@ -115,8 +115,8 @@ async def _route_checkout(target, bot: Bot, partner, content: BotContent) -> boo
         partner_id=partner.id,
         telegram_id=target.from_user.id,
     )
-    if cart is not None and cart.channel == Order.Channel.PICKUP:
-        await start_pickup_checkout(target, bot)
+    if cart is not None and cart.channel in Order.PREPAID_CHANNELS:
+        await start_remote_checkout(target, bot, cart.channel)
         return True
     return False
 

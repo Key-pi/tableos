@@ -14,20 +14,20 @@ def build_staff_order_actions_keyboard(
     *,
     order_public_id: str,
     available_statuses: list[str],
-    pickup_payment_pending: bool = False,
+    transfer_check_pending: bool = False,
 ) -> InlineKeyboardMarkup | None:
     keyboard = []
-    if pickup_payment_pending:
+    if transfer_check_pending:
         # A pickup order goes into work only after the transfer is checked.
         keyboard.append(
             [
                 InlineKeyboardButton(
                     text="✅ Оплата получена",
-                    callback_data=f"staffpkok:{order_public_id}",
+                    callback_data=f"stafftxok:{order_public_id}",
                 ),
                 InlineKeyboardButton(
                     text="❌ Оплаты нет",
-                    callback_data=f"staffpkno:{order_public_id}",
+                    callback_data=f"stafftxno:{order_public_id}",
                 ),
             ]
         )
@@ -53,13 +53,13 @@ def build_staff_order_actions_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
-def build_staff_pickup_reject_confirm_keyboard(order_public_id: str) -> InlineKeyboardMarkup:
+def build_staff_transfer_reject_confirm_keyboard(order_public_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
                     text="Да, оплаты нет — отменить заказ",
-                    callback_data=f"staffpknoy:{order_public_id}",
+                    callback_data=f"stafftxnoy:{order_public_id}",
                 )
             ],
             [

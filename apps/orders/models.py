@@ -31,6 +31,9 @@ class Order(PartnerBoundModel):
         TABLE = "table", "За столом"
         PICKUP = "pickup", "Самовывоз"
 
+    # Channels paid in advance by transfer and checked by staff (ADR-0009).
+    PREPAID_CHANNELS = frozenset({Channel.PICKUP})
+
     public_id = models.CharField(max_length=12, editable=False)
     guest = models.ForeignKey(
         "users.GuestProfile",
@@ -60,10 +63,13 @@ class Order(PartnerBoundModel):
     )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.NEW)
     channel = models.CharField(max_length=16, choices=Channel.choices, default=Channel.TABLE)
-    pickup_at = models.DateTimeField(
+    requested_for = models.DateTimeField(
         null=True,
         blank=True,
-        help_text="Pickup orders: when the guest comes; empty means as soon as possible.",
+        help_text=(
+            "Remote orders (pickup, later delivery): the requested time; empty "
+            "means as soon as possible."
+        ),
     )
     payment_method = models.CharField(
         max_length=16,

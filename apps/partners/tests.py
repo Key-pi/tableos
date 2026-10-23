@@ -149,7 +149,7 @@ class PartnerBotSettingsModuleTests(TestCase):
             module_cart_enabled=True,
             module_billing_enabled=True,
             module_staff_call_enabled=False,
-            pickup_payment_details="Карта 4149 0000 0000 0000",
+            transfer_payment_details="Карта 4149 0000 0000 0000",
         )
 
         settings.full_clean()
@@ -169,7 +169,7 @@ class PartnerBotSettingsModuleTests(TestCase):
         )
         with self.assertRaises(ValidationError) as caught:
             settings.full_clean()
-        self.assertIn("pickup_payment_details", caught.exception.message_dict)
+        self.assertIn("transfer_payment_details", caught.exception.message_dict)
 
     def test_order_journey_modules_are_independent(self):
         settings = PartnerBotSettings.objects.create(

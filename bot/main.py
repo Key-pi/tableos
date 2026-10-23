@@ -8,8 +8,8 @@ from bot.handlers.billing import router as billing_router
 from bot.handlers.guest_call import router as guest_call_router
 from bot.handlers.menu import router as menu_router
 from bot.handlers.order import router as order_router
-from bot.handlers.pickup import router as pickup_router
 from bot.handlers.profile import router as profile_router
+from bot.handlers.remote_checkout import router as remote_checkout_router
 from bot.handlers.session import router as session_router
 from bot.handlers.staff import router as staff_router
 from bot.handlers.start import router as start_router
@@ -24,7 +24,7 @@ def create_dispatcher() -> Dispatcher:
     dispatcher.include_router(session_router)
     dispatcher.include_router(menu_router)
     dispatcher.include_router(order_router)
-    dispatcher.include_router(pickup_router)
+    dispatcher.include_router(remote_checkout_router)
     dispatcher.include_router(profile_router)
     dispatcher.include_router(billing_router)
     dispatcher.include_router(guest_call_router)

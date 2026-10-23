@@ -50,7 +50,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                     "module_tables_enabled",
                     "module_delivery_enabled",
                     "module_pickup_enabled",
-                    "pickup_payment_details",
+                    "transfer_payment_details",
                 ),
             },
         ),
