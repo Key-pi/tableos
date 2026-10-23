@@ -21,15 +21,6 @@ from bot.services.navigation import resolve_guest_navigation_state
 router = Router()
 
 
-def _split_checkout_comment(text: str) -> str:
-    payload = text.partition(" ")[2].strip()
-    if not payload:
-        return ""
-    if payload.startswith("|"):
-        return payload.removeprefix("|").strip()
-    return payload
-
-
 def _render_cart(cart) -> str:
     if not cart.items.all():
         return "Корзина пуста."
@@ -180,7 +171,9 @@ async def checkout_handler(message: Message, bot: Bot) -> None:
         order = await sync_to_async(checkout_active_cart_for_telegram_user)(
             partner_id=partner.id,
             telegram_id=message.from_user.id,
-            comment=_split_checkout_comment(message.text or ""),
+            # The reply button text is the configured label, never a comment
+            # (AA-027); comments need an explicit input step.
+            comment="",
         )
     except OrderFlowError as exc:
         await message.answer(
