@@ -10,7 +10,10 @@ the production source of truth and Redis is the Celery broker/backend.
 Read [README.md](README.md) for onboarding. The canonical governance map is:
 
 - product: `docs/product/PRODUCT_SPEC.md`, `FEATURE_MATRIX.md`, and
-  `OPEN_PRODUCT_QUESTIONS.md`;
+  `OPEN_PRODUCT_QUESTIONS.md`; ecosystem direction (this repository becomes
+  **Botera Shop** in the Botera network; tables are one ordering channel among
+  pickup/delivery/shipping; no coupling to other Botera products):
+  `docs/product/ECOSYSTEM_DIRECTION.md`;
 - current architecture: `docs/architecture/AS_IS_ARCHITECTURE.md`;
 - target/module/layer rules: `docs/architecture/TARGET_ARCHITECTURE.md`,
   `MODULE_BOUNDARIES.md`, `LAYERING_RULES.md`;
