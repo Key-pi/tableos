@@ -338,7 +338,7 @@ by `AGENTS.md`.
 
 | ID | Category | Severity | Confidence | Short conclusion | Roadmap batch |
 |---|---|---:|---:|---|---|
-| AA-020 | BUG / FINANCIAL_INTEGRITY | High | High | Billing, bill-request visibility and auto-close are scoped to the table's whole history, not the current visit. | B3.2 (PQ-026 decided, ADR-0007) |
+| AA-020 | BUG / FINANCIAL_INTEGRITY | High | High | Billing, bill-request visibility and auto-close are scoped to the table's whole history, not the current visit. | B3.2 part B — resolved |
 | AA-021 | BUG / FINANCIAL_INTEGRITY | High | Medium–High | Post-payment auto-close can raise `TableSessionError` and roll back a payment; adapters do not handle it. | B3.1 — resolved |
 | AA-022 | BUG / FINANCIAL_INTEGRITY | High | High | A cancelled order stays charged in its bill; bills cannot be cancelled and allocations cannot be released. | B3.2 part A — resolved |
 | AA-023 | BUG / ADMIN_BYPASS | Medium | High | `OrderAdmin` leaves `guest`, `table`, `table_session` editable. | B3.1 — resolved |
@@ -500,8 +500,8 @@ PostgreSQL 16 (199 tests; 5 PostgreSQL-only tests skipped on SQLite).
 | AA-024 | Dynamic text escaped in bot messages, partner template values and notifications; broadcast text remains partner markup (B4). |
 | AA-032 (tests) | PostgreSQL concurrency tests for bill allocation, bonus payment and final payment; a mutation check confirms they fail without the locks. |
 
-Remaining from the post-B3 review: AA-020 (B3.2 part B), AA-030 (B4),
-AA-031 and AA-034 (B5).
+Remaining from the post-B3 review: AA-030 (B4), AA-031 and AA-034 (B5).
+AA-020 is resolved in B3.2 part B and AA-022 in B3.2 part A (see below).
 
 ## B3.2 part A implementation update — 2026-10-23
 
@@ -528,3 +528,36 @@ AA-022 is resolved on branch `b3.2a-bill-changes`:
   the bill, adjustment history.
 - Verified: 227 tests green on SQLite and PostgreSQL 16, including PostgreSQL
   races void-vs-payment and cancel-vs-billing.
+
+## B3.2 part B implementation update — 2026-10-23
+
+AA-020 is resolved on branch `b3.2b-visits` (ADR-0007, PQ-026):
+
+- `TableVisit` groups the sessions of one party at a table;
+  `TableSession.visit` and `Bill.visit` link to it. The backfill makes the
+  active sessions of each table one visit (owner decision 2); closed
+  sessions stay without a visit.
+- `activate_table_session(visit_choice=…)`: `ask` (bot) raises
+  `VisitChoiceRequired` when another party with a seated guest is at the
+  table; `auto` (service default) joins the party at the table; `new` and
+  `join:<id>` are explicit. A visit that closed meanwhile cannot be joined.
+  Starting a visit while another is open notifies staff.
+- Billing eligibility, bill creation/attachment, guest bill requests and the
+  "request bill" button are scoped to the visit. Staff/Admin table bills need
+  a visit when several are open.
+- Visits close by themselves when nobody sits in them and they are settled;
+  `close_table_visit` is the staff command (bot button, Admin action).
+- Staff bot: ⚠ on tables with several visits, per-visit bill and close
+  buttons. Admin: read-only `TableVisitAdmin`.
+- Lock order: activation `GuestProfile → Table → guest's sessions →
+  TableVisit`; payment `… → TableSession → TableVisit`.
+- Verified: 250 tests green on SQLite and PostgreSQL 16, including races
+  for two guests scanning an empty table and payment-closes-visit versus
+  join (no deadlock, no session inside a closed visit; six repeated runs);
+  migrations forward/backward/forward on PostgreSQL.
+
+Known limits: PQ-007 (a guest moving tables with unsettled orders) is still
+open — moving closes the old session, and the old visit stays open for staff
+when it has unpaid orders. Join choices show only visits with at least one
+seated guest; an open visit with nobody seated is staff work (⚠), not a
+party to join.

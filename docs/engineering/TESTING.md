@@ -14,7 +14,7 @@ docker compose config --quiet
 ```
 
 At the 2026-07-27 baseline, Django check/migration check/tests/compose config
-passed; the test suite ran **139 tests**. After B3.1 the suite has **199 tests**; it passes on SQLite (5
+passed; the test suite ran **139 tests**. After B3.2 part B the suite has **250 tests**; it passes on SQLite (9
 PostgreSQL-only tests skipped) and on PostgreSQL 16. Record every full run in
 the table at the end of this document.
 
@@ -42,8 +42,9 @@ and tool versions are recorded in [`../audits/BASELINE.md`](../audits/BASELINE.m
 
 ## Running the PostgreSQL-gated tests
 
-Seven tests run only on PostgreSQL and are skipped on SQLite:
-`apps/orders/test_concurrency.py`, `apps/tables/test_concurrency.py` and
+Nine tests run only on PostgreSQL and are skipped on SQLite:
+`apps/orders/test_concurrency.py`, `apps/tables/test_concurrency.py` (QR
+scans, two guests at an empty table, visit close vs join) and
 `apps/billing/test_concurrency.py` (bill allocation, bonus payment, final
 payment, void vs payment, cancel vs billing). SQLite also ignores `select_for_update`, so a lock that PostgreSQL
 rejects (AA-033) is invisible there: **run the whole suite on PostgreSQL
@@ -98,3 +99,5 @@ There is no CI; every run is manual. Add a row for each full run.
 | 2026-10-23 | B3.1 branch | PostgreSQL 16 | full suite | 199 tests OK |
 | 2026-10-23 | B3.2 part A branch | SQLite | full suite | 227 tests OK (7 skipped) |
 | 2026-10-23 | B3.2 part A branch | PostgreSQL 16 | full suite | 227 tests OK |
+| 2026-10-23 | B3.2 part B branch | SQLite | full suite | 250 tests OK (9 skipped) |
+| 2026-10-23 | B3.2 part B branch | PostgreSQL 16 | full suite | 250 tests OK; visit race test repeated 6× |

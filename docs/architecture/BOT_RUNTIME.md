@@ -51,6 +51,14 @@ live guard again.
   `PartnerBotSettings.clean()`. Raw reply text remains the routing mechanism;
   a stable-intent redesign is outside this batch.
 
+- B3.2 part B: QR activation may answer with a visit choice (`tv:j:<visit
+  hex>` join, `tv:n:<table hex>` new). The callback carries no QR token; the
+  handler reloads the table within the bot's partner and the service rechecks
+  that the visit is active and belongs to the table, otherwise the guest sees
+  `Выбор устарел. Отсканируйте QR-код стола ещё раз.`. Staff visit actions
+  (`stafftvshared`, `stafftvpersonal`, `stafftvclose`) reload the visit within
+  the employee's partner.
+
 ## Callback and content design
 
 Use a namespaced callback/action key plus a scoped object identifier. The

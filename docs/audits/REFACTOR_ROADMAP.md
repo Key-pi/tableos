@@ -4,8 +4,8 @@
 (post-B3 correctness fixes) are complete. The full suite, including every
 PostgreSQL-gated test, passes on PostgreSQL 16 in a development environment;
 the production data audits for the B2/B3 migrations are still required before
-rollout. B3.2 is approved; part A (bill changes and void) is complete, parts B
-(table visits) and C (cashback base) are in progress. B4 and B5 are proposals
+rollout. B3.2 is approved; parts A (bill changes and void) and B (table
+visits) are complete, part C (cashback base) is next. B4 and B5 are proposals
 and require owner approval before any application-code, migration,
 dependency, or runtime change begins.
 
@@ -233,7 +233,6 @@ PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implem
 | Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
 | Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
 
-The next safe action is B3.2 part B (table visits), then part C (cashback
-base). Before production rollout of B2/B3/B3.1:
+The next safe action is B3.2 part C (cashback base, PQ-030). Before production rollout of B2/B3/B3.1:
 run the duplicate-data audits on a production copy and the full suite on
 PostgreSQL.

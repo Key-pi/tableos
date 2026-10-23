@@ -138,12 +138,23 @@ partner-authored markup.
 ### Guest session, menu, cart and order
 
 1. `/start table_<number>_<token>` → `tables/services.py:activate_table_session`
-   locks `GuestProfile → Table`, closes the guest's previous active session in
-   the same partner **regardless of unpaid orders**, creates a new session and
-   applies `VISIT` bonus programmes with idempotency key
-   `table_session:<id>:program:<id>`. The partial unique constraint
-   `unique_active_table_session_per_partner_guest` guarantees one active
-   session per guest and partner.
+   (bot: `visit_choice="ask"`). Every session belongs to a **table visit**
+   (`TableVisit`, ADR-0007): one party at a table; a table may have several
+   active visits. If another party with a seated guest is at the table, the
+   bot asks "Подсесть к компании (с HH:MM, гостей: N)" or "Начать новый
+   визит" (`tv:j:<visit>` / `tv:n:<table>` callbacks, hex UUIDs); a guest who
+   already sits in an active visit of the table stays in it. Service callers
+   default to `auto` (join the party at the table, else start one). Starting
+   a visit while another one of the table is open notifies staff
+   (`StaffNotification` category `table_visit`). Activation locks
+   `GuestProfile → Table → guest's own sessions → TableVisit`, closes the
+   guest's previous active session in the partner **regardless of unpaid
+   orders** (PQ-007), creates the new session and applies `VISIT` bonus
+   programmes with idempotency key `table_session:<id>:program:<id>`. The
+   partial unique constraint `unique_active_table_session_per_partner_guest`
+   guarantees one active session per guest and partner. A visit closes by
+   itself when nobody sits in it and it is settled (no unpaid orders, no open
+   bill); `close_table_visit` is the staff command.
 2. Cart commands in `orders/services.py` lock the guest's active `Cart`.
    A cart with items that belongs to an older session is abandoned; an empty
    one is moved to the new session. `unique_active_cart_per_partner_guest`
@@ -171,9 +182,15 @@ partner-authored markup.
    either prepares a draft personal/shared bill (`auto_prepared`) or records a
    custom-split request (`open`) for staff. Staff can also build shared or
    personal bills per table from the bot or Admin.
-2. Eligible orders are selected by **table, not by session or visit**:
-   `get_table_billable_orders` returns every non-cancelled order on the table
-   that has no bill yet, from any time (AA-020).
+2. Eligible orders are selected **by table visit** (since B3.2 part B):
+   `get_table_billable_orders(visit_id=…)` returns the unbilled, not cancelled
+   orders of that visit (`visit_id=None`: legacy orders without a visit).
+   `create_bill_from_orders` rejects orders of different visits and stores
+   `Bill.visit`; `attach_orders_to_bill` accepts only orders of the bill's
+   visit. Guest requests use the guest's visit; staff/Admin table bills use an
+   explicit visit or the table's single active visit
+   (`resolve_table_visit_for_billing`; several active visits → staff picks).
+   The guest "request bill" button follows the guest's visit.
 3. `create_bill_from_orders` locks `Order → OrderItem`; `attach_orders_to_bill`
    locks `Bill → OrderItem`. `BillItem.unique_active_order_item_bill_allocation`
    allows one **active** allocation per `OrderItem`. Since B3.2 part A,
@@ -257,6 +274,7 @@ excludes superusers and `OrderAdmin` keeps `guest`, `table` and
 |---|---|---|
 | Order status | `transition_order_status`; `cancel_order`; guest confirmation; post-payment completion | Locked reload; staff transition table plus explicit guest confirmation rule; cancelling an order with active bill lines is refused |
 | Table session | `activate_table_session`, `close_table_session_if_settled`, post-payment auto-close | Partial unique active session per guest; locks; no expiry processor |
+| Table visit | activation (join/new/auto), automatic close when empty and settled, `close_table_visit` | Table row lock serialises visit creation/joining; visit row lock before joining and closing |
 | Cart | cart services, checkout | Partial unique active cart per guest; cart row lock |
 | Bill | create/attach/issue/payment/change/void services | Bill lock; one active allocation per order item; audited changes; void releases allocations |
 | Billing request | `mark_billing_request_processed`, `cancel_billing_request` | Locked reload; processed and cancelled are terminal |
@@ -270,12 +288,15 @@ transactions; allowed operations are actions that call owner services.
 
 ## Tests and checks
 
-- 227 tests after B3.2 part A, green on SQLite and on PostgreSQL 16. Seven
+- 250 tests after B3.2 part B, green on SQLite and on PostgreSQL 16. Nine
   are PostgreSQL-only and skipped on SQLite: concurrent order transition
-  (`apps/orders/test_concurrency.py`), concurrent QR scans
-  (`apps/tables/test_concurrency.py`), and concurrent bill allocation, bonus
+  (`apps/orders/test_concurrency.py`); concurrent QR scans, two guests
+  scanning an empty table, and paying a visit while a guest joins it
+  (`apps/tables/test_concurrency.py`); concurrent bill allocation, bonus
   payment, final payment, void-vs-payment and cancel-vs-billing
-  (`apps/billing/test_concurrency.py`).
+  (`apps/billing/test_concurrency.py`). A migration test
+  (`apps/tables/test_visit_migration.py`) drives the visit backfill backward
+  and forward.
 - Recorded runs are listed in
   [`../engineering/TESTING.md`](../engineering/TESTING.md).
 - There is no CI pipeline; every check is run by hand.
