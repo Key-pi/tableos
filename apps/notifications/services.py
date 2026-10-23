@@ -375,6 +375,43 @@ def request_staff_assistance(
     return table_number, queued_count
 
 
+def notify_staff_about_parallel_visit(visit) -> int:
+    """Tell staff that a new party started at a table whose previous visit is open.
+
+    ADR-0007: the previous visit is not closed automatically; staff settle and
+    close it. Recipients are the staff who receive billing requests.
+    """
+
+    recipients = list(
+        EmployeeProfile.objects.select_related("telegram_account", "user").filter(
+            partner_id=visit.partner_id,
+            is_active=True,
+            bot_notifications_enabled=True,
+            notify_on_billing_requests=True,
+            telegram_account__isnull=False,
+            user__role__in=("waiter", "cashier", "manager", "owner"),
+            user__is_active=True,
+            user__partner_id=visit.partner_id,
+        )
+    )
+    table_number = visit.table.number
+    queued_count = 0
+    for employee in recipients:
+        notification = StaffNotification.objects.create(
+            partner_id=visit.partner_id,
+            employee=employee,
+            category=StaffNotification.Category.TABLE_VISIT,
+            title=f"Стол #{table_number}: новый визит",
+            message=(
+                f"За столом #{table_number} начат новый визит, предыдущий не закрыт. "
+                "Рассчитайте и закройте предыдущий визит в разделе «Столы»."
+            ),
+        )
+        deliver_staff_notification(notification)
+        queued_count += 1
+    return queued_count
+
+
 def notify_staff_about_billing_request(billing_request) -> int:
     recipients = list(
         EmployeeProfile.objects.select_related("telegram_account", "user").filter(

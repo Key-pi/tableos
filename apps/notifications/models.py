@@ -30,6 +30,7 @@ class StaffNotification(PartnerBoundModel):
         ORDER_STATUS_CHANGED = "order_status_changed", "Order status changed"
         GUEST_CALL = "guest_call", "Guest call"
         BILLING_REQUEST = "billing_request", "Billing request"
+        TABLE_VISIT = "table_visit", "Table visit"
 
     class DeliveryStatus(models.TextChoices):
         PENDING = "pending", "Pending"
