@@ -226,6 +226,30 @@ class GuestPickupFlowTests(PickupBotFixture):
         async_to_sync(order_handlers.cart_checkout_callback)(checkout, self.bot)
         self.assertIn("номер телефона", checkout.message.answer.call_args.args[0])
 
+        # No «к столу» button: the table flow starts only from the QR code.
+        markup = switch.message.edit_text.call_args.kwargs["reply_markup"]
+        self.assertFalse(
+            [b for b in _buttons(markup) if b.callback_data.startswith("cart:mode:")]
+        )
+        rescan = SimpleNamespace(from_user=_user(GUEST), answer=AsyncMock())
+        async_to_sync(start_handler)(
+            rescan, SimpleNamespace(args=table.deep_link_payload), self.bot
+        )
+        cart.refresh_from_db()
+        self.assertEqual(cart.channel, Order.Channel.TABLE)
+
+        # No «к столу» button: the table flow starts only from the QR code.
+        markup = switch.message.edit_text.call_args.kwargs["reply_markup"]
+        self.assertFalse(
+            [b for b in _buttons(markup) if b.callback_data.startswith("cart:mode:")]
+        )
+        rescan = SimpleNamespace(from_user=_user(GUEST), answer=AsyncMock())
+        async_to_sync(start_handler)(
+            rescan, SimpleNamespace(args=table.deep_link_payload), self.bot
+        )
+        cart.refresh_from_db()
+        self.assertEqual(cart.channel, Order.Channel.TABLE)
+
     def test_pickup_menu_hides_table_only_items(self):
         MenuItem.objects.create(
             partner=self.partner,

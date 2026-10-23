@@ -85,24 +85,22 @@ async def _has_active_session(partner, content: BotContent, telegram_id: int) ->
     return session is not None
 
 
-def _mode_switch(cart, content: BotContent, has_session: bool):
-    """The button that switches the cart to the other flow, if there is one."""
+def _mode_switch(cart, content: BotContent):
+    """A table cart may switch to pickup. There is no way back by button: the
+    table flow starts only from the table's QR code (scanning it again)."""
 
     if cart.channel == Order.Channel.TABLE and content.supports_pickup_orders():
         return ("🥡 Взять с собой (самовывоз)", "cart:mode:pickup")
-    if cart.channel == Order.Channel.PICKUP and has_session:
-        return ("🍽 Заказать к столу", "cart:mode:table")
     return None
 
 
 async def _cart_view(cart, partner, content: BotContent, telegram_id: int, *, removed=None):
-    has_session = await _has_active_session(partner, content, telegram_id)
     return (
         _render_cart(cart, removed=removed),
         build_cart_keyboard(
             cart=cart,
             supports_cart=content.supports_cart(),
-            mode_switch=_mode_switch(cart, content, has_session),
+            mode_switch=_mode_switch(cart, content),
         ),
     )
 
@@ -199,6 +197,10 @@ async def pickup_handler(message: Message, bot: Bot) -> None:
                     lines.append(
                         "Убрали из корзины — не продаётся на вынос: "
                         + escape_html(", ".join(removed))
+                    )
+                if await _has_active_session(partner, content, message.from_user.id):
+                    lines.append(
+                        "Чтобы снова заказывать к столу, отсканируйте QR-код стола."
                     )
                 await _send_navigation_keyboard_message(
                     message=message,
@@ -390,13 +392,13 @@ async def cart_checkout_callback(callback: CallbackQuery, bot: Bot) -> None:
     await _checkout_at_table(callback, partner, content)
 
 
-@router.callback_query(F.data.in_({"cart:mode:table", "cart:mode:pickup"}))
+@router.callback_query(F.data == "cart:mode:pickup")
 async def cart_mode_callback(callback: CallbackQuery, bot: Bot) -> None:
-    """Switch the cart between the table flow and pickup."""
+    """Switch a table cart to pickup (to take the order away)."""
 
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
-    channel = Order.Channel.TABLE if callback.data.endswith("table") else Order.Channel.PICKUP
+    channel = Order.Channel.PICKUP
     try:
         _ensure_cart_enabled(content)
         cart, removed = await sync_to_async(switch_cart_channel_for_telegram_user)(

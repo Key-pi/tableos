@@ -63,8 +63,8 @@ live guard again.
   `pk:p:…` carries the total and the amount to pay that the guest saw, and
   the service refuses to place the order if either changed. The ordering
   flow is chosen first (the «Самовывоз» button or a table QR scan) and kept
-  in `Cart.channel`; the cart offers `cart:mode:table` / `cart:mode:pickup`
-  to switch. A shared contact is accepted
+  in `Cart.channel`; a table cart offers `cart:mode:pickup`, and the only
+  way back to the table flow is scanning the table QR again. A shared contact is accepted
   only when `contact.user_id` is the sender. Staff `staffpkok`, `staffpkno`
   (asks first) and `staffpknoy` reload the order within the employee's
   partner; the service checks the role (owner/manager/cashier).

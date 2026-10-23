@@ -115,3 +115,4 @@ There is no CI; every run is manual. Add a row for each full run.
 | 2026-10-23 | Pickup (`clean-project-rules`) | PostgreSQL 16 | full suite + pickup migrations (orders 0005, billing 0008, users 0002, partners 0007) backward/forward | 327 tests OK |
 | 2026-10-23 | Flow-first channels | SQLite | full suite | 330 tests OK (10 skipped) |
 | 2026-10-23 | Flow-first channels | PostgreSQL 16 | full suite + `orders.0006`, `menu.0004` backward/forward | 330 tests OK |
+| 2026-10-23 | Table flow only via QR | SQLite / PostgreSQL 16 | full suite | 330 tests OK (10 skipped on SQLite) |
