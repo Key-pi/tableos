@@ -1,65 +1,67 @@
-# TableOS — Audit and governance summary
+# Botera Shop (тогда TableOS) — сводка аудита и правил
 
-> **Historical snapshot** of the 2026-07-27 audit at commit `b17ce5b`. It is kept as evidence and is not updated as code changes. Batch status and the next proposed action live in [REFACTOR_ROADMAP.md](REFACTOR_ROADMAP.md); later findings are in [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#post-b3-review--2026-10-23).
+> **Исторический снимок** аудита 2026-07-27 на коммите `b17ce5b`. Сохранён как свидетельство и не обновляется при изменении кода. Статус батчей и следующее предлагаемое действие — в [REFACTOR_ROADMAP.md](REFACTOR_ROADMAP.md); более поздние находки — в [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#проверка-после-b3--2026-10-23).
 
-**Mode completed:** `AUDIT_AND_GOVERNANCE`  
-**Date:** 2026-07-27  
-**Implementation status:** no application-code, model, migration, dependency, runtime, commit, or push change was made.
+**Выполненный режим:** `AUDIT_AND_GOVERNANCE`
+**Дата:** 2026-07-27
+**Состояние реализации:** код приложения, модели, миграции, зависимости, работа процессов не менялись; коммитов и пушей не было.
 
-## Scope completed
+## Что сделано
 
-- Read in full: `TABLEOS_CODEBASE_AUDIT_MASTER_PROMPT.md`, `README.md`, `PROJECT_CHEATSHEET.md`, and `TABLEOS_TZ.md`.
-- Reviewed the whole first-party source tree: 221 Python files / 20,516 LOC, ten installed domain apps, `bot`, `core`, all 25 numbered migrations, all 17 discoverable test modules, root configuration and compose topology.
-- Traced Django Admin, Celery autodiscovery, aiogram router registration, static dependencies/import cycles, representative bot→service→model flows, and critical money/tenant/concurrency paths.
-- Recorded every file-class disposition in [`FILE_COVERAGE.md`](FILE_COVERAGE.md), including exclusions and follow-up items. The only pre-existing worktree change left untouched is the staged deletion of `SKILLS.md`; the master prompt remains untracked as supplied.
+- Полностью прочитаны: `TABLEOS_CODEBASE_AUDIT_MASTER_PROMPT.md`, `README.md`, `PROJECT_CHEATSHEET.md` и `TABLEOS_TZ.md`.
+- Просмотрено всё собственное дерево исходников: 221 Python-файл / 20 516 строк, десять установленных доменных приложений, `bot`, `core`, все 25 пронумерованных миграций, все 17 найденных тестовых модулей, корневая конфигурация и схема compose.
+- Прослежены Django Admin, autodiscovery Celery, регистрация роутеров aiogram, статические зависимости и циклы импорта, типичные сценарии бот → сервис → модель и критические пути денег, партнёров и конкуренции.
+- Решение по каждому классу файлов записано в [`FILE_COVERAGE.md`](FILE_COVERAGE.md), включая исключения и пункты на потом. Единственное ранее существовавшее изменение рабочей копии, оставленное нетронутым, — подготовленное удаление `SKILLS.md`; мастер-промпт остался неотслеживаемым, как был передан.
 
-## Baseline result
+## Результат базовой проверки
 
-| Check | Result |
+| Проверка | Результат |
 |---|---|
-| Django system check | Pass |
-| Migration drift check | Pass — no changes detected |
-| Full test suite | Pass — 139 tests, SQLite local mode |
-| Compose config | Pass |
-| Ruff check | Pre-existing failure — 21 findings |
-| Ruff format check | Pre-existing failure — 54 files would reformat |
+| Системная проверка Django | Проходит |
+| Проверка расхождения миграций | Проходит — изменений нет |
+| Полный набор тестов | Проходит — 139 тестов, локальный режим SQLite |
+| Конфигурация compose | Проходит |
+| Ruff check | Старая ошибка — 21 замечание |
+| Ruff format check | Старая ошибка — 54 файла были бы переформатированы |
 
-Exact commands, versions, database mode and failures are in [`BASELINE.md`](BASELINE.md). SQLite success is deliberately not presented as evidence for production PostgreSQL locking/constraint behavior.
+Точные команды, версии, режим базы и ошибки — в [`BASELINE.md`](BASELINE.md). Успех на SQLite намеренно не выдаётся за доказательство поведения блокировок и ограничений PostgreSQL в продакшене.
 
-## Main findings
+## Главные находки
 
-The full, evidence-linked register is [`ARCHITECTURE_AUDIT.md`](ARCHITECTURE_AUDIT.md). Its highest-priority confirmed risks are:
+Полный реестр со ссылками на доказательства — [`ARCHITECTURE_AUDIT.md`](ARCHITECTURE_AUDIT.md). Его подтверждённые риски высшего приоритета:
 
-1. disabled `User` can retain staff authority;
-2. same-partner object graphs are not universally enforced;
-3. Django Admin can bypass state, money, and ledger owner services;
-4. order transition, active table session, bill allocation, and bonus wallet paths have concurrency/integrity gaps;
-5. broadcast delivery combines open DB transaction with Telegram I/O and lacks durable recipient lease/idempotency;
-6. actual behavior is behind portions of the legacy specification (notably order-completed bonuses), while several financial/runtime semantics require product-owner decisions rather than an inferred implementation.
+1. отключённый `User` может сохранить полномочия сотрудника;
+2. принадлежность графов объектов одному партнёру соблюдается не везде;
+3. Django Admin может обойти сервисы-владельцы состояний, денег и журнала;
+4. в путях смены статуса заказа, активной сессии стола, распределения по счёту и бонусного кошелька есть пробелы конкурентности и целостности;
+5. доставка рассылок совмещает открытую транзакцию базы с вводом-выводом Telegram и не имеет долговечной аренды получателя и идемпотентности;
+6. реальное поведение отстаёт от части старой спецификации (особенно бонусы за завершённый заказ), а несколько финансовых смыслов и смыслов работы процессов требуют решений владельца продукта, а не домысленной реализации.
 
-The audit also records lower-priority tenant-admin metadata/inline risks, routing-label collision, non-positive quick sale, analytics metric ambiguity, zero-bill policy ambiguity, empty abstraction candidates, and seed reliability.
+Аудит также записывает риски меньшего приоритета: метаданные и inline Admin арендатора, совпадение подписей в маршрутизации, неположительную быструю продажу, неоднозначность метрик аналитики, неоднозначность политики нулевого счёта, кандидатов в пустые абстракции и надёжность наполнения демо-данными.
 
-## Documentation and governance delivered
+## Что сделано в документации и правилах
 
-| Area | Delivered artifacts |
+| Область | Результаты |
 |---|---|
-| Product | `docs/product/PRODUCT_SPEC.md`, feature matrix, open decision register, full legacy TZ migration map |
-| Architecture | AS-IS, target architecture, module boundaries, layering, tenancy/permissions, bot runtime, background jobs |
-| Decisions | ADR-0001 through ADR-0006 |
-| Engineering | development, testing, code-style guides |
-| Audit | baseline, inventory, coverage ledger, architecture audit, roadmap, this summary |
-| Repository governance | root `AGENTS.md` and exactly one `.agents/skills/tableos-development/` skill |
+| Продукт | `docs/product/PRODUCT_SPEC.md`, матрица возможностей, реестр открытых решений, полная карта переноса старого ТЗ |
+| Архитектура | AS-IS, целевая архитектура, границы модулей, слои, партнёры и права, работа бота, фоновые задачи |
+| Решения | ADR-0001 — ADR-0006 |
+| Инженерные практики | разработка, тестирование, стиль кода |
+| Аудит | базовая проверка, инвентарь, реестр покрытия, архитектурный аудит, дорожная карта, эта сводка |
+| Правила репозитория | корневой `AGENTS.md` и ровно один навык `.agents/skills/tableos-development/` |
 
-Root `README.md` is now short canonical onboarding. `PROJECT_CHEATSHEET.md` keeps its legacy navigation role but its verified baseline, scheduled task list, and machine-local links were corrected with a visible status banner. `TABLEOS_TZ.md` remains intact as legacy product evidence with a banner pointing to the canonical reconciliation. These documentation corrections are grounded in the documented code evidence; no contradiction was silently erased.
+Корневой `README.md` стал коротким каноническим вступлением. `PROJECT_CHEATSHEET.md` сохраняет роль старой навигации, но его базовая проверка, список плановых задач и ссылки на локальную машину исправлены с видимым баннером статуса. `TABLEOS_TZ.md` сохранён целиком как старое продуктовое свидетельство с баннером, указывающим на каноническую сверку. Эти исправления документации опираются на задокументированные доказательства в коде; ни одно противоречие не стёрто молча.
 
-## Validation performed after documentation work
+## Проверка после работы над документацией
 
-- `git diff --check` was used during artifact creation; final check is required in the closing verification pass.
-- Skill scaffold was generated by the required `skill-creator` initializer; its `openai.yaml` parses successfully and `SKILL.md` has no template TODOs.
-- The supplied `quick_validate.py` was attempted with both project and bundled Python runtimes, but neither environment contains its required `PyYAML` dependency. No dependency was installed in audit mode. This is a validation environment limitation, not an application failure; the skill’s structure and YAML were independently checked.
+- `git diff --check` использовался при создании материалов; финальная проверка требуется в заключительном проходе.
+- Заготовка навыка сгенерирована обязательным инициализатором `skill-creator`; её `openai.yaml` разбирается успешно, в `SKILL.md` нет шаблонных TODO.
+- Переданный `quick_validate.py` пробовали запускать и с Python проекта, и с встроенным, но ни в одном окружении нет нужной ему зависимости `PyYAML`. В режиме аудита зависимости не устанавливались. Это ограничение окружения проверки, а не ошибка приложения; структура навыка и YAML проверены независимо.
 
-## Proposed next action — requires approval
+## Предлагаемое следующее действие — требует утверждения
 
-Do **not** start a refactor automatically. Review [`REFACTOR_ROADMAP.md`](REFACTOR_ROADMAP.md) and approve one bounded batch.
+**Не** начинать рефакторинг автоматически. Просмотреть [`REFACTOR_ROADMAP.md`](REFACTOR_ROADMAP.md) и утвердить один ограниченный батч.
 
-The recommended first batch is **B1 — Tenant, actor and capability guardrails**: it begins with characterization tests and addresses disabled staff access, live suspension/capability checks, partner validation, label collisions and Admin scope gaps without making financial schema changes. It requires owner direction on stale callbacks and global Telegram identity policy. B2–B5 remain explicitly pending their dependencies and product/data/operations gates.
+Рекомендуемый первый батч — **B1 — защиты партнёра, исполнителя и прав**: начинается с характеризующих тестов и закрывает доступ отключённого сотрудника, живые проверки приостановки и прав, проверку партнёра, совпадение подписей и пробелы границ Admin без финансовых изменений схемы. Нужны указания владельца по устаревшим callback-ам и политике глобальной Telegram-личности. B2–B5 явно ждут своих зависимостей и продуктовых, данных и эксплуатационных условий.
+
+*(Позднее: B1–B5 выполнены; состояние — в [REFACTOR_ROADMAP.md](REFACTOR_ROADMAP.md).)*

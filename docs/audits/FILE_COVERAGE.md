@@ -1,59 +1,59 @@
-# File coverage ledger
+# Реестр покрытия файлов
 
-> **Historical snapshot** of the 2026-07-27 audit at commit `b17ce5b`. It is kept as evidence and is not updated as code changes. The post-B3 review on 2026-10-23 re-read all first-party source at `ddb7dce`; see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#post-b3-review--2026-10-23).
+> **Исторический снимок** аудита 2026-07-27 на коммите `b17ce5b`. Сохранён как свидетельство и не обновляется при изменении кода. Проверка после B3 (2026-10-23) заново прочитала весь собственный код на `ddb7dce`; см. [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#проверка-после-b3--2026-10-23).
 
-## Method
+## Метод
 
-The audit used `rg --files`, Python AST parsing, migration-operation inspection, direct source review, runtime call-chain tracing, configuration inspection, and the baseline test/check commands recorded in [BASELINE.md](BASELINE.md). `REVIEWED` means a first-party unit was included in this audit's source/AST/domain review; it does not mean every line is defect-free. `GENERATED/HISTORICAL` means read for schema/history but not evaluated against current style rules.
+Аудит использовал `rg --files`, разбор Python AST, просмотр операций миграций, прямое чтение исходников, трассировку цепочек вызовов, просмотр конфигурации и команды базовой проверки из [BASELINE.md](BASELINE.md). `REVIEWED` означает, что собственный модуль вошёл в обзор исходников, AST и домена; это не значит, что каждая строка без дефектов. `GENERATED/HISTORICAL` означает, что файл прочитан ради схемы и истории, но не оценивался по текущим правилам стиля.
 
-## Reviewed first-party source
+## Просмотренный собственный код
 
-| Coverage unit | Status | Evidence / scope |
+| Единица покрытия | Статус | Доказательство / объём |
 | --- | --- | --- |
-| Root: `README.md`, `PROJECT_CHEATSHEET.md`, `TABLEOS_TZ.md`, `TABLEOS_CODEBASE_AUDIT_MASTER_PROMPT.md`, `pyproject.toml`, `docker-compose.yml`, `manage.py`, `.env.example`, `.gitignore` | REVIEWED | All mandatory documents read in full; packaging, commands, environment, docs drift, and deployment topology checked. |
-| `core/**/*.py` (20 files) | REVIEWED | Settings, Celery, database bases, admin mixin, crypto, logging, URLs, ASGI/WSGI, and admin tests. |
-| `apps/partners/**/*.py` excluding migrations (17 files) | REVIEWED | Models, forms/admin, repositories/selectors/services, tasks/interface scaffold, tests, `seed_demo`, `seed_baseline_demo`. |
-| `apps/users/**/*.py` excluding migrations (13 files) | REVIEWED | Models, forms/admin, repositories/selectors/services, command, tests, RBAC constants. |
-| `apps/tables/**/*.py` excluding migrations (11 files) | REVIEWED | Models, services, repository/selector, admin, tests, scaffold. |
-| `apps/menu/**/*.py` excluding migrations (10 files) | REVIEWED | Models/admin, repository/selector, scaffold; behavior additionally traced through bot/order/bonus consumers. |
-| `apps/orders/**/*.py` excluding migrations (13 files) | REVIEWED | Models, services, repository/selector, admin, notification tests, state transition call chains. |
-| `apps/billing/**/*.py` excluding migrations (13 files) | REVIEWED | Models, forms/admin, services, repository/selector, tests, staff/admin payment paths. |
-| `apps/bonuses/**/*.py` excluding migrations (17 files) | REVIEWED | Models, strategies, services, forms/admin, repository/selector, command, tests. |
-| `apps/employees/**/*.py` excluding migrations (12 files) | REVIEWED | Models/forms/admin, selector/repository, tests, staff/notification consumers. |
-| `apps/notifications/**/*.py` excluding migrations (12 files) | REVIEWED | Models/admin, services/tasks, repository/selector, tests, Celery wiring. |
-| `apps/analytics/**/*.py` excluding migrations (10 files) | REVIEWED | Models/admin, report/snapshot services, task, repository/selector, tests. |
-| `bot/**/*.py` (40 files) | REVIEWED | Dispatcher/runtime/context/content/navigation, every handler/router, keyboards, filters, FSM, `runbot`, and six test modules. |
-| `infrastructure/docker/Dockerfile` | REVIEWED | Container build only; no other tracked implementation in `infrastructure/`. |
+| Корень: `README.md`, `PROJECT_CHEATSHEET.md`, `TABLEOS_TZ.md`, `TABLEOS_CODEBASE_AUDIT_MASTER_PROMPT.md`, `pyproject.toml`, `docker-compose.yml`, `manage.py`, `.env.example`, `.gitignore` | REVIEWED | Все обязательные документы прочитаны полностью; проверены упаковка, команды, окружение, расхождения документации и схема развёртывания. |
+| `core/**/*.py` (20 файлов) | REVIEWED | Настройки, Celery, базовые классы базы, mixin Admin, шифрование, логирование, URL, ASGI/WSGI и тесты Admin. |
+| `apps/partners/**/*.py` без миграций (17 файлов) | REVIEWED | Модели, формы и Admin, repositories/selectors/services, заготовки tasks/interface, тесты, `seed_demo`, `seed_baseline_demo`. |
+| `apps/users/**/*.py` без миграций (13 файлов) | REVIEWED | Модели, формы и Admin, repositories/selectors/services, команда, тесты, константы прав. |
+| `apps/tables/**/*.py` без миграций (11 файлов) | REVIEWED | Модели, сервисы, репозиторий и селектор, Admin, тесты, заготовки. |
+| `apps/menu/**/*.py` без миграций (10 файлов) | REVIEWED | Модели и Admin, репозиторий и селектор, заготовки; поведение дополнительно прослежено через потребителей в боте, заказах и бонусах. |
+| `apps/orders/**/*.py` без миграций (13 файлов) | REVIEWED | Модели, сервисы, репозиторий и селектор, Admin, тесты уведомлений, цепочки смены статуса. |
+| `apps/billing/**/*.py` без миграций (13 файлов) | REVIEWED | Модели, формы и Admin, сервисы, репозиторий и селектор, тесты, пути оплаты у персонала и в Admin. |
+| `apps/bonuses/**/*.py` без миграций (17 файлов) | REVIEWED | Модели, стратегии, сервисы, формы и Admin, репозиторий и селектор, команда, тесты. |
+| `apps/employees/**/*.py` без миграций (12 файлов) | REVIEWED | Модели, формы и Admin, селектор и репозиторий, тесты, потребители в персонале и уведомлениях. |
+| `apps/notifications/**/*.py` без миграций (12 файлов) | REVIEWED | Модели и Admin, сервисы и задачи, репозиторий и селектор, тесты, подключение Celery. |
+| `apps/analytics/**/*.py` без миграций (10 файлов) | REVIEWED | Модели и Admin, сервисы отчёта и снимков, задача, репозиторий и селектор, тесты. |
+| `bot/**/*.py` (40 файлов) | REVIEWED | Диспетчер, процесс, контекст, тексты, навигация, каждый обработчик и роутер, клавиатуры, фильтры, FSM, `runbot` и шесть тестовых модулей. |
+| `infrastructure/docker/Dockerfile` | REVIEWED | Только сборка контейнера; другой отслеживаемой реализации в `infrastructure/` нет. |
 
-## Schema history
+## История схемы
 
-| Paths | Status | Reason |
+| Пути | Статус | Причина |
 | --- | --- | --- |
-| `apps/*/migrations/[0-9]*.py` (25 numbered files) | GENERATED/HISTORICAL | Parsed and reviewed for entity/constraint/lifecycle history. Not scored for generated migration formatting. |
-| `apps/*/migrations/__init__.py` | GENERATED/HISTORICAL | Registration marker only. |
+| `apps/*/migrations/[0-9]*.py` (25 пронумерованных файлов) | GENERATED/HISTORICAL | Разобраны и просмотрены ради истории сущностей, ограничений и жизненных циклов. Форматирование сгенерированных миграций не оценивалось. |
+| `apps/*/migrations/__init__.py` | GENERATED/HISTORICAL | Только маркер регистрации. |
 
-## Tests and checks
+## Тесты и проверки
 
-| Unit | Status | Evidence |
+| Единица | Статус | Доказательство |
 | --- | --- | --- |
-| All 17 discoverable test modules | REVIEWED | AST inventory plus focused reading of tenant, state, billing, notification, bot, and report tests; full `manage.py test` passed 139 tests. |
-| `manage.py check`, migration dry run, full Django test suite, Ruff check/format check, Compose config | REVIEWED | Exact outputs in [BASELINE.md](BASELINE.md). |
+| Все 17 найденных тестовых модулей | REVIEWED | Инвентарь по AST и выборочное чтение тестов партнёров, состояний, счетов, уведомлений, бота и отчётов; полный `manage.py test` прошёл 139 тестов. |
+| `manage.py check`, проверка миграций, полный набор тестов Django, Ruff check/format check, конфигурация Compose | REVIEWED | Точный вывод — в [BASELINE.md](BASELINE.md). |
 
-## Excluded with reason
+## Исключено с причиной
 
-| Paths / class | Status | Reason |
+| Пути / класс | Статус | Причина |
 | --- | --- | --- |
-| `.git/` | EXCLUDED_WITH_REASON | VCS internals; only status, commit, and non-destructive diffs inspected. |
-| `.venv/`, `__pycache__/`, `.ruff_cache/`, `db.sqlite3`, coverage/static/media outputs | EXCLUDED_WITH_REASON | Environment/cache/generated artifacts, not source of current architecture. |
-| `.idea/` (8 tracked metadata files) | EXCLUDED_WITH_REASON | IDE metadata, not runtime/application behavior. |
-| `apps/background/` | EXCLUDED_WITH_REASON | Only ignored cache artifacts; no tracked source and not installed as a Django app. |
-| Empty physical `infrastructure/nginx`, `infrastructure/redis`, `infrastructure/scripts` directories | EXCLUDED_WITH_REASON | No tracked files to review. |
+| `.git/` | EXCLUDED_WITH_REASON | Внутренности VCS; просматривались только статус, коммит и неразрушающие diff. |
+| `.venv/`, `__pycache__/`, `.ruff_cache/`, `db.sqlite3`, результаты coverage/static/media | EXCLUDED_WITH_REASON | Окружение, кэш и сгенерированные файлы, а не источник текущей архитектуры. |
+| `.idea/` (8 отслеживаемых файлов метаданных) | EXCLUDED_WITH_REASON | Метаданные IDE, не поведение приложения. |
+| `apps/background/` | EXCLUDED_WITH_REASON | Только игнорируемый кэш; отслеживаемого кода нет, как приложение Django не установлено. |
+| Пустые каталоги `infrastructure/nginx`, `infrastructure/redis`, `infrastructure/scripts` | EXCLUDED_WITH_REASON | Нет отслеживаемых файлов. |
 
-## Needs follow-up
+## Требует продолжения
 
-| Item | Status | Why |
+| Пункт | Статус | Почему |
 | --- | --- | --- |
-| PostgreSQL concurrency/constraint behavior | NEEDS_FOLLOW_UP | Current baseline intentionally uses SQLite; no PostgreSQL characterization or CI job exists. |
-| `.agents/skills/tableos-development/` | REVIEWED / CREATED | Repository-local skill was initialized with `skill-creator`, completed, and YAML/manual structure-checked. The provided Python validator could not run because no available Python runtime has `PyYAML`; its failure is recorded in the audit summary rather than hidden. |
-| Pre-existing `SKILLS.md` deletion | NEEDS_FOLLOW_UP | User-owned staged deletion; preserve unless owner explicitly decides to restore or replace it. |
-| No CI configuration | NEEDS_FOLLOW_UP | No tracked workflow validates migrations, lint, PostgreSQL behavior, or bot/beat deployment. |
+| Поведение конкуренции и ограничений PostgreSQL | NEEDS_FOLLOW_UP | База намеренно использует SQLite; характеризации на PostgreSQL и CI нет. *(Позднее: тесты на PostgreSQL добавлены с B2/B3.1, полный набор прогоняется на PostgreSQL 16; CI по-прежнему нет.)* |
+| `.agents/skills/tableos-development/` | REVIEWED / CREATED | Навык репозитория создан через `skill-creator`, заполнен, YAML и структура проверены вручную. Переданный Python-валидатор не запустился, потому что ни в одном доступном Python нет `PyYAML`; это записано в сводке аудита, а не скрыто. |
+| Ранее существовавшее удаление `SKILLS.md` | NEEDS_FOLLOW_UP | Подготовленное удаление владельца; сохранить, пока владелец явно не решит восстановить или заменить файл. |
+| Нет конфигурации CI | NEEDS_FOLLOW_UP | Нет отслеживаемого процесса, проверяющего миграции, линтер, поведение PostgreSQL или развёртывание бота и beat. |

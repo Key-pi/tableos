@@ -1,242 +1,250 @@
-# TableOS — Refactor roadmap
+# Botera Shop — дорожная карта рефакторинга
 
-**Status (2026-10-23):** B0–B3, B0.1 (documentation refresh) and B3.1
-(post-B3 correctness fixes) are complete. The full suite, including every
-PostgreSQL-gated test, passes on PostgreSQL 16 in a development environment;
-the production data audits for the B2/B3 migrations are still required before
-rollout. B3.2 is complete: parts A (bill changes and void), B (table visits)
-and C (cashback base). B4 (durable delivery, ADR-0008) and B5 (hygiene) are complete. Product work
-continues per [ECOSYSTEM_DIRECTION.md](../product/ECOSYSTEM_DIRECTION.md).
+**Статус (2026-10-23):** B0–B3, B0.1 (обновление документации) и B3.1
+(исправления после B3) завершены. Полный набор тестов, включая все тесты
+только для PostgreSQL, проходит на PostgreSQL 16 в окружении разработки;
+аудиты продакшен-данных для миграций B2/B3 перед выкаткой всё ещё нужны.
+B3.2 завершён: части A (изменения и аннулирование счёта), B (визиты стола) и
+C (база кешбэка). B4 (надёжная доставка, ADR-0008) и B5 (гигиена) завершены.
+Самовывоз и упорядочивание каналов заказа (ADR-0009) завершены. Продуктовая
+работа идёт по [ECOSYSTEM_DIRECTION.md](../product/ECOSYSTEM_DIRECTION.md).
 
-## Operating rules for every batch
+## Правила для каждого батча
 
-- Start from a clean, recorded baseline and preserve unrelated worktree changes.
-- Add characterization tests before changing a confirmed behavior.
-- Run concurrency and durable-constraint tests against PostgreSQL, not only
-  `DJANGO_USE_SQLITE=true`.
-- Keep public import paths, Celery task names, router registration, admin URLs,
-  and user-visible behavior compatible unless the batch explicitly approves a
-  migration/deprecation.
-- Include partner/actor authorization, transaction/lock order, and external
-  side-effect behavior in the code review description.
-- Stop and escalate if a data audit finds cross-tenant or duplicate financial
-  records; do not silently repair production-like data.
+- Начинать с чистой записанной базы и сохранять несвязанные изменения рабочей копии.
+- Добавлять характеризующие тесты до изменения подтверждённого поведения.
+- Тесты конкурентности и долговечных ограничений запускать на PostgreSQL, а не
+  только с `DJANGO_USE_SQLITE=true`.
+- Сохранять совместимость публичных путей импорта, имён задач Celery,
+  регистрации роутеров, URL Admin и видимого поведения, если батч явно не
+  утверждает миграцию или вывод из употребления.
+- Включать в описание ревью проверку прав партнёра и исполнителя, порядок
+  транзакций и блокировок и внешние побочные эффекты.
+- Остановиться и эскалировать, если аудит данных найдёт записи между
+  партнёрами или дубли финансовых записей; не исправлять молча данные,
+  похожие на продакшен.
 
-## Batch B0 — Documentation governance baseline
+## Батч B0 — база правил документации
 
-| Field | Proposal |
+| Поле | Предложение |
 |---|---|
-| **Goal** | Establish one navigable, evidence-backed source map without changing runtime behavior. |
-| **Scope** | Root onboarding, canonical `docs/` product/architecture/engineering/audit structure, ADRs, repository instructions and skill. |
-| **Not in scope** | Application code, models, migrations, dependencies, deployment changes, secret rotation. |
-| **Evidence / risks** | AA-018; stale tests/lint claims, absolute local links, competing root documentation. |
-| **Dependencies** | None. |
-| **Required verification** | Link check, `git diff --check`, review that every source/spec contradiction appears in audit/feature matrix. |
-| **Rollback** | Revert documentation-only commit; original legacy TZ remains preserved as evidence. |
-| **Exit criterion** | Canonical documents and `AGENTS.md` exist, legacy source is explicitly mapped, owner accepts the governance structure. |
+| **Цель** | Одна навигируемая карта источников, основанная на доказательствах, без изменения поведения. |
+| **Объём** | Корневое вступление, каноническая структура `docs/` для продукта, архитектуры, инженерных практик и аудита, ADR, инструкции репозитория и навык. |
+| **Вне объёма** | Код приложения, модели, миграции, зависимости, развёртывание, смена секретов. |
+| **Доказательства / риски** | AA-018; устаревшие утверждения о тестах и линтере, абсолютные локальные ссылки, конкурирующая корневая документация. |
+| **Зависимости** | Нет. |
+| **Нужная проверка** | Проверка ссылок, `git diff --check`, проверка, что каждое противоречие исходника и спецификации есть в аудите и матрице возможностей. |
+| **Откат** | Откатить коммит документации; старое ТЗ сохранено как свидетельство. |
+| **Критерий завершения** | Канонические документы и `AGENTS.md` существуют, старый источник явно сопоставлен, владелец принимает структуру правил. |
 
-**Status in this audit:** artifacts have been prepared; owner approval is still
-needed before any subsequent batch.
+**Статус на момент аудита:** материалы подготовлены; перед любым следующим
+батчем нужно утверждение владельца.
 
-## Batch B1 — Tenant, actor and capability guardrails
+## Батч B1 — защиты партнёра, исполнителя и прав
 
-| Field | Proposal |
+| Поле | Предложение |
 |---|---|
-| **Goal** | Make supported entry points consistently reject inactive, suspended, cross-tenant, or no-longer-capable actors. |
-| **Scope** | Characterize and centralize active user + active employee + partner + capability checks; validate common-partner inputs in exposed owner services; recheck suspension/capability at update/callback execution; reject label collisions; scope/remove admin partner filter and related/inline choices; decide global Telegram identity editing policy. |
-| **Not in scope** | New role system, redesigning bot UI, database trigger rollout, module extraction, unrelated cleanup. |
-| **Evidence / risks** | AA-001, AA-002 (application layer), AA-009, AA-010, AA-015, AA-016. |
-| **Dependencies** | Product decision for stale callback behavior and global identity ownership; test environment with two partners. |
-| **Required verification** | Bot/admin/service tests for inactive user, inactive profile, wrong partner, suspended partner after startup, capability removal after card render, duplicate labels, list filter/inline/related choices. Existing guest flow authorization must remain green. |
-| **Rollback** | Feature-flag or narrowly revert the guard helper/use sites; no schema migration required in the first B1 slice. |
-| **Exit criterion** | Every protected command receives trusted partner/actor context and a characterization suite proves rejection before mutation. |
+| **Цель** | Поддерживаемые точки входа единообразно отклоняют неактивных, приостановленных, чужих или уже лишённых прав исполнителей. |
+| **Объём** | Охарактеризовать и собрать в одном месте проверки «активный пользователь + активный сотрудник + партнёр + право»; проверять принадлежность одному партнёру во входах открытых сервисов-владельцев; перепроверять приостановку и право при выполнении обновления или callback; отклонять совпадения подписей; ограничить или убрать фильтр партнёра и связанные/inline выборы в Admin; решить политику правки глобальной Telegram-личности. |
+| **Вне объёма** | Новая система ролей, переделка интерфейса бота, выкатка триггеров базы, выделение модулей, несвязанная чистка. |
+| **Доказательства / риски** | AA-001, AA-002 (уровень приложения), AA-009, AA-010, AA-015, AA-016. |
+| **Зависимости** | Продуктовое решение о поведении устаревших callback и о владении глобальной личностью; тестовое окружение с двумя партнёрами. |
+| **Нужная проверка** | Тесты бота, Admin и сервисов на неактивного пользователя, неактивный профиль, чужого партнёра, приостановку после старта, снятие права после показа карточки, повтор подписей, фильтр списка, inline и связанные выборы. Существующая проверка прав в сценариях гостя должна остаться зелёной. |
+| **Откат** | Флаг или узкий откат помощника-защиты и мест использования; в первом срезе B1 миграции схемы не нужны. |
+| **Критерий завершения** | Каждая защищённая команда получает доверенный контекст партнёра и исполнителя, а характеризующий набор доказывает отказ до изменения. |
 
-**Suggested sequence:** first write failing tests for AA-001/AA-009 and admin
-scope; then introduce the smallest shared guard; finally validate config label
-rules and document any consciously retained legacy callback response.
+**Предлагаемый порядок:** сначала написать падающие тесты на AA-001/AA-009 и
+границы Admin; затем ввести самую маленькую общую защиту; в конце проверить
+правила подписей и задокументировать любой сознательно сохранённый старый
+ответ callback.
 
-**Implementation update — 2026-08-03:** the approved technical slice is
-implemented without a schema migration. It adds active `User` + active
-`EmployeeProfile` + partner consistency to staff resolution and notification
-recipient queries; validates guest/table/session/menu ownership in generic
-`create_order`; rechecks current orders-module capability for stale staff order
-callbacks; rejects duplicate/non-empty routed reply labels; and closes the
-audited tenant Admin list-filter and inline-write gaps. On 2026-08-04 the owner
-approved the remaining runtime/identity policies: a suspended partner receives
-the standard paused-work response, a live-disabled bot instance processes no
-update, and only a superuser can rebind Telegram ID or edit the direct global
-identity Admin. The venue owner (or an Employees-section editor authorised by
-that owner) can change a staff member's `@username`; the owner can also change
-their venue user's username/name. The middleware/form implementation and
-characterization tests cover those policies.
+**Что сделано — 2026-08-03:** утверждённый технический срез реализован без
+миграции схемы. Определение сотрудника и запросы получателей уведомлений
+требуют активного `User`, активного `EmployeeProfile` и согласованного
+партнёра; общий `create_order` проверяет принадлежность гостя, стола, сессии
+и меню; устаревшие callback-и заказов персонала перепроверяют текущее право на
+модуль заказов; повторяющиеся и пустые подписи с маршрутизацией отклоняются;
+закрыты найденные пробелы фильтров списков и записи inline в Admin
+арендатора. 2026-08-04 владелец утвердил оставшиеся политики работы и
+личности: приостановленный партнёр получает стандартный ответ «работа
+приостановлена», отключённый на лету экземпляр бота не обрабатывает
+обновления, а перепривязать Telegram ID или править глобальную личность
+напрямую в Admin может только суперпользователь. Владелец заведения (или
+редактор раздела «Сотрудники» с его разрешения) может менять `@username`
+сотрудника; владелец также может менять имя пользователя и имя пользователя
+своего заведения. Middleware, формы и характеризующие тесты покрывают эти
+политики.
 
-**B1 status: complete.** No schema migration was required. `is_active=False`
-stops application handling immediately; stopping the polling transport itself
-remains an operational process restart, not a B1 code path.
+**Статус B1: завершён.** Миграция схемы не понадобилась. `is_active=False`
+сразу прекращает обработку в приложении; остановка самого транспорта polling
+остаётся эксплуатационным перезапуском процесса, а не путём кода B1.
 
-## Batch B2 — State machines, sessions, and safe Admin commands
+## Батч B2 — машины состояний, сессии и безопасные команды Admin
 
-| Field | Proposal |
+| Поле | Предложение |
 |---|---|
-| **Goal** | Serialize lifecycle transitions and remove direct Admin paths that bypass state rules. |
-| **Scope** | Lock/reload order before transition; establish active-session lock/invariant strategy; make state/derived fields readonly or service-backed in Admin; replace `BillingRequestAdmin` raw updates; characterize direct order/bill/session edits and stale callbacks. |
-| **Not in scope** | Loyalty ledger redesign, bill allocation schema, notification fan-out redesign, visual admin redesign. |
-| **Evidence / risks** | AA-003, AA-004, AA-005, AA-016. |
-| **Dependencies** | B1 actor guards; PostgreSQL test database; owner acceptance of Admin operations that remain allowed. |
-| **Required verification** | PostgreSQL concurrent status and two-table scan tests; admin tests showing forbidden fields cannot be changed and approved actions use services; history/notification assertions; migration test if a partial session constraint is selected. |
-| **Rollback** | Keep a reversible migration only after data audit; preserve prior admin action behind a temporary compatibility path only if it still enforces the owner service. |
-| **Exit criterion** | One canonical state command per lifecycle, deterministic duplicate-callback behavior, and no supported Admin bypass. |
+| **Цель** | Сериализовать переходы жизненного цикла и убрать прямые пути Admin в обход правил состояний. |
+| **Объём** | Блокировка и перезагрузка заказа перед переходом; стратегия блокировки и инварианта активной сессии; поля состояния и производные — только для чтения или через сервис в Admin; замена сырых обновлений `BillingRequestAdmin`; характеризация прямой правки заказов, счетов, сессий и устаревших callback. |
+| **Вне объёма** | Переделка бонусного журнала, схема распределения по счёту, переделка рассылки уведомлений, визуальная переделка Admin. |
+| **Доказательства / риски** | AA-003, AA-004, AA-005, AA-016. |
+| **Зависимости** | Защиты исполнителя из B1; тестовая база PostgreSQL; принятие владельцем операций Admin, которые остаются разрешены. |
+| **Нужная проверка** | Тесты на PostgreSQL для конкурентной смены статуса и сканирования двух столов; тесты Admin, что запрещённые поля не меняются, а утверждённые действия используют сервисы; проверки истории и уведомлений; тест миграции при выборе частичного ограничения сессии. |
+| **Откат** | Обратимая миграция только после аудита данных; прежнее действие Admin — за временным путём совместимости, только если он всё равно проходит через сервис-владелец. |
+| **Критерий завершения** | Одна каноническая команда состояния на жизненный цикл, детерминированное поведение повторного callback и отсутствие поддерживаемого обхода через Admin. |
 
-**Design checkpoint (resolved in B2):** canonical lock order is recorded in
-ADR-0003 before the corresponding locks and constraint are applied.
+**Контрольная точка дизайна (решена в B2):** канонический порядок блокировок
+записан в ADR-0003 до применения соответствующих блокировок и ограничения.
 
-**Implementation update — 2026-08-06:** B2 adds locked reloads for order
-transitions, bill issue/payment, billing-request transitions and table-session
-close; serializes table activation with `GuestProfile → Table → active session`
-locks; and adds the partial unique active-session constraint after a local data
-audit found no duplicate active guest scopes. Order/cart/bill/allocation/session
-Admin forms now protect lifecycle/derived/relation fields, while approved
-state changes use explicit owner-service actions. `BillingRequestAdmin` no
-longer performs raw queryset updates. The full SQLite suite and Admin/service
-characterization tests pass; PostgreSQL-only concurrency tests are included but
-were not executable because the local Docker/PostgreSQL service was unavailable.
+**Что сделано — 2026-08-06:** B2 добавляет перезагрузку под блокировкой для
+переходов заказа, выставления и оплаты счёта, переходов запросов счёта и
+закрытия сессии стола; сериализует активацию стола блокировками
+`GuestProfile → Table → активная сессия`; добавляет частичное уникальное
+ограничение активной сессии после локального аудита данных, не нашедшего
+дублей активных сессий гостей. Формы Admin заказа, корзины, счёта,
+распределения и сессии защищают поля жизненного цикла, производные и связи, а
+утверждённые изменения состояния используют явные действия сервисов-владельцев.
+`BillingRequestAdmin` больше не делает сырых обновлений выборки. Полный набор
+на SQLite и характеризующие тесты Admin и сервисов проходят; тесты
+конкурентности только для PostgreSQL добавлены, но не запускались, потому что
+локальный Docker/PostgreSQL был недоступен.
 
-**B2 implementation status:** complete in application code; PostgreSQL
-concurrency execution remains an environment verification prerequisite before
-production rollout of the migration.
+**Статус реализации B2:** завершён в коде приложения; запуск тестов
+конкурентности на PostgreSQL — условие проверки окружения перед выкаткой
+миграции в продакшен.
 
-## Batch B3 — Financial integrity and loyalty semantics
+## Батч B3 — целостность денег и смысл лояльности
 
-| Field | Proposal |
-|---|
-| **Goal** | Make bill allocation, payment, bonus wallet, revenue reporting, and money validation reconcilable and concurrency-safe. |
-| **Scope** | Data audit and migration plan for one `OrderItem` allocation; canonical wallet locking/source linkage/idempotency; positive quick-sale validation; Admin financial field restrictions; explicit `ORDER_COMPLETED` event decision; zero-total bill policy; revenue metric definitions and report updates. |
-| **Not in scope** | Introducing a general accounting platform, payment provider integration, mass historical reclassification without owner-approved migration policy. |
-| **Evidence / risks** | AA-002 (financial graph), AA-003, AA-006, AA-007, AA-011–AA-014, AA-016. |
-| **Dependencies** | B1/B2 guards; owner decisions listed in `docs/product/OPEN_PRODUCT_QUESTIONS.md`; PostgreSQL; a reviewed data backfill/exception handling plan. |
-| **Required verification** | Concurrent allocation/redemption/accrual tests; DB constraint tests; ledger-to-balance reconciliation fixture; negative/zero amount tests; completed/paid timing tests; zero-total settlement test; gross/net analytics examples. |
-| **Rollback** | Expand/validate before enforcing constraints; retain reversible migrations where safe; do not auto-delete conflicting legacy records; pause rollout if data audit finds exceptions. |
-| **Exit criterion** | No item is allocated twice, balance derives/reconciles from immutable source-linked entries, money mutation uses a documented lock order, and product metric/lifecycle choices are testable. |
-
-**Owner decisions captured for B3:**
-
-1. Paid settlement is the current baseline for order bonus accrual. Existing
-   `ORDER_COMPLETED` programme values remain as a compatibility name; the
-   partner programme model remains extensible for future trigger-specific
-   dispatch instead of imposing one universal trigger.
-2. Refund/cancellation after earned or redeemed bonuses is explicitly deferred.
-3. A partner may configure up to 100% bonus coverage through its programme.
-   One bonus equals one UAH. The single “pay with bonuses” command applies the
-   allowed amount, leaves any monetary remainder for cash/terminal payment, and
-   writes a `bonuses` payment for the nominal bonus value only when the bill is
-   fully covered; `Bill.paid_amount` counts money payments only.
-4. Gross/net/payment/bonus dashboard definitions remain deferred until the
-   owner reviews concrete report examples.
-5. Verification is intentionally risk-weighted: critical money, ledger,
-   allocation and Admin paths are covered by SQLite tests; no blanket test is
-   added for every presentation branch. *(Corrected 2026-10-23: PostgreSQL
-   concurrency coverage exists only for order transitions and table
-   activation; see AA-032.)*
-
-**B3 implementation update — 2026-08-06:** B3 adds locked/source-linked bonus
-ledger mutations, guest-balance reconciliation guards and per-partner
-idempotency keys; dispatches the approved paid-order bonus event once after
-settlement; validates positive quick-sale amounts; serializes `OrderItem`
-allocation and adds a database uniqueness guard after a local audit found 36
-active allocations with no duplicates; restricts direct bonus ledger/balance
-Admin edits; and exposes one service-backed bonus-payment command that applies
-partial coverage or closes a fully covered bill. The separate zero-total Admin
-action was removed. Refund/cancellation semantics and revenue metric
-definitions remain out of scope. *(Corrected 2026-10-23: the earlier text
-said PostgreSQL-only allocation, redemption and accrual tests were included.
-They are not in the repository; writing and running them is part of the
-PostgreSQL verification gate and of B3.1.)*
-
-## Batch B0.1 — Documentation refresh after B3 (complete, 2026-10-23)
-
-| Field | Result |
+| Поле | Предложение |
 |---|---|
-| **Goal** | Bring canonical documents back in line with the code after B1–B3 and record the post-B3 review. |
-| **Scope** | Rewrote `AS_IS_ARCHITECTURE.md` for commit `ddb7dce`; replaced line-number citations in current-state documents with `path:symbol`; marked audit-time snapshots as historical; corrected the PostgreSQL-test claims and the payment lock order; added AA-020–AA-032, PQ-026–PQ-030, ADR-0007 and batches B3.1/B3.2; updated engineering, runtime and background-job documents. |
-| **Not in scope** | Application code, migrations, dependencies, runtime configuration. |
-| **Verification** | Repository-wide check that every cited file exists and that `path:symbol` citations resolve; `git diff --check`. Tests were not executed (no environment); the recorded test baseline remains the 2026-07-27 run. |
-| **Rollback** | Revert the documentation commit. |
+| **Цель** | Распределение по счёту, оплата, бонусный кошелёк, отчёты о выручке и проверка денег сверяемы и безопасны при конкуренции. |
+| **Объём** | Аудит данных и план миграции для одного распределения `OrderItem`; каноническая блокировка кошелька, привязка к источнику, идемпотентность; проверка положительной суммы быстрой продажи; ограничения финансовых полей в Admin; явное решение о событии `ORDER_COMPLETED`; политика счёта с нулевым итогом; определения метрик выручки и обновление отчётов. |
+| **Вне объёма** | Общая бухгалтерская платформа, интеграция с провайдером оплаты, массовая переклассификация истории без утверждённой владельцем политики миграции. |
+| **Доказательства / риски** | AA-002 (финансовый граф), AA-003, AA-006, AA-007, AA-011–AA-014, AA-016. |
+| **Зависимости** | Защиты B1/B2; решения владельца из `docs/product/OPEN_PRODUCT_QUESTIONS.md`; PostgreSQL; проверенный план заполнения данных и обработки исключений. |
+| **Нужная проверка** | Тесты конкурентного распределения, списания и начисления; тесты ограничений базы; фикстура сверки журнала и баланса; тесты отрицательных и нулевых сумм; тесты момента «завершён/оплачен»; тест расчёта нулевого итога; примеры аналитики брутто и нетто. |
+| **Откат** | Сначала расширить и проверить, затем включать ограничения; обратимые миграции там, где безопасно; не удалять автоматически конфликтующие старые записи; приостановить выкатку, если аудит данных найдёт исключения. |
+| **Критерий завершения** | Ни одна позиция не распределена дважды, баланс выводится и сверяется из неизменяемых записей с привязкой к источнику, изменение денег использует задокументированный порядок блокировок, продуктовые решения о метриках и жизненном цикле проверяемы. |
 
-## Batch B3.1 — Post-B3 correctness fixes (no schema change) — complete, 2026-10-23
+**Решения владельца для B3:**
 
-| Field | Proposal |
+1. Расчёт по оплате — текущая основа начисления бонусов за заказ.
+   Существующие значения программ `ORDER_COMPLETED` остаются как имя для
+   совместимости; модель программ партнёра остаётся расширяемой для будущих
+   событий вместо одного универсального.
+2. Возврат и отмена после начисления или списания бонусов явно отложены.
+3. Партнёр может настроить до 100% покрытия бонусами через свою программу.
+   Один бонус равен одной гривне. Одна команда «Оплатить бонусами» применяет
+   разрешённую сумму, оставляет денежный остаток для наличных или терминала и
+   пишет оплату `bonuses` на номинал бонусов, только когда счёт покрыт
+   полностью; `Bill.paid_amount` учитывает только денежные оплаты.
+4. Определения брутто, нетто, оплат и бонусов для панелей отложены, пока
+   владелец не посмотрит конкретные примеры отчётов.
+5. Проверка намеренно взвешена по риску: критические пути денег, журнала,
+   распределения и Admin покрыты тестами на SQLite; сплошных тестов на каждую
+   ветку представления не добавлялось. *(Исправлено 2026-10-23: покрытие
+   конкурентности на PostgreSQL было только для переходов заказа и активации
+   стола; см. AA-032.)*
+
+**Что сделано в B3 — 2026-08-06:** B3 добавляет изменения бонусного журнала
+под блокировкой и с привязкой к источнику, защиты сверки баланса гостя и
+ключи идемпотентности в пределах партнёра; запускает утверждённое событие
+бонуса за оплаченный заказ один раз после расчёта; проверяет положительность
+суммы быстрой продажи; сериализует распределение `OrderItem` и добавляет
+ограничение уникальности в базе после локального аудита, нашедшего 36
+активных распределений без дублей; ограничивает прямую правку бонусного
+журнала и баланса в Admin; даёт одну команду оплаты бонусами через сервис,
+которая применяет частичное покрытие или закрывает полностью покрытый счёт.
+Отдельное действие Admin для нулевого итога убрано. Смысл возвратов и отмен и
+определения метрик выручки вне объёма. *(Исправлено 2026-10-23: прежний
+текст говорил, что тесты распределения, списания и начисления только для
+PostgreSQL включены. Их в репозитории не было; их написание и запуск — часть
+условия проверки на PostgreSQL и B3.1.)*
+
+## Батч B0.1 — обновление документации после B3 (завершён, 2026-10-23)
+
+| Поле | Результат |
 |---|---|
-| **Goal** | Fix the post-B3 defects that need no new data model, applying the owner decisions of 2026-10-23 where they apply. |
-| **Scope** | AA-021: a payment always persists; auto-close (when enabled) closes only sessions whose orders are all paid by settled bills and never raises into the payment (PQ-027). AA-025: explicit guest transition rule — receipt confirmation from any non-final status, including `new`, recorded as a guest action (PQ-029). AA-023: order `guest`/`table`/`table_session` read-only in Admin. AA-024: HTML escaping at the presentation boundary. AA-026: tenant `UserAdmin` excludes superusers. AA-027: the checkout reply button never produces a comment. AA-028: no write on the Bill changelist. AA-029: venue-timezone day for visit bonus; snapshot finalises the previous day. Missing PostgreSQL tests for allocation, bonus redemption and paid-order accrual. |
-| **Not in scope** | Visit model, bill editing/void, programme flags (B3.2); broadcast delivery (B4). |
-| **Evidence / risks** | AA-021, AA-023–AA-029, AA-032. |
-| **Dependencies** | PQ-027 and PQ-029 (decided). A working Python environment; PostgreSQL for the gated tests. |
-| **Order** | One finding per commit: characterization test that reproduces the defect → fix → full suite. AA-021 first. |
-| **Required verification** | Each finding's verification line in the audit register; full suite on SQLite; PostgreSQL-gated tests on PostgreSQL. |
-| **Rollback** | Revert the individual commit; no migrations. |
-| **Exit criterion** | Each finding has a regression test that failed before and passes after. |
+| **Цель** | Вернуть канонические документы в соответствие с кодом после B1–B3 и записать проверку после B3. |
+| **Объём** | Переписан `AS_IS_ARCHITECTURE.md` для коммита `ddb7dce`; ссылки с номерами строк в документах текущего состояния заменены на `path:symbol`; снимки времени аудита помечены историческими; исправлены утверждения о тестах PostgreSQL и порядок блокировок оплаты; добавлены AA-020–AA-032, PQ-026–PQ-030, ADR-0007 и батчи B3.1/B3.2; обновлены инженерные документы, документы работы бота и фоновых задач. |
+| **Вне объёма** | Код приложения, миграции, зависимости, конфигурация процессов. |
+| **Проверка** | Проверка по репозиторию, что каждый упомянутый файл существует и ссылки `path:symbol` разрешаются; `git diff --check`. Тесты не запускались (не было окружения); записанная база тестов осталась прогоном 2026-07-27. |
+| **Откат** | Откатить коммит документации. |
 
-**B3.1 result — 2026-10-23:** all scope items done, plus AA-033 (bill
-creation failed on PostgreSQL), found when the suite was first run on
-PostgreSQL. Each fix has a regression test that failed before the change;
-the new billing concurrency tests fail when the row locks are removed. Full
-suite: 199 tests green on SQLite (5 PostgreSQL-only skipped) and on
-PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implementation-update--2026-10-23).
+## Батч B3.1 — исправления после B3 (без изменения схемы) — завершён, 2026-10-23
 
-## Batch B3.2 — Table visits, bill changes and programme options (schema change)
-
-| Field | Proposal |
+| Поле | Предложение |
 |---|---|
-| **Goal** | Implement the owner decisions that need new data: visit-scoped billing, auditable bill changes, cashback base option. |
-| **Design** | [`../architecture/B3_2_VISITS_AND_BILL_CHANGES.md`](../architecture/B3_2_VISITS_AND_BILL_CHANGES.md) — approved 2026-10-23; parts A (bill changes), B (visits), C (cashback base) ship separately. **Parts A (AA-022), B (AA-020) and C (PQ-030) are complete.** |
-| **Scope** | 1) **Table visit** (ADR-0007, PQ-026, AA-020): visit model and backfill migration; join-or-new choice when scanning a table with an active visit; staff flag for tables with several visits and manual close of the old visit; billing eligibility, "request bill" button and settlement checks scoped to the visit. 2) **Bill changes and void** (PQ-028, AA-022): owner-granted permission to change or void bills; remove/add lines, including lines of a cancelled order; recalculation; audit history with actor, time and reason; total may not fall below the paid amount; void releases allocations (the unconditional `unique_order_item_bill_allocation` becomes conditional on the bill not being void). 3) **Cashback base option** (PQ-030): per-programme flag, default = accrue on the full total. |
-| **Not in scope** | Refunds, guest table moves (PQ-007), broadcast delivery. |
-| **Evidence / risks** | AA-020, AA-022, ADR-0007. Open design points to settle in the batch plan: how a bill with applied bonuses is changed (block vs. compensating ledger entry), and how historical sessions are grouped into visits by the backfill. |
-| **Dependencies** | B3.1 merged; data audit on a production-like copy before the migrations; PostgreSQL. |
-| **Required verification** | Two parties at one table with an unpaid order from the first; join and new-visit flows; concurrent scans on PostgreSQL; bill change/void with history and permission checks for owner, granted and non-granted staff; constraint migration forward/backward. |
-| **Rollback** | Reversible migrations; feature can be shipped behind a partner setting until verified. |
-| **Exit criterion** | No order can be billed outside its visit; every bill change is attributable; a voided bill's orders can be billed again. |
+| **Цель** | Исправить дефекты после B3, не требующие новой модели данных, применяя решения владельца от 2026-10-23, где они относятся. |
+| **Объём** | AA-021: оплата всегда сохраняется; автозакрытие (если включено) закрывает только сессии, все заказы которых оплачены рассчитанными счетами, и никогда не бросает исключение в оплату (PQ-027). AA-025: явное правило перехода гостя — подтверждение получения из любого нефинального статуса, включая `new`, записывается как действие гостя (PQ-029). AA-023: `guest`/`table`/`table_session` заказа только для чтения в Admin. AA-024: экранирование HTML на границе представления. AA-026: `UserAdmin` арендатора не показывает суперпользователей. AA-027: reply-кнопка оформления никогда не создаёт комментарий. AA-028: список счетов ничего не пишет. AA-029: день заведения для бонуса за визит; снимок закрывает предыдущий день. Недостающие тесты PostgreSQL для распределения, списания бонусов и начисления за оплаченный заказ. |
+| **Вне объёма** | Модель визита, правка и аннулирование счёта, флаги программ (B3.2); доставка рассылок (B4). |
+| **Доказательства / риски** | AA-021, AA-023–AA-029, AA-032. |
+| **Зависимости** | PQ-027 и PQ-029 (решены). Рабочее окружение Python; PostgreSQL для тестов только PostgreSQL. |
+| **Порядок** | Одна находка на коммит: характеризующий тест, воспроизводящий дефект → исправление → полный набор. AA-021 первой. |
+| **Нужная проверка** | Строка проверки каждой находки в реестре аудита; полный набор на SQLite; тесты только PostgreSQL — на PostgreSQL. |
+| **Откат** | Откатить отдельный коммит; миграций нет. |
+| **Критерий завершения** | У каждой находки есть регрессионный тест, падавший до и проходящий после. |
 
-## Batch B4 — Durable async delivery and operational runtime
+**Итог B3.1 — 2026-10-23:** весь объём выполнен, плюс AA-033 (создание
+счёта падало на PostgreSQL), найденная при первом запуске набора на
+PostgreSQL. У каждого исправления есть регрессионный тест, падавший до
+изменения; новые тесты конкурентности счетов падают, если убрать блокировки
+строк. Полный набор: 199 тестов зелёные на SQLite (5 только для PostgreSQL
+пропущены) и на PostgreSQL 16. Подробности: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#что-сделано-в-b31--2026-10-23).
 
-| Field | Proposal |
+## Батч B3.2 — визиты стола, изменения счёта и варианты программ (изменение схемы)
+
+| Поле | Предложение |
 |---|---|
-| **Status** | **Complete** (2026-10-23, branch `b4-delivery`, ADR-0008). Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b4-implementation-update--2026-10-23). |
-| **Goal** | Make notification/broadcast delivery recoverable without database transactions spanning Telegram I/O. |
-| **Scope** | Separate commit from send; introduce the smallest durable delivery/lease/idempotency record necessary for campaign fan-out; align exception/retry policy; recheck recipient eligibility as product requires; document/deploy actual bot/worker/scheduler topology. |
-| **Not in scope** | A generic event bus, message broker replacement, microservice extraction, unmeasured caching. |
-| **Evidence / risks** | AA-008, AA-009, AA-016, AA-018, AA-030; `docker-compose.yml` has no bot or beat service. |
-| **Dependencies** | B1 live eligibility semantics; owner decision on delivery guarantee and recipient preference behavior; operational deployment owner. |
-| **Required verification** | Worker retry, duplicate task, concurrent worker, crash-after-send/before-persist, disabled recipient, and campaign counter tests; instrumentation showing no network I/O in the source transaction; compose/runbook review. |
-| **Rollback** | Retain original campaign records and make the new delivery worker opt-in per campaign version until recovery behavior is proven; migration must preserve unsent work. |
-| **Exit criterion** | Delivery attempt has durable identity/lease/outcome, retries are intentional, and operational documentation names every required process. |
+| **Цель** | Реализовать решения владельца, которым нужны новые данные: счёт в пределах визита, изменения счёта с аудитом, вариант базы кешбэка. |
+| **Дизайн** | [`../architecture/B3_2_VISITS_AND_BILL_CHANGES.md`](../architecture/B3_2_VISITS_AND_BILL_CHANGES.md) — утверждён 2026-10-23; части A (изменения счёта), B (визиты), C (база кешбэка) выпускаются отдельно. **Части A (AA-022), B (AA-020) и C (PQ-030) завершены.** |
+| **Объём** | 1) **Визит стола** (ADR-0007, PQ-026, AA-020): модель визита и миграция заполнения; выбор «подсесть или новый» при скане стола с активным визитом; отметка для персонала у столов с несколькими визитами и ручное закрытие старого визита; выбор заказов для счёта, кнопка «Запросить счёт» и проверки расчёта в пределах визита. 2) **Изменения и аннулирование счёта** (PQ-028, AA-022): право от владельца менять или аннулировать счета; убирать и добавлять строки, в том числе строки отменённого заказа; пересчёт; история аудита с исполнителем, временем и причиной; итог не ниже оплаченного; аннулирование освобождает распределения (безусловное `unique_order_item_bill_allocation` становится условным — только для неаннулированного счёта). 3) **Вариант базы кешбэка** (PQ-030): флаг на программу, по умолчанию — начислять с полной суммы. |
+| **Вне объёма** | Возвраты, пересадка гостя за другой стол (PQ-007), доставка рассылок. |
+| **Доказательства / риски** | AA-020, AA-022, ADR-0007. Открытые точки дизайна, решаемые в плане батча: как менять счёт с применёнными бонусами (запрет или компенсирующая запись журнала) и как заполнение группирует исторические сессии в визиты. |
+| **Зависимости** | B3.1 влит; аудит данных на копии, похожей на продакшен, перед миграциями; PostgreSQL. |
+| **Нужная проверка** | Две компании за одним столом с неоплаченным заказом первой; сценарии «подсесть» и «новый визит»; конкурентные сканы на PostgreSQL; изменение и аннулирование счёта с историей и проверкой прав владельца, сотрудника с правом и без права; миграция ограничения вперёд и назад. |
+| **Откат** | Обратимые миграции; функцию можно выпустить за настройкой партнёра до проверки. |
+| **Критерий завершения** | Ни один заказ нельзя выставить вне его визита; каждое изменение счёта атрибутировано; заказы аннулированного счёта можно выставить снова. |
 
-## Batch B5 — Evidence-backed consolidation and operational hygiene
+## Батч B4 — надёжная фоновая доставка и работа процессов
 
-| Field | Proposal |
+| Поле | Предложение |
 |---|---|
-| **Status** | **Complete** (2026-10-23). Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b5-implementation-update--2026-10-23). |
-| **Goal** | Remove only proven-unused scaffolding and tighten lower-risk reliability/performance issues after behavior is protected. |
-| **Scope** | Resolve empty services/tasks/interfaces/repositories through static + dynamic consumer proof; break notifications task/service cycle; make demo seed atomic/idempotent; measure and address confirmed filter/report performance issues. |
-| **Not in scope** | Broad folder renames, code formatting sweep, dependency upgrade, speculative cache/event-engine abstraction. |
-| **Evidence / risks** | AA-017, AA-019, AA-031 and lower-priority observations in architecture audit. |
-| **Dependencies** | Characterization coverage from B1–B4; public import compatibility plan (ADR-0005). |
-| **Required verification** | Import/API search, Django/Celery/aiogram registration search, focused tests, seed failure rollback test, before/after query/latency measurement for any performance change. |
-| **Rollback** | One small deletion/consolidation per commit with re-export shims where public imports existed; revert without data migration. |
-| **Exit criterion** | Each removal has documented proof, no dynamic registration breaks, and retained layer names reflect actual responsibility. |
+| **Статус** | **Завершён** (2026-10-23, ветка `b4-delivery`, ADR-0008). Подробности: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#что-сделано-в-b4--2026-10-23). |
+| **Цель** | Доставка уведомлений и рассылок восстанавливается без транзакций базы, охватывающих ввод-вывод Telegram. |
+| **Объём** | Отделить коммит от отправки; ввести минимальную долговечную запись доставки, аренды и идемпотентности для рассылки кампании; выровнять политику исключений и повторов; перепроверять допуск получателя, как требует продукт; задокументировать и развернуть реальную схему процессов бота, воркера и планировщика. |
+| **Вне объёма** | Общая шина событий, замена брокера сообщений, выделение микросервисов, кэширование без измерений. |
+| **Доказательства / риски** | AA-008, AA-009, AA-016, AA-018, AA-030; в `docker-compose.yml` не было сервисов bot и beat. |
+| **Зависимости** | Смысл живого допуска из B1; решение владельца о гарантии доставки и настройках получателя; владелец эксплуатации. |
+| **Нужная проверка** | Тесты повтора воркера, повторной задачи, конкурентных воркеров, падения после отправки до записи, отключённого получателя и счётчиков кампании; инструментирование, показывающее отсутствие сетевого ввода-вывода в исходной транзакции; ревью compose и инструкции по эксплуатации. |
+| **Откат** | Сохранить исходные записи кампаний и сделать новый воркер доставки включаемым по версии кампании, пока восстановление не доказано; миграция должна сохранить неотправленную работу. |
+| **Критерий завершения** | У попытки доставки долговечные личность, аренда и итог, повторы намеренные, эксплуатационная документация называет все нужные процессы. |
 
-## Approval gates
+## Батч B5 — консолидация на основе доказательств и эксплуатационная гигиена
 
-| Gate | Required before |
+| Поле | Предложение |
 |---|---|
-| Product owner decision | B1 stale callbacks/global identity; B3 bonus timing, zero bill, revenue semantics, refund policy; B3.1/B3.2 decisions PQ-026–PQ-030 (approved 2026-10-23); B4 delivery guarantee/preference policy. |
-| Data owner review | Any migration or constraint in B2/B3, after reporting invalid existing rows. |
-| Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
-| Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
+| **Статус** | **Завершён** (2026-10-23). Подробности: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#что-сделано-в-b5--2026-10-23). |
+| **Цель** | Убрать только доказанно неиспользуемые заготовки и подтянуть менее рискованные проблемы надёжности и производительности после защиты поведения. |
+| **Объём** | Решить судьбу пустых сервисов, задач, интерфейсов и репозиториев через доказательство статических и динамических потребителей; разорвать цикл задача/сервис в уведомлениях; сделать наполнение демо-данными атомарным и идемпотентным; измерить и исправить подтверждённые проблемы производительности фильтров и отчётов. |
+| **Вне объёма** | Широкие переименования папок, форматирование всего кода, обновление зависимостей, спекулятивный кэш или движок событий. |
+| **Доказательства / риски** | AA-017, AA-019, AA-031 и замечания меньшего приоритета в архитектурном аудите. |
+| **Зависимости** | Характеризующее покрытие из B1–B4; план совместимости публичных импортов (ADR-0005). |
+| **Нужная проверка** | Поиск импортов и API, поиск регистраций Django/Celery/aiogram, точечные тесты, тест отката наполнения при ошибке, замеры запросов и задержек до и после любого изменения производительности. |
+| **Откат** | Одно небольшое удаление или объединение на коммит с реэкспортом там, где были публичные импорты; откат без миграции данных. |
+| **Критерий завершения** | У каждого удаления задокументировано доказательство, динамические регистрации не ломаются, оставшиеся имена слоёв отражают реальную ответственность. |
 
-B3.2, B4, B5 and pickup ordering ([PICKUP.md](../architecture/PICKUP.md))
-are complete. Next (owner-approved order, `ECOSYSTEM_DIRECTION.md`):
-renaming what people see to Botera Shop, source tracking for deep links. Before production rollout of
-B2–B5:
-run the duplicate-data audits on a production copy and the full suite on
-PostgreSQL.
+## Условия утверждения
+
+| Условие | Нужно перед |
+|---|---|
+| Решение владельца продукта | B1 — устаревшие callback-и и глобальная личность; B3 — момент бонусов, нулевой счёт, смысл выручки, политика возвратов; B3.1/B3.2 — решения PQ-026–PQ-030 (утверждены 2026-10-23); B4 — гарантия доставки и политика настроек. |
+| Ревью владельца данных | Любая миграция или ограничение в B2/B3 после отчёта о некорректных существующих строках. |
+| Эксплуатационное ревью | Схема процессов B4, развёртывание воркера, beat и бота, мониторинг повторов. |
+| Утверждение владельца кода | План реализации, план тестов, план отката и влияние на публичную совместимость каждого батча. |
+
+B3.2, B4, B5, самовывоз ([PICKUP.md](../architecture/PICKUP.md)),
+упорядочивание каналов (ADR-0009) и переименование видимого в Botera Shop
+завершены. Дальше (порядок утверждён владельцем, `ECOSYSTEM_DIRECTION.md`):
+учёт источника перехода по deep link, затем доставка и отправка. Перед
+выкаткой B2–B5 в продакшен: аудиты дублей данных на копии продакшена и полный
+набор тестов на PostgreSQL.

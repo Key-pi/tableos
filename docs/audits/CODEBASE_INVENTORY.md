@@ -1,55 +1,55 @@
-# Codebase inventory
+# Инвентарь кодовой базы
 
-> **Historical snapshot** of the 2026-07-27 audit at commit `b17ce5b`. It is kept as evidence and is not updated as code changes. Current figures (files, migrations, tests, dependencies) are in [`../architecture/AS_IS_ARCHITECTURE.md`](../architecture/AS_IS_ARCHITECTURE.md); several gaps listed here were closed in B1–B3.
+> **Исторический снимок** аудита 2026-07-27 на коммите `b17ce5b`. Сохранён как свидетельство и не обновляется при изменении кода. Текущие цифры (файлы, миграции, тесты, зависимости) — в [`../architecture/AS_IS_ARCHITECTURE.md`](../architecture/AS_IS_ARCHITECTURE.md); многие пробелы, перечисленные здесь, закрыты в B1–B5.
 
-This inventory is evidence-based. It combines an AST parse of all 221 tracked Python files, a review of all first-party source/test/configuration units, migration history review, and focused domain traces. Generated caches, virtual environments, and VCS internals were not treated as source.
+Инвентарь опирается на доказательства. Он объединяет разбор AST всех 221 отслеживаемых Python-файлов, просмотр всех собственных единиц исходного кода, тестов и конфигурации, историю миграций и точечные трассировки домена. Сгенерированный кэш, виртуальные окружения и внутренности VCS исходным кодом не считались.
 
-## System footprint
+## Размер системы
 
-| Metric | Count / evidence |
+| Метрика | Число / доказательство |
 | --- | --- |
-| First-party tracked files at `HEAD` | 238 |
-| Python files | 221 / 20,516 LOC |
-| Installed custom Django packages | `bot` plus 10 domain apps in `core/settings/base.py` |
-| Persisted model classes | 31, plus shared abstract bases in `core/database/models.py` |
-| Numbered migrations | 25 across the 10 domain apps |
-| Direct test modules | 17 / 3,826 LOC |
-| Largest code units | `bot/handlers/staff.py` (2,370 LOC), `apps/billing/services.py` (803), `apps/partners/management/commands/seed_baseline_demo.py` (728), `bot/keyboards/staff.py` (723), `apps/analytics/services.py` (718), `apps/orders/services.py` (673) |
+| Собственных отслеживаемых файлов на `HEAD` | 238 |
+| Python-файлов | 221 / 20 516 строк |
+| Установленных собственных пакетов Django | `bot` и 10 доменных приложений в `core/settings/base.py` |
+| Хранимых классов моделей | 31, плюс общие абстрактные базы в `core/database/models.py` |
+| Пронумерованных миграций | 25 в 10 доменных приложениях |
+| Прямых тестовых модулей | 17 / 3826 строк |
+| Крупнейшие модули | `bot/handlers/staff.py` (2370 строк), `apps/billing/services.py` (803), `apps/partners/management/commands/seed_baseline_demo.py` (728), `bot/keyboards/staff.py` (723), `apps/analytics/services.py` (718), `apps/orders/services.py` (673) |
 
-The deployable application is a modular Django monolith with an aiogram polling process and Celery workers. There is no public REST/API layer or WebApp frontend. The only HTTP endpoints are demo home, Django admin, and healthcheck in `core/urls.py`.
+Развёртываемое приложение — модульный монолит на Django с процессом polling aiogram и воркерами Celery. Публичного REST/API-слоя и фронтенда WebApp нет. Единственные HTTP-адреса — демо-страница, Django Admin и проверка здоровья в `core/urls.py`.
 
-## Domain app inventory
+## Инвентарь доменных приложений
 
-| Path | Business responsibility and persisted entities | Public entry points / consumers | Reads from / mutates / external I/O | Tenant boundary, transaction, tests, suspicions |
+| Путь | Бизнес-ответственность и хранимые сущности | Публичные точки входа / потребители | Читает / меняет / внешний ввод-вывод | Граница партнёра, транзакции, тесты, подозрения |
 | --- | --- | --- | --- | --- |
-| `apps/partners` | Venue, `BotInstance`, `PartnerBotSettings` | admin/forms; token rotation; demo seed commands; bot runtime/content | Own models; encryption; creates partner configuration | Partner is root scope. Settings validation is model-form based. Tests cover bot config and modules. Multiple active bots and label collisions need governance. |
-| `apps/users` | Django `User`, global `TelegramAccount`, partner `GuestProfile`, admin access/RBAC | guest-profile service; admin/forms; `ensure_admin` | Global Telegram identity plus partner profiles; mutates visits/access profiles | Global identity vs partner profile is intentional. Admin scoping is in `core`. Same-partner relation validation is not durable. |
-| `apps/tables` | `Table`, `TableSession`, QR/deep-link lifecycle | QR parser/activation; settlement close; admin bill actions | Reads billing/orders/bonuses/users; creates session and visit bonus | QR lookup is partner-scoped. Activation is atomic but lacks a guest/session concurrency invariant; `timed_out` has no runtime lifecycle. |
-| `apps/menu` | `MenuCategory`, `MenuItem` | admin, active catalog repository, bot menu renderer | Read-only catalog queries; no real service/task implementation | All normal bot queries scope partner. `repositories.py` is a selector-shaped ORM wrapper; no direct test module. |
-| `apps/orders` | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | cart/order/status services; selectors/repositories; admin actions; guest/staff handlers | Reads menu/tables/users/employees; writes orders/history/notifications | Core normal flow scopes partner. Status transition accepts a stale object and lacks row locking; generic creation API lacks full same-partner validation. |
-| `apps/billing` | `Bill`, `BillingRequest`, `BillOrder`, `BillItem`, `Payment` | bill/request/payment services; staff/admin flows | Reads orders/tables/bonuses; writes money state and notifications | Service paths scope partner and use `atomic`; allocation/idempotency and admin alternate transition paths need remediation. |
-| `apps/bonuses` | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | accrual strategies; quick-sale services; management command | Reads menu/orders/users; mutates loyalty ledger/balance | Visit/manual-purchase path exists. No production call applies `order_completed` programs. Ledger and redemption need concurrency characterization. |
-| `apps/employees` | `EmployeeProfile` | staff lookup selector, admin form | Reads global Telegram identity; employee authorization is consumed by bot/notifications | Partner-scoped profile; current selector omits `User.is_active`, so disabled Django users retain staff paths. |
-| `apps/notifications` | guest preferences, `StaffNotification`, `BroadcastCampaign` | delivery/broadcast services and Celery tasks; admin action | aiogram network calls; Celery/on-commit dispatch | Staff/guest messages use `on_commit`. Broadcast delivery currently performs Telegram I/O inside an atomic transaction and lacks durable batch idempotency. |
-| `apps/analytics` | `PartnerDailyMetric` | daily report builders and snapshot task | Reads billing/orders/bonuses/tables/users; writes daily snapshot | Partner-scoped report queries; beat refresh is idempotent per date but full-table materialization needs scale review. |
+| `apps/partners` | Заведение, `BotInstance`, `PartnerBotSettings` | Admin и формы; смена токена; команды демо-данных; работа и тексты бота | Свои модели; шифрование; создаёт настройки партнёра | Партнёр — корневая граница. Проверка настроек — через форму модели. Тесты покрывают настройки бота и модули. Несколько активных ботов и совпадение подписей требуют правил. |
+| `apps/users` | `User` Django, глобальный `TelegramAccount`, партнёрский `GuestProfile`, доступ к Admin и права | сервис профиля гостя; Admin и формы; `ensure_admin` | Глобальная Telegram-личность и профили партнёров; меняет визиты и профили доступа | Разделение глобальной личности и профиля партнёра намеренное. Ограничение Admin — в `core`. Проверка связей одного партнёра не долговечна. |
+| `apps/tables` | `Table`, `TableSession`, жизненный цикл QR и deep link | разбор QR и активация; закрытие после расчёта; действия Admin со счетами | Читает billing/orders/bonuses/users; создаёт сессию и бонус за визит | Поиск QR — в пределах партнёра. Активация атомарна, но без инварианта гостя и сессии при конкуренции; у `timed_out` нет жизненного цикла. |
+| `apps/menu` | `MenuCategory`, `MenuItem` | Admin, репозиторий активного каталога, отрисовка меню в боте | Запросы каталога только на чтение; настоящих сервисов и задач нет | Все обычные запросы бота ограничены партнёром. `repositories.py` — обёртка ORM в форме селектора; отдельного тестового модуля нет. |
+| `apps/orders` | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | сервисы корзины, заказа и статуса; селекторы и репозитории; действия Admin; обработчики гостя и персонала | Читает menu/tables/users/employees; пишет заказы, историю, уведомления | Основной поток ограничен партнёром. Смена статуса принимает устаревший объект и не блокирует строку; общий API создания не проверяет полностью принадлежность одному партнёру. |
+| `apps/billing` | `Bill`, `BillingRequest`, `BillOrder`, `BillItem`, `Payment` | сервисы счёта, запроса и оплаты; сценарии персонала и Admin | Читает orders/tables/bonuses; пишет денежное состояние и уведомления | Пути сервисов ограничены партнёром и используют `atomic`; распределение, идемпотентность и альтернативные пути переходов через Admin требуют исправления. |
+| `apps/bonuses` | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | стратегии начисления; сервисы быстрой продажи; management-команда | Читает menu/orders/users; меняет журнал и баланс лояльности | Пути визита и ручной покупки есть. Продакшен-вызова, применяющего программы `order_completed`, нет. Журналу и списанию нужна характеризация конкурентности. |
+| `apps/employees` | `EmployeeProfile` | селектор поиска сотрудника, форма Admin | Читает глобальную Telegram-личность; права сотрудника используют бот и уведомления | Профиль в пределах партнёра; селектор не учитывает `User.is_active`, поэтому отключённые пользователи Django сохраняют пути персонала. |
+| `apps/notifications` | настройки гостя, `StaffNotification`, `BroadcastCampaign` | сервисы доставки и рассылок и задачи Celery; действие Admin | сетевые вызовы aiogram; постановка через Celery и on-commit | Сообщения персоналу и гостям используют `on_commit`. Доставка рассылки выполняет ввод-вывод Telegram внутри атомарной транзакции и не имеет долговечной идемпотентности пачек. |
+| `apps/analytics` | `PartnerDailyMetric` | построители отчёта за день и задача снимков | Читает billing/orders/bonuses/tables/users; пишет дневной снимок | Запросы отчёта в пределах партнёра; обновление по beat идемпотентно на дату, но полная выборка таблиц требует проверки масштаба. |
 
-## Bot, core, and infrastructure inventory
+## Инвентарь бота, core и инфраструктуры
 
-| Path | Responsibility | Evidence |
+| Путь | Ответственность | Доказательство |
 | --- | --- | --- |
-| `bot/handlers/` | Transport/UI for start, menu, cart/order, session, profile, billing, guest calls, and staff operations | All eight routers registered by `bot/main.py`; most ORM/service calls cross `sync_to_async`. `staff.py` is a mixed 2,370-line UI/query/orchestration unit. |
-| `bot/keyboards/` | Reply and inline presentation | Main/menu/profile/session/billing/guest-call/staff keyboard builders. `staff.py` has 723 LOC of presentation composition. |
-| `bot/services/` | partner runtime resolution, content/capability model, navigation | Runtime maps token to partner at polling startup; `BotContent` resolves modules/buttons/templates; navigation derives browse/table state. |
-| `bot/filters`, `bot/states` | partner-configured reply-label matching and quick-sale FSM | `PartnerButtonFilter` does exact label matching; collision validation is absent. `StaffQuickSaleStates` is the only FSM state group. |
-| `core/` | settings, DB bases, admin scoping, Celery, crypto, logging, URL/ASGI/WSGI | PostgreSQL target + SQLite dev option; Celery queues/beat; Fernet encryption; scoped Django admin. |
-| `infrastructure/` | Container build | One tracked Dockerfile. Compose is root-level and declares db/redis/web/worker; no tracked nginx/Redis/script implementation. |
-| Management commands | runtime/bootstrap/manual actions | `runbot`, `ensure_admin`, `seed_demo`, `seed_baseline_demo`, `apply_manual_purchase_bonus`. `seed_demo` is non-atomic and must not silently reassign existing cross-tenant users. |
+| `bot/handlers/` | Транспорт и интерфейс для start, меню, корзины и заказа, сессии, профиля, счетов, вызова персонала и работы персонала | Все восемь роутеров регистрирует `bot/main.py`; большинство вызовов ORM и сервисов идут через `sync_to_async`. `staff.py` — смешанный модуль на 2370 строк: интерфейс, запросы, оркестрация. |
+| `bot/keyboards/` | Представление reply и inline | Построители клавиатур main/menu/profile/session/billing/guest-call/staff. В `staff.py` 723 строки сборки представления. |
+| `bot/services/` | определение партнёра процесса, модель текстов и возможностей, навигация | Процесс сопоставляет токен с партнёром при старте polling; `BotContent` определяет модули, кнопки и шаблоны; навигация выводит состояние просмотра и стола. |
+| `bot/filters`, `bot/states` | сопоставление подписей, настроенных партнёром, и FSM быстрой продажи | `PartnerButtonFilter` сравнивает подпись точно; проверки совпадений нет. `StaffQuickSaleStates` — единственная группа состояний FSM. |
+| `core/` | настройки, базовые классы базы, ограничение Admin, Celery, шифрование, логирование, URL/ASGI/WSGI | Цель — PostgreSQL + вариант SQLite для разработки; очереди и beat Celery; шифрование Fernet; ограниченный Django Admin. |
+| `infrastructure/` | Сборка контейнера | Один отслеживаемый Dockerfile. Compose лежит в корне и объявляет db/redis/web/worker; отслеживаемой реализации nginx/Redis/скриптов нет. |
+| Management-команды | запуск, начальная настройка, ручные действия | `runbot`, `ensure_admin`, `seed_demo`, `seed_baseline_demo`, `apply_manual_purchase_bonus`. `seed_demo` не атомарна и не должна тихо переназначать существующих пользователей между партнёрами. |
 
-## Layer inventory and dependency direction
+## Инвентарь слоёв и направление зависимостей
 
-Every domain app has the same scaffolded filenames (`interfaces.py`, `repositories.py`, `selectors.py`, `services.py`, `tasks.py`), but their real use is uneven. Only analytics and notifications contain concrete Celery tasks. Most interfaces are unused `Protocol` placeholders; several services/tasks contain only reserved docstrings. See [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#aa-017--layer-labels-hide-unused-abstractions-and-a-taskservice-cycle) for symbol-level decisions.
+У каждого доменного приложения одинаковые файлы-заготовки (`interfaces.py`, `repositories.py`, `selectors.py`, `services.py`, `tasks.py`), но реальное использование неравномерное. Настоящие задачи Celery есть только в analytics и notifications. Большинство интерфейсов — неиспользуемые заготовки `Protocol`; несколько сервисов и задач содержат только зарезервированные строки документации. Решения по символам — в [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#aa-017--названия-слоёв-скрывают-неиспользуемые-абстракции-и-цикл-задачасервис).
 
-Production-oriented imports flow broadly from orchestration apps toward domain models/services:
+Продакшен-импорты в целом идут от приложений-оркестраторов к доменным моделям и сервисам:
 
 ```text
 bot -> partners/users/tables/menu/orders/billing/bonuses/employees/notifications/analytics
@@ -61,12 +61,12 @@ tables -> billing/bonuses/orders/users
 bonuses -> menu/orders/users
 ```
 
-The AST import map found one direct module SCC: `apps.notifications.services -> apps.notifications.tasks -> apps.notifications.services`. It is currently mediated by function-local task imports and Celery registration, rather than a top-level import failure, but it is an intentional coupling to document rather than reproduce elsewhere. App-level coupling is otherwise high because reporting and billing span many aggregates; it is a modular monolith, not isolated bounded contexts.
+Карта импортов по AST нашла одну прямую сильно связную компоненту модулей: `apps.notifications.services -> apps.notifications.tasks -> apps.notifications.services`. Она разрешается импортами задач внутри функций и регистрацией Celery, а не падает на импорте верхнего уровня, но это намеренная связность, которую нужно документировать, а не повторять в других местах. В остальном связность приложений высокая, потому что отчёты и счета охватывают много агрегатов; это модульный монолит, а не изолированные ограниченные контексты.
 
-## Schema/migration history
+## История схемы и миграций
 
-All numbered migrations were read as historical schema evidence. Initial migrations create the domain entities and partner FKs; later migrations add module settings, remove obsolete module flags, add one-active-cart support, and prepare carts/orders/bills for non-table flows. Current unique constraints cover public IDs, customer codes, several join rows, menu/table names, employee Telegram binding per partner, metrics, and the active-cart invariant. They do not enforce cross-FK same-partner identity or a single active table session per guest. No applied migration was edited during this audit.
+Все пронумерованные миграции прочитаны как историческое свидетельство схемы. Начальные миграции создают доменные сущности и FK партнёров; более поздние добавляют настройки модулей, убирают устаревшие флаги модулей, добавляют поддержку одной активной корзины и готовят корзины, заказы и счета к сценариям без стола. Текущие уникальные ограничения покрывают публичные идентификаторы, коды клиентов, несколько связующих строк, названия позиций меню и столов, привязку Telegram сотрудника у партнёра, метрики и инвариант активной корзины. Они не обеспечивают принадлежность одному партнёру между FK и одну активную сессию стола на гостя. Применённые миграции в ходе аудита не правились.
 
-## Test structure
+## Структура тестов
 
-Tests live beside apps plus `bot/tests_*.py` and `core/tests_admin.py`. They characterize many core happy paths, rendering, RBAC fieldsets, module configurations, billing, notifications, and reports. There are no focused tests for concurrent callbacks/payment/broadcasts, PostgreSQL-only constraints, post-start partner suspension, inactive `User` staff denial, tenant list-filter leakage, inline scope, or direct admin state mutation. This is a coverage gap, not a claim that existing happy-path tests lack value.
+Тесты лежат рядом с приложениями, плюс `bot/tests_*.py` и `core/tests_admin.py`. Они характеризуют многие основные успешные пути, отрисовку, наборы полей прав, конфигурации модулей, счета, уведомления и отчёты. Нет точечных тестов на конкурентные callback-и, оплаты и рассылки, ограничения только PostgreSQL, приостановку партнёра после старта, отказ неактивному `User` в доступе персонала, утечку через фильтры списков арендатора, границы inline и прямое изменение состояния через Admin. Это пробел покрытия, а не утверждение, что существующие тесты успешных путей бесполезны.
