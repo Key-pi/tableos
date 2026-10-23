@@ -16,7 +16,7 @@ from apps.analytics.services import (
     build_daily_tails_page,
     build_daily_walk_in_sales_page,
 )
-from apps.billing.models import Bill, BillingRequest, Payment
+from apps.billing.models import Bill, BillAdjustment, BillingRequest, BillItem, Payment
 from apps.billing.repositories import (
     BillingOperationsRepository,
     BillingRequestRepository,
@@ -24,7 +24,9 @@ from apps.billing.repositories import (
 )
 from apps.billing.services import (
     BillingServiceError,
+    annotate_bill_adjustment,
     cancel_billing_request,
+    cancel_order,
     create_personal_bills_for_table,
     create_shared_bill_for_table,
     get_bill_context_label,
@@ -32,6 +34,9 @@ from apps.billing.services import (
     mark_billing_request_processed,
     pay_bill_with_bonuses,
     record_payment,
+    remove_bill_lines,
+    user_can_adjust_bills,
+    void_bill,
 )
 from apps.bonuses.models import WalkInSale
 from apps.bonuses.services import (
@@ -68,7 +73,10 @@ from apps.tables.services import (
 )
 from bot.keyboards.staff import (
     STATUS_LABELS,
+    build_staff_adjustment_done_keyboard,
+    build_staff_adjustment_reason_keyboard,
     build_staff_bill_actions_keyboard,
+    build_staff_bill_edit_keyboard,
     build_staff_billing_overview_keyboard,
     build_staff_billing_request_actions_keyboard,
     build_staff_home_keyboard,
@@ -87,7 +95,7 @@ from bot.keyboards.staff import (
 )
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
-from bot.states.staff_sale import StaffQuickSaleStates
+from bot.states.staff_sale import StaffBillStates, StaffQuickSaleStates
 from bot.utils.html import escape_html
 
 router = Router()
@@ -657,10 +665,14 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
     guest_label = _guest_label(bill.primary_guest) if bill.primary_guest_id else "несколько гостей"
     bonus_hint = ""
     can_pay_with_bonuses = False
+    active_items = [item for item in bill.items.all() if item.is_active]
+    removed_count = sum(1 for item in bill.items.all() if not item.is_active)
     item_lines = [
         f"• {escape_html(item.item_name)} x{item.quantity} = {item.line_total} грн"
-        for item in bill.items.all()[:8]
+        for item in active_items[:8]
     ]
+    if removed_count:
+        item_lines.append(f"Убрано позиций: {removed_count} (см. историю счёта)")
     if bill.primary_guest_id:
         redeemable_amount = (
             get_redeemable_bonus_amount(
@@ -701,6 +713,78 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
         f"{bonus_hint}"
     )
     return can_pay_with_bonuses, bill_text
+
+
+_OPEN_BILL_STATUSES = frozenset(
+    {Bill.Status.DRAFT, Bill.Status.ISSUED, Bill.Status.PARTIALLY_PAID}
+)
+
+
+def _bill_change_flags(bill: Bill, actor_user) -> tuple[bool, bool]:
+    """Return (can_edit, can_void) for the bill card buttons (PQ-028)."""
+
+    if bill.status not in _OPEN_BILL_STATUSES:
+        return False, False
+    if not user_can_adjust_bills(actor_user, bill.partner_id):
+        return False, False
+    has_active_lines = any(item.is_active for item in bill.items.all())
+    can_edit = has_active_lines and bill.bonus_spent_amount == 0
+    can_void = bill.paid_amount == 0
+    return can_edit, can_void
+
+
+def _build_bill_card_message(bill: Bill, actor_user):
+    """Return (text, keyboard) for a staff bill card."""
+
+    remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
+    can_pay_with_bonuses, bill_text = _build_bill_card_view(bill)
+    can_edit, can_void = _bill_change_flags(bill, actor_user)
+    markup = build_staff_bill_actions_keyboard(
+        bill_public_id=bill.public_id,
+        can_issue=bill.status == Bill.Status.DRAFT,
+        can_take_payment=remaining_amount > 0 and bill.status in _OPEN_BILL_STATUSES,
+        can_pay_with_bonuses=can_pay_with_bonuses,
+        can_edit=can_edit,
+        can_void=can_void,
+    )
+    return bill_text, markup
+
+
+def _build_bill_edit_view(bill: Bill, actor_user):
+    if not user_can_adjust_bills(actor_user, bill.partner_id):
+        raise BillingServiceError("Нет права изменять счета. Его выдаёт владелец заведения.")
+    if bill.status not in _OPEN_BILL_STATUSES:
+        raise BillingServiceError("Этот счёт уже закрыт, изменить его нельзя.")
+    if bill.bonus_spent_amount > 0:
+        raise BillingServiceError(
+            "По счёту применены бонусы: его можно только аннулировать целиком."
+        )
+    active_items = [
+        item for item in bill.items.select_related("order").all() if item.is_active
+    ]
+    lines = [
+        f"<b>Изменение счёта #{bill.public_id}</b>",
+        f"Сумма: {bill.total_amount} грн, оплачено: {bill.paid_amount} грн",
+        "",
+        "Уберите позицию (останется в истории счёта) или отмените заказ целиком.",
+    ]
+    line_actions = [
+        (
+            str(item.order_item_id),
+            f"Убрать: {item.item_name} x{item.quantity} ({item.line_total} грн)",
+        )
+        for item in active_items[:8]
+    ]
+    order_public_ids = list(dict.fromkeys(item.order.public_id for item in active_items))
+    order_actions = [
+        (public_id, f"Отменить заказ #{public_id}") for public_id in order_public_ids[:4]
+    ]
+    markup = build_staff_bill_edit_keyboard(
+        bill_public_id=bill.public_id,
+        line_actions=line_actions,
+        order_actions=order_actions,
+    )
+    return "\n".join(lines), markup
 
 
 def _build_quick_sale_items_payload(items_map: dict[str, int]) -> list[dict]:
@@ -891,6 +975,7 @@ async def _send_billing_feed(
     partner_id,
     can_quick_sale: bool,
     can_view_day_report: bool,
+    actor_user=None,
 ) -> None:
     requests, bills, unbilled_orders = await sync_to_async(
         _load_billing_feed_data
@@ -927,17 +1012,8 @@ async def _send_billing_feed(
             ),
         )
     for bill in bills:
-        remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
-        can_pay_with_bonuses, bill_text = await sync_to_async(_build_bill_card_view)(bill)
-        await message.answer(
-            bill_text,
-            reply_markup=build_staff_bill_actions_keyboard(
-                bill_public_id=bill.public_id,
-                can_issue=bill.status == Bill.Status.DRAFT,
-                can_take_payment=remaining_amount > 0,
-                can_pay_with_bonuses=can_pay_with_bonuses,
-            ),
-        )
+        bill_text, bill_markup = await sync_to_async(_build_bill_card_message)(bill, actor_user)
+        await message.answer(bill_text, reply_markup=bill_markup)
 
 
 def _load_billing_feed_data(partner_id):
@@ -1177,6 +1253,7 @@ async def staff_billing_refresh_callback_handler(callback: CallbackQuery, bot: B
         partner_id=partner.id,
         can_quick_sale=_can_use_quick_sale(employee),
         can_view_day_report=_can_view_day_report(employee),
+        actor_user=employee.user,
     )
     await callback.answer("Счета обновлены")
 
@@ -1469,14 +1546,25 @@ async def staff_order_status_callback_handler(callback: CallbackQuery, bot: Bot)
             order_public_id,
         )
         previous_status = order.status
-        order = await sync_to_async(transition_order_status)(
-            order=order,
-            to_status=to_status,
-            actor_user=employee.user,
-            note="Updated via staff inline button",
-        )
+        if to_status == Order.Status.CANCELED:
+            # A billed order is cancelled through its bill card (PQ-028).
+            order = await sync_to_async(cancel_order)(
+                order=order,
+                actor=employee.user,
+                note="Cancelled via staff inline button",
+            )
+        else:
+            order = await sync_to_async(transition_order_status)(
+                order=order,
+                to_status=to_status,
+                actor_user=employee.user,
+                note="Updated via staff inline button",
+            )
     except Order.DoesNotExist:
         await callback.answer("Заказ не найден.", show_alert=True)
+        return
+    except BillingServiceError as exc:
+        await callback.answer(str(exc), show_alert=True)
         return
     except OrderFlowError:
         refreshed_order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
@@ -1741,18 +1829,8 @@ async def staff_bill_open_or_refresh_callback_handler(callback: CallbackQuery, b
         await callback.answer(str(exc), show_alert=True)
         return
 
-    remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
-    can_pay_with_bonuses, bill_text = await sync_to_async(_build_bill_card_view)(bill)
-    updated = await _safe_edit_message_text(
-        callback.message,
-        bill_text,
-        reply_markup=build_staff_bill_actions_keyboard(
-            bill_public_id=bill.public_id,
-            can_issue=bill.status == Bill.Status.DRAFT,
-            can_take_payment=remaining_amount > 0,
-            can_pay_with_bonuses=can_pay_with_bonuses,
-        ),
-    )
+    bill_text, bill_markup = await sync_to_async(_build_bill_card_message)(bill, employee.user)
+    updated = await _safe_edit_message_text(callback.message, bill_text, reply_markup=bill_markup)
     await callback.answer("Карточка счёта обновлена" if updated else "Без изменений")
 
 
@@ -1781,20 +1859,11 @@ async def staff_bill_issue_callback_handler(callback: CallbackQuery, bot: Bot) -
         partner.id,
         bill.public_id,
     )
-    remaining_amount = (refreshed_bill.total_amount - refreshed_bill.paid_amount).quantize(
-        Decimal("0.01")
+    bill_text, bill_markup = await sync_to_async(_build_bill_card_message)(
+        refreshed_bill,
+        employee.user,
     )
-    can_pay_with_bonuses, bill_text = await sync_to_async(_build_bill_card_view)(refreshed_bill)
-    await _safe_edit_message_text(
-        callback.message,
-        bill_text,
-        reply_markup=build_staff_bill_actions_keyboard(
-            bill_public_id=refreshed_bill.public_id,
-            can_issue=False,
-            can_take_payment=remaining_amount > 0,
-            can_pay_with_bonuses=can_pay_with_bonuses,
-        ),
-    )
+    await _safe_edit_message_text(callback.message, bill_text, reply_markup=bill_markup)
     await callback.answer("Счёт выдан")
 
 
@@ -1857,15 +1926,9 @@ async def staff_bill_pay_callback_handler(callback: CallbackQuery, bot: Bot) -> 
             partner.id,
             bill_public_id,
         )
-        remaining_amount = (refreshed_bill.total_amount - refreshed_bill.paid_amount).quantize(
-            Decimal("0.01")
-        )
-        can_pay_with_bonuses, text = await sync_to_async(_build_bill_card_view)(refreshed_bill)
-        markup = build_staff_bill_actions_keyboard(
-            bill_public_id=refreshed_bill.public_id,
-            can_issue=False,
-            can_take_payment=remaining_amount > 0,
-            can_pay_with_bonuses=can_pay_with_bonuses,
+        text, markup = await sync_to_async(_build_bill_card_message)(
+            refreshed_bill,
+            employee.user,
         )
     except Bill.DoesNotExist:
         text = (
@@ -2370,3 +2433,317 @@ async def staff_sale_confirm_handler(
     )
     await _safe_edit_message_text(callback.message, "\n".join(result_lines))
     await callback.answer("Продажа сохранена")
+
+
+# --- Bill changes (B3.2 part A, PQ-028) -------------------------------------------
+
+_ADJUSTMENT_REASON_CODES = {
+    "e": BillAdjustment.ReasonCode.INPUT_ERROR,
+    "g": BillAdjustment.ReasonCode.GUEST_REFUSED,
+    "c": BillAdjustment.ReasonCode.COMPLIMENT,
+    "o": BillAdjustment.ReasonCode.OTHER,
+}
+
+
+async def _resolve_billing_staff(callback: CallbackQuery, bot: Bot):
+    partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+    if not _can_manage_billing(employee):
+        raise OrderFlowError("Работа со счетами доступна только владельцу, менеджеру или кассиру.")
+    return partner, employee
+
+
+def _active_bill_line(partner_id, order_item_id) -> BillItem:
+    return BillItem.objects.select_related("bill").get(
+        partner_id=partner_id,
+        order_item_id=order_item_id,
+        is_active=True,
+    )
+
+
+async def _show_adjustment_result(
+    callback: CallbackQuery,
+    *,
+    partner_id,
+    actor_user,
+    adjustment: BillAdjustment,
+    notice: str,
+) -> None:
+    bill = await sync_to_async(BillRepository.all_for_partner(partner_id).get)(
+        id=adjustment.bill_id,
+    )
+    bill_text, _markup = await sync_to_async(_build_bill_card_message)(bill, actor_user)
+    await _safe_edit_message_text(
+        callback.message,
+        f"{bill_text}\n\n<i>{escape_html(notice)}</i>",
+        reply_markup=build_staff_adjustment_done_keyboard(
+            bill_public_id=bill.public_id,
+            adjustment_id=str(adjustment.id),
+        ),
+    )
+    await callback.answer(notice)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbilledit:"))
+async def staff_bill_edit_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, employee = await _resolve_billing_staff(callback, bot)
+        _, bill_public_id = (callback.data or "").split(":", 1)
+        bill = await sync_to_async(BillRepository.by_public_id_for_partner)(
+            partner.id,
+            bill_public_id,
+        )
+        text, markup = await sync_to_async(_build_bill_edit_view)(bill, employee.user)
+    except Bill.DoesNotExist:
+        await callback.answer("Счёт не найден.", show_alert=True)
+        return
+    except (OrderFlowError, BillingServiceError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await _safe_edit_message_text(callback.message, text, reply_markup=markup)
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbillrm:"))
+async def staff_bill_remove_line_prompt_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, _employee = await _resolve_billing_staff(callback, bot)
+        _, order_item_id = (callback.data or "").split(":", 1)
+        line = await sync_to_async(_active_bill_line)(partner.id, order_item_id)
+    except (BillItem.DoesNotExist, ValueError):
+        await callback.answer("Позиция уже убрана из счёта.", show_alert=True)
+        return
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await _safe_edit_message_text(
+        callback.message,
+        (
+            f"<b>Счёт #{line.bill.public_id}</b>\n"
+            f"Убрать «{escape_html(line.item_name)} x{line.quantity}» "
+            f"({line.line_total} грн)?\nВыберите причину."
+        ),
+        reply_markup=build_staff_adjustment_reason_keyboard(
+            callback_prefix=f"staffbillrr:{order_item_id}",
+            bill_public_id=line.bill.public_id,
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbillrr:"))
+async def staff_bill_remove_line_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, employee = await _resolve_billing_staff(callback, bot)
+        _, order_item_id, code = (callback.data or "").split(":", 2)
+        line = await sync_to_async(_active_bill_line)(partner.id, order_item_id)
+        adjustment = await sync_to_async(remove_bill_lines)(
+            bill=line.bill,
+            order_item_ids=[order_item_id],
+            actor=employee.user,
+            reason_code=_ADJUSTMENT_REASON_CODES.get(code, ""),
+        )
+    except (BillItem.DoesNotExist, ValueError):
+        await callback.answer("Позиция уже убрана из счёта.", show_alert=True)
+        return
+    except (OrderFlowError, BillingServiceError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await _show_adjustment_result(
+        callback,
+        partner_id=partner.id,
+        actor_user=employee.user,
+        adjustment=adjustment,
+        notice="Позиция убрана из счёта",
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbilloc:"))
+async def staff_bill_cancel_order_prompt_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, _employee = await _resolve_billing_staff(callback, bot)
+        _, order_public_id = (callback.data or "").split(":", 1)
+        line = await sync_to_async(
+            lambda: BillItem.objects.select_related("bill")
+            .filter(partner_id=partner.id, order__public_id=order_public_id, is_active=True)
+            .first()
+        )()
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    if line is None:
+        await callback.answer("Заказа уже нет в открытом счёте.", show_alert=True)
+        return
+    await _safe_edit_message_text(
+        callback.message,
+        (
+            f"<b>Счёт #{line.bill.public_id}</b>\n"
+            f"Отменить заказ #{escape_html(order_public_id)} и убрать его позиции из счёта?\n"
+            "Выберите причину."
+        ),
+        reply_markup=build_staff_adjustment_reason_keyboard(
+            callback_prefix=f"staffbillor:{order_public_id}",
+            bill_public_id=line.bill.public_id,
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbillor:"))
+async def staff_bill_cancel_order_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, employee = await _resolve_billing_staff(callback, bot)
+        _, order_public_id, code = (callback.data or "").split(":", 2)
+        order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
+            partner.id,
+            order_public_id,
+        )
+        await sync_to_async(cancel_order)(
+            order=order,
+            actor=employee.user,
+            reason_code=_ADJUSTMENT_REASON_CODES.get(code, ""),
+        )
+        adjustment = await sync_to_async(
+            lambda: BillAdjustment.objects.filter(
+                partner_id=partner.id,
+                actor=employee.user,
+                kind=BillAdjustment.Kind.ORDER_CANCELED,
+            )
+            .order_by("-created_at")
+            .first()
+        )()
+    except (Order.DoesNotExist, ValueError):
+        await callback.answer("Заказ не найден.", show_alert=True)
+        return
+    except (OrderFlowError, BillingServiceError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await _show_adjustment_result(
+        callback,
+        partner_id=partner.id,
+        actor_user=employee.user,
+        adjustment=adjustment,
+        notice=f"Заказ #{order_public_id} отменён",
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbillvoid:"))
+async def staff_bill_void_prompt_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, employee = await _resolve_billing_staff(callback, bot)
+        _, bill_public_id = (callback.data or "").split(":", 1)
+        bill = await sync_to_async(BillRepository.by_public_id_for_partner)(
+            partner.id,
+            bill_public_id,
+        )
+        _can_edit, can_void = await sync_to_async(_bill_change_flags)(bill, employee.user)
+        if not can_void:
+            raise BillingServiceError(
+                "Этот счёт аннулировать нельзя: нет права, он закрыт или по нему есть оплата."
+            )
+    except Bill.DoesNotExist:
+        await callback.answer("Счёт не найден.", show_alert=True)
+        return
+    except (OrderFlowError, BillingServiceError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    bonus_hint = (
+        f"\nСписанные бонусы ({bill.bonus_spent_amount}) вернутся гостю."
+        if bill.bonus_spent_amount > 0
+        else ""
+    )
+    await _safe_edit_message_text(
+        callback.message,
+        (
+            f"<b>Аннулировать счёт #{bill.public_id}?</b>\n"
+            f"Сумма: {bill.total_amount} грн. Заказы снова можно будет выставить в счёт."
+            f"{bonus_hint}\nВыберите причину."
+        ),
+        reply_markup=build_staff_adjustment_reason_keyboard(
+            callback_prefix=f"staffbillvr:{bill.public_id}",
+            bill_public_id=bill.public_id,
+        ),
+    )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffbillvr:"))
+async def staff_bill_void_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, employee = await _resolve_billing_staff(callback, bot)
+        _, bill_public_id, code = (callback.data or "").split(":", 2)
+        bill = await sync_to_async(BillRepository.by_public_id_for_partner)(
+            partner.id,
+            bill_public_id,
+        )
+        adjustment = await sync_to_async(void_bill)(
+            bill=bill,
+            actor=employee.user,
+            reason_code=_ADJUSTMENT_REASON_CODES.get(code, ""),
+        )
+    except (Bill.DoesNotExist, ValueError):
+        await callback.answer("Счёт не найден.", show_alert=True)
+        return
+    except (OrderFlowError, BillingServiceError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await _show_adjustment_result(
+        callback,
+        partner_id=partner.id,
+        actor_user=employee.user,
+        adjustment=adjustment,
+        notice=f"Счёт #{bill_public_id} аннулирован",
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffadjc:"))
+async def staff_adjustment_comment_prompt_handler(
+    callback: CallbackQuery,
+    bot: Bot,
+    state: FSMContext,
+) -> None:
+    try:
+        partner, employee = await _resolve_billing_staff(callback, bot)
+        _, adjustment_id = (callback.data or "").split(":", 1)
+        is_author = await sync_to_async(
+            BillAdjustment.objects.filter(
+                id=adjustment_id,
+                partner_id=partner.id,
+                actor=employee.user,
+                reason_text="",
+            ).exists
+        )()
+    except ValueError:
+        await callback.answer("Изменение не найдено.", show_alert=True)
+        return
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    if not is_author:
+        await callback.answer("Комментарий уже добавлен или изменение не ваше.", show_alert=True)
+        return
+    await state.set_state(StaffBillStates.waiting_for_adjustment_comment)
+    await state.update_data(adjustment_id=adjustment_id)
+    await callback.message.answer("Напишите комментарий к изменению счёта одним сообщением.")
+    await callback.answer()
+
+
+@router.message(StaffBillStates.waiting_for_adjustment_comment)
+async def staff_adjustment_comment_message_handler(
+    message: Message,
+    bot: Bot,
+    state: FSMContext,
+) -> None:
+    data = await state.get_data()
+    await state.clear()
+    try:
+        partner, employee = await _resolve_staff_employee(message, bot)
+        await sync_to_async(annotate_bill_adjustment)(
+            adjustment_id=data.get("adjustment_id"),
+            partner_id=partner.id,
+            actor=employee.user,
+            text=message.text or "",
+        )
+    except (OrderFlowError, BillingServiceError) as exc:
+        await message.answer(escape_html(str(exc)))
+        return
+    await message.answer("Комментарий сохранён в истории счёта.")

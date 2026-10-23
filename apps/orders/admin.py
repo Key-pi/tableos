@@ -1,8 +1,9 @@
 from django.contrib import admin, messages
 from django.utils.translation import gettext_lazy as _
 
-from apps.billing.models import Bill
-from apps.billing.services import BillingServiceError, create_bill_from_orders
+from apps.billing.admin_actions import run_with_reason
+from apps.billing.models import Bill, BillItem
+from apps.billing.services import BillingServiceError, cancel_order, create_bill_from_orders
 from apps.orders.models import Cart, CartItem, Order, OrderItem, OrderStatusHistory
 from apps.orders.services import OrderFlowError, transition_order_status
 from apps.users.constants import AdminSection
@@ -157,7 +158,38 @@ class OrderAdmin(ScopedAdminMixin):
 
     @admin.action(description=_("Change selected orders to canceled"))
     def mark_as_canceled(self, request, queryset):
-        self._transition_orders(request, queryset, Order.Status.CANCELED)
+        billed = BillItem.objects.filter(order__in=queryset, is_active=True).exists()
+        if not billed:
+            for order in queryset:
+                try:
+                    cancel_order(order=order, actor=request.user)
+                except (OrderFlowError, BillingServiceError) as exc:
+                    self.message_user(
+                        request,
+                        f"Заказ #{order.public_id}: {exc}",
+                        level=messages.WARNING,
+                    )
+            return None
+        # Cancelling a billed order is a bill change: it needs a reason (PQ-028).
+        return run_with_reason(
+            self,
+            request,
+            queryset,
+            action_name="mark_as_canceled",
+            title="Отменить заказы",
+            description=(
+                "Часть заказов уже в счёте: их позиции будут убраны из счёта. "
+                "Нужно право изменять счета; заказ в оплаченном счёте отменить нельзя."
+            ),
+            submit_label="Отменено заказов",
+            object_label=lambda order: f"Заказ #{order.public_id}",
+            perform=lambda order, code, text: cancel_order(
+                order=order,
+                actor=request.user,
+                reason_code=code,
+                reason_text=text,
+            ),
+        )
 
     def _transition_orders(self, request, queryset, to_status: str) -> None:
         success_count = 0

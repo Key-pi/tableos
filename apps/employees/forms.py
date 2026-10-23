@@ -1,7 +1,20 @@
 from django import forms
 
 from apps.employees.models import EmployeeProfile
-from apps.users.models import TelegramAccount
+from apps.users.models import AdminAccessProfile, TelegramAccount
+
+
+def _is_owner_or_superuser(user) -> bool:
+    if user is None or not getattr(user, "is_active", False):
+        return False
+    if user.is_superuser:
+        return True
+    return AdminAccessProfile.objects.filter(
+        user=user,
+        is_partner_owner=True,
+        can_access_admin=True,
+        is_active=True,
+    ).exists()
 
 
 class EmployeeProfileAdminForm(forms.ModelForm):
@@ -29,6 +42,7 @@ class EmployeeProfileAdminForm(forms.ModelForm):
             "notify_on_order_status_changed",
             "notify_on_guest_calls",
             "notify_on_billing_requests",
+            "can_adjust_bills",
             "is_active",
         )
 
@@ -39,6 +53,12 @@ class EmployeeProfileAdminForm(forms.ModelForm):
         if account is not None:
             self.fields["telegram_id"].initial = account.telegram_id
             self.fields["telegram_username"].initial = account.username
+        if "can_adjust_bills" in self.fields and not _is_owner_or_superuser(self.actor_user):
+            # PQ-028: only the venue owner grants the right to change bills.
+            self.fields["can_adjust_bills"].disabled = True
+            self.fields["can_adjust_bills"].help_text = (
+                "Право выдаёт только владелец заведения."
+            )
         if not getattr(self.actor_user, "is_superuser", False):
             self.fields["telegram_id"].disabled = True
             self.fields[

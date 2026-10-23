@@ -1,9 +1,11 @@
 from django.contrib import admin, messages
 from django.utils.translation import gettext_lazy as _
 
+from apps.billing.admin_actions import run_with_reason
 from apps.billing.forms import PaymentAdminForm
 from apps.billing.models import (
     Bill,
+    BillAdjustment,
     BillingRequest,
     BillItem,
     BillOrder,
@@ -16,6 +18,8 @@ from apps.billing.services import (
     issue_bill,
     mark_billing_request_processed,
     record_payment,
+    remove_bill_lines,
+    void_bill,
 )
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
@@ -45,11 +49,36 @@ class BillItemInline(admin.TabularInline):
         "quantity",
         "line_total",
         "comment",
+        "is_active",
+        "removed_at",
+        "removed_by",
         "created_at",
         "updated_at",
     )
 
     def has_add_permission(self, request, obj=None):
+        return False
+
+
+class BillAdjustmentInline(admin.TabularInline):
+    model = BillAdjustment
+    extra = 0
+    can_delete = False
+    fields = (
+        "created_at",
+        "kind",
+        "actor",
+        "reason_code",
+        "reason_text",
+        "total_before",
+        "total_after",
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
         return False
 
 
@@ -168,12 +197,36 @@ class BillAdmin(ScopedAdminMixin):
         "created_at",
         "updated_at",
     )
-    inlines = [BillOrderInline, BillItemInline, PaymentInline]
+    inlines = [BillOrderInline, BillItemInline, PaymentInline, BillAdjustmentInline]
     actions = (
         "mark_as_issued",
         "record_remaining_cash_payment",
         "record_remaining_terminal_payment",
+        "void_selected_bills",
     )
+
+    @admin.action(description=_("Void selected bills (owner-granted right)"))
+    def void_selected_bills(self, request, queryset):
+        return run_with_reason(
+            self,
+            request,
+            queryset,
+            action_name="void_selected_bills",
+            title="Аннулировать счета",
+            description=(
+                "Счёт аннулируется, его заказы снова можно выставить в счёт. "
+                "Списанные бонусы вернутся гостю. Счёт с денежной оплатой "
+                "аннулировать нельзя."
+            ),
+            submit_label="Аннулировано счетов",
+            object_label=lambda bill: f"Счёт #{bill.public_id}",
+            perform=lambda bill, code, text: void_bill(
+                bill=bill,
+                actor=request.user,
+                reason_code=code,
+                reason_text=text,
+            ),
+        )
 
     @admin.display(description="Remaining")
     def remaining_amount(self, obj: Bill):
@@ -246,8 +299,41 @@ class BillItemAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BILLING
     allow_partner_add = False
     allow_partner_delete = False
-    list_display = ("bill", "item_name", "quantity", "unit_price", "line_total", "partner")
-    list_filter = ("partner",)
+    list_display = (
+        "bill",
+        "item_name",
+        "quantity",
+        "unit_price",
+        "line_total",
+        "is_active",
+        "partner",
+    )
+    list_filter = ("partner", "is_active")
+    actions = ("remove_selected_lines",)
+
+    @admin.action(description=_("Remove selected lines from their bills (owner-granted right)"))
+    def remove_selected_lines(self, request, queryset):
+        return run_with_reason(
+            self,
+            request,
+            queryset.filter(is_active=True).select_related("bill"),
+            action_name="remove_selected_lines",
+            title="Убрать позиции из счёта",
+            description=(
+                "Позиции остаются в истории счёта, сумма пересчитывается. Нельзя "
+                "уменьшить счёт ниже уже оплаченной суммы и менять счёт с "
+                "применёнными бонусами."
+            ),
+            submit_label="Убрано позиций",
+            object_label=lambda item: f"#{item.bill.public_id}: {item.item_name} x{item.quantity}",
+            perform=lambda item, code, text: remove_bill_lines(
+                bill=item.bill,
+                order_item_ids=[item.order_item_id],
+                actor=request.user,
+                reason_code=code,
+                reason_text=text,
+            ),
+        )
     search_fields = ("bill__public_id", "item_name", "order__public_id", "partner__name")
     readonly_fields = (
         "bill",
@@ -259,9 +345,52 @@ class BillItemAdmin(ScopedAdminMixin):
         "quantity",
         "line_total",
         "comment",
+        "is_active",
+        "removed_at",
+        "removed_by",
         "created_at",
         "updated_at",
     )
+
+
+@admin.register(BillAdjustment)
+class BillAdjustmentAdmin(ScopedAdminMixin):
+    admin_section = AdminSection.BILLING
+    allow_partner_add = False
+    allow_partner_delete = False
+    list_display = (
+        "bill",
+        "kind",
+        "reason_code",
+        "actor",
+        "total_before",
+        "total_after",
+        "created_at",
+    )
+    list_filter = ("partner", "kind", "reason_code")
+    search_fields = ("bill__public_id", "reason_text", "actor__username")
+    readonly_fields = (
+        "partner",
+        "bill",
+        "kind",
+        "actor",
+        "reason_code",
+        "reason_text",
+        "total_before",
+        "total_after",
+        "payload",
+        "created_at",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Payment)

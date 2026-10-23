@@ -5,3 +5,7 @@ class StaffQuickSaleStates(StatesGroup):
     waiting_for_customer_code = State()
     browsing_menu = State()
     waiting_for_comment = State()
+
+
+class StaffBillStates(StatesGroup):
+    waiting_for_adjustment_comment = State()

@@ -1,0 +1,21 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div class="px-4">
+  <h2 style="margin-bottom: 12px;">{{ title }}</h2>
+  <p style="margin-bottom: 12px;">{{ description }}</p>
+  <ul style="margin-bottom: 16px;">
+    {% for label in object_labels %}<li>{{ label }}</li>{% endfor %}
+  </ul>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    {% for obj_id in selected_ids %}
+      <input type="hidden" name="_selected_action" value="{{ obj_id }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="{{ action_name }}">
+    <input type="hidden" name="apply" value="1">
+    <button type="submit" style="margin-top: 12px;">{{ submit_label }}</button>
+    <a href="" style="margin-left: 12px;">Отмена</a>
+  </form>
+</div>
+{% endblock %}

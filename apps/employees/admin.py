@@ -22,6 +22,7 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
         "notify_on_order_status_changed",
         "notify_on_guest_calls",
         "notify_on_billing_requests",
+        "can_adjust_bills",
         "is_active",
     )
     list_filter = ("partner", "is_active")
@@ -45,6 +46,15 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
                     "title",
                     "is_active",
                 )
+            },
+        ),
+        (
+            "Права в счетах",
+            {
+                "fields": ("can_adjust_bills",),
+                "description": (
+                    "Изменение и аннулирование счетов. Выдаёт только владелец заведения."
+                ),
             },
         ),
         (

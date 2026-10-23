@@ -1362,3 +1362,35 @@ def cancel_order(
         actor_user=actor,
         note=note or reason_text,
     )
+
+
+ADJUSTMENT_COMMENT_WINDOW = timedelta(minutes=30)
+
+
+@transaction.atomic
+def annotate_bill_adjustment(*, adjustment_id, partner_id, actor, text: str) -> BillAdjustment:
+    """Let the author add the optional comment to a just-made bill change.
+
+    The record stays append-only otherwise: only an empty comment of the
+    author's own adjustment can be filled, within a short window.
+    """
+
+    comment = (text or "").strip()
+    if not comment:
+        raise BillingServiceError("Комментарий пустой.")
+    try:
+        adjustment = BillAdjustment.objects.select_for_update().get(
+            id=adjustment_id,
+            partner_id=partner_id,
+        )
+    except BillAdjustment.DoesNotExist as exc:
+        raise BillingServiceError("Изменение счёта не найдено.") from exc
+    if actor is None or adjustment.actor_id != actor.id:
+        raise BillingServiceError("Комментарий может добавить только автор изменения.")
+    if adjustment.reason_text:
+        raise BillingServiceError("Комментарий к этому изменению уже добавлен.")
+    if timezone.now() - adjustment.created_at > ADJUSTMENT_COMMENT_WINDOW:
+        raise BillingServiceError("Время на добавление комментария истекло.")
+    adjustment.reason_text = comment[:255]
+    adjustment.save(update_fields=["reason_text", "updated_at"])
+    return adjustment

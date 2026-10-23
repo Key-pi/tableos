@@ -538,6 +538,8 @@ def build_staff_bill_actions_keyboard(
     can_issue: bool,
     can_take_payment: bool,
     can_pay_with_bonuses: bool = False,
+    can_edit: bool = False,
+    can_void: bool = False,
 ) -> InlineKeyboardMarkup:
     keyboard: list[list[InlineKeyboardButton]] = []
     if can_issue:
@@ -571,6 +573,23 @@ def build_staff_bill_actions_keyboard(
                 ),
             ]
         )
+    change_row: list[InlineKeyboardButton] = []
+    if can_edit:
+        change_row.append(
+            InlineKeyboardButton(
+                text="Изменить счёт",
+                callback_data=f"staffbilledit:{bill_public_id}",
+            )
+        )
+    if can_void:
+        change_row.append(
+            InlineKeyboardButton(
+                text="Аннулировать",
+                callback_data=f"staffbillvoid:{bill_public_id}",
+            )
+        )
+    if change_row:
+        keyboard.append(change_row)
     keyboard.append(
         [
             InlineKeyboardButton(
@@ -580,6 +599,104 @@ def build_staff_bill_actions_keyboard(
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+# Short codes keep callback data under Telegram's 64-byte limit.
+ADJUSTMENT_REASON_BUTTONS = (
+    ("e", "Ошибка ввода"),
+    ("g", "Отказ гостя"),
+    ("c", "Комплимент заведения"),
+    ("o", "Другое"),
+)
+
+
+def _button_label(text: str, limit: int = 60) -> str:
+    return text if len(text) <= limit else f"{text[: limit - 1]}…"
+
+
+def build_staff_bill_edit_keyboard(
+    *,
+    bill_public_id: str,
+    line_actions: list[tuple[str, str]],
+    order_actions: list[tuple[str, str]],
+) -> InlineKeyboardMarkup:
+    keyboard: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=_button_label(label),
+                callback_data=f"staffbillrm:{order_item_id}",
+            )
+        ]
+        for order_item_id, label in line_actions
+    ]
+    keyboard.extend(
+        [
+            InlineKeyboardButton(
+                text=_button_label(label),
+                callback_data=f"staffbilloc:{order_public_id}",
+            )
+        ]
+        for order_public_id, label in order_actions
+    )
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                text="Назад к счёту",
+                callback_data=f"staffbillrefresh:{bill_public_id}",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def build_staff_adjustment_reason_keyboard(
+    *,
+    callback_prefix: str,
+    bill_public_id: str,
+) -> InlineKeyboardMarkup:
+    """Reason buttons; each sends ``{callback_prefix}:{code}``."""
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                text=label,
+                callback_data=f"{callback_prefix}:{code}",
+            )
+        ]
+        for code, label in ADJUSTMENT_REASON_BUTTONS
+    ]
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                text="Отмена",
+                callback_data=f"staffbillrefresh:{bill_public_id}",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def build_staff_adjustment_done_keyboard(
+    *,
+    bill_public_id: str,
+    adjustment_id: str,
+) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Добавить комментарий",
+                    callback_data=f"staffadjc:{adjustment_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Открыть счёт",
+                    callback_data=f"staffbillrefresh:{bill_public_id}",
+                )
+            ],
+        ]
+    )
 
 
 def build_staff_table_actions_keyboard(

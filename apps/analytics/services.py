@@ -354,7 +354,8 @@ def build_daily_paid_bills_page(*, partner_id, page: int = 1) -> ReportPage:
                 f"{_bill_payment_method_label(bill)}"
             ),
             "subtitle": (
-                f"Позиций: {bill.items.count()} • заказов: {bill.bill_orders.count()} • "
+                f"Позиций: {sum(1 for item in bill.items.all() if item.is_active)} • "
+                f"заказов: {bill.bill_orders.count()} • "
                 f"гость: {_guest_label(bill.primary_guest)}"
             ),
         }
