@@ -16,7 +16,6 @@ from apps.billing.services import (
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import get_bonus_ledger_balance
 from apps.menu.models import MenuCategory, MenuItem
-from apps.orders.models import Order
 from apps.orders.services import create_order_from_session
 from apps.partners.models import Partner, PartnerBotSettings
 from apps.tables.models import Table
