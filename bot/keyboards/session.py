@@ -50,3 +50,39 @@ def build_guest_order_card_keyboard(
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def build_visit_choice_keyboard(
+    *,
+    table_id,
+    options: list[tuple[str, str]],
+) -> InlineKeyboardMarkup:
+    """Join-or-new choice for a table that already has a party (ADR-0007).
+
+    ``options`` are ``(visit_id, label)`` pairs. Callback data carries only
+    UUIDs (hex, 32 chars) to stay well under Telegram's 64-byte limit; the
+    handler reloads and re-validates the table and visit.
+    """
+
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=label,
+                callback_data=f"tv:j:{_hex(visit_id)}",
+            )
+        ]
+        for visit_id, label in options
+    ]
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text="Начать новый визит",
+                callback_data=f"tv:n:{_hex(table_id)}",
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _hex(value) -> str:
+    return str(value).replace("-", "")
