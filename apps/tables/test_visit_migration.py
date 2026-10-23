@@ -2,8 +2,12 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
+# Later migrations of other apps add NOT NULL columns these historical models
+# do not know about, so roll them back as well.
 BEFORE = [("tables", "0003_tablesession_unique_active_table_session_per_partner_guest"),
-          ("billing", "0005_billadjustment_and_more")]
+          ("billing", "0005_billadjustment_and_more"),
+          ("orders", "0004_alter_order_payment_method"),
+          ("users", "0001_initial")]
 AFTER = [("tables", "0005_backfill_table_visits"), ("billing", "0007_backfill_bill_visits")]
 
 

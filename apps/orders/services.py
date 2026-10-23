@@ -1,5 +1,6 @@
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -10,9 +11,10 @@ from apps.menu.models import MenuItem
 from apps.notifications.models import StaffNotification
 from apps.notifications.services import deliver_staff_notification, send_guest_order_status_update
 from apps.orders.models import Cart, CartItem, Order, OrderItem, OrderStatusHistory
+from apps.partners.models import PartnerBotSettings
 from apps.tables.models import TableSession
 from apps.tables.services import get_active_table_session
-from apps.users.models import User
+from apps.users.models import GuestProfile, User
 
 
 class OrderFlowError(Exception):
@@ -186,9 +188,18 @@ def create_order(
     table=None,
     table_session: TableSession | None = None,
     comment: str = "",
+    channel: str = Order.Channel.TABLE,
+    pickup_at=None,
+    notify_staff: bool = True,
 ) -> Order:
     if not items:
         raise OrderFlowError("Нельзя создать заказ без позиций.")
+    if channel not in Order.Channel.values:
+        raise OrderFlowError("Неизвестный способ получения заказа.")
+    if channel != Order.Channel.TABLE and (table is not None or table_session is not None):
+        raise OrderFlowError("Заказ на самовывоз не привязывается к столу.")
+    if channel == Order.Channel.TABLE and pickup_at is not None:
+        raise OrderFlowError("Время самовывоза указывается только для самовывоза.")
     if table_session is not None:
         if table is None:
             table = table_session.table
@@ -206,6 +217,8 @@ def create_order(
         table=table,
         table_session=table_session,
         comment=comment,
+        channel=channel,
+        pickup_at=pickup_at,
     )
 
     subtotal = Decimal("0.00")
@@ -234,8 +247,16 @@ def create_order(
         to_status=order.status,
         note="Order created",
     )
-    _create_staff_notifications_for_order_created(order)
+    if notify_staff:
+        _create_staff_notifications_for_order_created(order)
     return order
+
+
+def notify_staff_about_new_order(order: Order, *, note: str = "") -> None:
+    """Notify staff about a created order; callers that build the order in
+    several steps (pickup) call this once the order is complete."""
+
+    _create_staff_notifications_for_order_created(order, note=note)
 
 
 @transaction.atomic
@@ -257,6 +278,14 @@ def transition_order_status(
     allowed_statuses = ORDER_STATUS_TRANSITIONS[order.status]
     if to_status not in allowed_statuses:
         raise OrderFlowError(f"Нельзя перевести заказ из `{order.status}` в `{to_status}`.")
+    if (
+        order.channel == Order.Channel.PICKUP
+        and to_status == Order.Status.ACCEPTED
+        and order.paid_at is None
+    ):
+        # A pickup order goes into work only after its transfer is confirmed
+        # (apps/billing/pickup.py:confirm_pickup_payment).
+        raise OrderFlowError("Сначала подтвердите оплату переводом.")
     if to_status == Order.Status.CANCELED and BillItem.objects.filter(
         partner_id=order.partner_id,
         order_id=order.id,
@@ -375,71 +404,108 @@ def _resolve_actor_employee(*, order: Order, actor_user: User | None) -> Employe
     return employee
 
 
+def _pickup_cart_allowed(partner_id) -> bool:
+    return PartnerBotSettings.objects.filter(
+        partner_id=partner_id,
+        module_menu_enabled=True,
+        module_orders_enabled=True,
+        module_cart_enabled=True,
+        module_pickup_enabled=True,
+    ).exists()
+
+
+def _resolve_cart_guest(*, partner_id, telegram_id: int):
+    """The guest whose cart is used, and their active table session if any.
+
+    At a table the cart belongs to the table session. Without a session a
+    cart is allowed only when the venue offers pickup (the channel is then
+    chosen at checkout).
+    """
+
+    table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
+    if table_session is not None:
+        return table_session.guest, table_session
+    if not _pickup_cart_allowed(partner_id):
+        raise OrderFlowError(
+            "Корзина доступна только после сканирования QR-кода стола. Сначала откройте сессию."
+        )
+    guest = (
+        GuestProfile.objects.select_related("telegram_account")
+        .filter(partner_id=partner_id, telegram_account__telegram_id=telegram_id)
+        .first()
+    )
+    if guest is None:
+        raise OrderFlowError("Сначала нажмите /start, чтобы бот вас узнал.")
+    return guest, None
+
+
+def _align_cart_with_session(cart: Cart, table_session: TableSession | None) -> Cart | None:
+    """Keep the cart consistent with where the guest is now.
+
+    - at a table: a cart without a session (built for pickup) joins the
+      session with its items; a cart of another session is abandoned if it
+      has items, otherwise reused;
+    - without a session: a cart left from a closed session is detached and
+      kept for pickup.
+    """
+
+    if table_session is not None:
+        if cart.table_session_id == table_session.id:
+            return cart
+        if cart.table_session_id is not None and cart.items.exists():
+            cart.status = Cart.Status.ABANDONED
+            cart.save(update_fields=["status", "updated_at"])
+            return None
+        cart.table_session = table_session
+        cart.save(update_fields=["table_session", "updated_at"])
+        return cart
+    if cart.table_session_id is not None:
+        cart.table_session = None
+        cart.save(update_fields=["table_session", "updated_at"])
+    return cart
+
+
 @transaction.atomic
 def get_or_create_active_cart_for_telegram_user(
     *,
     partner_id: UUID | str,
     telegram_id: int,
 ) -> Cart:
-    table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
-    if table_session is None:
-        raise OrderFlowError(
-            "Корзина доступна только после сканирования QR-кода стола. Сначала откройте сессию."
+    guest, table_session = _resolve_cart_guest(partner_id=partner_id, telegram_id=telegram_id)
+
+    def locked_active_cart():
+        return (
+            Cart.objects.select_for_update()
+            .filter(partner_id=partner_id, guest=guest, status=Cart.Status.ACTIVE)
+            .order_by("-updated_at")
+            .first()
         )
 
-    cart = (
-        Cart.objects.select_for_update()
-        .filter(
-            partner_id=partner_id,
-            guest=table_session.guest,
-            status=Cart.Status.ACTIVE,
-        )
-        .order_by("-updated_at")
-        .first()
-    )
+    cart = locked_active_cart()
     if cart is not None:
-        if cart.table_session_id != table_session.id:
-            if cart.items.exists():
-                cart.status = Cart.Status.ABANDONED
-                cart.save(update_fields=["status", "updated_at"])
-                cart = None
-            else:
-                cart.table_session = table_session
-                cart.save(update_fields=["table_session", "updated_at"])
+        cart = _align_cart_with_session(cart, table_session)
         if cart is not None:
             return cart
 
     try:
-        return Cart.objects.create(
-            partner_id=partner_id,
-            guest=table_session.guest,
-            table_session=table_session,
-        )
-    except IntegrityError:
-        cart = (
-            Cart.objects.select_for_update()
-            .filter(
+        with transaction.atomic():
+            return Cart.objects.create(
                 partner_id=partner_id,
-                guest=table_session.guest,
-                status=Cart.Status.ACTIVE,
+                guest=guest,
+                table_session=table_session,
             )
-            .order_by("-updated_at")
-            .first()
-        )
+    except IntegrityError:
+        cart = locked_active_cart()
         if cart is None:
             raise
-        if cart.table_session_id != table_session.id:
-            if cart.items.exists():
-                cart.status = Cart.Status.ABANDONED
-                cart.save(update_fields=["status", "updated_at"])
-                return Cart.objects.create(
-                    partner_id=partner_id,
-                    guest=table_session.guest,
-                    table_session=table_session,
-                )
-            cart.table_session = table_session
-            cart.save(update_fields=["table_session", "updated_at"])
-        return cart
+        aligned = _align_cart_with_session(cart, table_session)
+        if aligned is not None:
+            return aligned
+        return Cart.objects.create(
+            partner_id=partner_id,
+            guest=guest,
+            table_session=table_session,
+        )
 
 
 @transaction.atomic
@@ -485,31 +551,32 @@ def get_active_cart_for_telegram_user(
     partner_id: UUID | str,
     telegram_id: int,
 ) -> Cart | None:
-    table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
-    if table_session is None:
+    try:
+        guest, table_session = _resolve_cart_guest(
+            partner_id=partner_id,
+            telegram_id=telegram_id,
+        )
+    except OrderFlowError:
         return None
 
     cart = (
         Cart.objects.filter(
             partner_id=partner_id,
-            guest=table_session.guest,
+            guest=guest,
             status=Cart.Status.ACTIVE,
         )
-        .select_related("table_session__table")
-        .prefetch_related("items", "items__menu_item")
         .order_by("-updated_at")
         .first()
     )
     if cart is None:
         return None
-    if cart.table_session_id != table_session.id:
-        if cart.items.all():
-            cart.status = Cart.Status.ABANDONED
-            cart.save(update_fields=["status", "updated_at"])
-            return None
-        cart.table_session = table_session
-        cart.save(update_fields=["table_session", "updated_at"])
-    return cart
+    if _align_cart_with_session(cart, table_session) is None:
+        return None
+    return (
+        Cart.objects.select_related("table_session__table")
+        .prefetch_related("items", "items__menu_item")
+        .get(id=cart.id)
+    )
 
 
 @transaction.atomic
@@ -602,7 +669,9 @@ def checkout_active_cart_for_telegram_user(
     if not cart_items:
         raise OrderFlowError("Корзина пуста. Добавьте позиции перед оформлением.")
     if cart.table_session_id is None:
-        raise OrderFlowError("Эта корзина не привязана к столу для оформления заказа.")
+        raise OrderFlowError(
+            "Вы не за столом. Оформите заказ на самовывоз или отсканируйте QR-код стола."
+        )
 
     order = create_order(
         partner_id=partner_id,
@@ -682,9 +751,18 @@ def _refresh_cart_totals(cart: Cart) -> Cart:
 
 
 def _order_location_label(order: Order) -> str:
+    if order.channel == Order.Channel.PICKUP:
+        return f"самовывоз, {pickup_time_label(order)}"
     if order.table_id is not None:
         return f"стол #{order.table.number}"
     return "заказ без привязки к столу"
+
+
+def pickup_time_label(order: Order) -> str:
+    if order.pickup_at is None:
+        return "как можно скорее"
+    local = order.pickup_at.astimezone(ZoneInfo(order.partner.timezone))
+    return f"к {local:%H:%M}"
 
 
 def _staff_notification_recipients(order: Order):
@@ -700,7 +778,7 @@ def _staff_notification_recipients(order: Order):
     )
 
 
-def _create_staff_notifications_for_order_created(order: Order) -> None:
+def _create_staff_notifications_for_order_created(order: Order, *, note: str = "") -> None:
     notifications = []
     for employee in _staff_notification_recipients(order).filter(
         notify_on_order_created=True,
@@ -713,8 +791,9 @@ def _create_staff_notifications_for_order_created(order: Order) -> None:
                 category=StaffNotification.Category.ORDER_CREATED,
                 title=f"Новый заказ #{order.public_id}",
                 message=(
-                    f"Поступил новый заказ на {_order_location_label(order)} "
-                    f"с суммой {order.total_amount} грн."
+                    f"Поступил новый заказ: {_order_location_label(order)}, "
+                    f"сумма {order.total_amount} грн."
+                    + (f"\n{note}" if note else "")
                 ),
             )
         )
@@ -741,7 +820,7 @@ def _create_staff_notifications_for_status_change(
                 category=StaffNotification.Category.ORDER_STATUS_CHANGED,
                 title=f"Заказ #{order.public_id}: {to_status}",
                 message=(
-                    f"Статус заказа для {_order_location_label(order)} "
+                    f"Статус заказа ({_order_location_label(order)}) "
                     f"изменён с {from_status or '-'} на {to_status}."
                 ),
             )

@@ -216,6 +216,7 @@ class Payment(PartnerBoundModel):
     class Method(models.TextChoices):
         CASH = "cash", "Cash"
         TERMINAL = "terminal", "Terminal"
+        TRANSFER = "transfer", "Transfer"
         ONLINE = "online", "Online"
         MIXED = "mixed", "Mixed"
         BONUSES = "bonuses", "Bonuses"
@@ -255,6 +256,7 @@ class BillAdjustment(PartnerBoundModel):
         INPUT_ERROR = "input_error", "Ошибка ввода"
         GUEST_REFUSED = "guest_refused", "Отказ гостя"
         COMPLIMENT = "compliment", "Комплимент заведения"
+        PAYMENT_NOT_RECEIVED = "payment_not_received", "Оплата не поступила"
         OTHER = "other", "Другое"
 
     bill = models.ForeignKey(Bill, on_delete=models.PROTECT, related_name="adjustments")

@@ -158,6 +158,14 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name="Самовывоз",
         help_text="Сценарий заказа на самовывоз. Включается независимо от столов.",
     )
+    pickup_payment_details = models.TextField(
+        blank=True,
+        verbose_name="Реквизиты для оплаты самовывоза",
+        help_text=(
+            "Куда гость переводит деньги за заказ на самовывоз: номер карты или "
+            "IBAN, получатель. Гость видит этот текст перед оплатой."
+        ),
+    )
     module_cart_enabled = models.BooleanField(
         default=True,
         verbose_name="Корзина",
@@ -297,6 +305,11 @@ class PartnerBotSettings(TimeStampedModel):
                 "module_orders_enabled",
                 "Orders module requires tables, delivery, or pickup module.",
             )
+        if self.module_pickup_enabled and not self.pickup_payment_details.strip():
+            add_error(
+                "pickup_payment_details",
+                "Для самовывоза укажите реквизиты, на которые гость переводит оплату.",
+            )
         if self.module_billing_enabled and not self.module_orders_enabled:
             add_error("module_billing_enabled", "Billing module requires orders module.")
         if self.module_staff_call_enabled and not self.module_tables_enabled:
@@ -330,3 +343,45 @@ class PartnerBotSettings(TimeStampedModel):
 
         if errors:
             raise ValidationError(errors)
+
+
+class OpeningHours(TimeStampedModel):
+    """One opening interval of a venue on a weekday, in the venue's timezone.
+
+    ``closes_at`` at or before ``opens_at`` means the interval ends after
+    midnight (for example 18:00–03:00). A venue without intervals is treated
+    as always open.
+    """
+
+    class Weekday(models.IntegerChoices):
+        MONDAY = 0, "Понедельник"
+        TUESDAY = 1, "Вторник"
+        WEDNESDAY = 2, "Среда"
+        THURSDAY = 3, "Четверг"
+        FRIDAY = 4, "Пятница"
+        SATURDAY = 5, "Суббота"
+        SUNDAY = 6, "Воскресенье"
+
+    partner = models.ForeignKey(
+        Partner,
+        on_delete=models.CASCADE,
+        related_name="opening_hours",
+    )
+    weekday = models.PositiveSmallIntegerField(choices=Weekday.choices)
+    opens_at = models.TimeField()
+    closes_at = models.TimeField()
+
+    class Meta:
+        ordering = ["partner_id", "weekday", "opens_at"]
+        verbose_name = "Часы работы"
+        verbose_name_plural = "Часы работы"
+
+    def __str__(self) -> str:
+        return (
+            f"{self.get_weekday_display()} {self.opens_at:%H:%M}–{self.closes_at:%H:%M}"
+        )
+
+    def clean(self) -> None:
+        super().clean()
+        if self.opens_at is not None and self.opens_at == self.closes_at:
+            raise ValidationError({"closes_at": "Время закрытия совпадает со временем открытия."})

@@ -67,6 +67,11 @@ class GuestProfile(PartnerBoundModel):
     last_visit_at = models.DateTimeField(null=True, blank=True)
     loyalty_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     is_subscribed = models.BooleanField(default=True)
+    phone = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="Shared by the guest through Telegram (needed for pickup).",
+    )
 
     class Meta:
         constraints = [

@@ -1138,6 +1138,7 @@ def _derive_order_payment_method(
     method_map = {
         Payment.Method.CASH: Order.PaymentMethod.CASH,
         Payment.Method.TERMINAL: Order.PaymentMethod.TERMINAL,
+        Payment.Method.TRANSFER: Order.PaymentMethod.TRANSFER,
         Payment.Method.MIXED: Order.PaymentMethod.MIXED,
         Payment.Method.BONUSES: Order.PaymentMethod.BONUSES,
     }
@@ -1351,6 +1352,17 @@ def void_bill(*, bill: Bill, actor, reason_code: str, reason_text: str = "") -> 
 
     _validate_adjustment_reason(reason_code)
     bill = _lock_bill_for_change(bill, actor)
+    return _void_locked_bill(
+        bill=bill,
+        actor=actor,
+        reason_code=reason_code,
+        reason_text=reason_text,
+    )
+
+
+def _void_locked_bill(*, bill: Bill, actor, reason_code: str, reason_text: str) -> BillAdjustment:
+    """Void a bill the caller has locked and authorised (see ``void_bill``)."""
+
     bill = Bill.objects.prefetch_related("items", "payments").get(id=bill.id)
     _subtotal, total_before, paid_amount = _compute_bill_totals(bill)
     if paid_amount > 0:

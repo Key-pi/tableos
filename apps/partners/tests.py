@@ -149,6 +149,7 @@ class PartnerBotSettingsModuleTests(TestCase):
             module_cart_enabled=True,
             module_billing_enabled=True,
             module_staff_call_enabled=False,
+            pickup_payment_details="Карта 4149 0000 0000 0000",
         )
 
         settings.full_clean()
@@ -158,6 +159,17 @@ class PartnerBotSettingsModuleTests(TestCase):
         self.assertTrue(content.module_billing_enabled)
         # Guest bill request stays gated on tables even when billing is enabled.
         self.assertFalse(content.supports_billing_request())
+
+    def test_pickup_requires_payment_details(self):
+        settings = PartnerBotSettings(
+            partner=self.partner,
+            module_menu_enabled=True,
+            module_orders_enabled=True,
+            module_pickup_enabled=True,
+        )
+        with self.assertRaises(ValidationError) as caught:
+            settings.full_clean()
+        self.assertIn("pickup_payment_details", caught.exception.message_dict)
 
     def test_order_journey_modules_are_independent(self):
         settings = PartnerBotSettings.objects.create(
