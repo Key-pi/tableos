@@ -1,94 +1,99 @@
-# TableOS — Bot runtime and handler boundary
+# Botera Shop — работа бота и граница обработчиков
 
-**Status:** current runtime map plus target guardrails.
+**Статус:** текущая карта работы бота и целевые ограничения.
 
-## Current topology
+## Текущая схема
 
-The aiogram polling process starts from `manage.py runbot` →
-`bot/main.py:run_polling`. `bot/main.py:create_dispatcher` registers
-`PartnerRuntimeMiddleware` as an outer middleware and includes routers in the
-order `start → session → menu → order → profile →
-billing → guest_call → staff`. Aiogram resolves the first matching handler, so
-router order and text filters are observable behavior.
+Процесс polling aiogram запускается командой `manage.py runbot` →
+`bot/main.py:run_polling`. `bot/main.py:create_dispatcher` регистрирует
+`PartnerRuntimeMiddleware` как внешний middleware и подключает роутеры в
+порядке `start → session → menu → order → remote_checkout → profile →
+billing → guest_call → staff`. aiogram выбирает первый подходящий
+обработчик, поэтому порядок роутеров и текстовые фильтры — это видимое
+поведение.
 
-| Concern | Current implementation | Governance rule |
+| Вопрос | Как сейчас | Правило |
 |---|---|---|
-| Partner resolution | bot token/runtime selects partner; B1 rechecks current partner and bot-instance state before dispatch | suspended partner gets the standard paused-work response; a disabled bot instance is dropped |
-| Router assembly | static inclusion in `bot/main.py` | new router registration is a dynamic-consumer check in review |
-| Reply labels | exact configured text filters in `bot/filters/content.py` | actionable labels must be collision-safe or use stable callback intent |
-| Callback data | handler resolves domain record/employee | callback identifier is not authorization; reload scoped current state |
-| ORM access | handlers generally wrap Django access with `sync_to_async` | retain non-blocking adapter behavior; do not put business invariants in handler |
-| Runtime cache | partner bot runtime built at startup | cache cannot be sole source for revocable status/capability |
-| Message formatting | every bot and notification message uses `ParseMode.HTML`; since B3.1 dynamic values go through `bot/utils/html.py:escape_html` (bot) or `_escape_html` (notifications) | escape every interpolated value (partner, menu, guest, employee, comment text) at render time; never escape keyboard button labels; only partner templates and broadcast text may carry markup |
-| Per-update lookups | the middleware, every `PartnerButtonFilter` evaluation and each handler reload the partner and `BotContent` | acceptable for MVP; measure before caching, and never cache status or capability |
+| Определение партнёра | партнёр выбирается по токену бота; с B1 перед обработкой заново проверяются состояние партнёра и экземпляра бота | приостановленный партнёр получает стандартный ответ «работа приостановлена»; отключённый экземпляр бота молча пропускается |
+| Сборка роутеров | статическое подключение в `bot/main.py` | регистрация нового роутера — пункт ревью «динамический потребитель» |
+| Подписи кнопок | точное совпадение с настроенным текстом, фильтры в `bot/filters/content.py` | подписи действий не должны совпадать или должны заменяться стабильным callback |
+| Данные callback | обработчик находит запись домена/сотрудника | идентификатор в callback — не доказательство прав; заново загружать текущее состояние с учётом партнёра |
+| Доступ к ORM | обработчики оборачивают работу с Django в `sync_to_async` | сохранять неблокирующий адаптер; не помещать бизнес-инварианты в обработчик |
+| Кэш при старте | настройки ботов партнёров строятся при запуске | кэш не может быть единственным источником отзываемого статуса или права |
+| Форматирование | все сообщения бота и уведомления в `ParseMode.HTML`; с B3.1 динамические значения проходят через `bot/utils/html.py:escape_html` (бот) или `_escape_html` (уведомления) | экранировать каждое подставляемое значение (партнёр, меню, гость, сотрудник, комментарий) при отрисовке; подписи кнопок не экранировать; разметку могут содержать только шаблоны партнёра и тексты рассылок |
+| Загрузки на каждое обновление | middleware, каждый `PartnerButtonFilter` и каждый обработчик заново загружают партнёра и `BotContent` | для MVP допустимо; измерить прежде чем кэшировать и никогда не кэшировать статус или права |
 
-## Handler contract
+## Договор обработчика
 
-Each handler should do only the following:
+Обработчик делает только следующее:
 
-1. parse/validate the Telegram update and known callback schema;
-2. resolve current partner and current actor/guest context;
-3. call one owner service or selector with scoped IDs/context;
-4. translate a typed result or controlled domain error into Telegram UI.
+1. разбирает и проверяет обновление Telegram и известную схему callback;
+2. определяет текущего партнёра и текущий контекст исполнителя/гостя;
+3. вызывает один сервис или селектор владельца с идентификаторами и
+   контекстом, ограниченными партнёром;
+4. переводит типизированный результат или контролируемую доменную ошибку в
+   интерфейс Telegram.
 
-Handlers must not mutate ORM models directly, decide a cross-module money rule,
-or rely on a keyboard created earlier as evidence of permission. Keyboard
-rendering may hide unavailable operations, but execution must perform the same
-live guard again.
+Обработчики не меняют модели ORM напрямую, не решают межмодульные денежные
+правила и не считают ранее созданную клавиатуру доказательством прав.
+Клавиатура может прятать недоступные действия, но выполнение заново делает
+ту же живую проверку.
 
-## Current exception cases recorded by audit
+## Зафиксированные особые случаи
 
-- B1 `PartnerRuntimeMiddleware` runs before every router/filter dispatch.
-  It sends `Работа бота приостановлена, ожидайте обновлений.` for a suspended
-  partner and shows the same text as a callback alert. A live-disabled
-  `BotInstance` is silently dropped. The polling transport itself closes when
-  the runtime process is restarted.
-- B1 staff resolution now requires active `User`, active `EmployeeProfile`, and
-  matching partner. Stale order callbacks recheck the current orders-module
-  capability before reading or mutating an order; a formal role matrix remains
-  PQ-004.
-- B1 rejects duplicate/non-empty routed reply labels in
-  `PartnerBotSettings.clean()`. Raw reply text remains the routing mechanism;
-  a stable-intent redesign is outside this batch.
+- B1: `PartnerRuntimeMiddleware` выполняется перед каждым роутером и
+  фильтром. Приостановленному партнёру отвечает «Работа бота
+  приостановлена, ожидайте обновлений.» и показывает тот же текст во
+  всплывающем ответе на callback. Отключённый на лету `BotInstance` молча
+  пропускается. Сам транспорт polling закрывается при перезапуске процесса.
+- B1: сотрудник определяется только при активном `User`, активном
+  `EmployeeProfile` и совпадении партнёра. Устаревшие callback-и заказов
+  заново проверяют текущее право на модуль заказов перед чтением или
+  изменением заказа; формальная матрица ролей остаётся вопросом PQ-004.
+- B1: `PartnerBotSettings.clean()` отклоняет повторяющиеся и пустые подписи
+  кнопок с маршрутизацией. Маршрутизация по тексту кнопки остаётся;
+  переход на стабильные намерения — вне того батча.
+- B3.2 часть B: активация по QR может ответить выбором визита (`tv:j:<визит
+  hex>` — подсесть, `tv:n:<стол hex>` — новый). Callback не несёт токен QR;
+  обработчик заново загружает стол в пределах партнёра бота, а сервис
+  проверяет, что визит активен и принадлежит столу, иначе гость видит
+  «Выбор устарел. Отсканируйте QR-код стола ещё раз.». Действия персонала
+  с визитами (`stafftvshared`, `stafftvpersonal`, `stafftvclose`) заново
+  загружают визит в пределах партнёра сотрудника.
+- Удалённое оформление (самовывоз; PICKUP.md, ADR-0009): шаги гостя —
+  callback-и без состояния `rc:<код канала>:…` (`p` — самовывоз);
+  последний `rc:p:p:…` несёт итог и сумму к оплате, которые видел гость, и
+  сервис не создаёт заказ, если что-то изменилось. Способ заказа выбирается
+  сначала (кнопка «Самовывоз» или скан QR стола) и хранится в
+  `Cart.channel`; корзина стола предлагает `cart:mode:pickup`, а вернуться
+  к заказу за столом можно только повторным сканированием QR. Присланный
+  контакт принимается, только если `contact.user_id` — сам отправитель.
+  Действия персонала `stafftxok`, `stafftxno` (сначала переспрашивает) и
+  `stafftxnoy` заново загружают заказ в пределах партнёра сотрудника;
+  сервис проверяет роль (владелец, менеджер, кассир).
 
-- B3.2 part B: QR activation may answer with a visit choice (`tv:j:<visit
-  hex>` join, `tv:n:<table hex>` new). The callback carries no QR token; the
-  handler reloads the table within the bot's partner and the service rechecks
-  that the visit is active and belongs to the table, otherwise the guest sees
-  `Выбор устарел. Отсканируйте QR-код стола ещё раз.`. Staff visit actions
-  (`stafftvshared`, `stafftvpersonal`, `stafftvclose`) reload the visit within
-  the employee's partner.
+## Схема callback и текстов
 
-- Remote checkout (pickup; PICKUP.md, ADR-0009): guest steps are stateless
-  `rc:<channel code>:…` callbacks (`p` = pickup); the final `rc:p:p:…` carries the total and the amount to pay that the guest saw, and
-  the service refuses to place the order if either changed. The ordering
-  flow is chosen first (the «Самовывоз» button or a table QR scan) and kept
-  in `Cart.channel`; a table cart offers `cart:mode:pickup`, and the only
-  way back to the table flow is scanning the table QR again. A shared contact is accepted
-  only when `contact.user_id` is the sender. Staff `stafftxok`, `stafftxno`
-  (asks first) and `stafftxnoy` reload the order within the employee's
-  partner; the service checks the role (owner/manager/cashier).
+Использовать ключ действия с пространством имён и идентификатор объекта.
+Сервис независимо загружает объект заново и проверяет права. Если действие
+по тексту кнопки оставлено ради удобства, проверка настроек должна
+доказывать, что оно в данном контексте соответствует ровно одному
+включённому намерению. Переименование подписи не должно незаметно
+превращать сохранённое или устаревшее сообщение пользователя в другую
+команду.
 
-## Callback and content design
+## Проверка работы бота
 
-Use a namespaced callback/action key plus a scoped object identifier. The
-service must independently reload/authorize it. If a reply-text action is
-retained for UX reasons, configuration validation must prove that it maps to
-exactly one enabled intent in the given context. Renaming a label must not
-quietly convert a saved/stale user message into another command.
+Тесты и ручной обзор изменения, затрагивающего бота, покрывают:
 
-## Runtime verification
+- подключение и порядок роутеров и нужное первое совпадение;
+- поведение для активного и приостановленного партнёра;
+- неактивного пользователя/профиль и несовпадение партнёра;
+- повтор callback и отзыв прав после отрисовки интерфейса;
+- границу `sync_to_async` для работы с ORM и сервисами;
+- совместимость изменённой схемы callback;
+- отсутствие жёстко заданных текстов маршрутизации, конфликтующих с
+  настройками партнёра.
 
-Tests and manual review for a bot-affecting change must cover:
-
-- router inclusion/order and the intended first match;
-- current active partner and suspended-partner outcome;
-- inactive user/profile and partner mismatch;
-- callback replay and permission removal after UI render;
-- `sync_to_async` boundary for ORM/service work;
-- changed callback schema compatibility;
-- no hardcoded routing text conflicting with partner configuration.
-
-Tasks are documented separately in
-[`BACKGROUND_JOBS.md`](BACKGROUND_JOBS.md); they are adapters too and must not
-be used as a way to bypass the owner service.
+Задачи описаны отдельно в [`BACKGROUND_JOBS.md`](BACKGROUND_JOBS.md); они
+тоже адаптеры и не могут быть способом обойти сервис-владелец.

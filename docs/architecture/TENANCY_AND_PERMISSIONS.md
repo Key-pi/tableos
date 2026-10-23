@@ -1,97 +1,103 @@
-# TableOS — Tenancy and permissions
+# Botera Shop — партнёры и права
 
-**Status:** audited controls and target invariants, with the B1 implementation
-update recorded below. It does not claim that all target controls are already
-implemented.
+**Статус:** проверенные аудитом механизмы и целевые инварианты; ниже записано,
+что сделано в B1. Документ не утверждает, что все целевые механизмы уже
+реализованы.
 
-## Trust model
+## Модель доверия
 
-| Context | Trusted input | Must be derived/validated | Must never be trusted by itself |
+| Контекст | Доверенный вход | Нужно вывести/проверить | Само по себе не доверять |
 |---|---|---|---|
-| Telegram guest update | active bot instance/runtime partner | Telegram identity → guest profile; table/session/order belong to that partner | callback payload ID, reply text, a user-supplied partner ID |
-| Telegram staff update | active bot/runtime partner and Telegram identity | active `User`, active `EmployeeProfile`, profile/user partner consistency, current capability | previously rendered keyboard/card, employee ID in callback |
-| Django Admin | authenticated account plus Admin access profile | scoped queryset, section/object policy, related-field/inline partner ownership, approved command | `is_staff` alone, list-filter choice, submitted foreign key |
-| Celery task | durable source record/command ID | current source partner/status/recipient eligibility and idempotency claim | task payload as current authorization |
-| Service/management caller | explicit trusted actor and partner context | every foreign object relation shares the partner | bare IDs or an object from an arbitrary queryset |
+| Обновление Telegram от гостя | активный экземпляр бота и партнёр процесса | Telegram-личность → профиль гостя; стол, сессия и заказ принадлежат этому партнёру | идентификатор из callback, текст ответа, присланный пользователем идентификатор партнёра |
+| Обновление Telegram от сотрудника | активный бот, партнёр процесса и Telegram-личность | активный `User`, активный `EmployeeProfile`, совпадение партнёра профиля и пользователя, текущее право | ранее отрисованная клавиатура или карточка, идентификатор сотрудника в callback |
+| Django Admin | вошедший аккаунт с профилем доступа к Admin | ограниченная выборка, политика раздела и объекта, принадлежность партнёру связанных полей и inline, утверждённая команда | один только `is_staff`, выбор в фильтре списка, присланный внешний ключ |
+| Задача Celery | идентификатор долговечной записи-источника или команды | текущий партнёр источника, статус, допуск получателя и захват идемпотентности | данные задачи как текущее разрешение |
+| Вызов сервиса или management-команды | явный доверенный исполнитель и контекст партнёра | каждый связанный объект принадлежит тому же партнёру | голые идентификаторы или объект из произвольной выборки |
 
-## Current enforcement and audited gaps
+## Как соблюдается сейчас и найденные аудитом пробелы
 
-| Control | Confirmed current behavior | Gap / evidence | Status |
+| Механизм | Подтверждённое текущее поведение | Пробел / доказательство | Статус |
 |---|---|---|---|
-| Partner-scoped bot reads | Main guest/staff handlers resolve partner from bot runtime and often use scoped selectors; B1 `create_order` validates guest/table/session/menu ownership | Public service APIs are not uniformly guarded against mismatched object graphs | PARTIAL_CURRENT |
-| Partner-bound model | `PartnerBoundModel` supplies `partner` FK | FK alone cannot enforce same partner across linked tables (`core/database/models.py:22-33`) | DEFECT — AA-002 |
-| Staff eligibility | B1 selector requires active `User`, active profile and matching user/profile partner; staff notification recipients use the same active-user/partner constraints | A formal per-role authority policy remains PQ-004 | PARTIAL_CURRENT — AA-001 mitigated |
-| Runtime suspension | B1 middleware and context recheck `Partner.status` and `BotInstance.is_active` for every update; suspension returns the approved message and an inactive instance drops the update | Polling transport remains connected until its process is restarted, but it does no further application work | CONFIRMED_CURRENT — AA-009 mitigated |
-| Admin object scope | `ScopedAdminMixin` limits normal object querysets; B1 removes tenant-facing partner list filters and rejects foreign partner inline writes; Telegram ID/direct global identity Admin are superuser-only, while authorised employee editors may change their venue employee's `@username` | B2/B3 made lifecycle/money fields read-only; still open: order `guest`/`table`/`table_session` editable (AA-023), tenant user list can include a partner-linked superuser (AA-026) | PARTIAL_CURRENT — AA-015 mitigated |
-| Admin access vs staff role | `AdminAccessProfile` gates back office | it is not the same as an active staff profile/capability | DESIGN RULE |
+| Чтение в боте с учётом партнёра | Основные обработчики гостя и сотрудника берут партнёра из процесса бота и обычно используют селекторы с учётом партнёра; `create_order` с B1 проверяет принадлежность гостя, стола, сессии и меню | Публичные API сервисов не везде защищены от несогласованного графа объектов | PARTIAL_CURRENT |
+| Модель с привязкой к партнёру | `PartnerBoundModel` даёт FK `partner` | Один FK не гарантирует одного партнёра у связанных таблиц (`core/database/models.py:22-33`) | DEFECT — AA-002 |
+| Допуск сотрудника | Селектор B1 требует активного `User`, активного профиля и совпадения партнёра пользователя и профиля; получатели уведомлений персонала подчиняются тем же условиям | Формальная политика прав по ролям — вопрос PQ-004 | PARTIAL_CURRENT — AA-001 смягчена |
+| Приостановка на лету | Middleware и контекст B1 перепроверяют `Partner.status` и `BotInstance.is_active` на каждом обновлении; приостановленный партнёр получает утверждённый ответ, обновления неактивного экземпляра отбрасываются | Транспорт polling остаётся подключённым до перезапуска процесса, но приложение ничего не делает | CONFIRMED_CURRENT — AA-009 смягчена |
+| Границы объектов в Admin | `ScopedAdminMixin` ограничивает обычные выборки; B1 убрал фильтры по партнёру у арендаторов и отклоняет запись inline чужого партнёра; Telegram ID и прямой Admin глобальной личности — только суперпользователю, а уполномоченные редакторы сотрудников могут менять `@username` сотрудника своего заведения | B2/B3 сделали поля жизненного цикла и денег только для чтения; открыто: редактируемые `guest`/`table`/`table_session` заказа (AA-023), список пользователей арендатора может включать суперпользователя, привязанного к партнёру (AA-026) | PARTIAL_CURRENT — AA-015 смягчена |
+| Доступ к Admin и роль сотрудника | `AdminAccessProfile` открывает бэк-офис | это не то же, что активный профиль сотрудника и его право | ПРАВИЛО ПРОЕКТИРОВАНИЯ |
 
-## Target invariants
+## Целевые инварианты
 
-1. Every partner-bound write validates one common `Partner` for actor, target,
-   and related objects before mutation.
-2. A protected staff command requires all of: active Django user, active
-   employee profile, matching partner, and capability at command time.
-3. A suspended partner has explicitly approved behavior at every update and
-   task boundary; the default safe interpretation is deny mutation.
-4. Global Telegram identity has an explicit owner/change policy and cannot be
-   silently modified through a tenant-local staff form.
-5. Admin list filters, foreign keys, inlines, actions, and forms provide no
-   weaker tenant boundary than normal change-list querysets.
-6. Cross-table partner identity is enforced in services now and, after data
-   audit, with the narrowest viable PostgreSQL schema mechanism.
+1. Каждая запись с привязкой к партнёру до изменения проверяет, что
+   исполнитель, цель и связанные объекты принадлежат одному `Partner`.
+2. Защищённая команда сотрудника требует всего сразу: активного `User`
+   Django, активного профиля сотрудника, совпадения партнёра и права в
+   момент команды.
+3. У приостановленного партнёра на каждой границе обновления и задачи явно
+   утверждённое поведение; безопасное толкование по умолчанию — запрет
+   изменений.
+4. У глобальной Telegram-личности явная политика владельца и изменений; её
+   нельзя тихо изменить через локальную форму сотрудника заведения.
+5. Фильтры списков, внешние ключи, inline, действия и формы Admin дают
+   границу партнёра не слабее обычных выборок списка.
+6. Принадлежность одному партнёру между таблицами соблюдается в сервисах
+   сейчас, а после аудита данных — самым узким пригодным механизмом схемы
+   PostgreSQL.
 
-## B1 implementation update — 2026-08-03
+## Что сделано в B1 — 2026-08-03
 
-The approved B1 technical slice adds live active-user/profile/partner checks to
-staff resolution, validates the generic order command's guest/table/session/menu
-graph, rechecks the current orders-module capability on previously rendered
-staff order callbacks, validates routed reply-label uniqueness, and narrows the
-audited Admin surfaces. The final owner decisions add an outer bot middleware:
-a suspended partner receives `Работа бота приостановлена, ожидайте обновлений.`,
-while a live-disabled `BotInstance` drops updates. The request-bound employee
-Admin form permits Telegram ID mutation only to a superuser, while the venue
-owner or an Employees-section editor may change their employee's `@username`.
-The scoped `UserAdmin` also permits the venue owner to update their employee's
-username and name.
+Утверждённый технический срез B1 добавляет живые проверки активности
+пользователя, профиля и партнёра при определении сотрудника, проверяет граф
+гостя, стола, сессии и меню в общей команде заказа, заново проверяет текущее
+право на модуль заказов в ранее отрисованных callback-ах заказов, проверяет
+уникальность подписей кнопок с маршрутизацией и сужает найденные аудитом
+поверхности Admin. Итоговые решения владельца добавляют внешний middleware
+бота: приостановленный партнёр получает `Работа бота приостановлена, ожидайте
+обновлений.`, а отключённый на лету `BotInstance` отбрасывает обновления.
+Форма сотрудника в Admin, привязанная к запросу, разрешает менять Telegram ID
+только суперпользователю, а владелец заведения или редактор раздела
+«Сотрудники» может менять `@username` своего сотрудника. Ограниченный
+`UserAdmin` тоже позволяет владельцу заведения менять имя пользователя и имя
+своего сотрудника.
 
-Characterization tests cover disabled users, partner mismatches, foreign order
-inputs, stale order callbacks, duplicate labels, suspended/live-disabled bots,
-global identity edits, and tenant list-filter/related-choice/inline behavior.
-No migration or database-level same-partner constraint is part of B1.
+Характеризующие тесты покрывают отключённых пользователей, несовпадение
+партнёра, чужие объекты в заказе, устаревшие callback-и заказов, повторяющиеся
+подписи, приостановленных и отключённых на лету ботов, правку глобальной
+личности, а также фильтры списков, выбор связанных объектов и inline у
+арендатора. Миграций и ограничений базы «один партнёр» в B1 нет.
 
-## Implementation guard pattern
+## Шаблон защиты в реализации
 
-An owner service should receive an actor/context with a resolved partner, load
-the canonical target under that partner scope, and verify every related object
-before starting a state/money mutation. A generic helper may remove repetition,
-but it must not obscure the owner service’s authorization policy.
+Сервис-владелец получает исполнителя/контекст с определённым партнёром,
+загружает каноническую цель в пределах этого партнёра и проверяет каждый
+связанный объект до начала изменения состояния или денег. Общий помощник
+может убрать повторы, но не должен скрывать политику прав сервиса-владельца.
 
 ```text
-trusted update/admin context
-  → resolve active partner
-  → resolve active actor + capability
-  → load target scoped by partner
-  → validate all linked objects share partner
-  → acquire command locks and mutate
+доверенный контекст обновления/Admin
+  → определить активного партнёра
+  → определить активного исполнителя и право
+  → загрузить цель в пределах партнёра
+  → проверить, что все связанные объекты того же партнёра
+  → взять блокировки команды и изменить
 ```
 
-This is deliberately not a claim that Django `clean()` or a UI choice is a
-security boundary. Database constraints should be selected only after a data
-audit and an approved migration strategy; ordinary `CheckConstraint` cannot
-compare values from related rows.
+Это сознательно не утверждение, что `clean()` Django или выбор в интерфейсе —
+граница безопасности. Ограничения базы выбирать только после аудита данных и
+утверждённой стратегии миграции; обычный `CheckConstraint` не может сравнивать
+значения из связанных строк.
 
-## Verification matrix
+## Матрица проверки
 
-| Scenario | Required test level |
+| Сценарий | Нужный уровень теста |
 |---|---|
-| User disabled after employee profile exists | bot handler and owner service |
-| Staff capability removed after card is displayed | callback/owner service |
-| Partner suspended while polling process is running | runtime context and protected handler |
-| Foreign guest/table/session/menu object supplied to command | service test, two tenants |
-| Tenant admin list filters / related fields / inlines | Django Admin request/form test |
-| Shared Telegram identity changed by tenant admin | form/service two-tenant test |
-| Existing invalid tenant graph before constraint migration | data audit query and migration dry-run |
+| Пользователь отключён после создания профиля сотрудника | обработчик бота и сервис-владелец |
+| Право сотрудника снято после показа карточки | callback и сервис-владелец |
+| Партнёр приостановлен во время работы процесса polling | контекст процесса и защищённый обработчик |
+| В команду переданы чужой гость, стол, сессия или позиция меню | тест сервиса, два партнёра |
+| Фильтры списков, связанные поля и inline Admin арендатора | тест запроса или формы Django Admin |
+| Общая Telegram-личность изменена администратором арендатора | тест формы или сервиса, два партнёра |
+| Существующий некорректный граф партнёров до миграции с ограничением | запрос аудита данных и проверка миграции |
 
-Open semantics are tracked in
+Открытые смысловые вопросы ведутся в
 [`../product/OPEN_PRODUCT_QUESTIONS.md`](../product/OPEN_PRODUCT_QUESTIONS.md),
-especially PQ-004, PQ-005 and PQ-020.
+особенно PQ-004, PQ-005 и PQ-020.

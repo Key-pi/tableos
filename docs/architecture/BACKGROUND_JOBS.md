@@ -1,83 +1,86 @@
-# TableOS — Background jobs and external delivery
+# Botera Shop — фоновые задачи и внешняя доставка
 
-**Status:** current registrations and target reliability contract.
+**Статус:** текущие регистрации и целевой договор надёжности.
 
-## Registered task inventory
+## Зарегистрированные задачи
 
-Celery autodiscovery currently registers these first-party tasks:
+Autodiscovery Celery регистрирует такие собственные задачи:
 
-| Task | Source | Queue | Trigger | Retry | Idempotency today |
+| Задача | Источник | Очередь | Запуск | Повтор | Идемпотентность сейчас |
 |---|---|---|---|---|---|
-| `notifications.deliver_staff_notification` | `apps/notifications/tasks.py` | `default` | `on_commit` after a `StaffNotification` row is created | `autoretry_for=Exception`, backoff, max 5; `acks_late`, `reject_on_worker_lost` | skips a row already `sent`; rechecks active employee/user and opt-in; transient Telegram errors raise `RetryableDeliveryError` (at least once, PQ-015) |
-| `notifications.send_guest_order_status_update` | `apps/notifications/tasks.py` | `default` | `on_commit` after an order status change, if guest allows updates | same | rechecks the preference; only a transient failure raises for retry, nothing raises after a successful send |
-| `notifications.send_broadcast_campaign` | `apps/notifications/tasks.py` | `broadcasts` | `on_commit` from `send_broadcast_campaign`; queues itself per batch | same | `BroadcastDelivery` rows: claim `pending → sending` (skip-locked), send outside transactions, record each outcome; never re-claims `sending` (at most once, PQ-014) |
-| `notifications.process_scheduled_broadcast_campaigns` | `apps/notifications/tasks.py` | `default` | beat, every minute | none | `send_broadcast_campaign` locks the campaign row and ignores queued/sending/sent campaigns |
-| `notifications.recover_stalled_broadcast_campaigns` | `apps/notifications/tasks.py` | `default` | beat, every 5 minutes | none | expired claims (30 min) → `unknown`; re-queues sending campaigns with pending rows and no recent claim; finalizes finished ones |
-| `analytics.refresh_daily_partner_metrics` | `apps/analytics/tasks.py` | `default` | beat, every 15 minutes | none | `update_or_create` per partner and day; current day, plus the previous day once after the venue's local midnight |
+| `notifications.deliver_staff_notification` | `apps/notifications/tasks.py` | `default` | `on_commit` после создания строки `StaffNotification` | `autoretry_for=Exception`, нарастающая пауза, максимум 5; `acks_late`, `reject_on_worker_lost` | уже `sent` пропускается; заново проверяются активность сотрудника/пользователя и согласие на уведомления; временные ошибки Telegram выбрасывают `RetryableDeliveryError` (хотя бы один раз, PQ-015) |
+| `notifications.send_guest_order_status_update` | `apps/notifications/tasks.py` | `default` | `on_commit` после смены статуса заказа, если гость разрешил уведомления | так же | заново проверяется настройка; повтор только при временной ошибке, после успешной отправки ничего не выбрасывается |
+| `notifications.send_broadcast_campaign` | `apps/notifications/tasks.py` | `broadcasts` | `on_commit` из `send_broadcast_campaign`; ставит себя на каждую пачку | так же | строки `BroadcastDelivery`: захват `pending → sending` (skip-locked), отправка вне транзакций, запись каждого результата; `sending` повторно не захватывается (не больше одного раза, PQ-014) |
+| `notifications.process_scheduled_broadcast_campaigns` | `apps/notifications/tasks.py` | `default` | beat, каждую минуту | нет | `send_broadcast_campaign` блокирует строку кампании и пропускает поставленные, отправляемые и отправленные |
+| `notifications.recover_stalled_broadcast_campaigns` | `apps/notifications/tasks.py` | `default` | beat, каждые 5 минут | нет | просроченные захваты (30 мин) → `unknown`; кампании в `sending` с ожидающими строками и без свежего захвата ставятся заново; законченные — завершаются |
+| `analytics.refresh_daily_partner_metrics` | `apps/analytics/tasks.py` | `default` | beat, каждые 15 минут | нет | `update_or_create` на партнёра и день; текущий день и один раз предыдущий — после полуночи по времени заведения |
 
-`_send_telegram_messages` classifies each result: sent; definite failure
-(`Forbidden` also marks the account blocked, `BadRequest`); or ambiguous
-(network/server error, unexpected exception), where Telegram may have
-delivered the message. Operational notifications retry ambiguous failures;
-broadcasts record them as `unknown` and never resend (ADR-0008).
+`_send_telegram_messages` относит каждый результат к одному из видов:
+отправлено; точная ошибка (`Forbidden` к тому же помечает аккаунт
+заблокировавшим бота, `BadRequest`); неоднозначная ошибка (сеть, ошибка
+сервера, непредвиденное исключение), когда Telegram мог доставить
+сообщение. Рабочие уведомления повторяют неоднозначные ошибки; рассылки
+записывают их как `unknown` и не отправляют снова (ADR-0008).
 
-The legacy cheatsheet omitted scheduled campaign processing; this list is the
-source-verified registration map. Placeholder `tasks.py` files in other apps
-do not demonstrate registered background work.
+Старая шпаргалка не упоминала обработку запланированных кампаний; этот
+список сверен с кодом.
 
-## Current behavior (since B4)
+## Текущее поведение (с B4)
 
-Business data commits before asynchronous work is scheduled
-(`transaction.on_commit`), and no Telegram call runs inside a database
-transaction. A broadcast records its audience as `BroadcastDelivery` rows
-when sending starts; campaign counters (`delivered_count`, `failed_count`,
-`unknown_count`) are derived from those rows. Re-queueing a campaign reaches
-only guests not attempted yet. Tasks queued by the pre-B4 cursor-based sender
-resume after their cursor; a pre-B4 campaign that is mid-way with no cursor is
-marked failed instead of being resent.
+Бизнес-данные коммитятся до постановки фоновой работы
+(`transaction.on_commit`), и ни один вызов Telegram не выполняется внутри
+транзакции базы. Рассылка при старте записывает аудиторию строками
+`BroadcastDelivery`; счётчики кампании (`delivered_count`, `failed_count`,
+`unknown_count`) считаются по этим строкам. Повторный запуск кампании
+доходит только до тех, кому ещё не пытались отправить. Задачи, поставленные
+старым отправителем с курсором (до B4), продолжают с курсора; кампания до
+B4 на середине без курсора помечается как неудачная, а не отправляется
+повторно.
 
-Required processes, all declared in `docker-compose.yml`: `web`, `worker`
-(queues `default` and `broadcasts`), exactly one `beat`, exactly one `bot`
-(`manage.py runbot`), PostgreSQL and Redis. Without beat, scheduled campaigns,
-stalled-broadcast recovery and daily metrics do not run.
+Нужные процессы, все объявлены в `docker-compose.yml`: `web`, `worker`
+(очереди `default` и `broadcasts`), ровно один `beat`, ровно один `bot`
+(`manage.py runbot`), PostgreSQL и Redis. Без beat не работают
+запланированные рассылки, восстановление зависших рассылок и метрики дня.
 
-## Target task contract
+## Целевой договор задачи
 
-| Step | Required behavior |
+| Шаг | Требование |
 |---|---|
-| Persist intent | Source service stores/commits durable work or a versioned job reference. |
-| Schedule | `on_commit` enqueues only after durable state exists. |
-| Claim | Task claims a campaign/recipient unit with a lease/idempotency key in a short transaction. |
-| Deliver | Telegram/network I/O occurs outside that transaction. |
-| Record | A short follow-up transaction records attempt, outcome, error and counters. |
-| Retry | Retry policy is based on an observable failure and does not recreate a completed recipient delivery. |
-| Recover | Crash/retry/parallel workers converge according to an approved delivery guarantee. |
+| Сохранить намерение | Сервис-источник сохраняет и коммитит долговечную работу или ссылку на неё с версией. |
+| Поставить | `on_commit` ставит задачу только когда долговечное состояние уже есть. |
+| Захватить | Задача захватывает единицу работы (кампания/получатель) с арендой или ключом идемпотентности в короткой транзакции. |
+| Доставить | Ввод-вывод Telegram и сети — вне этой транзакции. |
+| Записать | Короткая следующая транзакция записывает попытку, результат, ошибку и счётчики. |
+| Повторить | Повтор основан на наблюдаемой ошибке и не создаёт заново уже выполненную доставку получателю. |
+| Восстановить | Падения, повторы и параллельные воркеры сходятся согласно утверждённой гарантии доставки. |
 
-B4 implements this contract with a per-recipient delivery record only; no
-generic event bus or outbox product was introduced (ADR-0008).
+B4 реализует этот договор только записью доставки на получателя; общей
+шины событий или продукта outbox не вводилось (ADR-0008).
 
-## Operational checks
+## Эксплуатационные проверки
 
-- Verify all task names after any module move; Celery autodiscovery is a dynamic
-  consumer.
-- Verify broker/backend settings and worker queue routing in the actual
-  deployment environment.
-- Record scheduler ownership and cadence for scheduled broadcasts.
-- Alert on repeat failure, a growing `unknown_count`, and campaigns that stay
-  `sending` (recovery should finalize or resume them within minutes).
-- Never call Telegram, retry sleep, or long fan-out loop inside a source DB
-  transaction.
+- Проверять имена всех задач после любого переноса модуля: autodiscovery
+  Celery — динамический потребитель.
+- Проверять настройки брокера и хранилища результатов и маршрутизацию
+  очередей воркеров в реальном окружении.
+- Зафиксировать, кто отвечает за планировщик и как часто он запускает
+  рассылки.
+- Оповещать о повторяющихся ошибках, растущем `unknown_count` и кампаниях,
+  которые долго остаются в `sending` (восстановление должно завершить или
+  продолжить их за минуты).
+- Никогда не вызывать Telegram, паузу перед повтором или длинный цикл
+  рассылки внутри транзакции базы.
 
-## Test matrix
+## Матрица тестов
 
-Covered by `apps/notifications/test_delivery.py` (B4); item 2 runs on
-PostgreSQL only.
+Покрыто `apps/notifications/test_delivery.py` (B4); пункт 2 выполняется
+только на PostgreSQL.
 
-1. enqueue only after commit;
-2. one recipient/campaign claimed by two workers;
-3. task retry after transient provider failure;
-4. crash after provider send but before result persistence;
-5. disabled/preference-ineligible recipient at delivery time;
-6. scheduled campaign is discovered only once per intended schedule;
-7. order state persistence is not rolled back because notification delivery
-   fails.
+1. постановка только после коммита;
+2. один получатель/кампания захватывается двумя воркерами;
+3. повтор задачи после временной ошибки провайдера;
+4. падение после отправки провайдеру, но до записи результата;
+5. получатель, отключённый или отписавшийся к моменту доставки;
+6. запланированная кампания обнаруживается один раз на расписание;
+7. сохранение состояния заказа не откатывается из-за ошибки доставки
+   уведомления.

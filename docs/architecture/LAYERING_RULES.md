@@ -1,49 +1,52 @@
-# TableOS — Layering rules
+# Botera Shop — правила слоёв
 
-**Status:** target conventions.  The table also records the audited current
-placement so future changes can consolidate deliberately instead of applying a
-mechanical rename.
+**Статус:** целевые соглашения. Таблица также фиксирует текущее
+размещение по итогам аудита, чтобы будущие изменения объединяли слои
+осознанно, а не механическим переименованием.
 
-## Contract for each layer
+## Договорённость для каждого слоя
 
-| Layer | Permitted responsibility | Must not do |
+| Слой | Что можно | Чего нельзя |
 |---|---|---|
-| Model / migration | persistence shape, local validation, durable constraints | orchestrate Telegram, perform cross-module workflow, hide transactions in `save()` |
-| Application service | command/use-case orchestration, authorization context, transaction/lock boundary, invariant enforcement | render bot UI or silently accept unscoped foreign objects |
-| Selector | read-only, scoped queries and projections | mutate, send notifications, determine a state transition |
-| Repository | a reusable persistence boundary that is more than ORM aliases | become a second generic query API with no callers |
-| Policy | a named, stable authorization/capability decision | own database persistence or external I/O |
-| Rule / strategy | deterministic business calculation/eligibility | fetch arbitrary global state or mutate a foreign aggregate |
-| Engine | coordinate a genuinely complex algorithm with multiple rules | replace an ordinary owner service |
-| Task | deserialize durable work and invoke an idempotent service | hold a DB transaction across network I/O |
-| Bot/admin adapter | authenticate intent, validate UI payload, call service, render result | write state directly or duplicate domain rules |
+| Модель / миграция | форма хранения, локальная валидация, долговечные ограничения | управлять Telegram, вести межмодульный сценарий, прятать транзакции в `save()` |
+| Сервис приложения | оркестрация команды/сценария, контекст прав, граница транзакции и блокировок, соблюдение инвариантов | рисовать интерфейс бота или молча принимать чужие объекты без проверки партнёра |
+| Селектор | запросы и проекции только на чтение, с учётом партнёра | изменять данные, слать уведомления, решать переход состояния |
+| Репозиторий | переиспользуемая граница хранения, больше чем псевдонимы ORM | становиться вторым общим API запросов без потребителей |
+| Политика | именованное устойчивое решение о правах/возможностях | владеть хранением в базе или внешним вводом-выводом |
+| Правило / стратегия | детерминированный бизнес-расчёт или проверка допуска | читать произвольное глобальное состояние или менять чужой агрегат |
+| Движок | координировать действительно сложный алгоритм из нескольких правил | заменять обычный сервис-владелец |
+| Задача | разобрать долговечную работу и вызвать идемпотентный сервис | держать транзакцию базы во время сетевого ввода-вывода |
+| Адаптер бота/Admin | понять намерение, проверить данные интерфейса, вызвать сервис, показать результат | писать состояние напрямую или дублировать доменные правила |
 
-## Current placement audit
+## Текущее размещение
 
-| Area / files | Current role | Assessment | Safe target action |
+| Область / файлы | Роль сейчас | Оценка | Безопасное целевое действие |
 |---|---|---|---|
-| `apps/*/models.py` | Django models, choices, some `clean()` | Keep as aggregate data/local constraints; cross-tenant relations remain underconstrained. | Add only evidence-backed durable constraints and service guards in approved batches. |
-| `apps/orders/services.py`, `billing/services.py`, `tables/services.py`, `bonuses/services.py`, `notifications/services.py` | Primary use-case logic | Correct direction, but transaction/locking and owner boundaries are inconsistent. | Preserve public functions; characterize then harden each lifecycle seam. |
-| `apps/*/selectors.py` (employees, orders, bonuses, users) | read-only lookups with consumers | Every remaining selector has a caller; the unscoped ones were removed in B5 and `get_orders_for_session` requires `partner_id`. | Keep read-only and partner-scoped. |
-| `apps/*/repositories.py` (billing, bonuses, menu, notifications, orders) | query helpers with consumers | Zero-consumer repositories were removed in B5. | Add only with a real caller. |
-| `interfaces.py`, placeholder `tasks.py`, docstring-only `services.py` | — | Removed in B5 (no static or dynamic consumers; Celery registrations unchanged). | Recreate only with a documented consumer (ADR-0005). |
-| `apps/analytics/tasks.py`, `apps/notifications/tasks.py` | actual Celery tasks | Valid adapters. `notifications.services` reaches `tasks` only through function-local imports at enqueue time — accepted (B5): breaking it would move fan-out control into tasks for no runtime gain. | Preserve task names. |
-| `apps/bonuses/strategies.py` | bonus rule implementations | This is the repository's effective rule layer. | Name/document as rules or retain strategy naming consistently; make source/idempotency explicit. |
-| `policies.py`, `rules.py`, `engine.py` | no production modules found | Absence is not a defect. | Add only for a demonstrated policy/rule/algorithm seam. |
-| `bot/handlers`, keyboards, filters | adapter/presentation layer | Handles significant workflow branching and content matching. | Move invariant decisions into owner services; leave Telegram presentation here. |
-| `apps/*/admin.py`, forms | second UI/write boundary | Scoped reads are useful; direct lifecycle writes bypass services. | Restrict to readonly/protected fields and service-backed actions. |
+| `apps/*/models.py` | модели Django, choices, отдельные `clean()` | Данные агрегатов и локальные ограничения; связи между партнёрами ограничены недостаточно. | Добавлять только обоснованные долговечные ограничения и проверки в сервисах, в утверждённых батчах. |
+| `apps/orders/services.py`, `billing/services.py`, `tables/services.py`, `bonuses/services.py`, `notifications/services.py` | основная логика сценариев | Верное направление; границы владельцев и блокировки выровнены в B1–B4. | Сохранять публичные функции; сначала характеризовать, затем укреплять каждый шов жизненного цикла. |
+| `apps/billing/table_bills.py`, `apps/billing/remote_orders.py` | поведение каналов заказа (ADR-0009) | Стол и удалённые каналы с предоплатой отделены от ядра счёта. | Новый канал — в модуль своего семейства, не в ядро. |
+| `apps/*/selectors.py` (employees, orders, bonuses, users) | запросы на чтение с потребителями | У каждого оставшегося селектора есть вызывающий; селекторы без партнёра удалены в B5, `get_orders_for_session` требует `partner_id`. | Только чтение и обязательный партнёр. |
+| `apps/*/repositories.py` (billing, bonuses, menu, notifications, orders) | помощники запросов с потребителями | Репозитории без потребителей удалены в B5. | Добавлять только при реальном вызывающем. |
+| `interfaces.py`, заглушки `tasks.py`, `services.py` из одной строки документации | — | Удалены в B5 (нет статических и динамических потребителей; регистрации Celery не изменились). | Создавать заново только с задокументированным потребителем (ADR-0005). |
+| `apps/analytics/tasks.py`, `apps/notifications/tasks.py` | настоящие задачи Celery | Корректные адаптеры. `notifications.services` обращается к `tasks` только через импорты внутри функций в момент постановки — принято в B5: разрыв цикла перенёс бы управление рассылкой в задачи без выигрыша. | Сохранять имена задач. |
+| `apps/bonuses/strategies.py` | реализации бонусных правил | Фактический слой правил репозитория. | Называть и документировать как правила или последовательно держать имя «стратегия»; источник и идемпотентность — явные. |
+| `policies.py`, `rules.py`, `engine.py` | продакшен-модулей нет | Отсутствие — не дефект. | Добавлять только для доказанного шва политики/правила/алгоритма. |
+| `bot/handlers`, клавиатуры, фильтры | адаптер и представление | Содержат заметные развилки сценариев и сопоставление текстов. | Решения об инвариантах переносить в сервисы-владельцы; представление Telegram оставлять здесь. |
+| `apps/*/admin.py`, формы | второй интерфейс записи | Ограничение по партнёру полезно; прямые записи жизненного цикла обходят сервисы. | Поля только на чтение или защищённые, действия — через сервисы. |
 
-## Evidence standard before removal or relocation
+## Доказательства перед удалением или переносом
 
-A candidate is eligible for an approved cleanup only after all of the following
-are recorded in the change:
+Кандидат допускается к утверждённой чистке, только если в изменении
+записано всё следующее:
 
-1. static import/name search across first-party code;
-2. dynamic registration search (Django apps/admin, Celery autodiscovery,
-   aiogram router inclusion, signals, settings/import strings);
-3. public import/API compatibility check;
-4. focused characterization test or an explicit reason it is unnecessary; and
-5. a narrow rollback path.
+1. статический поиск импортов и имён по всему собственному коду;
+2. поиск динамических регистраций (приложения и Admin Django, autodiscovery
+   Celery, подключение роутеров aiogram, сигналы, строки импорта в
+   настройках);
+3. проверка совместимости публичных импортов и API;
+4. точечный характеризующий тест или явная причина, почему он не нужен;
+5. узкий путь отката.
 
-The audit found no evidence sufficient to delete a module today.  This is why
-the roadmap treats cleanup as a later, separately approved batch.
+На момент аудита доказательств для удаления модулей не было, поэтому чистка
+шла отдельным утверждённым батчем (B5), с такими доказательствами по
+каждому удалению.

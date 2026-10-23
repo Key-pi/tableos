@@ -1,94 +1,100 @@
-# TableOS — Module boundaries
+# Botera Shop — границы модулей
 
-**Status:** governance target for a modular monolith.  It does not authorize
-moving code during the audit phase.
+**Статус:** целевые правила модульного монолита. Сами по себе не разрешают
+переносить код.
 
-## Boundary rule
+## Правило границы
 
-Each business module owns its models, migrations, application services,
-selectors, and module-specific integration adapters.  A caller should express
-an intent through the owner module rather than write another module's model or
-reimplement its lifecycle.  Import compatibility stays in place until a
-separate approved migration has characterization tests and a deprecation plan.
+Каждый бизнес-модуль владеет своими моделями, миграциями, сервисами
+приложения, селекторами и собственными адаптерами интеграций. Вызывающий
+выражает намерение через модуль-владелец, а не пишет в чужую модель и не
+повторяет её жизненный цикл. Совместимость импортов сохраняется, пока
+отдельная утверждённая миграция не получит характеризующие тесты и план
+вывода из употребления.
 
-| Module | Owns | May coordinate with | Must not own |
+| Модуль | Владеет | Может координироваться с | Не должен владеть |
 |---|---|---|---|
-| `partners` | tenant lifecycle, bot settings, content configuration | users, employees, bot runtime | guest/order/bill lifecycle |
-| `users` | global Telegram identity and guest profile | tables, orders, bonuses | partner authorization policy |
-| `tables` | table inventory, QR token, session lifecycle | users, orders, bonuses | order status and payment settlement |
-| `menu` | category and item catalogue | orders, bot presentation | cart/order mutation |
-| `orders` | cart, order, order-item and order-state lifecycle | tables, menu, employees, notifications, billing | payment ledger and bonus wallet mutation |
-| `billing` | billing request, bill, allocation, payment, settlement orchestration | orders, tables, bonuses, notifications | menu catalogue or staff permission policy |
-| `bonuses` | programs, wallet ledger, reward/redemption rules, walk-in sale | users, billing, tables | bill state transitions |
-| `employees` | employee profile, role, preferences, staff eligibility | partners, notifications, orders | global Telegram identity mutation without a dedicated identity policy |
-| `notifications` | durable notifications, campaign lifecycle, delivery adapter/task | employees, orders, partners, tables, users | source-domain state changes |
-| `analytics` | read models, aggregations, reports | all modules via explicit read contracts | operational writes to foreign aggregates |
-| `bot` | Telegram handlers, DTO/keyboard presentation, routing | module services/selectors | business invariants or direct financial writes |
-| `core` | genuinely cross-cutting primitives only | all | domain-specific entities and cycles |
+| `partners` | жизненный цикл партнёра, настройки бота, контент, часы работы | users, employees, работа бота | жизненным циклом гостя, заказа, счёта |
+| `users` | глобальная Telegram-личность и профиль гостя | tables, orders, bonuses | политикой прав партнёра |
+| `tables` | столы, QR-токены, сессии и визиты стола | users, orders, bonuses | статусами заказов и расчётом оплаты |
+| `menu` | категории и позиции, каналы продажи позиций | orders, представление бота | изменением корзины и заказов |
+| `orders` | корзина, заказ, позиции заказа, статусы заказа, канал заказа | tables, menu, employees, notifications, billing | журналом оплат и изменением бонусного баланса |
+| `billing` | ядро счёта (счёт, распределение, оплата, изменения); счета стола (`table_bills.py`); удалённые заказы с предоплатой (`remote_orders.py`) | orders, tables, bonuses, notifications | каталогом меню и политикой прав персонала |
+| `bonuses` | программы, журнал бонусов, правила начисления и списания, быстрые продажи | users, billing, tables | переходами статусов счёта |
+| `employees` | профиль сотрудника, роль, настройки, допуск к работе | partners, notifications, orders | изменением глобальной Telegram-личности без отдельной политики |
+| `notifications` | долговечные уведомления, жизненный цикл рассылок, адаптер и задачи доставки | employees, orders, partners, tables, users | изменениями состояния в исходных доменах |
+| `analytics` | модели чтения, агрегаты, отчёты | все модули через явные договоры чтения | операционными записями в чужие агрегаты |
+| `bot` | обработчики Telegram, представление DTO и клавиатур, маршрутизация | сервисы и селекторы модулей | бизнес-инвариантами и прямыми денежными записями |
+| `core` | только действительно сквозные примитивы | все | доменными сущностями и циклами |
 
-## Cross-module contracts
+## Межмодульные договоры
 
-Until an explicit internal event mechanism is approved, a cross-module call is
-allowed only when it has a named owner service, a clear transaction boundary,
-and a partner/actor context.  This means a service signature should receive
-scoped domain objects or a trusted `partner_id`; it must never infer authority
-from arbitrary callback payload, global Telegram identity, or an unvalidated
-foreign key.
+Пока не утверждён явный внутренний механизм событий, межмодульный вызов
+допустим, только если у него есть именованный сервис-владелец, понятная
+граница транзакции и контекст партнёра/исполнителя. Сигнатура сервиса
+получает ограниченные партнёром доменные объекты или доверенный
+`partner_id`; она никогда не выводит права из произвольных данных
+callback, глобальной Telegram-личности или непроверенного внешнего ключа.
 
-Use explicit contracts for these recurring integrations:
+Явные договоры для повторяющихся интеграций:
 
-| Producer | Consumer | Contract direction | Current governance concern |
+| Производитель | Потребитель | Направление | Что важно |
 |---|---|---|---|
-| Orders | Notifications | accepted domain event after commit | Existing `on_commit` use is a useful baseline. |
-| Billing | Orders / Tables / Bonuses | settle bill and source-linked redemption | Needs serialized allocation/wallet rules. |
-| Tables | Bonuses | visit credit after a session is valid | Needs active-session invariant and idempotent source. |
-| Partners | Bot | runtime capability/configuration snapshot | Needs live suspension/capability semantics. |
-| Notifications | Telegram | durable delivery intent → worker | Needs transaction-free I/O and delivery idempotency. |
-| Analytics | all domains | read-only reporting projection | Avoid write-back into source aggregates. |
+| Orders | Notifications | доменное событие после коммита | `on_commit` — хорошая основа. |
+| Billing | Orders / Tables / Bonuses | расчёт счёта и списание с привязкой к источнику | Распределение и баланс сериализованы блокировками (B2–B3). |
+| Tables | Bonuses | начисление за визит после корректной сессии | Одна активная сессия на гостя и идемпотентный источник (B2). |
+| Partners | Bot | снимок возможностей и настроек | Живая проверка приостановки и прав (B1). |
+| Notifications | Telegram | долговечное намерение доставки → воркер | Ввод-вывод без транзакции, идемпотентная доставка (B4). |
+| Analytics | все домены | проекция только для отчётов | Без обратной записи в исходные агрегаты. |
 
-## Target allowed dependency direction
+## Целевое направление зависимостей
 
 ```mermaid
 flowchart TB
-  UI[Bot / Django Admin / HTTP] --> APP[Owner application services]
-  APP --> SEL[Selectors / repositories]
-  APP --> DOM[Models and local rules]
-  APP --> INT[Integration ports]
-  INT --> EXT[Telegram / Celery / external systems]
-  TASK[Celery task] --> APP
+  UI[Бот / Django Admin / HTTP] --> APP[Сервисы-владельцы]
+  APP --> SEL[Селекторы / репозитории]
+  APP --> DOM[Модели и локальные правила]
+  APP --> INT[Порты интеграций]
+  INT --> EXT[Telegram / Celery / внешние системы]
+  TASK[Задача Celery] --> APP
 ```
 
-Handlers, admin actions and tasks are adapters; they do not contain alternate
-implementations of lifecycle transitions.  Selectors are read-only.  A
-repository earns its existence only when it centralizes a meaningful persistence
-boundary, not merely wraps a one-line ORM query.  No generic shared domain
-service should be introduced merely to eliminate an import.
+Обработчики, действия Admin и задачи — адаптеры; в них нет альтернативных
+реализаций переходов жизненного цикла. Селекторы только читают.
+Репозиторий оправдан, только когда собирает значимую границу хранения, а не
+оборачивает однострочный запрос ORM. Общий доменный сервис не вводится
+только ради того, чтобы убрать импорт.
 
-## Stable seams for the first approved batches
+## Устойчивые швы
 
-1. **Tenant and actor guard seam.** A small shared helper may resolve a
-   trusted partner/actor, but ownership validation remains in the owner service.
-2. **Order state seam.** All order state writes pass through a locked owner
-   service; bot/admin translate user intent only.
-3. **Money seam.** Bill allocation, payment, and wallet changes pass through
-   owner services with a documented lock order and immutable ledger/source
-   linkage.
-4. **Notification seam.** Source modules create a durable post-commit delivery
-   intent; a worker performs Telegram I/O outside the originating transaction.
-5. **Admin seam.** Django Admin can view scoped data and invoke approved service
-   actions.  It cannot freely edit state-machine, ledger, allocation, or total
-   fields.
+1. **Партнёр и исполнитель.** Небольшой общий помощник может определить
+   доверенного партнёра и исполнителя, но проверка владения остаётся в
+   сервисе-владельце.
+2. **Статус заказа.** Все записи статуса заказа идут через сервис-владелец с
+   блокировкой; бот и Admin только передают намерение пользователя.
+3. **Деньги.** Распределение по счетам, оплаты и изменения бонусного баланса
+   идут через сервисы-владельцы с задокументированным порядком блокировок и
+   неизменяемым журналом с привязкой к источнику.
+4. **Уведомления.** Модули-источники создают долговечное намерение доставки
+   после коммита; воркер выполняет ввод-вывод Telegram вне исходной
+   транзакции.
+5. **Admin.** Django Admin показывает данные партнёра и вызывает
+   утверждённые действия сервисов. Свободно править поля статусов, журналов,
+   распределений и сумм в нём нельзя.
+6. **Каналы заказа (ADR-0009).** Одна модель заказа, счёта и оплаты; канал —
+   атрибут, поведение канала — модуль своего семейства.
 
-## Anti-corruption rules
+## Правила защиты от разрастания
 
-- Do not make `bot` a domain service layer; keep aiogram types out of domain
-  services.
-- Do not allow one module to update a foreign aggregate via `QuerySet.update()`.
-- Do not pass a bare object ID across a module boundary when a scoped lookup is
-  required.
-- Do not fold unrelated modules into a new `common`, `utils`, or `services`
-  package.
-- Do not assume admin scoping makes a lifecycle write safe; authorization and
-  invariant enforcement are separate responsibilities.
-- Do not create an event bus, outbox, CQRS subsystem, or repository hierarchy
-  before the approved roadmap batch establishes the narrower need.
+- Не делать `bot` доменным слоем; типы aiogram не попадают в доменные
+  сервисы.
+- Не позволять одному модулю обновлять чужой агрегат через
+  `QuerySet.update()`.
+- Не передавать через границу модуля голый идентификатор, где нужен поиск с
+  учётом партнёра.
+- Не сваливать несвязанные модули в новый пакет `common`, `utils` или
+  `services`.
+- Не считать, что ограничение Admin по партнёру делает запись жизненного
+  цикла безопасной: права и соблюдение инвариантов — разные обязанности.
+- Не создавать шину событий, outbox, подсистему CQRS или иерархию
+  репозиториев, пока утверждённый батч не обоснует более узкую потребность.

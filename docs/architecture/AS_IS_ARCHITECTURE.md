@@ -1,350 +1,374 @@
-# TableOS — Architecture as implemented
+# Botera Shop — архитектура как она есть
 
-**Status:** current implemented behaviour, verified against source at commit
-`ddb7dce` (branch `clean-project-rules`, after roadmap batches B0–B3) on
-2026-10-23 and updated for batch B3.1 the same day. This document describes what the code does today, not the intended
-design. The intended design is in
-[`TARGET_ARCHITECTURE.md`](TARGET_ARCHITECTURE.md); open defects are in
+**Статус:** поведение, которое реализовано сейчас, сверено с кодом ветки
+`clean-project-rules` 2026-10-23 после батчей B0–B5, самовывоза и
+упорядочивания каналов (ADR-0009). Документ описывает, что код делает
+сегодня, а не задуманный дизайн. Задуманный дизайн — в
+[`TARGET_ARCHITECTURE.md`](TARGET_ARCHITECTURE.md); открытые дефекты — в
 [`../audits/ARCHITECTURE_AUDIT.md`](../audits/ARCHITECTURE_AUDIT.md).
 
-**Reference convention:** code is cited as `path:symbol` rather than by line
-number, so that references survive ordinary edits. Line-numbered citations in
-the audit register refer to the audit baseline commit `b17ce5b` and are kept as
-historical evidence.
+**Ссылки на код:** в виде `path:symbol`, а не по номерам строк, чтобы ссылки
+переживали обычные правки. Ссылки с номерами строк в реестре аудита относятся
+к базовому коммиту аудита `b17ce5b` и сохранены как историческое
+доказательство.
 
-## System boundary and processes
+## Граница системы и процессы
 
-TableOS is a Django 5 modular monolith: one PostgreSQL database, Redis, an
-aiogram polling process and Celery workers. SQLite is available only as an
-explicit local mode (`DJANGO_USE_SQLITE=true`); its locking behaviour is not
-representative of PostgreSQL.
+Botera Shop (во внутренних именах — `tableos`) — модульный монолит на
+Django 5: одна база PostgreSQL, Redis, процесс polling aiogram и воркеры
+Celery. SQLite — только явный локальный режим (`DJANGO_USE_SQLITE=true`);
+его поведение блокировок не соответствует PostgreSQL.
 
 ```mermaid
 flowchart LR
-  TG[Telegram users] --> BOT[aiogram polling process]
-  BOT --> DJ[Django domain modules]
+  TG[Пользователи Telegram] --> BOT[процесс polling aiogram]
+  BOT --> DJ[доменные модули Django]
   ADMIN[Django Admin] --> DJ
   DJ --> PG[(PostgreSQL)]
-  DJ -->|on_commit .delay| REDIS[(Redis broker)]
+  DJ -->|on_commit .delay| REDIS[(брокер Redis)]
   BEAT[Celery beat] --> REDIS
-  REDIS --> CELERY[Celery worker]
+  REDIS --> CELERY[воркер Celery]
   CELERY --> DJ
   CELERY --> TG
 ```
 
-| Process | Entry point | Responsibility | Settings module by default |
+| Процесс | Точка входа | Ответственность | Модуль настроек по умолчанию |
 |---|---|---|---|
-| Django web/admin | `core/wsgi.py`, `core/asgi.py`, `core/urls.py` | Demo home page, `/admin/`, `/health/` | `core.settings.production` |
-| Management commands, `runserver` | `manage.py` | Migrations, seeds, `runbot`, `ensure_admin` | `core.settings.local` |
-| Telegram bot | `manage.py runbot` → `bot/main.py:run_polling` | Polls every active polling `BotInstance` in one process | `core.settings.local` (via `manage.py`) |
-| Celery worker | `celery -A core.celery worker` → `core/celery.py` | Staff/guest notifications, broadcasts, metric refresh | `core.settings.local` |
-| Celery beat | `celery -A core.celery beat` | `process-scheduled-broadcast-campaigns` (1 min), `refresh-daily-partner-metrics` (15 min) from `CELERY_BEAT_SCHEDULE` | `core.settings.local` |
-| PostgreSQL 16, Redis 7 | `docker-compose.yml` | Durable data; Celery broker and result backend | — |
+| Django web/Admin | `core/wsgi.py`, `core/asgi.py`, `core/urls.py` | демо-страница, `/admin/`, `/health/` | `core.settings.production` |
+| Management-команды, `runserver` | `manage.py` | миграции, наполнение демо-данными, `runbot`, `ensure_admin` | `core.settings.local` |
+| Telegram-бот | `manage.py runbot` → `bot/main.py:run_polling` | polling всех активных `BotInstance` в одном процессе | `core.settings.local` (через `manage.py`) |
+| Воркер Celery | `celery -A core.celery worker` → `core/celery.py` | уведомления персонала и гостей, рассылки, обновление метрик | `core.settings.local` |
+| Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `refresh-daily-partner-metrics` (15 мин) | `core.settings.local` |
+| PostgreSQL 16, Redis 7 | `docker-compose.yml` | долговечные данные; брокер и хранилище результатов Celery | — |
 
-`docker-compose.yml` declares only `db`, `redis`, `web` (Django `runserver`)
-and `worker`. It declares **no `runbot` and no `beat` service**, so a
-compose-only environment does not poll Telegram, does not send scheduled
-broadcasts and does not refresh daily metrics. There is no production web
-server, no CI configuration and no deployment manifest in the repository.
-Every non-web process falls back to `core.settings.local` (`DEBUG=True`)
-unless `DJANGO_SETTINGS_MODULE` is set explicitly.
+`docker-compose.yml` объявляет `db`, `redis`, `web` (Django `runserver`),
+`worker` (очереди `default,broadcasts`), `beat` и `bot` (`manage.py runbot`);
+`beat` и `bot` должны работать ровно в одном экземпляре. Продакшен-веб-сервера,
+CI и манифестов развёртывания в репозитории нет. Все процессы, кроме веба,
+по умолчанию берут `core.settings.local` (`DEBUG=True`), если
+`DJANGO_SETTINGS_MODULE` не задан явно.
 
-Queues: `default` and `broadcasts`; only
-`notifications.send_broadcast_campaign` is routed to `broadcasts`. Because
-`CELERY_TASK_QUEUES` is declared, a worker without `-Q` consumes both queues.
+Очереди: `default` и `broadcasts`; в `broadcasts` направляется только
+`notifications.send_broadcast_campaign`. Поскольку `CELERY_TASK_QUEUES`
+объявлены, воркер без `-Q` слушает обе очереди.
 
-## Application modules and ownership
+## Модули приложения и их зона
 
-Installed apps, in order: `unfold`, Django contrib, `bot`, then `partners`,
-`users`, `tables`, `menu`, `orders`, `billing`, `bonuses`, `employees`,
-`notifications`, `analytics`. `core` holds shared bases, Admin scoping, Celery,
-crypto, logging and settings.
+Установленные приложения по порядку: `unfold`, Django contrib, `bot`, затем
+`partners`, `users`, `tables`, `menu`, `orders`, `billing`, `bonuses`,
+`employees`, `notifications`, `analytics`. В `core` — общие базовые классы,
+ограничение Admin по партнёру, Celery, шифрование, логирование и настройки.
 
-| Area | Persisted concepts | Real orchestration | Notes |
+| Область | Хранимые понятия | Где реальная оркестрация | Примечания |
 |---|---|---|---|
-| Partners | `Partner`, `BotInstance`, `PartnerBotSettings` | model `clean()` (`Partner.clean` rejects unknown timezones), `BotInstance.set_token` | `PartnerBotSettings` holds module flags, button labels and message templates. Default timezone `Europe/Kyiv`. |
-| Users / identity | `User`, global `TelegramAccount`, partner `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile` | One Telegram identity → one guest profile per partner. |
-| Tables | `Table`, `TableSession` | `tables/services.py` | QR activation, settlement-gated close. `timed_out` and `expires_at` exist but nothing sets them. |
-| Menu | `MenuCategory`, `MenuItem` | `menu/repositories.py` reads; Admin writes | Price must be positive (`menu_item_price_positive`). |
-| Orders | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py`; remote prepaid channels in `billing/remote_orders.py` | Cart lifecycle, order creation by channel (table / pickup), status machine, guest receipt confirmation. |
-| Billing | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment` | `billing/services.py` | Bill creation/extension, payment, bonus payment, post-payment settlement. |
-| Bonuses | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Ledger-backed balance with reconciliation guard; quick sale. |
-| Employees | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | Writes go through Admin. |
-| Notifications | `NotificationPreference`, `StaffNotification`, `BroadcastCampaign` | `notifications/services.py`, `tasks.py` | All Telegram sending lives here. |
-| Analytics | `PartnerDailyMetric` | `analytics/services.py` | On-demand day report for staff; 15-minute snapshot task. |
+| Партнёры | `Partner`, `BotInstance`, `PartnerBotSettings`, `OpeningHours` | `clean()` моделей (`Partner.clean` отклоняет неизвестные часовые пояса), `BotInstance.set_token`, `partners/opening_hours.py` | `PartnerBotSettings` хранит флаги модулей, подписи кнопок, шаблоны сообщений и реквизиты для перевода. Часовой пояс по умолчанию `Europe/Kyiv`. Часы работы поддерживают интервалы через полночь. |
+| Пользователи и личность | `User`, глобальный `TelegramAccount`, партнёрский `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile` | Одна Telegram-личность → один профиль гостя на партнёра. Телефон гостя хранится в профиле. |
+| Столы | `Table`, `TableSession`, `TableVisit` | `tables/services.py` | Активация по QR, визиты стола, закрытие только после расчёта. `timed_out` и `expires_at` есть, но ничто их не выставляет. |
+| Меню | `MenuCategory`, `MenuItem` | чтение — `menu/repositories.py`; запись — Admin | Цена должна быть положительной (`menu_item_price_positive`). Отметки каналов: `available_at_table`, `available_for_pickup`, `available_for_delivery`; `MenuItem.is_sold_in(channel)`. |
+| Заказы | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py`; удалённые каналы с предоплатой — в `billing/remote_orders.py` | Корзина, создание заказа по каналу (стол / самовывоз), машина статусов, подтверждение получения гостем. `Order.channel`, `Order.requested_for`, `Order.PREPAID_CHANNELS`. |
+| Счета | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment`, `BillAdjustment` | ядро — `billing/services.py`; стол — `billing/table_bills.py`; удалённые каналы — `billing/remote_orders.py` | Создание и расширение счёта, оплата деньгами и бонусами, изменения и аннулирование, действия после оплаты. |
+| Бонусы | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Баланс на основе журнала с проверкой сверки; быстрая продажа. |
+| Сотрудники | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | Запись — через Admin. |
+| Уведомления | `NotificationPreference`, `StaffNotification`, `BroadcastCampaign`, `BroadcastDelivery` | `notifications/services.py`, `tasks.py` | Вся отправка в Telegram — здесь. |
+| Аналитика | `PartnerDailyMetric` | `analytics/services.py` | Отчёт за день для персонала по запросу (с разбивкой по каналам заказа); снимок раз в 15 минут. |
 
-### Actual import dependencies
+### Фактические зависимости импорта
 
-The target allows `tables → users` only and forbids `core → apps`. The code
-today has these direct dependencies (production modules, excluding tests):
+Целевая схема разрешает только `tables → users` и запрещает `core → apps`.
+Сейчас в коде такие прямые зависимости (продакшен-модули без тестов и
+миграций, включая импорты внутри функций):
 
 ```text
-bot           -> every domain app
+bot           -> все доменные приложения
 analytics     -> billing, bonuses, orders, partners, tables, users
-billing       -> bonuses, notifications, orders, partners, tables, users
-orders        -> employees, menu, notifications, tables, users
-tables        -> billing, bonuses, orders, users
+billing       -> bonuses, employees, notifications, orders, partners, tables, users
+orders        -> billing, employees, menu, notifications, partners, tables, users
+tables        -> billing, bonuses, notifications, orders, users
 notifications -> employees, orders, partners, tables, users
-bonuses       -> menu, orders, users
+bonuses       -> menu, orders, partners, users
+partners      -> bonuses, employees, menu, tables, users (Admin и наполнение демо-данными)
+menu          -> users
+employees     -> users
 core          -> partners, users (core/admin_mixins.py); orders, partners, tables (core/urls.py)
 ```
 
-`apps.notifications.services ↔ apps.notifications.tasks` is a cycle broken
-only by function-local imports; accepted in B5. `core → apps` remains in two
-adapters: `core/admin_mixins.py` (Admin scoping needs the tenancy models) and
-`core/urls.py` (the demo root page, which outside `DEBUG` returns only `ok`
-and discloses no counts). Both are accepted adapter exceptions (AA-031).
+В `billing` зависимость от `tables` есть только у `table_bills.py`; ядро
+`billing/services.py` вызывает его единственным импортом внутри функции
+после оплаты (ADR-0009). `apps.notifications.services ↔
+apps.notifications.tasks` — цикл, разорванный только импортами внутри
+функций; принят в B5. `core → apps` остаётся в двух адаптерах:
+`core/admin_mixins.py` (ограничению Admin нужны модели партнёров) и
+`core/urls.py` (демо-страница, которая вне `DEBUG` отвечает только `ok` и не
+раскрывает счётчики). Оба — принятые исключения-адаптеры (AA-031).
 
-## Runtime and bot routing
+## Работа бота и маршрутизация
 
-`bot/main.py:create_dispatcher` registers `PartnerRuntimeMiddleware` as an
-outer update middleware and then includes routers in this order: `start`,
-`session`, `menu`, `order`, `pickup`, `profile`, `billing`, `guest_call`,
-`staff`.
-aiogram stops at the first matching handler, so this order is behaviour.
+`bot/main.py:create_dispatcher` регистрирует `PartnerRuntimeMiddleware` как
+внешний middleware обновлений и подключает роутеры в порядке `start`,
+`session`, `menu`, `order`, `remote_checkout`, `profile`, `billing`,
+`guest_call`, `staff`. aiogram останавливается на первом подходящем
+обработчике, поэтому порядок — это поведение.
 
-1. `bot/services/runtime.py:load_active_bot_configs` runs once at `runbot`
-   start. It refuses to start if any active `BotInstance` belongs to a
-   non-active partner, uses webhook mode, has an undecryptable, placeholder,
-   malformed or duplicated token. It builds a token → `BotRuntimeConfig` map.
-2. For **every update**, `bot/middlewares/partner_runtime.py` calls
-   `bot/services/context.py:resolve_partner_for_bot_token`, which reloads the
-   `BotInstance` and `Partner`. A disabled bot instance drops the update
-   silently; a suspended partner receives
-   `Работа бота приостановлена, ожидайте обновлений.` (message or callback
-   alert). The polling connection itself stays open until the process restarts.
-3. Handlers call `resolve_partner_for_bot_token` again and build
-   `bot/services/content.py:BotContent` from `PartnerBotSettings`.
-4. Reply-keyboard actions are matched by exact text through
-   `bot/filters/content.py:PartnerButtonFilter`; each filter evaluation reloads
-   the partner and its content. `PartnerBotSettings.clean` rejects empty or
-   duplicate routed labels.
-5. Staff handlers resolve the actor through
+1. `bot/services/runtime.py:load_active_bot_configs` выполняется один раз при
+   старте `runbot`. Процесс не запускается, если хоть один активный
+   `BotInstance` принадлежит неактивному партнёру, работает в режиме webhook
+   или имеет нерасшифровываемый, шаблонный, некорректный или повторяющийся
+   токен. Строится карта токен → `BotRuntimeConfig`.
+2. На **каждое обновление** `bot/middlewares/partner_runtime.py` вызывает
+   `bot/services/context.py:resolve_partner_for_bot_token`, который заново
+   загружает `BotInstance` и `Partner`. Обновление отключённого экземпляра
+   бота молча отбрасывается; приостановленный партнёр получает
+   `Работа бота приостановлена, ожидайте обновлений.` (сообщением или
+   всплывающим ответом на callback). Само соединение polling остаётся
+   открытым до перезапуска процесса.
+3. Обработчики снова вызывают `resolve_partner_for_bot_token` и строят
+   `bot/services/content.py:BotContent` из `PartnerBotSettings`.
+4. Действия reply-клавиатуры сопоставляются по точному тексту через
+   `bot/filters/content.py:PartnerButtonFilter`; каждая проверка фильтра
+   заново загружает партнёра и его тексты. `PartnerBotSettings.clean`
+   отклоняет пустые и повторяющиеся подписи с маршрутизацией.
+5. Обработчики персонала определяют исполнителя через
    `bot/handlers/staff.py:_resolve_staff_employee_by_telegram_id` →
-   `employees/selectors.py:get_staff_employee_by_telegram`, which requires an
-   active `EmployeeProfile`, an active `User`, and `User.partner` equal to the
-   bot partner. Every staff callback resolves the actor again and checks the
-   relevant capability (`_can_manage_billing`, `_can_view_tables`,
-   `_ensure_open_orders_allowed`, `_ensure_quick_sale_allowed`). Capabilities
-   combine `User.role` with the partner's module flags.
+   `employees/selectors.py:get_staff_employee_by_telegram`, что требует
+   активного `EmployeeProfile`, активного `User` и `User.partner`, равного
+   партнёру бота. Каждый callback персонала заново определяет исполнителя и
+   проверяет нужное право (`_can_manage_billing`, `_can_view_tables`,
+   `_ensure_open_orders_allowed`, `_ensure_quick_sale_allowed`). Права
+   сочетают `User.role` с флагами модулей партнёра.
 
-All bot messages are sent with `ParseMode.HTML` (default bot properties in
-`bot/main.py` and `notifications/services.py:_send_telegram_messages`). Since
-B3.1, free-text values (venue, menu, guest, staff, comments, labels) are
-escaped with `bot/utils/html.py:escape_html` in the bot and
-`notifications/services.py:_escape_html` in notifications; partner templates
-are trusted markup with escaped substituted values; broadcast text is sent as
-partner-authored markup.
+Все сообщения бота отправляются в `ParseMode.HTML` (свойства бота по
+умолчанию в `bot/main.py` и `notifications/services.py:_send_telegram_messages`).
+С B3.1 значения свободного текста (заведение, меню, гость, сотрудник,
+комментарии, подписи) экранируются через `bot/utils/html.py:escape_html` в
+боте и `notifications/services.py:_escape_html` в уведомлениях; шаблоны
+партнёра — доверенная разметка с экранированными подставляемыми значениями;
+текст рассылки отправляется как разметка, написанная партнёром.
 
-## Key domain flows
+## Основные сценарии домена
 
-### Guest session, menu, cart and order
+### Сессия гостя, меню, корзина и заказ
 
-1. `/start table_<number>_<token>` → `tables/services.py:activate_table_session`
-   (bot: `visit_choice="ask"`). Every session belongs to a **table visit**
-   (`TableVisit`, ADR-0007): one party at a table; a table may have several
-   active visits. If another party with a seated guest is at the table, the
-   bot asks "Подсесть к компании (с HH:MM, гостей: N)" or "Начать новый
-   визит" (`tv:j:<visit>` / `tv:n:<table>` callbacks, hex UUIDs); a guest who
-   already sits in an active visit of the table stays in it. Service callers
-   default to `auto` (join the party at the table, else start one). Starting
-   a visit while another one of the table is open notifies staff
-   (`StaffNotification` category `table_visit`). Activation locks
-   `GuestProfile → Table → guest's own sessions → TableVisit`, closes the
-   guest's previous active session in the partner **regardless of unpaid
-   orders** (PQ-007), creates the new session and applies `VISIT` bonus
-   programmes with idempotency key `table_session:<id>:program:<id>`. The
-   partial unique constraint `unique_active_table_session_per_partner_guest`
-   guarantees one active session per guest and partner. A visit closes by
-   itself when nobody sits in it and it is settled (no unpaid orders, no open
-   bill); `close_table_visit` is the staff command.
-2. Cart commands in `orders/services.py` lock the guest's active `Cart`.
-   The guest chooses the flow first: a table QR scan or the «Самовывоз»
-   button sets `Cart.channel` (`switch_cart_channel_for_telegram_user`,
-   which removes items not sold in that flow — `MenuItem.available_at_table`
-   / `available_for_pickup`); the menu shows only items of the cart's flow
-   and checkout follows it. A table cart belongs to the session: one with
-   items of an older session is abandoned, an empty one is moved; a table
-   cart whose guest left becomes a pickup cart. A pickup cart never ties to
-   a session. Without a session a cart exists only when the venue offers
-   pickup. `unique_active_cart_per_partner_guest` allows one active cart per
-   guest and partner.
-3. Checkout → `create_order`, which validates that guest, table, session and
-   every menu item belong to the partner, snapshots item names and the prices
-   stored in the cart, writes `OrderStatusHistory` and creates
-   `StaffNotification` rows dispatched with `transaction.on_commit`.
-   Availability of menu items is checked when items are added to the cart,
-   not again at checkout.
-4. Staff status changes use `transition_order_status`, which reloads the order
-   with `select_for_update()` and validates against `ORDER_STATUS_TRANSITIONS`:
-   `new → accepted|canceled`, `accepted → preparing|ready|canceled`,
-   `preparing → ready|canceled`, `ready → delivering|completed|canceled`,
-   `delivering → completed|canceled`. Completion sets `received_at`.
-5. **Pickup** (`Order.channel = pickup`, [PICKUP.md](PICKUP.md)): checkout
-   of a pickup cart runs
-   `apps/billing/remote_orders.py:place_remote_order` — phone required, only within
-   `OpeningHours`, a personal bill issued at once, optional bonuses; the
-   guest prepays by transfer to `PartnerBotSettings.transfer_payment_details`.
-   Staff (owner/manager/cashier) confirm (`transfer` payment, `accepted`) or
-   reject (bill voided with `payment_not_received`, bonuses returned,
-   `canceled`); an unpaid pickup order cannot be accepted otherwise.
-6. Guest receipt confirmation (`confirm_order_received_by_guest`) locks the
-   order and moves it to `completed` from any status in
-   `GUEST_RECEIPT_CONFIRMABLE_STATUSES` (every non-final status, including
-   `new`; owner decision PQ-029). This is the only guest-initiated transition;
-   history records it as a guest action.
+1. `/start table_<номер>_<токен>` → `tables/services.py:activate_table_session`
+   (в боте `visit_choice="ask"`). Каждая сессия принадлежит **визиту стола**
+   (`TableVisit`, ADR-0007): одна компания за столом; у стола может быть
+   несколько активных визитов. Если за столом уже есть другая компания с
+   сидящим гостем, бот спрашивает «Подсесть к компании (с HH:MM, гостей: N)»
+   или «Начать новый визит» (callback-и `tv:j:<визит>` / `tv:n:<стол>`, UUID
+   в hex); гость, уже сидящий в активном визите стола, остаётся в нём.
+   Вызовы сервиса по умолчанию используют `auto` (подсесть к компании за
+   столом, иначе начать новую). Начало визита, пока открыт другой визит
+   стола, уведомляет персонал (`StaffNotification` категории `table_visit`).
+   Активация блокирует `GuestProfile → Table → свои сессии гостя →
+   TableVisit`, закрывает предыдущую активную сессию гостя у партнёра
+   **независимо от неоплаченных заказов** (PQ-007), создаёт новую сессию и
+   применяет бонусные программы `VISIT` с ключом идемпотентности
+   `table_session:<id>:program:<id>`. Частичное уникальное ограничение
+   `unique_active_table_session_per_partner_guest` гарантирует одну активную
+   сессию на гостя и партнёра. Визит закрывается сам, когда в нём никто не
+   сидит и он рассчитан (нет неоплаченных заказов и открытого счёта);
+   `close_table_visit` — команда персонала.
+2. Команды корзины в `orders/services.py` блокируют активную `Cart` гостя.
+   Сначала гость выбирает способ заказа: скан QR стола или кнопка
+   «Самовывоз» задают `Cart.channel` (`switch_cart_channel_for_telegram_user`
+   убирает позиции, которые в этом способе не продаются —
+   `MenuItem.available_at_table` / `available_for_pickup`); меню показывает
+   только позиции способа корзины, и оформление идёт по нему. Корзина стола
+   принадлежит сессии: корзина с позициями старой сессии забрасывается,
+   пустая переносится; корзина стола, чей гость ушёл, становится корзиной
+   самовывоза. Корзина самовывоза к сессии не привязывается. Без сессии
+   корзина существует, только если заведение предлагает самовывоз.
+   `unique_active_cart_per_partner_guest` допускает одну активную корзину на
+   гостя и партнёра.
+3. Оформление → `create_order`: проверяет, что гость, стол, сессия и каждая
+   позиция меню принадлежат партнёру, фиксирует названия позиций и цены из
+   корзины, пишет `OrderStatusHistory` и создаёт строки `StaffNotification`,
+   которые отправляются через `transaction.on_commit`. Доступность позиций
+   меню проверяется при добавлении в корзину, а не повторно при оформлении.
+4. Смена статуса персоналом идёт через `transition_order_status`: заказ
+   заново загружается с `select_for_update()` и проверяется по
+   `ORDER_STATUS_TRANSITIONS`: `new → accepted|canceled`,
+   `accepted → preparing|ready|canceled`, `preparing → ready|canceled`,
+   `ready → delivering|completed|canceled`, `delivering → completed|canceled`.
+   Завершение выставляет `received_at`.
+5. **Самовывоз** (`Order.channel = pickup`, [PICKUP.md](PICKUP.md)):
+   оформление корзины самовывоза выполняет
+   `apps/billing/remote_orders.py:place_remote_order` — телефон обязателен,
+   только в часы работы (`OpeningHours`), личный счёт выставляется сразу,
+   бонусы по желанию; гость платит заранее переводом на
+   `PartnerBotSettings.transfer_payment_details`. Персонал (владелец,
+   менеджер, кассир) подтверждает (оплата `transfer`, статус `accepted`) или
+   отклоняет (счёт аннулируется с причиной `payment_not_received`, бонусы
+   возвращаются, статус `canceled`); неоплаченный заказ самовывоза иначе
+   принять нельзя.
+6. Подтверждение получения гостем (`confirm_order_received_by_guest`)
+   блокирует заказ и переводит его в `completed` из любого статуса из
+   `GUEST_RECEIPT_CONFIRMABLE_STATUSES` (все нефинальные, включая `new`;
+   решение владельца PQ-029). Это единственный переход по инициативе гостя;
+   история записывает его как действие гостя.
 
-### Billing and settlement
+### Счета и расчёт
 
-Billing is split by channel (ADR-0009): the channel-agnostic core is
-`apps/billing/services.py` (bills from orders, payments, bonuses, bill
-changes, void); the table channel's settlement is
-`apps/billing/table_bills.py` (visit selection, table bills, guest bill
-requests, the table follow-up of a paid bill); remote prepaid channels are
-`apps/billing/remote_orders.py`. The core does not import `apps.tables`.
+Счета разделены по каналам (ADR-0009): ядро, не знающее каналов, —
+`apps/billing/services.py` (счета из заказов, оплаты, бонусы, изменения,
+аннулирование); расчёт канала «стол» — `apps/billing/table_bills.py` (выбор
+визита, счета стола, запросы счёта гостем, действия после оплаты счёта
+стола); удалённые каналы с предоплатой — `apps/billing/remote_orders.py`.
+Ядро не импортирует `apps.tables`.
 
-1. A guest billing request (`create_billing_request_for_telegram_user`)
-   either prepares a draft personal/shared bill (`auto_prepared`) or records a
-   custom-split request (`open`) for staff. Staff can also build shared or
-   personal bills per table from the bot or Admin.
-2. Eligible orders are selected **by table visit** (since B3.2 part B):
-   `get_table_billable_orders(visit_id=…)` returns the unbilled, not cancelled
-   orders of that visit (`visit_id=None`: legacy orders without a visit).
-   `create_bill_from_orders` rejects orders of different visits and stores
-   `Bill.visit`; `attach_orders_to_bill` accepts only orders of the bill's
-   visit. Guest requests use the guest's visit; staff/Admin table bills use an
-   explicit visit or the table's single active visit
-   (`resolve_table_visit_for_billing`; several active visits → staff picks).
-   The guest "request bill" button follows the guest's visit.
-3. `create_bill_from_orders` locks `Order → OrderItem`; `attach_orders_to_bill`
-   locks `Bill → OrderItem`. `BillItem.unique_active_order_item_bill_allocation`
-   allows one **active** allocation per `OrderItem`. Since B3.2 part A,
-   staff with the owner-granted permission (or the owner) can remove lines
-   (`remove_bill_lines`), void a bill without money payments (`void_bill`,
-   which returns applied bonuses as a `reversal` ledger credit and reopens its
-   requests) and cancel a billed order (`cancel_order`). Removed lines stay
-   inactive for history; every change is a `BillAdjustment`. A bill with
-   applied bonuses can only be voided; totals never drop below money paid;
-   orders in paid bills cannot be cancelled.
-   Bill creation locks orders with `select_for_update(of=("self",))`, because
-   PostgreSQL rejects `FOR UPDATE` on the nullable `table` join (AA-033).
-4. `record_payment` locks the bill, rejects bonus method, non-positive and
-   over-remaining amounts, then sets `partially_paid` or `paid`.
-   `pay_bill_with_bonuses` locks `Bill → Order → GuestProfile`, checks
-   ledger/balance reconciliation, applies the partner cap at 1 bonus = 1 UAH
-   and writes a `bonuses` payment only when the bill is fully covered.
-   `Bill.paid_amount` counts money payments only.
-5. When a bill becomes `paid`, `_process_post_payment_updates`, still inside
-   the payment transaction: locks the bill's orders, completes `ready` and
-   `delivering` orders, sets `paid_at`, accrues `ORDER_COMPLETED` programmes
-   once per order (key `order_paid:<order_id>:program:<id>`), marks the bill's
-   billing requests processed and, if
-   `PartnerBotSettings.auto_close_table_session_after_payment` is on, runs
-   `table_bills.after_table_bill_paid` → `_close_settled_sessions_of_bill`: only sessions that own orders of this
-   bill are candidates; a fully settled candidate has its pending requests
-   marked processed and is closed; any other session stays open. This step
-   never raises into the payment (PQ-027, fixed in B3.1).
+1. Запрос счёта гостем (`create_billing_request_for_telegram_user`) либо
+   готовит черновик личного или общего счёта (`auto_prepared`), либо
+   записывает запрос на особое деление (`open`) для персонала. Персонал
+   также может собрать общий или личные счета по столу из бота или Admin.
+2. Подходящие заказы выбираются **по визиту стола** (с B3.2 часть B):
+   `get_table_billable_orders(visit_id=…)` возвращает невыставленные и
+   неотменённые заказы этого визита (`visit_id=None` — старые заказы без
+   визита). `create_bill_from_orders` отклоняет заказы разных визитов и
+   сохраняет `Bill.visit`; `attach_orders_to_bill` принимает только заказы
+   визита счёта. Запросы гостя используют визит гостя; счета стола от
+   персонала и Admin — явный визит или единственный активный визит стола
+   (`resolve_table_visit_for_billing`; при нескольких активных визитах выбирает
+   персонал). Кнопка гостя «Запросить счёт» следует за визитом гостя.
+3. `create_bill_from_orders` блокирует `Order → OrderItem`;
+   `attach_orders_to_bill` — `Bill → OrderItem`.
+   `BillItem.unique_active_order_item_bill_allocation` допускает одно
+   **активное** распределение на `OrderItem`. С B3.2 часть A сотрудник с
+   правом от владельца (или сам владелец) может убирать строки
+   (`remove_bill_lines`), аннулировать счёт без денежных оплат (`void_bill`,
+   применённые бонусы возвращаются записью журнала `reversal`, запросы
+   счёта открываются снова) и отменять заказ в счёте (`cancel_order`).
+   Убранные строки остаются неактивными для истории; каждое изменение —
+   `BillAdjustment`. Счёт с применёнными бонусами можно только аннулировать;
+   итог никогда не ниже оплаченного деньгами; заказы в оплаченных счетах
+   отменить нельзя. Создание счёта блокирует заказы через
+   `select_for_update(of=("self",))`, потому что PostgreSQL отклоняет
+   `FOR UPDATE` по nullable-join `table` (AA-033).
+4. `record_payment` блокирует счёт, отклоняет способ «бонусы»,
+   неположительные суммы и суммы больше остатка, затем ставит
+   `partially_paid` или `paid`. `pay_bill_with_bonuses` блокирует
+   `Bill → Order → GuestProfile`, проверяет сверку журнала и баланса,
+   применяет лимит партнёра при курсе 1 бонус = 1 грн и пишет оплату
+   `bonuses`, только когда счёт покрыт полностью. `Bill.paid_amount` учитывает
+   только денежные оплаты.
+5. Когда счёт становится `paid`, `_process_post_payment_updates` ещё внутри
+   транзакции оплаты: блокирует заказы счёта, завершает заказы в `ready` и
+   `delivering`, выставляет `paid_at`, начисляет программы `ORDER_COMPLETED`
+   один раз на заказ (ключ `order_paid:<order_id>:program:<id>`), отмечает
+   запросы счёта обработанными и, если включено
+   `PartnerBotSettings.auto_close_table_session_after_payment`, вызывает
+   `table_bills.after_table_bill_paid` → `_close_settled_sessions_of_bill`:
+   кандидаты — только сессии, которым принадлежат заказы этого счёта;
+   у полностью рассчитанного кандидата ожидающие запросы отмечаются
+   обработанными, и он закрывается; остальные сессии остаются открытыми.
+   Этот шаг никогда не бросает исключение в оплату (PQ-027, исправлено в
+   B3.1).
 
-Effective lock order of the payment path:
-`Bill → Order → GuestProfile → BillingRequest → TableSession`. Bill changes:
-`Bill → BillItem → GuestProfile → Order`.
+Фактический порядок блокировок оплаты:
+`Bill → Order → GuestProfile → BillingRequest → TableSession → TableVisit`.
+Изменение счёта: `Bill → BillItem → GuestProfile → Order`.
 
-### Loyalty and quick sale
+### Лояльность и быстрая продажа
 
-`GuestProfile.loyalty_balance` is a cached projection of the immutable
-`BonusTransaction` ledger. Every mutation locks the guest row, refuses to act if
-the cached balance differs from the ledger (`assert_bonus_balance_reconciled`)
-and then resynchronises it. Source-linked idempotency keys are unique per
-partner. Quick sale (`register_walk_in_sale*`) requires a positive amount,
-optionally redeems bonuses before accrual and accrues `MANUAL_PURCHASE`
-programmes. Cashback programmes have an accrual base
-(`BonusProgram.accrual_base`, PQ-030): `full_total` (default) accrues on the
-whole purchase; `money_paid` subtracts the bonus-paid part — for a quick sale
-its `bonus_spent_amount`, for a paid order its share of the bill's bonuses
-(`apps/billing/services.py:_bill_bonus_share_by_order`, proportional to its
-lines in the bill, remainder on the last order). The minimum order total is
-compared with the full total. `expires_at` is written on accruals but nothing
-expires bonuses.
-The management command `apply_manual_purchase_bonus` accrues without a source
-key, so re-running it accrues again.
+`GuestProfile.loyalty_balance` — кэшированная проекция неизменяемого журнала
+`BonusTransaction`. Каждое изменение блокирует строку гостя, отказывает, если
+кэшированный баланс расходится с журналом (`assert_bonus_balance_reconciled`),
+и затем синхронизирует его. Ключи идемпотентности с привязкой к источнику
+уникальны в пределах партнёра. Быстрая продажа (`register_walk_in_sale*`)
+требует положительной суммы, по желанию списывает бонусы до начисления и
+начисляет программы `MANUAL_PURCHASE`. У программ кешбэка есть база
+начисления (`BonusProgram.accrual_base`, PQ-030): `full_total` (по умолчанию)
+— со всей покупки; `money_paid` — за вычетом части, оплаченной бонусами: для
+быстрой продажи её `bonus_spent_amount`, для оплаченного заказа — его доля
+бонусов счёта (`apps/billing/services.py:_bill_bonus_share_by_order`,
+пропорционально его строкам в счёте, остаток — последнему заказу).
+Минимальная сумма заказа сравнивается с полным итогом. `expires_at`
+записывается при начислении, но бонусы ничто не сжигает. Management-команда
+`apply_manual_purchase_bonus` начисляет без ключа источника, поэтому
+повторный запуск начисляет снова.
 
-### Notifications and broadcasts
+### Уведомления и рассылки
 
-- Delivery contract (ADR-0008, B4): no Telegram call runs inside a database
-  transaction. Staff notifications and guest order-status updates are queued
-  with `transaction.on_commit` and delivered **at least once**: transient
-  Telegram failures raise `RetryableDeliveryError` and the task retries
-  (`acks_late`); a staff notification already `sent` is skipped, and an
-  inactive or opted-out employee/user gets nothing.
-- Guest calls (`request_staff_assistance`) target roles by `User.role` and use
-  a check-then-create cooldown on recent notifications for the same table.
-- Broadcasts are delivered **at most once** per guest and campaign:
-  `send_broadcast_campaign` locks the campaign, marks it `scheduled` and
-  enqueues it after commit. The task records the audience as
-  `BroadcastDelivery` rows, claims a batch (`pending → sending`, skip-locked),
-  rechecks eligibility (opted out/blocked → `skipped`), sends with no
-  transaction open and stores each outcome (`sent`, `failed`, or `unknown`
-  for ambiguous network/server errors), then queues the next batch or
-  finalizes. `recover_stalled_broadcast_campaigns` (beat) turns claims older
-  than 30 minutes into `unknown` and resumes or finalizes stalled campaigns.
-  Counters come from the delivery rows.
+- Договор доставки (ADR-0008, B4): ни один вызов Telegram не выполняется
+  внутри транзакции базы. Уведомления персонала и обновления статуса заказа
+  для гостя ставятся через `transaction.on_commit` и доставляются **хотя бы
+  один раз**: временные ошибки Telegram выбрасывают `RetryableDeliveryError`,
+  и задача повторяется (`acks_late`); уже `sent` уведомление персонала
+  пропускается, а неактивный или отписавшийся сотрудник/пользователь ничего
+  не получает.
+- Вызовы персонала гостем (`request_staff_assistance`) адресуются ролям по
+  `User.role` и используют паузу «проверить, затем создать» по недавним
+  уведомлениям того же стола.
+- Рассылки доставляются **не больше одного раза** на гостя и кампанию:
+  `send_broadcast_campaign` блокирует кампанию, ставит её в `scheduled` и
+  ставит задачу после коммита. Задача записывает аудиторию строками
+  `BroadcastDelivery`, захватывает пачку (`pending → sending`, skip-locked),
+  заново проверяет допуск (отписан/заблокировал → `skipped`), отправляет без
+  открытой транзакции и сохраняет каждый итог (`sent`, `failed` или
+  `unknown` при неоднозначной ошибке сети или сервера), затем ставит
+  следующую пачку или завершает кампанию.
+  `recover_stalled_broadcast_campaigns` (beat) переводит захваты старше
+  30 минут в `unknown` и продолжает или завершает зависшие кампании.
+  Счётчики считаются по строкам доставки.
 
-## Data ownership, tenancy and authorization
+## Владение данными, партнёры и права
 
-Most domain models inherit `core/database/models.py:PartnerBoundModel`, which
-adds only a `partner` foreign key. No database rule ties related rows to the
-same partner (AA-002, PQ-020). Application-level checks exist in
-`create_order`, the bonus services, billing locks scoped by `partner_id`, and
-the bot's partner-derived lookups.
+Большинство доменных моделей наследуют
+`core/database/models.py:PartnerBoundModel`, который добавляет только внешний
+ключ `partner`. Правила базы, связывающего связанные строки с одним
+партнёром, нет (AA-002, PQ-020). Проверки на уровне приложения есть в
+`create_order`, сервисах бонусов, блокировках счетов в пределах `partner_id`
+и в поиске объектов ботом через партнёра.
 
-`core/admin_mixins.py:ScopedAdminMixin` scopes changelists, object
-permissions, foreign-key/M2M choices and inline saves by the user's
-`AdminAccessProfile.partner`, hides the `partner` list filter and `partner`
-field from tenant users, and maps Admin sections to CRUD/sensitive
-permissions. Superusers bypass scoping. Since B3.1 the tenant `UserAdmin`
-excludes superusers and `OrderAdmin` keeps `guest`, `table` and
-`table_session` read-only.
+`core/admin_mixins.py:ScopedAdminMixin` ограничивает списки, права на
+объекты, выбор FK/M2M и сохранение inline по `AdminAccessProfile.partner`
+пользователя, прячет фильтр списка и поле `partner` от пользователей
+арендатора и сопоставляет разделы Admin с правами CRUD и чувствительными
+правами. Суперпользователь не ограничивается. С B3.1 `UserAdmin` арендатора
+не показывает суперпользователей, а в `OrderAdmin` поля `guest`, `table` и
+`table_session` только для чтения.
 
-## States and protections actually enforced
+## Состояния и защиты, которые реально соблюдаются
 
-| Concept | Transition mechanism | Durable or locked protection today |
+| Понятие | Механизм перехода | Долговечная защита или блокировка сейчас |
 |---|---|---|
-| Order status | `transition_order_status`; `cancel_order`; guest confirmation; post-payment completion | Locked reload; staff transition table plus explicit guest confirmation rule; cancelling an order with active bill lines is refused |
-| Table session | `activate_table_session`, `close_table_session_if_settled`, post-payment auto-close | Partial unique active session per guest; locks; no expiry processor |
-| Table visit | activation (join/new/auto), automatic close when empty and settled, `close_table_visit` | Table row lock serialises visit creation/joining; visit row lock before joining and closing |
-| Cart | cart services, checkout | Partial unique active cart per guest; cart row lock |
-| Bill | create/attach/issue/payment/change/void services | Bill lock; one active allocation per order item; audited changes; void releases allocations |
-| Billing request | `mark_billing_request_processed`, `cancel_billing_request` | Locked reload; processed and cancelled are terminal |
-| Payment | `record_payment`, `pay_bill_with_bonuses` | Bill lock; positive and ≤ remaining; Admin cannot edit existing payments |
-| Bonus ledger | bonus services, billing bonus payment | Guest lock; reconciliation guard; idempotency key unique per partner |
-| Broadcast | notification service and task | None beyond status field (AA-008) |
+| Статус заказа | `transition_order_status`; `cancel_order`; подтверждение гостем; завершение после оплаты; подтверждение/отклонение перевода (самовывоз) | Перезагрузка под блокировкой; таблица переходов персонала и явное правило подтверждения гостем; отмена заказа с активными строками счёта отклоняется; неоплаченный заказ с предоплатой не принимается |
+| Сессия стола | `activate_table_session`, `close_table_session_if_settled`, автозакрытие после оплаты | Частичная уникальность активной сессии на гостя; блокировки; обработчика истечения нет |
+| Визит стола | активация (подсесть/новый/auto), автоматическое закрытие пустого рассчитанного визита, `close_table_visit` | Блокировка строки стола сериализует создание визита и присоединение; блокировка строки визита перед присоединением и закрытием |
+| Корзина | сервисы корзины, оформление, смена способа заказа | Частичная уникальность активной корзины на гостя; блокировка строки корзины |
+| Счёт | сервисы создания, расширения, выставления, оплаты, изменения, аннулирования | Блокировка счёта; одно активное распределение на позицию заказа; изменения с аудитом; аннулирование освобождает распределения |
+| Запрос счёта | `mark_billing_request_processed`, `cancel_billing_request` | Перезагрузка под блокировкой; `processed` и `cancelled` — финальные |
+| Оплата | `record_payment`, `pay_bill_with_bonuses`, `confirm_transfer` | Блокировка счёта; сумма положительна и ≤ остатка; Admin не может править существующие оплаты |
+| Журнал бонусов | сервисы бонусов, оплата счёта бонусами | Блокировка гостя; проверка сверки; ключ идемпотентности уникален в пределах партнёра |
+| Рассылка | сервис и задача уведомлений | Блокировка кампании; строка `BroadcastDelivery` на получателя, захват skip-locked, повторно не отправляется (B4, ADR-0008) |
 
-Admin shows lifecycle, derived and ledger fields read-only for orders, carts,
-bills, allocations, payments, sessions, guest balances and bonus
-transactions; allowed operations are actions that call owner services.
+Admin показывает поля жизненного цикла, производные и журнальные поля только
+для чтения у заказов, корзин, счетов, распределений, оплат, сессий, балансов
+гостей и бонусных транзакций; разрешённые операции — действия, вызывающие
+сервисы-владельцы.
 
-## Tests and checks
+## Тесты и проверки
 
-- 331 tests after the channel cleanup (ADR-0009), green on SQLite and on PostgreSQL 16. Ten are
-  PostgreSQL-only and skipped on SQLite: parallel broadcast workers
-  (`apps/notifications/test_delivery.py`); concurrent order transition
-  (`apps/orders/test_concurrency.py`); concurrent QR scans, two guests
-  scanning an empty table, and paying a visit while a guest joins it
-  (`apps/tables/test_concurrency.py`); concurrent bill allocation, bonus
-  payment, final payment, void-vs-payment and cancel-vs-billing
-  (`apps/billing/test_concurrency.py`). A migration test
-  (`apps/tables/test_visit_migration.py`) drives the visit backfill backward
-  and forward.
-- Recorded runs are listed in
+- 331 тест после упорядочивания каналов (ADR-0009), зелёные на SQLite и на
+  PostgreSQL 16. Десять выполняются только на PostgreSQL и на SQLite
+  пропускаются: параллельные воркеры рассылки
+  (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа
+  (`apps/orders/test_concurrency.py`); параллельные сканы QR, два гостя
+  сканируют пустой стол, оплата визита во время присоединения гостя
+  (`apps/tables/test_concurrency.py`); параллельное распределение по счёту,
+  оплата бонусами, последняя оплата, аннулирование против оплаты и отмена
+  против выставления счёта (`apps/billing/test_concurrency.py`). Тест
+  миграции (`apps/tables/test_visit_migration.py`) прогоняет заполнение
+  визитов назад и вперёд.
+- Записанные прогоны — в
   [`../engineering/TESTING.md`](../engineering/TESTING.md).
-- There is no CI pipeline; every check is run by hand.
+- CI нет; все проверки запускаются вручную.
 
-## Codebase figures at `ddb7dce`
+## Цифры кодовой базы на 2026-10-23
 
-233 tracked Python files (22,828 lines), 31 numbered migrations, 20 test
-modules. Largest non-test units: `bot/handlers/staff.py` (2,366 lines),
-`apps/billing/services.py` (1,068),
-`apps/partners/management/commands/seed_baseline_demo.py` (728),
-`bot/keyboards/staff.py` (723), `apps/orders/services.py` (722),
-`apps/analytics/services.py` (718). The audit-time inventory is preserved in
+233 отслеживаемых Python-файла (около 31 400 строк), 50 пронумерованных
+миграций, 37 тестовых модулей. Крупнейшие нетестовые модули:
+`bot/handlers/staff.py` (2983 строки), `apps/billing/services.py` (1106),
+`apps/orders/services.py` (914), `bot/keyboards/staff.py` (901),
+`apps/analytics/services.py` (771),
+`apps/partners/management/commands/seed_baseline_demo.py` (728). Инвентарь
+на момент аудита сохранён в
 [`../audits/CODEBASE_INVENTORY.md`](../audits/CODEBASE_INVENTORY.md).

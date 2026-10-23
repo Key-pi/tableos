@@ -284,7 +284,7 @@ def transition_order_status(
         and order.paid_at is None
     ):
         # A pickup order goes into work only after its transfer is confirmed
-        # (apps/billing/pickup.py:confirm_transfer).
+        # (apps/billing/remote_orders.py:confirm_transfer).
         raise OrderFlowError("Сначала подтвердите оплату переводом.")
     if to_status == Order.Status.CANCELED and BillItem.objects.filter(
         partner_id=order.partner_id,
