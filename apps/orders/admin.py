@@ -74,6 +74,11 @@ class OrderAdmin(ScopedAdminMixin):
     search_fields = ("public_id", "guest__telegram_account__username", "partner__name")
     readonly_fields = (
         "public_id",
+        # AA-023: billing context, bonus target and session settlement depend
+        # on these relations; re-pointing them is not an Admin edit.
+        "guest",
+        "table",
+        "table_session",
         "assigned_employee",
         "status",
         "payment_method",

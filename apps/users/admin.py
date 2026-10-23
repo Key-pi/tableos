@@ -92,6 +92,14 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
         ),
     )
 
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        if self.is_platform_admin(request):
+            return queryset
+        # AA-026: platform accounts are never part of a venue's user list,
+        # even when a superuser happens to carry the venue's partner.
+        return queryset.filter(is_superuser=False)
+
     def get_fieldsets(self, request, obj=None):
         # On the add page Django must use the add_fieldsets (password1/password2),
         # otherwise the creation form renders against change fields and fails

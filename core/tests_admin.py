@@ -267,6 +267,41 @@ class OwnerFacingAdminTests(TestCase):
         ):
             self.assertNotIn(field_name, form.fields)
 
+    def test_order_admin_keeps_order_relations_read_only(self):
+        # AA-023: billing context, bonus target and session settlement depend
+        # on these relations, so Admin must not re-point them.
+        superuser = User.objects.create_superuser(
+            username="platform_root",
+            email="root@example.com",
+            password="pass12345",
+        )
+        for user in (self.owner, superuser):
+            request = self._build_request(user)
+            model_admin = OrderAdmin(Order, admin.site)
+            form = model_admin.get_form(request, Order(partner=self.partner))(
+                instance=Order(partner=self.partner)
+            )
+            for field_name in ("guest", "table", "table_session"):
+                self.assertNotIn(field_name, form.fields, (user.username, field_name))
+
+    def test_tenant_user_admin_never_lists_superusers(self):
+        # AA-026: a superuser linked to the venue must not be visible (and so
+        # not editable or password-resettable) by the venue owner.
+        linked_superuser = User.objects.create_superuser(
+            username="linked_root",
+            email="linked@example.com",
+            password="pass12345",
+            partner=self.partner,
+        )
+        request = self._build_request()
+        model_admin = UserAdmin(User, admin.site)
+
+        queryset = model_admin.get_queryset(request)
+
+        self.assertIn(self.owner, queryset)
+        self.assertNotIn(linked_superuser, queryset)
+        self.assertFalse(model_admin.has_change_permission(request, linked_superuser))
+
     def test_bill_and_table_session_admin_hide_lifecycle_fields(self):
         request = self._build_request()
         bill_form = BillAdmin(Bill, admin.site).get_form(request, Bill(partner=self.partner))(
