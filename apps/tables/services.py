@@ -152,7 +152,16 @@ def close_table_session(session: TableSession) -> TableSession:
     return _close_locked_table_session(locked_session)
 
 
-def can_close_table_session(session: TableSession) -> tuple[bool, str]:
+def can_close_table_session(
+    session: TableSession,
+    *,
+    include_billing_requests: bool = True,
+) -> tuple[bool, str]:
+    """Return whether the session is settled and may be closed.
+
+    ``include_billing_requests=False`` lets the billing settlement path decide
+    about pending requests itself: once every order is paid they are moot.
+    """
     has_active_cart = Cart.objects.filter(
         partner_id=session.partner_id,
         guest_id=session.guest_id,
@@ -182,7 +191,7 @@ def can_close_table_session(session: TableSession) -> tuple[bool, str]:
     if has_unreceived_orders:
         return False, "У гостя есть заказы, получение которых ещё не подтверждено."
 
-    has_open_billing_requests = BillingRequest.objects.filter(
+    has_open_billing_requests = include_billing_requests and BillingRequest.objects.filter(
         partner_id=session.partner_id,
         table_session_id=session.id,
         status__in=[

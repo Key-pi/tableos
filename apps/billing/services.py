@@ -24,11 +24,16 @@ from apps.bonuses.services import (
     sync_bonus_balance_from_ledger,
 )
 from apps.notifications.services import notify_staff_about_billing_request
-from apps.orders.models import Cart, Order, OrderItem
+from apps.orders.models import Order, OrderItem
 from apps.orders.services import transition_order_status
 from apps.partners.models import PartnerBotSettings
 from apps.tables.models import TableSession
-from apps.tables.services import close_table_session_if_settled, get_active_table_session
+from apps.tables.services import (
+    TableSessionError,
+    can_close_table_session,
+    close_table_session_if_settled,
+    get_active_table_session,
+)
 from apps.users.models import GuestProfile
 
 
@@ -854,13 +859,8 @@ def _process_post_payment_updates(bill: Bill) -> None:
 
     _sync_orders_after_bill_paid(bill)
     _mark_related_billing_requests_processed(bill)
-    if bill.table_id is None:
-        return
     if _partner_auto_closes_table_session_after_payment(partner_id=bill.partner_id):
-        _close_table_sessions_if_fully_settled(
-            partner_id=bill.partner_id,
-            table_id=bill.table_id,
-        )
+        _close_settled_sessions_of_bill(bill)
 
 
 def _partner_auto_closes_table_session_after_payment(*, partner_id) -> bool:
@@ -890,69 +890,54 @@ def _mark_related_billing_requests_processed(bill: Bill) -> int:
     return processed_count
 
 
-def _close_table_sessions_if_fully_settled(*, partner_id, table_id) -> int:
-    has_open_bills = Bill.objects.filter(
-        partner_id=partner_id,
-        table_id=table_id,
-        status__in=[
-            Bill.Status.DRAFT,
-            Bill.Status.ISSUED,
-            Bill.Status.PARTIALLY_PAID,
-        ],
-    ).exists()
-    if has_open_bills:
-        return 0
+def _close_settled_sessions_of_bill(bill: Bill) -> int:
+    """Auto-close the sessions whose orders this bill settled (PQ-027).
 
-    has_active_carts = Cart.objects.filter(
-        partner_id=partner_id,
-        table_session__table_id=table_id,
-        status=Cart.Status.ACTIVE,
-    ).exists()
-    if has_active_carts:
-        return 0
+    Only sessions that own at least one order of the bill are candidates; a
+    session is closed when it is fully settled, otherwise it stays open. This
+    step never raises into the payment command (AA-021).
+    """
 
-    settled_order_ids = BillOrder.objects.filter(
-        partner_id=partner_id,
-        bill__table_id=table_id,
-        bill__status=Bill.Status.PAID,
-    ).values_list("order_id", flat=True)
-    active_orders = Order.objects.filter(
-        partner_id=partner_id,
-        table_id=table_id,
-    ).exclude(
-        status=Order.Status.CANCELED,
+    session_ids = set(
+        Order.objects.filter(
+            partner_id=bill.partner_id,
+            bill_links__bill_id=bill.id,
+            table_session_id__isnull=False,
+        ).values_list("table_session_id", flat=True)
     )
-    has_unsettled_orders = active_orders.exclude(
-        id__in=settled_order_ids,
-    ).exists()
-    if has_unsettled_orders:
-        return 0
+    candidate_sessions = TableSession.objects.filter(
+        partner_id=bill.partner_id,
+        id__in=session_ids,
+        status=TableSession.Status.ACTIVE,
+    ).order_by("id")
 
-    has_unfinished_orders = active_orders.exclude(status=Order.Status.COMPLETED).exists()
-    if has_unfinished_orders:
-        return 0
-
-    active_sessions = list(
-        TableSession.objects.filter(
-            partner_id=partner_id,
-            table_id=table_id,
-            status=TableSession.Status.ACTIVE,
+    closed_count = 0
+    for session in candidate_sessions:
+        is_settled, _reason = can_close_table_session(
+            session,
+            include_billing_requests=False,
         )
-    )
-    for session in active_sessions:
-        close_table_session_if_settled(session)
-
-    pending_requests = BillingRequest.objects.filter(
-        partner_id=partner_id,
-        table_id=table_id,
-        status__in=[
-            BillingRequest.Status.OPEN,
-            BillingRequest.Status.AUTO_PREPARED,
-        ],
-    )
-    for billing_request in pending_requests:
-        mark_billing_request_processed(billing_request)
-    return len(active_sessions)
+        if not is_settled:
+            continue
+        # Every order of the session is paid and received, so pending
+        # requests of this session are satisfied.
+        pending_requests = BillingRequest.objects.filter(
+            partner_id=bill.partner_id,
+            table_session_id=session.id,
+            status__in=[
+                BillingRequest.Status.OPEN,
+                BillingRequest.Status.AUTO_PREPARED,
+            ],
+        ).order_by("id")
+        for billing_request in pending_requests:
+            mark_billing_request_processed(billing_request)
+        try:
+            closed_session = close_table_session_if_settled(session)
+        except TableSessionError:
+            continue
+        if closed_session.status == TableSession.Status.CLOSED:
+            closed_count += 1
+    return closed_count
 
 
 def _sync_orders_after_bill_paid(bill: Bill) -> int:

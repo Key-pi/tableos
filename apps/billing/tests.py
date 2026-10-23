@@ -494,6 +494,68 @@ class BillingServiceTests(TestCase):
         self.assertEqual(bill.status, Bill.Status.PAID)
         self.assertEqual(self.session.status, self.session.Status.ACTIVE)
 
+    def _make_order_ready(self, order):
+        for to_status in (Order.Status.ACCEPTED, Order.Status.READY):
+            transition_order_status(
+                order=order,
+                to_status=to_status,
+                actor_user=self.manager.user,
+            )
+
+    def test_payment_persists_when_session_has_open_custom_split_request(self):
+        # AA-021: a non-closable session must never roll back the payment.
+        custom_request = create_billing_request_for_telegram_user(
+            partner_id=self.partner.id,
+            telegram_id=5550001,
+            request_type=BillingRequest.RequestType.CUSTOM_SPLIT,
+        ).request
+        self._make_order_ready(self.order)
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+
+        payment = record_payment(
+            bill=bill,
+            amount=bill.total_amount,
+            method=Payment.Method.CASH,
+            created_by=self.manager.user,
+        )
+
+        bill.refresh_from_db()
+        custom_request.refresh_from_db()
+        self.session.refresh_from_db()
+        self.assertTrue(Payment.objects.filter(id=payment.id).exists())
+        self.assertEqual(bill.status, Bill.Status.PAID)
+        # Every order of the session is paid, so the open request is satisfied.
+        self.assertEqual(custom_request.status, BillingRequest.Status.PROCESSED)
+        self.assertEqual(self.session.status, self.session.Status.CLOSED)
+
+    def test_auto_close_keeps_sessions_without_paid_orders_open(self):
+        # PQ-027: only sessions whose orders were settled by the bill close.
+        other_session = activate_table_session(
+            partner_id=self.partner.id,
+            telegram_id=5550009,
+            payload=self.table.deep_link_payload,
+            username="table_friend",
+        )
+        self._make_order_ready(self.order)
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+
+        record_payment(
+            bill=bill,
+            amount=bill.total_amount,
+            method=Payment.Method.CASH,
+        )
+
+        self.session.refresh_from_db()
+        other_session.refresh_from_db()
+        self.assertEqual(self.session.status, self.session.Status.CLOSED)
+        self.assertEqual(other_session.status, other_session.Status.ACTIVE)
+
     def test_create_shared_bill_for_table_collects_all_unbilled_orders(self):
         second_session = activate_table_session(
             partner_id=self.partner.id,
