@@ -13,13 +13,15 @@ from apps.billing.models import (
 )
 from apps.billing.services import (
     BillingServiceError,
-    cancel_billing_request,
     get_bill_remaining_amount,
     issue_bill,
-    mark_billing_request_processed,
     record_payment,
     remove_bill_lines,
     void_bill,
+)
+from apps.billing.table_bills import (
+    cancel_billing_request,
+    mark_billing_request_processed,
 )
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin

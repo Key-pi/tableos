@@ -187,7 +187,7 @@ class VisitScopedBillingTests(VisitFixtureMixin, TestCase):
 
     def test_shared_bill_request_takes_only_the_new_party_orders(self):
         from apps.billing.models import BillingRequest
-        from apps.billing.services import create_billing_request_for_telegram_user
+        from apps.billing.table_bills import create_billing_request_for_telegram_user
 
         result = create_billing_request_for_telegram_user(
             partner_id=self.partner.id,
@@ -209,7 +209,8 @@ class VisitScopedBillingTests(VisitFixtureMixin, TestCase):
             )
 
     def test_staff_table_bill_needs_a_visit_when_several_are_open(self):
-        from apps.billing.services import BillingServiceError, create_shared_bill_for_table
+        from apps.billing.services import BillingServiceError
+        from apps.billing.table_bills import create_shared_bill_for_table
 
         with self.assertRaisesMessage(BillingServiceError, "визит"):
             create_shared_bill_for_table(partner_id=self.partner.id, table_id=self.table.id)

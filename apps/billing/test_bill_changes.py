@@ -19,11 +19,13 @@ from apps.billing.services import (
     BillingServiceError,
     cancel_order,
     create_bill_from_orders,
-    create_billing_request_for_telegram_user,
     pay_bill_with_bonuses,
     record_payment,
     remove_bill_lines,
     void_bill,
+)
+from apps.billing.table_bills import (
+    create_billing_request_for_telegram_user,
 )
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import get_bonus_ledger_balance

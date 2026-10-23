@@ -7,7 +7,7 @@ from django.test import RequestFactory, TestCase
 
 from apps.billing.admin import BillAdmin, BillingRequestAdmin
 from apps.billing.models import Bill, BillingRequest
-from apps.billing.services import mark_billing_request_processed
+from apps.billing.table_bills import mark_billing_request_processed
 from apps.employees.admin import EmployeeProfileAdmin
 from apps.employees.models import EmployeeProfile
 from apps.orders.admin import OrderAdmin

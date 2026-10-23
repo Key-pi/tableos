@@ -3,7 +3,8 @@ from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
 from apps.billing.models import BillingRequest
-from apps.billing.services import BillingServiceError, create_billing_request_for_telegram_user
+from apps.billing.services import BillingServiceError
+from apps.billing.table_bills import create_billing_request_for_telegram_user
 from apps.tables.services import get_active_table_session
 from bot.filters.content import PartnerButtonFilter
 from bot.keyboards.billing import build_billing_request_keyboard

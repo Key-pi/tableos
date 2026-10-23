@@ -9,17 +9,19 @@ from apps.billing.repositories import BillingRequestRepository, BillRepository
 from apps.billing.services import (
     BillingServiceError,
     attach_orders_to_bill,
-    cancel_billing_request,
     create_bill_from_orders,
-    create_billing_request_for_telegram_user,
-    create_personal_bills_for_table,
-    create_shared_bill_for_table,
     get_bill_remaining_amount,
     issue_bill,
-    mark_billing_request_processed,
     pay_bill_with_bonuses,
     record_payment,
     redeem_bonus_for_bill,
+)
+from apps.billing.table_bills import (
+    cancel_billing_request,
+    create_billing_request_for_telegram_user,
+    create_personal_bills_for_table,
+    create_shared_bill_for_table,
+    mark_billing_request_processed,
 )
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import apply_bonus_programs

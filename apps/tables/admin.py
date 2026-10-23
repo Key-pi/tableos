@@ -5,6 +5,8 @@ from django.utils.http import urlencode
 
 from apps.billing.services import (
     BillingServiceError,
+)
+from apps.billing.table_bills import (
     create_personal_bills_for_table,
     create_shared_bill_for_table,
 )

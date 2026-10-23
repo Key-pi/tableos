@@ -33,18 +33,20 @@ from apps.billing.repositories import (
 from apps.billing.services import (
     BillingServiceError,
     annotate_bill_adjustment,
-    cancel_billing_request,
     cancel_order,
-    create_personal_bills_for_table,
-    create_shared_bill_for_table,
     get_bill_context_label,
     issue_bill,
-    mark_billing_request_processed,
     pay_bill_with_bonuses,
     record_payment,
     remove_bill_lines,
     user_can_adjust_bills,
     void_bill,
+)
+from apps.billing.table_bills import (
+    cancel_billing_request,
+    create_personal_bills_for_table,
+    create_shared_bill_for_table,
+    mark_billing_request_processed,
 )
 from apps.bonuses.models import WalkInSale
 from apps.bonuses.services import (
