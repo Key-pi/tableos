@@ -126,3 +126,78 @@ class TableVisitConcurrencyTests(TransactionTestCase):
         self.assertEqual(sorted(results), ["asked", "started"])
         self.assertEqual(TableVisit.objects.filter(table=self.table).count(), 1)
         self.assertEqual(TableSession.objects.filter(table=self.table).count(), 1)
+
+
+@skipUnless(connection.vendor == "postgresql", "PostgreSQL concurrency test")
+class VisitCloseVersusJoinConcurrencyTests(TransactionTestCase):
+    """Payment closing a visit races a guest joining it (lock order, ADR-0007)."""
+
+    reset_sequences = True
+
+    def setUp(self):
+        from apps.billing.services import create_bill_from_orders
+        from apps.menu.models import MenuCategory, MenuItem
+        from apps.orders.services import confirm_order_received_by_guest, create_order_from_session
+
+        self.partner = Partner.objects.create(
+            name="Race venue", slug="race-venue", status=Partner.Status.ACTIVE
+        )
+        self.table = Table.objects.create(partner=self.partner, number=1, qr_token="race-1")
+        category = MenuCategory.objects.create(partner=self.partner, name="Bar")
+        item = MenuItem.objects.create(
+            partner=self.partner, category=category, name="Tea", price="50.00"
+        )
+        self.session = activate_table_session(
+            partner_id=self.partner.id, telegram_id=980201, payload=self.table.deep_link_payload
+        )
+        order = create_order_from_session(
+            partner_id=self.partner.id,
+            table_session=self.session,
+            items=[
+                {"menu_item_id": item.id, "item_name": "Tea", "unit_price": "50.00", "quantity": 1}
+            ],
+        )
+        confirm_order_received_by_guest(
+            partner_id=self.partner.id, telegram_id=980201, order_public_id=order.public_id
+        )
+        self.bill = create_bill_from_orders(partner_id=self.partner.id, order_ids=[str(order.id)])
+
+    def _pay(self, barrier):
+        from apps.billing.models import Payment
+        from apps.billing.services import record_payment
+
+        close_old_connections()
+        try:
+            barrier.wait(timeout=10)
+            record_payment(bill=self.bill, amount="50.00", method=Payment.Method.CASH)
+            return "paid"
+        finally:
+            close_old_connections()
+
+    def _join(self, barrier):
+        close_old_connections()
+        try:
+            barrier.wait(timeout=10)
+            session = activate_table_session(
+                partner_id=self.partner.id,
+                telegram_id=980202,
+                payload=self.table.deep_link_payload,
+            )
+            return str(session.visit_id)
+        finally:
+            close_old_connections()
+
+    def test_no_deadlock_and_no_session_in_a_closed_visit(self):
+        barrier = Barrier(2)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            paid = executor.submit(self._pay, barrier)
+            joined = executor.submit(self._join, barrier)
+            self.assertEqual(paid.result(timeout=30), "paid")
+            joined.result(timeout=30)
+
+        self.assertFalse(
+            TableSession.objects.filter(
+                status=TableSession.Status.ACTIVE,
+                visit__status=TableVisit.Status.CLOSED,
+            ).exists()
+        )
