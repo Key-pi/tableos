@@ -10,13 +10,14 @@ class Order(PartnerBoundModel):
     """Confirmed guest order tied to a table session and tracked by status."""
 
     class Status(models.TextChoices):
-        NEW = "new", "New"
-        ACCEPTED = "accepted", "Accepted"
-        PREPARING = "preparing", "Preparing"
-        READY = "ready", "Ready"
-        DELIVERING = "delivering", "Delivering"
-        COMPLETED = "completed", "Completed"
-        CANCELED = "canceled", "Canceled"
+        # Labels are what guests and staff read («Новый статус: В пути»).
+        NEW = "new", "Новый"
+        ACCEPTED = "accepted", "Принят"
+        PREPARING = "preparing", "Готовится"
+        READY = "ready", "Готов"
+        DELIVERING = "delivering", "В пути"
+        COMPLETED = "completed", "Завершён"
+        CANCELED = "canceled", "Отменён"
 
     class PaymentMethod(models.TextChoices):
         CASH = "cash", "Cash"

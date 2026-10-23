@@ -77,7 +77,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 - `ruff check --no-cache .`: 21 старое замечание; `ruff format --check --no-cache .`: 54 файла были бы переформатированы. Это не «зелёная» база.
 
 После B1–B5, самовывоза, упорядочивания каналов, Docker, источников переходов и доставки
-тестов стало 389, они
+тестов стало 390, они
 зелёные на SQLite и PostgreSQL 16; актуальные команды и журнал прогонов — в
 [TESTING.md](docs/engineering/TESTING.md).
 
