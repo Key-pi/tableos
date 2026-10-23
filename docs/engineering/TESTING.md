@@ -1,8 +1,8 @@
-# TableOS — Testing and verification
+# Botera Shop — тесты и проверка
 
-## Reproducible baseline commands
+## Команды базовой проверки
 
-The audit executed the following commands in the repository virtual environment:
+На аудите в виртуальном окружении репозитория выполнялись:
 
 ```bash
 env DJANGO_USE_SQLITE=true PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python manage.py check
@@ -13,47 +13,50 @@ env DJANGO_USE_SQLITE=true PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python manage.p
 docker compose config --quiet
 ```
 
-At the 2026-07-27 baseline, Django check/migration check/tests/compose config
-passed; the test suite ran **139 tests**. After the channel cleanup (ADR-0009) the suite has **331 tests**; it passes on SQLite (10
-PostgreSQL-only tests skipped) and on PostgreSQL 16. Record every full run in
-the table at the end of this document.
+На базовой проверке 2026-07-27 прошли `check`, проверка миграций, тесты и
+конфигурация compose; тестов было **139**. После упорядочивания каналов
+(ADR-0009) тестов **331**; они проходят на SQLite (10 тестов только для
+PostgreSQL пропускаются) и на PostgreSQL 16. Каждый полный прогон
+записывайте в таблицу в конце документа.
 
-**Environment requirements.** Tests encrypt bot tokens, so
-`BOT_TOKEN_ENCRYPTION_KEY` must be a valid Fernet key — put it into `.env`
-(see `DEVELOPMENT.md`); without it about 60 tests error with
-`BOT_TOKEN_ENCRYPTION_KEY must be configured`. Since B5 the default
-timezone is `Europe/Kyiv` and an old `DJANGO_TIMEZONE=Europe/Kiev` is read as
-`Europe/Kyiv` (AA-034). A local PostgreSQL created by `initdb` on such a
-system may itself have `timezone = 'Europe/Kiev'` in `postgresql.conf` and
-refuse to start once the legacy name is gone; change it to `Europe/Kyiv`. Ruff reported **21 pre-existing
-check violations** and **54 files that would be reformatted**. Do not state
-that Ruff is green until the actual baseline changes and is rerun. Full output
-and tool versions are recorded in [`../audits/BASELINE.md`](../audits/BASELINE.md).
+**Требования к окружению.** Тесты шифруют токены ботов, поэтому
+`BOT_TOKEN_ENCRYPTION_KEY` должен быть корректным ключом Fernet — положите
+его в `.env` (см. `DEVELOPMENT.md`); без него около 60 тестов падают с
+`BOT_TOKEN_ENCRYPTION_KEY must be configured`. С B5 таймзона по умолчанию —
+`Europe/Kyiv`, а старое `DJANGO_TIMEZONE=Europe/Kiev` читается как
+`Europe/Kyiv` (AA-034). Локальный PostgreSQL, созданный `initdb` в такой
+системе, сам может иметь `timezone = 'Europe/Kiev'` в `postgresql.conf` и
+перестать запускаться, когда старого имени не станет; замените на
+`Europe/Kyiv`. Ruff на базовой проверке показал **21 старое нарушение** и
+**54 файла, которые переформатировал бы**. Не утверждайте, что Ruff
+«зелёный», пока это не изменится и не будет перепроверено. Полный вывод и
+версии инструментов — в [`../audits/BASELINE.md`](../audits/BASELINE.md).
 
-## Test selection by change type
+## Какие тесты нужны для какого изменения
 
-| Change | Minimum verification |
+| Изменение | Минимальная проверка |
 |---|---|
-| Model/migration | migration dry-run, focused tests, data/migration test; PostgreSQL if constraint or lock semantics matter |
-| Tenant/permission | two-partner service + bot/admin request/form tests |
-| Order/session state | state transition and duplicate callback tests; PostgreSQL concurrent test |
-| Billing/bonus/money | reconciliation fixture, negative/boundary tests, PostgreSQL allocation/wallet concurrency test |
-| Admin | admin change-form/action/inline/list-filter tests; assert service side effects |
-| Bot routing/content | router/filter ordering, stale callback, changed label/callback schema tests |
-| Celery/notifications | after-commit, retry/duplicate worker/crash behavior, task registration tests |
-| Cleanup/move | import/API search, dynamic registration checks, characterization tests, `git diff --check` |
+| Модель/миграция | `makemigrations --check`, точечные тесты, тест данных/миграции; PostgreSQL, если важны ограничения или блокировки |
+| Партнёры/права | тесты сервиса с двумя партнёрами + запросы/формы бота и Admin |
+| Состояние заказа/сессии | тесты переходов и повторного callback; конкурентный тест на PostgreSQL |
+| Счета/бонусы/деньги | фикстура со сверкой журнала, граничные и отрицательные случаи, конкурентный тест распределения/баланса на PostgreSQL |
+| Admin | тесты формы изменения, действий, inline, фильтров списка; проверка побочных эффектов сервиса |
+| Маршрутизация/тексты бота | порядок роутеров/фильтров, устаревший callback, изменённая подпись кнопки/схема callback |
+| Celery/уведомления | постановка после коммита, повтор, дублирующий воркер, падение, регистрация задач |
+| Чистка/перенос | поиск импортов и API, проверка динамических регистраций, характеризующие тесты, `git diff --check` |
 
-## Running the PostgreSQL-gated tests
+## Тесты только для PostgreSQL
 
-Ten tests run only on PostgreSQL and are skipped on SQLite:
-`apps/notifications/test_delivery.py` (parallel broadcast workers),
-`apps/orders/test_concurrency.py`, `apps/tables/test_concurrency.py` (QR
-scans, two guests at an empty table, visit close vs join) and
-`apps/billing/test_concurrency.py` (bill allocation, bonus payment, final
-payment, void vs payment, cancel vs billing). SQLite also ignores `select_for_update`, so a lock that PostgreSQL
-rejects (AA-033) is invisible there: **run the whole suite on PostgreSQL
-before closing any batch that touches locks, constraints or queries with
-`select_for_update`.**
+Десять тестов выполняются только на PostgreSQL и на SQLite пропускаются:
+`apps/notifications/test_delivery.py` (параллельные воркеры рассылки),
+`apps/orders/test_concurrency.py`, `apps/tables/test_concurrency.py`
+(сканирования QR, два гостя у пустого стола, закрытие визита против
+подсадки) и `apps/billing/test_concurrency.py` (распределение по счетам,
+оплата бонусами, финальная оплата, аннулирование против оплаты, отмена
+против выставления счёта). SQLite к тому же игнорирует `select_for_update`,
+поэтому блокировка, которую PostgreSQL отвергает (AA-033), там не видна:
+**перед закрытием любого батча, который трогает блокировки, ограничения или
+запросы с `select_for_update`, прогоните весь набор на PostgreSQL.**
 
 ```bash
 docker compose up -d db
@@ -61,60 +64,61 @@ env DJANGO_USE_SQLITE=false POSTGRES_HOST=localhost PYTHONDONTWRITEBYTECODE=1 \
   ./.venv/bin/python manage.py test
 ```
 
-The compose database user owns the database and may create the test database.
-Run the whole suite the same way before a production rollout of B2/B3
-migrations.
+Пользователь базы из compose владеет базой и может создать тестовую.
+Так же прогоните весь набор перед выкаткой миграций B2–B5 в продакшен.
 
-## Concurrency protocol
+## Порядок проверки конкурентности
 
-SQLite is not acceptable evidence for PostgreSQL row locks, partial unique
-constraints, or concurrent transactions. A concurrency test should use separate
-database connections/transactions, synchronize the competing operations, and
-assert the durable final state (not merely that neither call threw). Required
-initial cases are in AA-004 through AA-008.
+SQLite не доказывает работу построчных блокировок PostgreSQL, частичных
+уникальных ограничений и параллельных транзакций. Конкурентный тест должен
+использовать отдельные соединения/транзакции, синхронизировать
+конкурирующие операции (`threading.Barrier`) и проверять итоговое
+сохранённое состояние, а не только то, что вызовы не упали. Затем —
+проверка мутацией: убрать защиту и убедиться, что тест падает.
 
-## Test data safety
+## Безопасность тестовых данных
 
-- Keep partner fixtures distinct and make cross-tenant assertions explicit.
-- Do not use production bot tokens or user data in tests.
-- Use deterministic money values and assert ledger/balance/report results.
-- Preserve source-state evidence in characterization tests; annotate a test if
-  it encodes a known defect pending an approved batch.
+- Фикстуры партнёров держать раздельными, проверки «между партнёрами» —
+  явными.
+- Не использовать продакшен-токены ботов и данные пользователей.
+- Денежные значения — детерминированные; проверять журнал, баланс и отчёт.
+- Характеризующие тесты фиксируют исходное поведение; если тест закрепляет
+  известный дефект до утверждённого батча, это помечается в тесте.
 
-## Definition of done for a behavioral fix
+## Готовность исправления поведения
 
-1. Test demonstrates the prior defect or unsupported path.
-2. Owner/service-level fix preserves authorized current behavior.
-3. Relevant adapter (bot/admin/task) cannot bypass it.
-4. Migration/data/rollback implications are documented.
-5. Full relevant test set and documented baseline checks are run; unrelated
-   pre-existing lint failures are reported separately, not hidden.
+1. Тест показывает прежний дефект или неподдержанный путь.
+2. Исправление в сервисе-владельце сохраняет разрешённое текущее поведение.
+3. Адаптеры (бот, Admin, задачи) не могут его обойти.
+4. Последствия для миграций, данных и отката описаны.
+5. Прогнаны нужный набор тестов и описанные базовые проверки; старые
+   несвязанные замечания линтера указаны отдельно, а не скрыты.
 
-## Recorded runs
+## Журнал прогонов
 
-There is no CI; every run is manual. Add a row for each full run.
+CI нет, каждый прогон ручной. Добавляйте строку для каждого полного прогона.
 
-| Date | Commit | Database | Command scope | Result |
+| Дата | Коммит / этап | База | Объём | Результат |
 |---|---|---|---|---|
-| 2026-07-27 | `b17ce5b` | SQLite | full suite | 139 tests OK; Ruff: 21 findings, 54 files to reformat |
-| 2026-10-23 | `ddb7dce` | SQLite | full suite | 179 tests OK (2 skipped) |
-| 2026-10-23 | `ddb7dce` | PostgreSQL 16 | full suite | **29 errors** — AA-033 |
-| 2026-10-23 | B3.1 branch | SQLite | full suite | 199 tests OK (5 skipped); Ruff: no new findings in changed files |
-| 2026-10-23 | B3.1 branch | PostgreSQL 16 | full suite | 199 tests OK |
-| 2026-10-23 | B3.2 part A branch | SQLite | full suite | 227 tests OK (7 skipped) |
-| 2026-10-23 | B3.2 part A branch | PostgreSQL 16 | full suite | 227 tests OK |
-| 2026-10-23 | B3.2 part B branch | SQLite | full suite | 250 tests OK (9 skipped) |
-| 2026-10-23 | B3.2 part B branch | PostgreSQL 16 | full suite | 250 tests OK; visit race test repeated 6× |
-| 2026-10-23 | B3.2 part C branch | SQLite | full suite | 265 tests OK (9 skipped); Ruff: no new findings in changed files |
-| 2026-10-23 | B3.2 part C branch | PostgreSQL 16 | full suite + `bonuses.0008` backward/forward | 265 tests OK |
-| 2026-10-23 | B4 branch | SQLite | full suite | 286 tests OK (10 skipped); Ruff: no new findings in changed files |
-| 2026-10-23 | B4 branch | PostgreSQL 16 | full suite + `notifications.0004` backward/forward | 286 tests OK; broadcast race test repeated 10× |
-| 2026-10-23 | B5 (`clean-project-rules`) | SQLite, `Europe/Kiev` link removed | full suite | 296 tests OK (10 skipped); Ruff: no new findings repository-wide |
-| 2026-10-23 | B5 (`clean-project-rules`) | PostgreSQL 16 | full suite + `partners.0006` backward/forward | 296 tests OK |
-| 2026-10-23 | Pickup (`clean-project-rules`) | SQLite | full suite | 327 tests OK (10 skipped) |
-| 2026-10-23 | Pickup (`clean-project-rules`) | PostgreSQL 16 | full suite + pickup migrations (orders 0005, billing 0008, users 0002, partners 0007) backward/forward | 327 tests OK |
-| 2026-10-23 | Flow-first channels | SQLite | full suite | 330 tests OK (10 skipped) |
-| 2026-10-23 | Flow-first channels | PostgreSQL 16 | full suite + `orders.0006`, `menu.0004` backward/forward | 330 tests OK |
-| 2026-10-23 | Table flow only via QR | SQLite / PostgreSQL 16 | full suite | 330 tests OK (10 skipped on SQLite) |
-| 2026-10-23 | Channel cleanup (ADR-0009) | SQLite | full suite | 331 tests OK (10 skipped) |
-| 2026-10-23 | Channel cleanup (ADR-0009) | PostgreSQL 16 | full suite + `orders.0007`, `partners.0008` (RenameField) backward/forward | 331 tests OK |
+| 2026-07-27 | `b17ce5b` | SQLite | весь набор | 139 тестов OK; Ruff: 21 замечание, 54 файла на форматирование |
+| 2026-10-23 | `ddb7dce` | SQLite | весь набор | 179 тестов OK (2 пропущено) |
+| 2026-10-23 | `ddb7dce` | PostgreSQL 16 | весь набор | **29 ошибок** — AA-033 |
+| 2026-10-23 | ветка B3.1 | SQLite | весь набор | 199 тестов OK (5 пропущено); Ruff: новых замечаний в изменённых файлах нет |
+| 2026-10-23 | ветка B3.1 | PostgreSQL 16 | весь набор | 199 тестов OK |
+| 2026-10-23 | B3.2 часть A | SQLite | весь набор | 227 тестов OK (7 пропущено) |
+| 2026-10-23 | B3.2 часть A | PostgreSQL 16 | весь набор | 227 тестов OK |
+| 2026-10-23 | B3.2 часть B | SQLite | весь набор | 250 тестов OK (9 пропущено) |
+| 2026-10-23 | B3.2 часть B | PostgreSQL 16 | весь набор | 250 тестов OK; гонка визитов повторена 6 раз |
+| 2026-10-23 | B3.2 часть C | SQLite | весь набор | 265 тестов OK (9 пропущено); Ruff: новых замечаний в изменённых файлах нет |
+| 2026-10-23 | B3.2 часть C | PostgreSQL 16 | весь набор + `bonuses.0008` назад/вперёд | 265 тестов OK |
+| 2026-10-23 | ветка B4 | SQLite | весь набор | 286 тестов OK (10 пропущено); Ruff: новых замечаний в изменённых файлах нет |
+| 2026-10-23 | ветка B4 | PostgreSQL 16 | весь набор + `notifications.0004` назад/вперёд | 286 тестов OK; гонка рассылки повторена 10 раз |
+| 2026-10-23 | B5 (`clean-project-rules`) | SQLite, без ссылки `Europe/Kiev` | весь набор | 296 тестов OK (10 пропущено); Ruff: новых замечаний во всём репозитории нет |
+| 2026-10-23 | B5 (`clean-project-rules`) | PostgreSQL 16 | весь набор + `partners.0006` назад/вперёд | 296 тестов OK |
+| 2026-10-23 | Самовывоз | SQLite | весь набор | 327 тестов OK (10 пропущено) |
+| 2026-10-23 | Самовывоз | PostgreSQL 16 | весь набор + миграции самовывоза (orders 0005, billing 0008, users 0002, partners 0007) назад/вперёд | 327 тестов OK |
+| 2026-10-23 | Способ заказа сначала | SQLite | весь набор | 330 тестов OK (10 пропущено) |
+| 2026-10-23 | Способ заказа сначала | PostgreSQL 16 | весь набор + `orders.0006`, `menu.0004` назад/вперёд | 330 тестов OK |
+| 2026-10-23 | Стол только через QR | SQLite / PostgreSQL 16 | весь набор | 330 тестов OK (10 пропущено на SQLite) |
+| 2026-10-23 | Каналы (ADR-0009) | SQLite | весь набор | 331 тест OK (10 пропущено) |
+| 2026-10-23 | Каналы (ADR-0009) | PostgreSQL 16 | весь набор + `orders.0007`, `partners.0008` (RenameField) назад/вперёд | 331 тест OK |

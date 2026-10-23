@@ -1,37 +1,40 @@
-# TableOS
+# Botera Shop
 
-TableOS is a multi-tenant hospitality platform built as a Django modular
-monolith with an aiogram Telegram bot, Celery, PostgreSQL, and Redis.
+Botera Shop (бывший TableOS) — multi-tenant платформа заказов и лояльности
+для заведений и магазинов: Django-монолит из модулей, Telegram-бот на
+aiogram, Celery, PostgreSQL и Redis. Часть сети Botera
+([`docs/product/ECOSYSTEM_DIRECTION.md`](docs/product/ECOSYSTEM_DIRECTION.md)).
 
-## Start here
+## С чего начать
 
-- Product contract and current feature status:
-  [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md) and
+- Продукт и текущий статус функций:
+  [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md) и
   [`docs/product/FEATURE_MATRIX.md`](docs/product/FEATURE_MATRIX.md)
-- Current implementation:
+- Как устроено сейчас:
   [`docs/architecture/AS_IS_ARCHITECTURE.md`](docs/architecture/AS_IS_ARCHITECTURE.md)
-- Target boundaries and decisions:
+- Целевые границы и решения:
   [`docs/architecture/TARGET_ARCHITECTURE.md`](docs/architecture/TARGET_ARCHITECTURE.md)
-  and [`docs/decisions/`](docs/decisions/)
-- Development and checks:
-  [`docs/engineering/DEVELOPMENT.md`](docs/engineering/DEVELOPMENT.md) and
+  и [`docs/decisions/`](docs/decisions/)
+- Разработка и проверки:
+  [`docs/engineering/DEVELOPMENT.md`](docs/engineering/DEVELOPMENT.md) и
   [`docs/engineering/TESTING.md`](docs/engineering/TESTING.md)
-- Repository rules for contributors and agents: [`AGENTS.md`](AGENTS.md)
-- Open findings and batch status:
-  [`docs/audits/ARCHITECTURE_AUDIT.md`](docs/audits/ARCHITECTURE_AUDIT.md) and
+- Правила репозитория для разработчиков и агентов: [`AGENTS.md`](AGENTS.md),
+  для Claude — [`CLAUDE.md`](CLAUDE.md)
+- Находки аудита и статус батчей:
+  [`docs/audits/ARCHITECTURE_AUDIT.md`](docs/audits/ARCHITECTURE_AUDIT.md) и
   [`docs/audits/REFACTOR_ROADMAP.md`](docs/audits/REFACTOR_ROADMAP.md)
-- Open product decisions:
+- Открытые продуктовые решения:
   [`docs/product/OPEN_PRODUCT_QUESTIONS.md`](docs/product/OPEN_PRODUCT_QUESTIONS.md)
 
-`TABLEOS_TZ.md` and `PROJECT_CHEATSHEET.md` are retained as legacy/evidence
-documents. Their relationship to current code is mapped in
+`TABLEOS_TZ.md` и `PROJECT_CHEATSHEET.md` сохранены как исторические
+документы. Их связь с текущим кодом описана в
 [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](docs/product/LEGACY_TZ_MIGRATION_MAP.md).
 
-## Local verification
+## Проверка локально
 
-For quick local exploration, SQLite is available explicitly via
-`DJANGO_USE_SQLITE=true`; PostgreSQL is required for production-like locking and
-constraint behavior.
+Для быстрого знакомства можно явно включить SQLite через
+`DJANGO_USE_SQLITE=true`; для поведения блокировок и ограничений как в
+продакшене нужен PostgreSQL.
 
 ```bash
 env DJANGO_USE_SQLITE=true PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python manage.py check
@@ -40,7 +43,6 @@ env DJANGO_USE_SQLITE=true PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/python manage.p
 docker compose config --quiet
 ```
 
-The complete, source-verified setup, process topology, and current lint baseline
-are documented in [`docs/engineering/`](docs/engineering/), rather than copied
-here. Never put real bot tokens, passwords, or environment secrets into this
-repository’s documentation.
+Полная настройка, набор процессов и текущее состояние линтера описаны в
+[`docs/engineering/`](docs/engineering/), а не дублируются здесь. Никогда не
+кладите в документацию настоящие токены ботов, пароли и секреты окружения.

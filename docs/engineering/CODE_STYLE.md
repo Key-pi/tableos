@@ -1,48 +1,55 @@
-# TableOS — Code style and review rules
+# Botera Shop — стиль кода и правила ревью
 
-## Core principles
+## Основные принципы
 
-- Prefer small, explicit owner-service changes to broad rewrites.
-- Preserve behavior and public imports unless an approved roadmap batch says
-  exactly what changes.
-- Use Django ORM idiomatically, but make scoping and transaction boundaries
-  visible rather than implicit.
-- Use existing project formatting/import conventions; do not combine an
-  unrelated repository-wide format sweep with a behavioral fix.
+- Небольшие явные изменения в сервисе-владельце лучше широких переписываний.
+- Сохранять поведение и публичные импорты, если утверждённый батч дорожной
+  карты не говорит точно, что меняется.
+- Использовать Django ORM идиоматично, но делать границы партнёра и
+  транзакций видимыми, а не неявными.
+- Следовать принятым в проекте форматированию и импортам; не смешивать
+  форматирование всего репозитория с исправлением поведения.
 
-## Naming and placement
+## Имена и размещение
 
-| Name | Use only when |
+| Файл | Только если |
 |---|---|
-| `services.py` | a module owns a command/use case, transaction, authorization or orchestration |
-| `selectors.py` | a read-only scoped lookup/projection is shared or materially clarifies a query |
-| `repositories.py` | a real persistence/query boundary has more value than a one-line ORM wrapper |
-| `interfaces.py` | there is a documented consumer and an actual interchangeable boundary |
-| `policies.py` / `rules.py` / `strategies.py` | a named, deterministic business decision is shared or independently testable |
-| `tasks.py` | Celery registers durable background work for the app |
+| `services.py` | модуль владеет командой/сценарием, транзакцией, авторизацией или оркестрацией |
+| `selectors.py` | общий read-only запрос с учётом партнёра или проекция заметно проясняет запрос |
+| `repositories.py` | настоящая граница хранения/запросов ценнее однострочной обёртки над ORM |
+| `interfaces.py` | есть задокументированный потребитель и реально взаимозаменяемая граница |
+| `policies.py` / `rules.py` / `strategies.py` | именованное детерминированное бизнес-решение используется в нескольких местах или тестируется отдельно |
+| `tasks.py` | Celery регистрирует в приложении долговременную фоновую работу |
 
-An empty file or protocol is not architecture. Before deleting or moving one,
-check direct imports, public imports, Django registration, Celery autodiscovery,
-aiogram router inclusion, settings strings, and management command use.
+Пустой файл или протокол — не архитектура. Прежде чем удалять или
+переносить модуль, проверьте прямые и публичные импорты, регистрацию в
+Django, autodiscovery Celery, подключение роутеров aiogram, строки в
+настройках и management-команды.
 
-## Transaction and money rules
+## Транзакции и деньги
 
-- Load the canonical mutable row under the appropriate lock inside the command;
-  do not validate state from a stale object fetched outside it.
-- State/ledger/derived total writes go through one owner service; no raw admin
-  `QuerySet.update()` alternative.
-- Document lock order when more than one aggregate is locked.
-- Use immutable/source-linked/idempotent records for payment/bonus/delivery
-  effects where repeated execution is possible.
-- Network calls occur after commit and outside the database transaction.
+- Загружать каноническую изменяемую строку под нужной блокировкой внутри
+  команды; не проверять состояние по устаревшему объекту, загруженному
+  снаружи.
+- Запись состояния, журнала и производных сумм — через один сервис-владелец;
+  без обходного `QuerySet.update()` из Admin.
+- Документировать порядок блокировок, если блокируется больше одного
+  агрегата.
+- Для эффектов оплаты, бонусов и доставки, которые могут выполниться
+  повторно, использовать неизменяемые, привязанные к источнику,
+  идемпотентные записи.
+- Сетевые вызовы — после коммита и вне транзакции базы.
+- Каналы заказа различать по `order.channel`, а не по наличию стола
+  (ADR-0009).
 
-## Review checklist
+## Чек-лист ревью
 
-- Is `partner` derived from trusted context and checked on all related objects?
-- Is actor activity/capability rechecked at action time?
-- Does the change create a new unscoped selector, mutable admin field, or
-  alternate lifecycle path?
-- Is external I/O/retry outside `atomic`?
-- Are dynamic consumers and public imports preserved?
-- Is an ADR/product decision required rather than inferred?
-- Are docs and focused tests updated in the same change?
+- `partner` берётся из доверенного контекста и проверяется у всех связанных
+  объектов?
+- Активность и права исполнителя проверяются в момент действия?
+- Не появился ли новый селектор без партнёра, изменяемое поле в Admin или
+  обходной путь жизненного цикла?
+- Внешний ввод-вывод и повторы — вне `atomic`?
+- Сохранены динамические потребители и публичные импорты?
+- Нужно ли решение владельца/ADR вместо догадки?
+- Документы и точечные тесты обновлены в том же изменении?

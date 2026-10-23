@@ -1,57 +1,99 @@
 ---
 name: tableos-development
-description: Implement focused TableOS changes safely in the Django, aiogram, Celery modular monolith. Use for application code, models/migrations, bot handlers, Admin, tasks, tests, configuration, or documentation changes that affect tenant scope, permissions, money, lifecycle, background work, or public imports.
+description: Безопасно вносить точечные изменения в Botera Shop (бывший TableOS) — модульный монолит на Django, aiogram и Celery. Использовать для кода приложений, моделей и миграций, обработчиков бота, Admin, задач, тестов, конфигурации или документации, которые затрагивают границы партнёров, права, деньги, жизненный цикл, фоновую работу или публичные импорты.
 ---
 
-# TableOS Development
+# Разработка Botera Shop
 
-## Overview
+## Назначение
 
-Use this skill to make a narrow, evidence-backed TableOS change without bypassing the repository's tenant, money, lifecycle, async, and documentation governance. It is not a license for a broad cleanup or architecture rewrite.
+Навык помогает сделать узкое, подкреплённое доказательствами изменение в
+Botera Shop, не обходя правила репозитория о партнёрах, деньгах, жизненном
+цикле, фоновой работе и документации. Это не разрешение на широкую чистку
+или переписывание архитектуры.
 
-## Required reading
+## Что прочитать
 
-Before editing, read root `AGENTS.md` and the applicable canonical documents:
+Перед правкой прочитайте `AGENTS.md`, `CLAUDE.md` в корне и подходящие
+канонические документы:
 
-- `docs/architecture/MODULE_BOUNDARIES.md` and `LAYERING_RULES.md` for owner and placement;
-- `docs/architecture/TENANCY_AND_PERMISSIONS.md` for actor/tenant work;
-- `docs/architecture/BOT_RUNTIME.md` for aiogram routing/callback work;
-- `docs/architecture/BACKGROUND_JOBS.md` for Celery/external-delivery work;
-- `docs/architecture/TARGET_ARCHITECTURE.md` and relevant ADRs for design choices;
-- `docs/engineering/TESTING.md` for verification; and
-- `docs/product/OPEN_PRODUCT_QUESTIONS.md` before choosing a product semantic.
+- `docs/architecture/MODULE_BOUNDARIES.md` и `LAYERING_RULES.md` — кто
+  владеет и где размещать;
+- `docs/architecture/TENANCY_AND_PERMISSIONS.md` — партнёры и права;
+- `docs/architecture/BOT_RUNTIME.md` — маршрутизация и callback-и aiogram;
+- `docs/architecture/BACKGROUND_JOBS.md` — Celery и внешняя доставка;
+- `docs/architecture/TARGET_ARCHITECTURE.md` и нужные ADR (в том числе
+  ADR-0009 о каналах заказа) — проектные решения;
+- `docs/engineering/TESTING.md` — проверка;
+- `docs/product/OPEN_PRODUCT_QUESTIONS.md` — прежде чем выбирать
+  продуктовый смысл.
 
-If the request depends on an open product decision, stop after safe characterization work and ask the owner; do not infer the policy.
+Если задача зависит от открытого продуктового решения, остановитесь после
+безопасной характеризующей работы и спросите владельца; не додумывайте
+политику.
 
-## Focused change workflow
+## Порядок точечного изменения
 
-1. Locate the owning module and all entry adapters (bot, Admin, task, command, API) with `rg`; check static imports and dynamic registrations before moving or deleting anything.
-2. State the invariant, trusted actor/partner context, transaction boundary, lock order, idempotency behavior, and external side effects before coding.
-3. Add a focused characterization or regression test first. Use PostgreSQL for lock, partial-constraint, or concurrent-worker behavior.
-4. Make the smallest compatible owner-service change. Keep handlers, Admin, and tasks as adapters; preserve documented public imports/task names unless a migration plan explicitly changes them.
-5. Exercise every alternate write boundary. A safe service fix is incomplete if Django Admin, Celery, or a bot callback can still bypass it.
-6. Run the relevant checks, inspect the diff, and update canonical docs/ADR when an invariant or decision changes.
+1. Найти модуль-владельца и все входные адаптеры (бот, Admin, задача,
+   команда, API) через `rg`; проверить статические импорты и динамические
+   регистрации прежде чем что-то переносить или удалять.
+2. Сформулировать инвариант, доверенный контекст исполнителя и партнёра,
+   границу транзакции, порядок блокировок, идемпотентность и внешние
+   побочные эффекты до написания кода.
+3. Сначала добавить точечный характеризующий или регрессионный тест. Для
+   блокировок, частичных ограничений и параллельных воркеров — PostgreSQL.
+4. Сделать минимальное совместимое изменение в сервисе-владельце. Обработчики,
+   Admin и задачи остаются адаптерами; задокументированные публичные импорты
+   и имена задач сохраняются, если план миграции явно не меняет их.
+5. Проверить каждую альтернативную точку записи. Исправление сервиса
+   неполно, если Django Admin, Celery или callback бота всё ещё могут его
+   обойти.
+6. Выполнить нужные проверки, просмотреть diff и обновить канонические
+   документы/ADR, если изменился инвариант или решение.
 
-## Non-negotiable implementation rules
+## Обязательные правила реализации
 
-- Derive `partner` from trusted context and validate all related objects share it. Never trust callback payloads, UI visibility, or a submitted FK alone.
-- Require active Django user, active employee profile, matching partner, and current capability for staff commands.
-- Reload the canonical mutable row under the right lock inside the transaction; do not transition from a stale object fetched earlier.
-- Do not mutate money/state/ledger/derived totals through raw `QuerySet.update`, direct Admin fields, or a duplicate adapter-specific implementation.
-- Do not call Telegram/network I/O or retry/sleep inside `transaction.atomic`. Persist/commit first, then schedule or perform idempotent work.
-- Escape every dynamic value in Telegram messages; bot and notifications use HTML parse mode.
-- Do not add an interface/repository/policy/rule/engine without a real consumer and a distinct responsibility.
-- Do not perform a broad formatting sweep, dependency upgrade, or module move while fixing an unrelated behavior.
+- Брать `partner` из доверенного контекста и проверять, что все связанные
+  объекты принадлежат ему. Никогда не доверять только данным callback,
+  видимости в интерфейсе или присланному FK.
+- Для команд персонала требовать активного пользователя Django, активный
+  профиль сотрудника, совпадение партнёра и текущее право.
+- Перезагружать каноническую изменяемую строку под нужной блокировкой внутри
+  транзакции; не менять состояние по устаревшему объекту.
+- Не менять деньги, состояние, журнал и производные суммы через сырой
+  `QuerySet.update`, прямые поля Admin или дублирующую реализацию в
+  адаптере.
+- Не выполнять сетевой ввод-вывод Telegram и паузы перед повтором внутри
+  `transaction.atomic`. Сначала сохранить и закоммитить, затем ставить или
+  выполнять идемпотентную работу.
+- Экранировать каждое динамическое значение в сообщениях Telegram: бот и
+  уведомления работают в режиме HTML.
+- Не добавлять interface/repository/policy/rule/engine без реального
+  потребителя и отдельной ответственности.
+- Каналы заказа различать по `order.channel`; данные канала — поля заказа,
+  а не новые модели (ADR-0009).
+- Не делать форматирование всего репозитория, обновление зависимостей или
+  перенос модулей вместе с несвязанным исправлением.
 
-## Verification baseline
+## Базовая проверка
 
-Use the project virtual environment and the commands in `docs/engineering/TESTING.md`. The 2026-07-27 audited baseline had 139 passing Django tests in SQLite mode (331 tests after the channel cleanup, green on SQLite and PostgreSQL 16; record new runs in `TESTING.md`), while Ruff has pre-existing failures; report those separately rather than masking them. Run `manage.py makemigrations --check --dry-run` for model changes and `docker compose config --quiet` for deployment configuration changes. Add PostgreSQL verification where required by the change; any change that adds or edits `select_for_update` needs the whole suite on PostgreSQL, because SQLite ignores row locks.
+Используйте виртуальное окружение проекта и команды из
+`docs/engineering/TESTING.md`. На базовой проверке 2026-07-27 в режиме
+SQLite проходило 139 тестов Django (331 тест после упорядочивания каналов,
+зелёные на SQLite и PostgreSQL 16; новые прогоны записывайте в
+`TESTING.md`), у Ruff есть старые замечания — сообщайте о них отдельно, не
+скрывая. Для изменений моделей запускайте
+`manage.py makemigrations --check --dry-run`, для конфигурации развёртывания —
+`docker compose config --quiet`. Где нужно, добавляйте проверку на
+PostgreSQL; любое изменение, которое добавляет или меняет
+`select_for_update`, требует полного прогона на PostgreSQL, потому что
+SQLite игнорирует построчные блокировки.
 
-## Completion checklist
+## Чек-лист завершения
 
-- [ ] Owner module and dynamic consumers identified.
-- [ ] Tenant/actor and lifecycle authority checked at every adapter.
-- [ ] Transaction, lock, idempotency, and external I/O boundary explicit.
-- [ ] Focused tests pass in the correct database/runtime environment.
-- [ ] Public compatibility and rollback considered.
-- [ ] Canonical docs/ADR updated where the rule changed.
+- [ ] Найдены модуль-владелец и динамические потребители.
+- [ ] Права партнёра/исполнителя и жизненного цикла проверены в каждом адаптере.
+- [ ] Транзакция, блокировки, идемпотентность и граница внешнего ввода-вывода явные.
+- [ ] Точечные тесты проходят в нужной базе/окружении.
+- [ ] Учтены публичная совместимость и откат.
+- [ ] Канонические документы/ADR обновлены там, где изменилось правило.

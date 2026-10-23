@@ -1,115 +1,129 @@
-# TableOS repository instructions
+# Правила репозитория Botera Shop
 
-## System summary
+## Кратко о системе
 
-TableOS is a Django modular monolith for multi-tenant hospitality venues.
-`bot` is the aiogram adapter; Django Admin and management commands are other
-write/read adapters; Celery handles background delivery/analytics; PostgreSQL is
-the production source of truth and Redis is the Celery broker/backend.
+Botera Shop (бывший TableOS) — модульный монолит на Django для
+multi-tenant заведений и магазинов. `bot` — адаптер aiogram; Django Admin и
+management-команды — другие адаптеры записи и чтения; Celery отвечает за
+фоновую доставку и аналитику; PostgreSQL — источник правды в продакшене,
+Redis — брокер и хранилище результатов Celery.
 
-Read [README.md](README.md) for onboarding. The canonical governance map is:
+Начните с [README.md](README.md). Канонические документы:
 
-- product: `docs/product/PRODUCT_SPEC.md`, `FEATURE_MATRIX.md`, and
-  `OPEN_PRODUCT_QUESTIONS.md`; ecosystem direction (this repository becomes
-  **Botera Shop** in the Botera network; tables are one ordering channel among
-  pickup/delivery/shipping; no coupling to other Botera products):
+- продукт: `docs/product/PRODUCT_SPEC.md`, `FEATURE_MATRIX.md` и
+  `OPEN_PRODUCT_QUESTIONS.md`; направление сети (этот репозиторий — **Botera
+  Shop** в сети Botera; стол — один из каналов заказа наравне с самовывозом,
+  доставкой и отправкой; никакой связности с другими продуктами Botera):
   `docs/product/ECOSYSTEM_DIRECTION.md`;
-- current architecture: `docs/architecture/AS_IS_ARCHITECTURE.md`;
-- target/module/layer rules: `docs/architecture/TARGET_ARCHITECTURE.md`,
+- как устроено сейчас: `docs/architecture/AS_IS_ARCHITECTURE.md`;
+- целевые правила модулей и слоёв: `docs/architecture/TARGET_ARCHITECTURE.md`,
   `MODULE_BOUNDARIES.md`, `LAYERING_RULES.md`;
-- security/runtime/tasks: `TENANCY_AND_PERMISSIONS.md`, `BOT_RUNTIME.md`,
-  `BACKGROUND_JOBS.md` in `docs/architecture/`;
-- decisions: `docs/decisions/ADR-0001.md` through `ADR-0009.md`;
-- engineering: `docs/engineering/`;
-- evidence/roadmap: `docs/audits/` (open findings: `ARCHITECTURE_AUDIT.md`;
-  batch status: `REFACTOR_ROADMAP.md`).
+- безопасность, бот, фоновые задачи: `TENANCY_AND_PERMISSIONS.md`,
+  `BOT_RUNTIME.md`, `BACKGROUND_JOBS.md` в `docs/architecture/`;
+- решения: `docs/decisions/ADR-0001.md` — `ADR-0009.md`;
+- инженерные практики: `docs/engineering/`;
+- аудит и дорожная карта: `docs/audits/` (находки — `ARCHITECTURE_AUDIT.md`,
+  статус батчей — `REFACTOR_ROADMAP.md`).
 
-Current-state documents cite code as `path:symbol`, not by line number. When a
-change alters behaviour described in `AS_IS_ARCHITECTURE.md`,
-`FEATURE_MATRIX.md` or an ADR, update them in the same change.
+Документы о текущем состоянии ссылаются на код как `path:symbol`, без
+номеров строк. Если изменение меняет поведение, описанное в
+`AS_IS_ARCHITECTURE.md`, `FEATURE_MATRIX.md` или ADR, обновляйте их в том
+же изменении.
 
-`TABLEOS_TZ.md` and `PROJECT_CHEATSHEET.md` are retained legacy/evidence
-documents. Do not treat them as a higher source of truth than the source code,
-canonical docs, or an approved ADR.
+`TABLEOS_TZ.md` и `PROJECT_CHEATSHEET.md` — сохранённые исторические
+документы. Они не важнее кода, канонических документов и утверждённых ADR.
 
-## Mandatory workflow
+## Обязательный порядок работы
 
-1. Identify the owning module and relevant adapter boundaries before editing.
-2. Search static imports and dynamic consumers (Django registration/admin,
-   migrations, Celery autodiscovery, aiogram router inclusion, management
-   commands, settings strings) before moving/removing code.
-3. Add characterization/regression tests before changing a lifecycle, money,
-   tenant, or permission behavior.
-4. Make the narrowest compatible owner-service change; preserve public imports,
-   Celery task names, router behavior, admin URLs, and user-facing flows unless
-   an approved migration plan explicitly changes them.
-5. Verify the relevant paths, inspect the diff, and update canonical docs/ADR
-   when a rule or product decision changes.
+1. Определить модуль-владельца и границы адаптеров до правки.
+2. Найти статические импорты и динамических потребителей (регистрация в
+   Django и Admin, миграции, autodiscovery Celery, подключение роутеров
+   aiogram, management-команды, строки в настройках) прежде чем переносить
+   или удалять код.
+3. Добавить характеризующие/регрессионные тесты прежде чем менять жизненный
+   цикл, деньги, границы партнёров или права.
+4. Делать самое узкое совместимое изменение в сервисе-владельце; сохранять
+   публичные импорты, имена задач Celery, поведение роутеров, URL Admin и
+   пользовательские сценарии, если утверждённый план миграции явно не меняет
+   их.
+5. Проверить затронутые пути, просмотреть diff и обновить канонические
+   документы/ADR при изменении правила или продуктового решения.
 
-## Fixed architecture rules
+## Неизменные правила архитектуры
 
-- `core` contains only cross-cutting technical primitives and must not import a
-  domain app.
-- Domain modules own their data and commands. `bot`, Django Admin, Celery tasks,
-  and management commands are adapters: they call owner services/selectors and
-  do not reimplement business invariants.
-- `services.py` owns use cases/transactions; `selectors.py` is read-only;
-  `repositories.py`, `interfaces.py`, `policies.py`, `rules.py`, and `engine.py`
-  require a documented consumer and distinct responsibility.
-- Do not introduce a generic event bus, repository hierarchy, microservice, or
-  cache merely to make a structure look uniform.
+- `core` содержит только сквозные технические примитивы и не импортирует
+  доменные приложения (исключения — адаптеры `core/admin_mixins.py` и
+  `core/urls.py`, см. AS-IS).
+- Доменные модули владеют своими данными и командами. `bot`, Django Admin,
+  задачи Celery и management-команды — адаптеры: вызывают сервисы и
+  селекторы владельца и не повторяют бизнес-инварианты.
+- `services.py` владеет сценариями и транзакциями; `selectors.py` только
+  читает; `repositories.py`, `interfaces.py`, `policies.py`, `rules.py` и
+  `engine.py` требуют задокументированного потребителя и отдельной
+  ответственности.
+- Одна модель заказа, корзины, счёта и оплаты на все каналы заказа; канал —
+  атрибут (`order.channel`), данные канала — поля заказа (ADR-0009).
+- Не вводить общую шину событий, иерархию репозиториев, микросервис или кэш
+  только ради единообразия структуры.
 
-## Tenant and permission rules
+## Партнёры и права
 
-- Derive `partner` from trusted context; never trust a callback payload, UI
-  visibility, submitted FK, or unscoped object as proof of tenant authority.
-- Validate that actor, target, and every related object share the same partner
-  in an owner service before mutation.
-- A staff command requires active Django `User`, active `EmployeeProfile`,
-  matching partner, and current capability at execution time. Recheck after a
-  rendered card/keyboard may have gone stale.
-- Scope Admin list filters, foreign keys, inlines, and actions as rigorously as
-  primary querysets. Admin access is not interchangeable with staff capability.
-- A suspended partner’s behavior must be decided and enforced at update/task
-  time, not assumed from process startup cache.
+- Брать `partner` из доверенного контекста; данные callback, видимость в
+  интерфейсе, присланный FK или объект без привязки к партнёру не
+  доказывают прав.
+- В сервисе-владельце до изменения проверять, что исполнитель, цель и все
+  связанные объекты принадлежат одному партнёру.
+- Команда персонала требует активного `User` Django, активного
+  `EmployeeProfile`, совпадения партнёра и текущего права в момент
+  выполнения. Перепроверять после того, как карточка или клавиатура могла
+  устареть.
+- Фильтры списков, внешние ключи, inline и действия Admin ограничивать по
+  партнёру так же строго, как основные выборки. Доступ к Admin не равен
+  правам сотрудника.
+- Поведение приостановленного партнёра решается и применяется в момент
+  обновления или задачи, а не берётся из кэша при старте процесса.
 
-## Django, transaction, money and async rules
+## Django, транзакции, деньги и фоновая работа
 
-- Load the canonical mutable row under the appropriate lock inside the command;
-  do not transition state from a stale preloaded instance.
-- State-machine, ledger, allocation, payment, derived-total, and session-close
-  writes use one owner service. Do not use raw `QuerySet.update()` or editable
-  Admin fields as an alternate lifecycle path.
-- Document lock order and idempotency for concurrent commands. Use PostgreSQL
-  tests for locks and durable constraints, and run the whole suite on
-  PostgreSQL for any change that adds or edits `select_for_update`: SQLite
-  ignores it (AA-033).
-- Keep money ledgers source-linked/traceable and use explicit compensating
-  policy rather than silently editing history.
-- Telegram/network I/O, retry sleep, and fan-out never run inside an open
-  database transaction. Persist/commit first; task delivery must be idempotent.
-- Bot and notification messages use HTML parse mode: escape every dynamic
-  value (partner, menu, guest, employee, comment text) when rendering.
+- Загружать каноническую изменяемую строку под нужной блокировкой внутри
+  команды; не менять состояние по заранее загруженному устаревшему объекту.
+- Записи состояния, журналов, распределения по счетам, оплат, производных
+  сумм и закрытия сессий идут через один сервис-владелец. Не использовать
+  сырой `QuerySet.update()` или редактируемые поля Admin как обходной путь.
+- Документировать порядок блокировок и идемпотентность конкурентных команд.
+  Блокировки и долговечные ограничения проверять тестами на PostgreSQL, а
+  весь набор прогонять на PostgreSQL при любом добавлении или изменении
+  `select_for_update`: SQLite его игнорирует (AA-033).
+- Денежные журналы — с привязкой к источнику и прослеживаемые; исправления —
+  явной компенсирующей записью, а не тихой правкой истории.
+- Сетевой ввод-вывод Telegram, паузы перед повтором и рассылка никогда не
+  выполняются внутри открытой транзакции базы. Сначала сохранить и
+  закоммитить; доставка задач — идемпотентная.
+- Сообщения бота и уведомления — в режиме HTML: экранировать каждое
+  динамическое значение (партнёр, меню, гость, сотрудник, комментарий).
 
-## Checks and definition of done
+## Проверки и готовность
 
-Use the exact commands in `docs/engineering/TESTING.md`. At the 2026-07-27
-audited baseline, `manage.py check`, migration dry-run, tests (139), and compose
-config passed in local SQLite mode; Ruff had pre-existing failures. The suite
-has grown since (331 tests after the channel cleanup, green on SQLite and PostgreSQL 16); record every full run in
-`TESTING.md`. Do not claim a green test or lint baseline without rerunning it,
-and do not claim PostgreSQL coverage that is not in the repository.
+Используйте точные команды из `docs/engineering/TESTING.md`. На базовой
+проверке 2026-07-27 в режиме SQLite проходили `manage.py check`, проверка
+миграций, тесты (139) и конфигурация compose; у Ruff были старые замечания.
+С тех пор набор вырос (331 тест после упорядочивания каналов, зелёные на
+SQLite и PostgreSQL 16); каждый полный прогон записывайте в `TESTING.md`.
+Не заявляйте «зелёные» тесты или линтер без перепроверки и не заявляйте
+покрытие PostgreSQL, которого нет в репозитории.
 
-A change is done only when its owner/adapter boundaries, tenant/actor checks,
-transaction/lock/idempotency behavior, alternate Admin/bot/task paths, tests,
-compatibility impact, and documentation/ADR updates have been reviewed.
+Изменение готово, только когда проверены: границы владельца и адаптеров,
+проверки партнёра и исполнителя, транзакции, блокировки и идемпотентность,
+альтернативные пути через Admin, бота и задачи, тесты, совместимость и
+обновление документов/ADR.
 
-## Prohibited without explicit owner approval
+## Запрещено без явного согласия владельца
 
-- Product semantic decisions listed in `docs/product/OPEN_PRODUCT_QUESTIONS.md`.
-- Destructive data repair, migration enforcement without a data audit, or
-  silent cross-tenant data cleanup.
-- Broad refactors, dependency upgrades, full formatting sweeps, or module moves
-  bundled into an unrelated bug fix.
-- Removing a module/interface/task/repository before static, dynamic, public API
-  and test evidence proves it unused.
+- Продуктовые решения из `docs/product/OPEN_PRODUCT_QUESTIONS.md`.
+- Разрушительное исправление данных, включение ограничений миграцией без
+  аудита данных, тихая чистка данных между партнёрами.
+- Широкие рефакторинги, обновление зависимостей, форматирование всего
+  репозитория или перенос модулей вместе с несвязанным исправлением.
+- Удаление модуля, интерфейса, задачи или репозитория, пока статический и
+  динамический поиск, публичный API и тесты не доказали, что он не
+  используется.
