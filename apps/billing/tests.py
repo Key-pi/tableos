@@ -356,6 +356,20 @@ class BillingServiceTests(TestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.payment_method, Order.PaymentMethod.MIXED)
 
+    def test_get_bill_remaining_amount_is_read_only(self):
+        # AA-028: the Admin changelist calls this per row on a GET request.
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self.order.id)],
+        )
+        record_payment(bill=bill, amount="100.00", method=Payment.Method.CASH)
+
+        with patch.object(Bill, "save", autospec=True) as save_mock:
+            remaining = get_bill_remaining_amount(bill)
+
+        self.assertEqual(remaining, Decimal("200.00"))
+        save_mock.assert_not_called()
+
     def test_record_payment_rejects_unknown_method(self):
         bill = create_bill_from_orders(
             partner_id=self.partner.id,

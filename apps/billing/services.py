@@ -59,9 +59,14 @@ class BonusPaymentResult:
 
 
 def get_bill_remaining_amount(bill: Bill) -> Decimal:
+    """Return the unpaid remainder computed from items and payments.
+
+    Read-only: it never saves the bill (AA-028), so it is safe in list views.
+    """
+
     refreshed_bill = Bill.objects.prefetch_related("items", "payments").get(id=bill.id)
-    recalculate_bill_totals(refreshed_bill)
-    return (refreshed_bill.total_amount - refreshed_bill.paid_amount).quantize(Decimal("0.01"))
+    _subtotal, total_amount, paid_amount = _compute_bill_totals(refreshed_bill)
+    return (total_amount - paid_amount).quantize(Decimal("0.01"))
 
 
 def get_bill_context_label(bill: Bill) -> str:
@@ -219,7 +224,9 @@ def attach_orders_to_bill(
     return recalculate_bill_totals(bill)
 
 
-def recalculate_bill_totals(bill: Bill) -> Bill:
+def _compute_bill_totals(bill: Bill) -> tuple[Decimal, Decimal, Decimal]:
+    """Return (subtotal, total, money paid) from the bill's items and payments."""
+
     subtotal = sum((item.line_total for item in bill.items.all()), Decimal("0.00"))
     paid_amount = sum(
         (
@@ -229,12 +236,18 @@ def recalculate_bill_totals(bill: Bill) -> Bill:
         ),
         Decimal("0.00"),
     )
-    bill.subtotal_amount = subtotal
-    bill.total_amount = max(
+    total_amount = max(
         Decimal("0.00"),
         subtotal - bill.discount_amount - bill.bonus_spent_amount,
     ).quantize(Decimal("0.01"))
-    bill.paid_amount = paid_amount.quantize(Decimal("0.01"))
+    return subtotal, total_amount, paid_amount.quantize(Decimal("0.01"))
+
+
+def recalculate_bill_totals(bill: Bill) -> Bill:
+    subtotal, total_amount, paid_amount = _compute_bill_totals(bill)
+    bill.subtotal_amount = subtotal
+    bill.total_amount = total_amount
+    bill.paid_amount = paid_amount
     bill.save(
         update_fields=[
             "discount_amount",
