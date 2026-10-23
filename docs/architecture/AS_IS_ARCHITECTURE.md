@@ -66,7 +66,7 @@ crypto, logging and settings.
 | Users / identity | `User`, global `TelegramAccount`, partner `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile` | One Telegram identity → one guest profile per partner. |
 | Tables | `Table`, `TableSession` | `tables/services.py` | QR activation, settlement-gated close. `timed_out` and `expires_at` exist but nothing sets them. |
 | Menu | `MenuCategory`, `MenuItem` | `menu/repositories.py` reads; Admin writes | Price must be positive (`menu_item_price_positive`). |
-| Orders | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py` | Cart lifecycle, order creation, status machine, guest receipt confirmation. |
+| Orders | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py`; pickup in `billing/pickup.py` | Cart lifecycle, order creation by channel (table / pickup), status machine, guest receipt confirmation. |
 | Billing | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment` | `billing/services.py` | Bill creation/extension, payment, bonus payment, post-payment settlement. |
 | Bonuses | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Ledger-backed balance with reconciliation guard; quick sale. |
 | Employees | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | Writes go through Admin. |
@@ -99,7 +99,8 @@ and discloses no counts). Both are accepted adapter exceptions (AA-031).
 
 `bot/main.py:create_dispatcher` registers `PartnerRuntimeMiddleware` as an
 outer update middleware and then includes routers in this order: `start`,
-`session`, `menu`, `order`, `profile`, `billing`, `guest_call`, `staff`.
+`session`, `menu`, `order`, `pickup`, `profile`, `billing`, `guest_call`,
+`staff`.
 aiogram stops at the first matching handler, so this order is behaviour.
 
 1. `bot/services/runtime.py:load_active_bot_configs` runs once at `runbot`
@@ -158,8 +159,11 @@ partner-authored markup.
    itself when nobody sits in it and it is settled (no unpaid orders, no open
    bill); `close_table_visit` is the staff command.
 2. Cart commands in `orders/services.py` lock the guest's active `Cart`.
-   A cart with items that belongs to an older session is abandoned; an empty
-   one is moved to the new session. `unique_active_cart_per_partner_guest`
+   At a table the cart belongs to the session: a cart with items of an older
+   session is abandoned, an empty one is moved, and a cart without a session
+   (built for pickup) joins the session with its items. Without a session a
+   cart exists only when the venue offers pickup; a cart left from a closed
+   session is detached and kept. `unique_active_cart_per_partner_guest`
    allows one active cart per guest and partner.
 3. Checkout → `create_order`, which validates that guest, table, session and
    every menu item belong to the partner, snapshots item names and the prices
@@ -172,7 +176,15 @@ partner-authored markup.
    `new → accepted|canceled`, `accepted → preparing|ready|canceled`,
    `preparing → ready|canceled`, `ready → delivering|completed|canceled`,
    `delivering → completed|canceled`. Completion sets `received_at`.
-5. Guest receipt confirmation (`confirm_order_received_by_guest`) locks the
+5. **Pickup** (`Order.channel = pickup`, [PICKUP.md](PICKUP.md)): checkout
+   without a table, or «Самовывоз» at a table, runs
+   `apps/billing/pickup.py:place_pickup_order` — phone required, only within
+   `OpeningHours`, a personal bill issued at once, optional bonuses; the
+   guest prepays by transfer to `PartnerBotSettings.pickup_payment_details`.
+   Staff (owner/manager/cashier) confirm (`transfer` payment, `accepted`) or
+   reject (bill voided with `payment_not_received`, bonuses returned,
+   `canceled`); an unpaid pickup order cannot be accepted otherwise.
+6. Guest receipt confirmation (`confirm_order_received_by_guest`) locks the
    order and moves it to `completed` from any status in
    `GUEST_RECEIPT_CONFIRMABLE_STATUSES` (every non-final status, including
    `new`; owner decision PQ-029). This is the only guest-initiated transition;
@@ -302,7 +314,7 @@ transactions; allowed operations are actions that call owner services.
 
 ## Tests and checks
 
-- 296 tests after B5, green on SQLite and on PostgreSQL 16. Ten are
+- 327 tests after pickup, green on SQLite and on PostgreSQL 16. Ten are
   PostgreSQL-only and skipped on SQLite: parallel broadcast workers
   (`apps/notifications/test_delivery.py`); concurrent order transition
   (`apps/orders/test_concurrency.py`); concurrent QR scans, two guests

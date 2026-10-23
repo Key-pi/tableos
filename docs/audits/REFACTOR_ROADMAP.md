@@ -234,9 +234,9 @@ PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implem
 | Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
 | Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
 
-B3.2, B4 and B5 are complete. Next (owner-approved order,
-`ECOSYSTEM_DIRECTION.md`): pickup ordering, renaming what people see to
-Botera Shop, source tracking for deep links. Before production rollout of
+B3.2, B4, B5 and pickup ordering ([PICKUP.md](../architecture/PICKUP.md))
+are complete. Next (owner-approved order, `ECOSYSTEM_DIRECTION.md`):
+renaming what people see to Botera Shop, source tracking for deep links. Before production rollout of
 B2–B5:
 run the duplicate-data audits on a production copy and the full suite on
 PostgreSQL.

@@ -59,6 +59,14 @@ live guard again.
   (`stafftvshared`, `stafftvpersonal`, `stafftvclose`) reload the visit within
   the employee's partner.
 
+- Pickup (PICKUP.md): guest steps are stateless `pk:` callbacks; the final
+  `pk:p:…` carries the total and the amount to pay that the guest saw, and
+  the service refuses to place the order if either changed. The checkout
+  channel choice is `co:table` / `co:pickup`. A shared contact is accepted
+  only when `contact.user_id` is the sender. Staff `staffpkok`, `staffpkno`
+  (asks first) and `staffpknoy` reload the order within the employee's
+  partner; the service checks the role (owner/manager/cashier).
+
 ## Callback and content design
 
 Use a namespaced callback/action key plus a scoped object identifier. The

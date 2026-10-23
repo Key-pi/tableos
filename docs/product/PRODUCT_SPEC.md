@@ -27,7 +27,7 @@ TableOS — multi-tenant white-label B2B платформа для заведе�
 4. сохранять проверяемый след по заказам, оплатам, бонусам и уведомлениям;
 5. сохранять строгую изоляцию данных и действий партнёров.
 
-В текущий product scope **не входят как готовые journeys** public REST API, WebApp, production webhook runtime, POS/fiscal providers, online payments, delivery и pickup. Наличие model fields или flags не означает, что journey существует.
+В текущий product scope **не входят как готовые journeys** public REST API, WebApp, production webhook runtime, POS/fiscal providers, online payments и delivery. Pickup реализован с предоплатой переводом ([PICKUP.md](../architecture/PICKUP.md)). Наличие model fields или flags не означает, что journey существует.
 
 ## 2. Роли и контексты доступа
 
@@ -67,7 +67,8 @@ TableOS — multi-tenant white-label B2B платформа для заведе�
 | Staff operations | Orders, notifications, tables, billing, quick sale, reports by capability | Employee + Telegram binding | PARTIAL_CURRENT — B1 rechecks active user/profile/partner and capability on every callback; formal role matrix is PQ-004 |
 | Daily report | Operational day summary, tails, bills/quick sales | Billing and/or quick sale | CONFIRMED_CURRENT as on-demand MVP |
 | Broadcasts | Partner-scoped marketing respecting preferences; scheduled delivery | Celery + Telegram | CONFIRMED_CURRENT since B4: at most once per guest and campaign (PQ-014, ADR-0008) |
-| Delivery / pickup | Separate journeys, not merely flags | Product design required | CODE_IS_BEHIND_SPEC / future scope |
+| Pickup | Prepaid by transfer (with optional bonuses), ASAP / 30 / 60 min within opening hours, phone required, staff confirms the transfer | Menu + orders + cart; billing used internally | CONFIRMED_CURRENT ([PICKUP.md](../architecture/PICKUP.md)) |
+| Delivery / shipping | Separate journeys, not merely flags | Product design required | CODE_IS_BEHIND_SPEC / future scope |
 | Webhook runtime | Explicit production runtime with observability | Product/ops decision | CODE_IS_BEHIND_SPEC / future scope |
 
 ### Capability dependencies
@@ -164,7 +165,7 @@ The following are not silently “normalised” in this product document; implem
 | Labels cannot misroute guest actions | `TABLEOS_TZ.md:1512-1537`; `bot/filters/content.py:PartnerButtonFilter` compares raw message text; B1: `apps/partners/models.py:PartnerBotSettings.clean` rejects empty and duplicate routed labels | RESOLVED_IN_B1 (validation) | Stable intent routing remains a future choice (PQ-016) |
 | Telegram I/O is outside transaction and broadcasts are retry-safe | `TABLEOS_TZ.md:1852-1877`; B4: `apps/notifications/services.py:send_broadcast_campaign_now` claims `BroadcastDelivery` rows, sends with no transaction open and records each outcome; `recover_stalled_broadcast_campaigns` | RESOLVED_IN_B4 (AA-008, AA-030) | At most once for broadcasts, at least once for operational notifications (PQ-014, PQ-015) |
 | Admin cannot bypass operational transition rules | B2/B3 make lifecycle, allocation, bonus balance and ledger fields readonly; payment/bonus commands remain owner services and no special bonus-settlement Admin action exists | PARTIALLY_RESOLVED_FOR_B3 | Correction policy (PQ-018), order relations read-only since B3.1, PostgreSQL rollout gate remain open |
-| Delivery/pickup are usable journeys | `TABLEOS_TZ.md:2220-2245`; `apps/partners/models.py:PartnerBotSettings.clean` accepts delivery/pickup flags, but there is no established delivery/pickup order journey | CODE_IS_BEHIND_SPEC | Keep flags as capability groundwork; do not market as implemented flows |
+| Delivery/pickup are usable journeys | Pickup: `apps/billing/pickup.py`, `bot/handlers/pickup.py`; delivery has only its flag | Pickup RESOLVED; delivery CODE_IS_BEHIND_SPEC | Delivery and shipping are the next channels (ECOSYSTEM_DIRECTION.md) |
 | A bill contains only the current visit's orders | B3.2 part B: `apps/billing/services.py:get_table_billable_orders` filters by `TableSession.visit`; `create_bill_from_orders` rejects orders of different visits; `bot/services/navigation.py` checks the guest's visit | RESOLVED_IN_B3.2B (AA-020) | Guest chooses to join a party or start a new visit (PQ-026); staff close leftover visits |
 | Recording a payment does not fail because of follow-up steps | Before B3.1 the table-wide auto-close raised `TableSessionError` inside the payment transaction; now `apps/billing/services.py:_close_settled_sessions_of_bill` skips non-closable sessions | RESOLVED_IN_B3.1 (AA-021) | Payment always persists; auto-close closes only fully paid sessions (PQ-027) |
 | A guest is not charged for a cancelled order | `apps/orders/services.py:transition_order_status` cancels allocated orders; `recalculate_bill_totals` keeps their lines; no bill void command exists | RESOLVED_IN_B3.2A (AA-022) | Owner-granted, audited bill change/void; void releases allocations (PQ-028) |
@@ -172,6 +173,6 @@ The following are not silently “normalised” in this product document; implem
 
 ## 9. Future scope and exclusions
 
-The following need their own approved product/design batch before implementation: delivery/pickup data model and UX, WebApp, webhook runtime, online payment provider callbacks, POS/fiscal integrations, refund lifecycle, loyalty expiry automation, segmentation/preview/unsubscribe for broadcasts, export/dashboard UX, multilingual policy, inventory/stop-lists, service charge/tips and table-session expiry policy.
+The following need their own approved product/design batch before implementation: delivery/shipping data model and UX, WebApp, webhook runtime, online payment provider callbacks, POS/fiscal integrations, refund lifecycle, loyalty expiry automation, segmentation/preview/unsubscribe for broadcasts, export/dashboard UX, multilingual policy, inventory/stop-lists, service charge/tips and table-session expiry policy.
 
 Open choices that affect behavior are maintained in [OPEN_PRODUCT_QUESTIONS.md](OPEN_PRODUCT_QUESTIONS.md); they are not resolved by this audit.
