@@ -256,8 +256,10 @@ def create_bill_from_orders(
         raise BillingServiceError("Нужно выбрать хотя бы один заказ для создания счёта.")
 
     requested_order_ids = {str(order_id) for order_id in order_ids}
+    # PostgreSQL rejects FOR UPDATE on the nullable side of an outer join
+    # (`table` is nullable), so lock only the order rows themselves.
     orders = list(
-        Order.objects.select_for_update()
+        Order.objects.select_for_update(of=("self",))
         .select_related("table", "guest")
         .prefetch_related("items")
         .filter(
