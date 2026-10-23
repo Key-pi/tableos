@@ -68,9 +68,7 @@ class GuestAndStaffRenderingTests(SimpleTestCase):
             public_id="ABCD1234",
             table_id=1,
             table=SimpleNamespace(number=4),
-            guest=SimpleNamespace(
-                telegram_account=SimpleNamespace(username="", telegram_id=42)
-            ),
+            guest=SimpleNamespace(telegram_account=SimpleNamespace(username="", telegram_id=42)),
             assigned_employee=SimpleNamespace(
                 user=SimpleNamespace(get_full_name=lambda: "Ann & <Bob>", username="ann")
             ),
