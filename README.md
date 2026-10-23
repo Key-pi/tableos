@@ -5,6 +5,17 @@ Botera Shop (бывший TableOS) — multi-tenant платформа зака�
 aiogram, Celery, PostgreSQL и Redis. Часть сети Botera
 ([`docs/product/ECOSYSTEM_DIRECTION.md`](docs/product/ECOSYSTEM_DIRECTION.md)).
 
+## Быстрый старт в Docker
+
+```bash
+cp .env.example .env    # впишите BOT_TOKEN_ENCRYPTION_KEY, токен бота и свой Telegram ID
+docker compose up --build
+docker compose logs init   # логины Admin и ссылки на столы демо-заведений
+```
+
+Подробно, со списком того, что проверить, — в
+[`docs/engineering/DEVELOPMENT.md`](docs/engineering/DEVELOPMENT.md#запуск-в-docker-с-нуля).
+
 ## С чего начать
 
 - Продукт и текущий статус функций:

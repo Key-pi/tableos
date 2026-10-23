@@ -3,76 +3,165 @@
 **Статус:** проверено по коду. Точные результаты базовой проверки — в
 [`../audits/BASELINE.md`](../audits/BASELINE.md).
 
-## Что нужно
+## Запуск в Docker с нуля
 
-- Python 3.10 или новее (на аудите использовался Python 3.10.20).
-- PostgreSQL — для данных как в продакшене, миграций, ограничений и проверки
-  конкурентности.
-- Redis и воркер Celery — для фоновой доставки.
-- Действующая зашифрованная настройка Telegram-бота для настоящего polling;
-  токены-заглушки из сидов ботом не являются.
+Самый простой путь: всё поднимается одной командой, включая бота, уведомления
+и рассылки. Нужен только Docker Desktop (macOS/Windows) или Docker Engine с
+плагином Compose (Linux).
 
-Проект описан как пакет PEP 621/Hatchling в `pyproject.toml`; lock-файла в
-репозитории нет. Используйте виртуальное окружение проекта или аналогичное
-изолированное, и не записывайте личные и продакшен-секреты в документацию,
-историю команд или фикстуры.
-
-## Первая настройка (macOS / Linux)
+### 1. Код и настройки
 
 ```bash
 git clone https://github.com/Key-pi/tableos.git && cd tableos
+git checkout clean-project-rules
+cp .env.example .env
+openssl rand -base64 32 | tr '+/' '-_'   # ключ шифрования токенов ботов
+```
+
+Откройте `.env` и заполните:
+
+| Переменная | Что вписать | Зачем |
+|---|---|---|
+| `BOT_TOKEN_ENCRYPTION_KEY` | ключ из команды выше | обязательно; задаётся один раз — со сменой ключа сохранённые токены не расшифруются |
+| `DEMO_CAFE_BOT_TOKEN` | токен бота из @BotFather (`/newbot`) | бот кафе Riverstone (столы, самовывоз, всегда открыто) |
+| `DEMO_HOOKAH_BOT_TOKEN` | токен второго бота (по желанию) | бот кальянной Night Owl (самовывоз только 18:00–04:00) |
+| `DEMO_TELEGRAM_ID` | ваш Telegram ID (напишите @userinfobot) | вы станете владельцем обоих заведений: `/staff`, уведомления, плюс 500 бонусов как гостю |
+
+У каждого заведения свой бот: один и тот же токен на два заведения не
+подходит. Имя бота узнаётся у Telegram по токену само.
+
+### 2. Запуск
+
+```bash
+docker compose up --build        # с логами в терминале; Ctrl+C — остановить
+# или в фоне:
+docker compose up --build -d
+```
+
+Порядок старта: `db` и `redis` → `init` (проверяет ключ, применяет миграции,
+загружает демо-данные и завершается) → `web`, `worker`, `beat`, `bot`.
+
+| Сервис | Что делает |
+|---|---|
+| `db` | PostgreSQL 16, данные в томе `postgres_data` |
+| `redis` | брокер Celery |
+| `init` | разовый: миграции + `seed_baseline_demo --keep-existing` |
+| `web` | Django и Admin: http://localhost:8000/admin/ |
+| `worker` | доставка уведомлений персоналу и гостям, рассылки |
+| `beat` | запланированные рассылки, восстановление зависших, метрики дня |
+| `bot` | polling всех ботов с настоящим токеном; без них ждёт и пишет подсказку |
+
+Логины и ссылки на столы печатает `init`:
+
+```bash
+docker compose logs init
+```
+
+По умолчанию администратор платформы — `platform_admin / botera12345`,
+владельцы заведений — `cafe_owner_1`, `smoke_owner_1` с тем же паролем
+(меняются в `.env`: `DEMO_ADMIN_*`, `DEMO_STAFF_PASSWORD`).
+
+### 3. Что проверить
+
+**Перед проверкой нажмите «Start» в каждом своём боте.** Telegram не даёт
+боту написать человеку, который его ни разу не открывал, поэтому без этого
+уведомления персоналу не придут.
+
+- **Заказ за столом.** Откройте ссылку стола из `docker compose logs init`
+  (`https://t.me/<бот>?start=table_3_river_tbl_03`) — это то, что зашито в
+  QR-код. Меню → корзина → оформить. Вам как владельцу придёт уведомление о
+  заказе; в `/staff` примите заказ и смените статус — гость получит
+  обновление.
+- **Самовывоз.** В боте кнопка «Самовывоз» → меню без кальянов и алкоголя →
+  оформить: время, телефон, бонусы. Подтвердите перевод в `/staff`. В
+  кальянной днём покажется «закрыто» — так проверяются часы работы.
+- **Счета и бонусы.** «Запросить счёт» за столом, в `/staff` — счёт, оплата,
+  «Оплатить бонусами» (500 стартовых бонусов уже на вашем профиле), правка и
+  аннулирование счёта.
+- **Вызов персонала**, **быстрая продажа**, **отчёт за день** — из меню
+  `/staff`.
+- **Рассылки.** Admin → Notifications → Broadcast campaigns: создать и отправить
+  сразу или на время (запланированные отправляет `beat` раз в минуту).
+- **Admin под владельцем.** Войдите как `cafe_owner_1`: видно только своё
+  заведение.
+
+Второй телефон удобно сделать официантом или гостем: в Admin → Employees →
+Employee profiles привяжите его Telegram-аккаунт (появится после `/start` в боте) к
+`cafe_waiter_1`.
+
+### 4. Повседневные команды
+
+```bash
+docker compose ps                         # что запущено
+docker compose logs -f bot worker         # логи бота и доставки
+docker compose up -d                      # после правки .env: контейнеры пересоздадутся
+docker compose restart bot                # после изменения ботов в Admin
+docker compose restart worker beat bot    # после правки кода (web перезапускается сам)
+docker compose up --build                 # после изменения pyproject.toml
+docker compose run --rm web python manage.py seed_baseline_demo   # вернуть демо-данные к исходным
+docker compose run --rm web python manage.py test                 # тесты на PostgreSQL в Docker
+docker compose run --rm web python manage.py createsuperuser
+docker compose down                       # остановить
+docker compose down -v                    # остановить и удалить базу — полный сброс
+```
+
+При каждом `up` сервис `init` перезапускает сид с `--keep-existing`: уже
+созданные заведения не трогаются (ваши правки в Admin сохраняются), только
+подключаются новые токены ботов и ваш Telegram. Без флага сид возвращает
+меню, столы, персонал и пароли демо-заведений к исходным. `DEMO_SEED=false`
+отключает демо-данные совсем.
+
+Рабочая копия смонтирована в контейнеры, поэтому правка кода не требует
+пересборки образа.
+
+### 5. Если что-то не так
+
+| Симптом | Что сделать |
+|---|---|
+| `init` завершился с ошибкой про `BOT_TOKEN_ENCRYPTION_KEY` | сгенерируйте ключ (шаг 1) и впишите в `.env` |
+| `init`: «Telegram не принял токен» | проверьте токен в @BotFather; без интернета задайте `DEMO_*_BOT_USERNAME` |
+| порт 5432, 6379 или 8000 занят | в `.env` задайте `DB_PORT_ON_HOST`, `REDIS_PORT_ON_HOST`, `WEB_PORT_ON_HOST` |
+| бот молчит | `docker compose logs bot`; один токен не должен работать в двух местах (например, ещё и в локальном `runbot`) |
+| не приходят уведомления | нажали «Start» в боте? `DEMO_TELEGRAM_ID` указан? Admin → Notifications → Staff notifications: статус и ошибка доставки; `docker compose logs worker` |
+| изменили бота в Admin, а он не отвечает | `docker compose restart bot` |
+
+## Запуск без Docker
+
+Нужны Python 3.10+, PostgreSQL и Redis (их удобно взять из Docker:
+`docker compose up -d db redis`).
+
+```bash
 python3 -m venv .venv
 ./.venv/bin/pip install -e ".[dev]"
-cp .env.example .env
-# Сгенерируйте ключ Fernet и впишите его в BOT_TOKEN_ENCRYPTION_KEY в .env:
-./.venv/bin/python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+cp .env.example .env          # и впишите BOT_TOKEN_ENCRYPTION_KEY
+./.venv/bin/python manage.py migrate
+./.venv/bin/python manage.py seed_baseline_demo
+./.venv/bin/python manage.py runserver
+./.venv/bin/python manage.py runbot --wait
+./.venv/bin/celery -A core.celery worker -Q default,broadcasts --loglevel=info
+./.venv/bin/celery -A core.celery beat --loglevel=info
 ```
 
 `core/settings/env.py` читает `.env` из рабочей папки; настоящие переменные
-окружения его перекрывают. По умолчанию `.env.example` настроен на
-PostgreSQL (`DJANGO_USE_SQLITE=false`), поэтому либо запустите
-`docker compose up -d db redis`, либо добавляйте к командам
-`DJANGO_USE_SQLITE=true`.
+окружения его перекрывают. Для быстрого знакомства без PostgreSQL добавляйте
+`DJANGO_USE_SQLITE=true`, но успех на SQLite не доказывает, что блокировки
+работают как в продакшене. Процессы кроме web используют
+`core.settings.local` (`DEBUG=True`), если не задан `DJANGO_SETTINGS_MODULE`.
 
-## Локальный запуск
+## Демо-данные
 
-SQLite допустим только для быстрого знакомства:
+`seed_baseline_demo` создаёт два заведения: кафе Riverstone и кальянную
+Night Owl. В них персонал всех ролей, столы, меню с отметками каналов,
+бонусные программы, самовывоз с реквизитами и часы работы. Команда
+идемпотентна и выполняется одной транзакцией. Обращение к Telegram за именем
+бота делается до транзакции. Все параметры читаются и из `.env` (см.
+`.env.example`), полный список — `python manage.py seed_baseline_demo --help`.
+Стартовые бонусы начисляются одной записью журнала `manual` с ключом
+идемпотентности, по одному разу на заведение.
 
-```bash
-DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py migrate
-DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py runserver
-```
-
-Для поведения с `select_for_update`, частичными ограничениями или
-параллельными воркерами настройте PostgreSQL. Успех на SQLite не доказывает,
-что блокировки работают как в продакшене.
-
-Полезные процессы запускаются отдельно:
-
-```bash
-DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py runserver
-DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py runbot
-DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker --loglevel=info
-```
-
-Запланированным рассылкам, восстановлению зависших рассылок и снимкам
-метрик дня нужен ещё Celery beat:
-
-```bash
-DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery beat --loglevel=info
-```
-
-`docker compose up` поднимает все нужные процессы: `db`, `redis`, `web`,
-`worker`, `beat` и `bot` (с B4). `beat` и `bot` — ровно по одному.
-Процессы кроме web используют `core.settings.local` (`DEBUG=True`), если не
-задан `DJANGO_SETTINGS_MODULE`.
-
-## Сиды и локальные данные
-
-Management-команды создают демо- и базовые данные. Все выданные ими логины —
-только для локальной работы, не постоянные учётные данные для документации.
-`seed_demo` выполняется одной транзакцией и повторный запуск безопасен
-(AA-019); не используйте сиды как неявную миграцию продакшен-данных.
+`seed_demo` — старая маленькая команда на одно заведение; оставлена для
+совместимости. Логины демо-данных — только для локальной работы. Не
+используйте сиды как неявную миграцию продакшен-данных.
 
 ## Порядок изменения
 

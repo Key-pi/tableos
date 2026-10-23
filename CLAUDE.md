@@ -108,13 +108,19 @@ DJANGO_USE_SQLITE=false POSTGRES_HOST=127.0.0.1 python3 manage.py test --noinput
 python3 manage.py makemigrations --check --dry-run
 ruff check --no-cache <изменённые файлы> --output-format concise
 docker compose config --quiet
+
+# весь стек в Docker (пошагово: docs/engineering/DEVELOPMENT.md)
+cp .env.example .env && docker compose up --build
+docker compose logs init        # логины и ссылки на столы демо-данных
 ```
 
 Подводные камни окружения: таймзона по умолчанию `Europe/Kyiv` (старое
 `Europe/Kiev` в `.env` читается как Kyiv, но локальный PostgreSQL с
 `timezone = 'Europe/Kiev'` в `postgresql.conf` не стартует); Celery в тестах
-eager; `docker compose up` поднимает web, worker, beat, bot, db, redis —
-beat и bot ровно по одному.
+eager; `docker compose up` поднимает db, redis, разовый init (миграции +
+`seed_baseline_demo --keep-existing`), затем web, worker, beat, bot
+(`runbot --wait`) — beat и bot ровно по одному. Демо-данные берут токены
+ботов и Telegram ID владельца из `.env` (`DEMO_*`).
 
 ## Что дальше (на 2026-10-23)
 

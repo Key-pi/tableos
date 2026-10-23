@@ -1,19 +1,46 @@
+"""Demo data for local testing: two venues, staff, tables, menu, bonuses.
+
+Every option also reads an environment variable (see ``.env.example``), so the
+Docker ``init`` service seeds from ``.env`` with no arguments:
+
+- ``DEMO_CAFE_BOT_TOKEN`` / ``DEMO_HOOKAH_BOT_TOKEN`` — BotFather tokens; the
+  bot username is looked up with ``getMe`` unless ``DEMO_*_BOT_USERNAME`` is
+  set. Without a token the venue's bot stays inactive.
+- ``DEMO_TELEGRAM_ID`` — your own Telegram user id: it becomes the first owner
+  of both venues (``/staff`` works for you) and gets start bonuses as a guest.
+
+``--keep-existing`` (used by Docker on every start) creates a venue only when
+it is missing and otherwise only applies bot tokens and your Telegram binding,
+so changes made in Admin survive a restart. Without it the demo catalogue is
+reset to these defaults. ``docker compose down -v`` wipes everything.
+"""
+
 from __future__ import annotations
 
+import json
+import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
+from datetime import time
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from apps.bonuses.models import BonusProgram
+from apps.bonuses.models import BonusProgram, BonusTransaction
+from apps.bonuses.services import assert_bonus_balance_reconciled, sync_bonus_balance_from_ledger
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
-from apps.partners.models import BotInstance, Partner, PartnerBotSettings
+from apps.partners.models import BotInstance, OpeningHours, Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.users.constants import AdminAccessPreset
-from apps.users.models import AdminAccessProfile, TelegramAccount
+from apps.users.models import AdminAccessProfile, GuestProfile, TelegramAccount
+
+HOOKAH_SLUG = "night-owl-hookah"
+CAFE_SLUG = "riverstone-cafe"
+START_BONUS_KEY = "demo-seed:start-bonus"
 
 
 @dataclass(frozen=True)
@@ -47,86 +74,227 @@ class MenuItemSeed:
     description: str = ""
 
 
+@dataclass(frozen=True)
+class VenueSeed:
+    slug: str
+    name: str
+    phone: str
+    bot_username: str
+    bot_display_name: str
+    token_option: str
+    username_option: str
+    env_name: str
+
+
+VENUES = (
+    VenueSeed(
+        slug=HOOKAH_SLUG,
+        name="Night Owl Hookah Lounge",
+        phone="+380671110101",
+        bot_username="night_owl_hookah_bot",
+        bot_display_name="Night Owl Hookah Bot",
+        token_option="hookah_bot_token",
+        username_option="hookah_bot_username",
+        env_name="DEMO_HOOKAH_BOT_TOKEN",
+    ),
+    VenueSeed(
+        slug=CAFE_SLUG,
+        name="Riverstone Cafe",
+        phone="+380672220202",
+        bot_username="riverstone_cafe_bot",
+        bot_display_name="Riverstone Cafe Bot",
+        token_option="cafe_bot_token",
+        username_option="cafe_bot_username",
+        env_name="DEMO_CAFE_BOT_TOKEN",
+    ),
+)
+
+# The owner whose Telegram is replaced by DEMO_TELEGRAM_ID in each venue.
+TESTER_OWNER_USERNAME = {HOOKAH_SLUG: "smoke_owner_1", CAFE_SLUG: "cafe_owner_1"}
+
+TRANSFER_DETAILS = (
+    "Карта 4149 0000 0000 0000 (демо), получатель ФОП Демо Демо. "
+    "В комментарии к переводу укажите номер заказа."
+)
+
+
+def _env(name: str, default: str = "") -> str:
+    return os.environ.get(name, default).strip()
+
+
+def fetch_bot_username(token: str) -> str:
+    """Ask Telegram which bot a token belongs to (``getMe``)."""
+
+    url = f"https://api.telegram.org/bot{token}/getMe"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as response:  # noqa: S310
+            payload = json.load(response)
+    except urllib.error.HTTPError as exc:
+        raise CommandError(
+            f"Telegram не принял токен бота (HTTP {exc.code}): проверьте его в @BotFather."
+        ) from exc
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        raise CommandError(
+            "Не удалось связаться с Telegram, чтобы узнать имя бота по токену "
+            f"({exc}). Проверьте интернет или задайте имя бота в DEMO_*_BOT_USERNAME."
+        ) from exc
+    username = (payload.get("result") or {}).get("username") or ""
+    if not payload.get("ok") or not username:
+        raise CommandError("Telegram не принял токен бота: проверьте его в @BotFather.")
+    return username
+
+
 class Command(BaseCommand):
     help = (
-        "Seed a full two-partner demo baseline with staff, bots, tables, menu, "
-        "and loyalty rules for local QA."
+        "Демо-данные для локальной проверки: два заведения (кальянная и кафе), персонал, "
+        "столы, меню, бонусы, самовывоз; токены ботов и ваш Telegram ID — из .env."
     )
 
     def add_arguments(self, parser):
-        parser.add_argument("--admin-username", default="platform_admin")
+        parser.add_argument(
+            "--admin-username", default=_env("DEMO_ADMIN_USERNAME", "platform_admin")
+        )
         parser.add_argument("--admin-email", default="admin@botera.local")
-        parser.add_argument("--admin-password", default="botera12345")
+        parser.add_argument("--admin-password", default=_env("DEMO_ADMIN_PASSWORD", "botera12345"))
         parser.add_argument(
             "--staff-password",
-            default="botera12345",
-            help="Password assigned to all seeded venue staff users.",
+            default=_env("DEMO_STAFF_PASSWORD", "botera12345"),
+            help="Пароль всех сотрудников демо-заведений.",
+        )
+        parser.add_argument("--hookah-bot-token", default=_env("DEMO_HOOKAH_BOT_TOKEN"))
+        parser.add_argument("--hookah-bot-username", default=_env("DEMO_HOOKAH_BOT_USERNAME"))
+        parser.add_argument("--cafe-bot-token", default=_env("DEMO_CAFE_BOT_TOKEN"))
+        parser.add_argument("--cafe-bot-username", default=_env("DEMO_CAFE_BOT_USERNAME"))
+        parser.add_argument(
+            "--telegram-id",
+            default=_env("DEMO_TELEGRAM_ID"),
+            help="Ваш Telegram ID: станет владельцем обоих заведений и получит бонусы.",
+        )
+        parser.add_argument("--telegram-username", default=_env("DEMO_TELEGRAM_USERNAME"))
+        parser.add_argument(
+            "--start-bonuses",
+            default=_env("DEMO_START_BONUSES", "500"),
+            help="Бонусы на ваш гостевой профиль в каждом заведении (один раз).",
+        )
+        parser.add_argument(
+            "--keep-existing",
+            action="store_true",
+            help=(
+                "Не трогать уже созданные заведения (меню, столы, персонал, пароли): "
+                "только подключить ботов и ваш Telegram. Так Docker запускает сид при "
+                "каждом старте."
+            ),
+        )
+        parser.add_argument(
+            "--public-url", default=_env("DEMO_PUBLIC_URL", "http://localhost:8000")
         )
 
-    @transaction.atomic
     def handle(self, *args, **options):
-        admin_user = self._ensure_platform_admin(
+        tester_id = self._parse_telegram_id(options["telegram_id"])
+        try:
+            start_bonuses = Decimal(str(options["start_bonuses"] or "0")).quantize(Decimal("0.01"))
+        except ArithmeticError as exc:
+            raise CommandError("--start-bonuses должно быть числом.") from exc
+        if start_bonuses < 0:
+            raise CommandError("--start-bonuses не может быть отрицательным.")
+
+        # Telegram lookups happen before the transaction: no network I/O while
+        # the database transaction is open.
+        bots = self._resolve_bots(options)
+
+        with transaction.atomic():
+            report = self._seed(
+                options=options,
+                bots=bots,
+                tester_id=tester_id,
+                tester_username=options["telegram_username"].removeprefix("@"),
+                start_bonuses=start_bonuses,
+            )
+        self._print_report(report, options)
+
+    # ------------------------------------------------------------------ input
+
+    @staticmethod
+    def _parse_telegram_id(raw) -> int | None:
+        raw = str(raw or "").strip()
+        if not raw:
+            return None
+        if not raw.isdigit() or int(raw) <= 0:
+            raise CommandError(
+                "DEMO_TELEGRAM_ID должен быть числом — ваш Telegram ID (узнать: @userinfobot)."
+            )
+        return int(raw)
+
+    def _resolve_bots(self, options) -> dict[str, tuple[str, str]]:
+        """Venue slug → (token, bot username) for every token given."""
+
+        bots: dict[str, tuple[str, str]] = {}
+        for venue in VENUES:
+            token = (options[venue.token_option] or "").strip()
+            if not token:
+                continue
+            if not BotInstance.looks_like_valid_token(token):
+                raise CommandError(
+                    f"{venue.env_name}: это не похоже на токен бота (вид 123456:ABC...)."
+                )
+            username = BotInstance.normalize_username(options[venue.username_option] or "")
+            if not username:
+                username = fetch_bot_username(token)
+            bots[venue.slug] = (token, username)
+        tokens = [token for token, _ in bots.values()]
+        if len(tokens) != len(set(tokens)):
+            raise CommandError(
+                "Один и тот же токен указан для двух заведений: у каждого заведения свой бот."
+            )
+        return bots
+
+    # ------------------------------------------------------------------- seed
+
+    def _seed(self, *, options, bots, tester_id, tester_username, start_bonuses) -> dict:
+        keep_existing = options["keep_existing"]
+        report: dict = {"venues": [], "admin_created": False}
+        report["admin_created"] = self._ensure_platform_admin(
             username=options["admin_username"].strip(),
             email=options["admin_email"].strip(),
             password=options["admin_password"],
+            keep_existing=keep_existing,
         )
 
-        smoke_partner = self._ensure_partner(
-            slug="night-owl-hookah",
-            name="Night Owl Hookah Lounge",
-            phone="+380671110101",
-            bot_username="night_owl_hookah_bot",
-            bot_display_name="Night Owl Hookah Bot",
-        )
-        cafe_partner = self._ensure_partner(
-            slug="riverstone-cafe",
-            name="Riverstone Cafe",
-            phone="+380672220202",
-            bot_username="riverstone_cafe_bot",
-            bot_display_name="Riverstone Cafe Bot",
-        )
+        tester = None
+        if tester_id is not None:
+            tester, _ = TelegramAccount.objects.get_or_create(telegram_id=tester_id)
+            if tester_username and tester.username != tester_username:
+                tester.username = tester_username
+                tester.save(update_fields=["username", "updated_at"])
 
-        staff_password = options["staff_password"]
-        self._seed_staff(smoke_partner, self._smoke_staff(), staff_password)
-        self._seed_staff(cafe_partner, self._cafe_staff(), staff_password)
-        self._seed_tables(smoke_partner, self._smoke_tables())
-        self._seed_tables(cafe_partner, self._cafe_tables())
-        self._seed_smoke_menu(smoke_partner)
-        self._seed_cafe_menu(cafe_partner)
-        self._seed_bonus_programs(smoke_partner, include_milestone=False)
-        self._seed_bonus_programs(cafe_partner, include_milestone=True)
-
-        self.stdout.write(self.style.SUCCESS("Baseline demo dataset is ready."))
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Platform admin: {admin_user.username} / {options['admin_password']}"
+        for venue in VENUES:
+            existed = Partner.objects.filter(slug=venue.slug).exists()
+            partner = self._ensure_partner(venue, keep_existing=keep_existing and existed)
+            if not (keep_existing and existed):
+                self._seed_catalogue(partner, options["staff_password"])
+            bot = self._ensure_bot(partner, venue, bots.get(venue.slug))
+            tester_note = ""
+            if tester is not None:
+                tester_note = self._bind_tester(partner, tester, start_bonuses)
+            report["venues"].append(
+                {"partner": partner, "bot": bot, "created": not existed, "tester": tester_note}
             )
-        )
-        self.stdout.write(
-            self.style.SUCCESS(f"Venue staff password: {options['staff_password']}")
-        )
-        self.stdout.write("Partners:")
-        self._print_partner_summary(smoke_partner)
-        self._print_partner_summary(cafe_partner)
-        self.stdout.write("Staff accounts:")
-        self._print_staff_summary("night-owl-hookah", self._smoke_staff())
-        self._print_staff_summary("riverstone-cafe", self._cafe_staff())
+        return report
 
     @staticmethod
-    def _ensure_platform_admin(*, username: str, email: str, password: str):
+    def _ensure_platform_admin(*, username: str, email: str, password: str, keep_existing: bool):
         user_model = get_user_model()
-        user, _ = user_model.objects.get_or_create(
-            username=username,
-            defaults={
-                "email": email,
-                "first_name": "Platform",
-                "last_name": "Admin",
-                "role": user_model.Role.ADMIN,
-                "is_staff": True,
-                "is_superuser": True,
-                "is_active": True,
-            },
-        )
+        user = user_model.objects.filter(username=username).first()
+        if user is not None and user.partner_id is not None:
+            raise CommandError(
+                f"Пользователь `{username}` принадлежит заведению; выберите другое имя "
+                "администратора платформы."
+            )
+        if user is not None and keep_existing:
+            return False
+        created = user is None
+        if user is None:
+            user = user_model(username=username)
         user.email = email
         user.first_name = "Platform"
         user.last_name = "Admin"
@@ -136,32 +304,28 @@ class Command(BaseCommand):
         user.is_active = True
         user.set_password(password)
         user.save()
-        return user
+        return created
 
     @staticmethod
-    def _ensure_partner(
-        *,
-        slug: str,
-        name: str,
-        phone: str,
-        bot_username: str,
-        bot_display_name: str,
-    ) -> Partner:
+    def _ensure_partner(venue: VenueSeed, *, keep_existing: bool) -> Partner:
         partner, _ = Partner.objects.get_or_create(
-            slug=slug,
+            slug=venue.slug,
             defaults={
-                "name": name,
+                "name": venue.name,
                 "timezone": "Europe/Kyiv",
-                "contact_phone": phone,
+                "contact_phone": venue.phone,
                 "status": Partner.Status.ACTIVE,
             },
         )
-        partner.name = name
+        if keep_existing:
+            return partner
+        partner.name = venue.name
         partner.timezone = "Europe/Kyiv"
-        partner.contact_phone = phone
+        partner.contact_phone = venue.phone
         partner.status = Partner.Status.ACTIVE
         partner.save()
 
+        is_hookah = venue.slug == HOOKAH_SLUG
         settings, _ = PartnerBotSettings.objects.get_or_create(partner=partner)
         settings.allow_menu_without_session = True
         settings.module_menu_enabled = True
@@ -173,35 +337,185 @@ class Command(BaseCommand):
         settings.module_quick_sale_enabled = True
         settings.module_reports_enabled = True
         settings.module_delivery_enabled = False
-        settings.module_pickup_enabled = False
+        settings.module_pickup_enabled = True
+        settings.transfer_payment_details = TRANSFER_DETAILS
         settings.button_my_profile = "Мой профиль"
         settings.staff_call_waiter_enabled = True
         settings.staff_call_bartender_enabled = True
-        settings.staff_call_hookah_enabled = slug == "night-owl-hookah"
+        settings.staff_call_hookah_enabled = is_hookah
+        settings.full_clean()
         settings.save()
 
-        bot_instance = partner.bot_instances.order_by("created_at").first()
-        if bot_instance is None:
-            bot_instance = BotInstance(
+        # Night Owl works 18:00–04:00 (pickup is refused in the daytime: handy to
+        # see the "closed" message); Riverstone has no hours, i.e. always open.
+        OpeningHours.objects.filter(partner=partner).delete()
+        if is_hookah:
+            OpeningHours.objects.bulk_create(
+                OpeningHours(partner=partner, weekday=day, opens_at=time(18), closes_at=time(4))
+                for day in range(7)
+            )
+        return partner
+
+    def _seed_catalogue(self, partner: Partner, staff_password: str) -> None:
+        if partner.slug == HOOKAH_SLUG:
+            self._seed_staff(partner, self._smoke_staff(), staff_password)
+            self._seed_tables(partner, self._smoke_tables())
+            self._seed_smoke_menu(partner)
+            self._seed_bonus_programs(partner, include_milestone=False)
+        else:
+            self._seed_staff(partner, self._cafe_staff(), staff_password)
+            self._seed_tables(partner, self._cafe_tables())
+            self._seed_cafe_menu(partner)
+            self._seed_bonus_programs(partner, include_milestone=True)
+
+    @staticmethod
+    def _ensure_bot(partner: Partner, venue: VenueSeed, token_and_username) -> BotInstance:
+        bot = partner.bot_instances.order_by("created_at").first()
+        if bot is None:
+            bot = BotInstance(
                 partner=partner,
-                username=bot_username,
-                display_name=bot_display_name,
+                username=venue.bot_username,
+                display_name=venue.bot_display_name,
                 mode=BotInstance.Mode.POLLING,
                 is_active=False,
             )
-            # Fresh seed bots stay inactive and use a placeholder token until
-            # a real BotFather token is added in admin.
-            bot_instance.set_token(f"seed-placeholder-token-{slug}")
+            bot.set_token(f"{BotInstance.PLACEHOLDER_TOKEN_PREFIX}{venue.slug}")
+        if token_and_username is not None:
+            token, username = token_and_username
+            taken = BotInstance.objects.filter(username=username).exclude(pk=bot.pk).first()
+            if taken is not None:
+                raise CommandError(
+                    f"Бот @{username} уже подключён к заведению `{taken.partner.slug}`."
+                )
+            bot.username = username
+            bot.mode = BotInstance.Mode.POLLING
+            bot.is_active = True
+            bot.set_token(token)
+        elif not bot.has_usable_token:
+            # A bot without a real token stays off so `runbot` can start the others.
+            bot.is_active = False
+            bot.set_token(f"{BotInstance.PLACEHOLDER_TOKEN_PREFIX}{venue.slug}")
+        bot.save()
+        return bot
+
+    def _bind_tester(
+        self, partner: Partner, tester: TelegramAccount, start_bonuses: Decimal
+    ) -> str:
+        notes = []
+        bound_elsewhere = (
+            EmployeeProfile.objects.filter(partner=partner, telegram_account=tester)
+            .select_related("user")
+            .first()
+        )
+        owner = (
+            EmployeeProfile.objects.filter(
+                partner=partner, user__username=TESTER_OWNER_USERNAME[partner.slug]
+            )
+            .select_related("user")
+            .first()
+        )
+        if bound_elsewhere is not None and (owner is None or bound_elsewhere.pk != owner.pk):
+            notes.append(f"ваш Telegram уже у сотрудника {bound_elsewhere.user.username}")
+        elif owner is not None:
+            owner.telegram_account = tester
+            owner.bot_notifications_enabled = True
+            owner.notify_on_order_created = True
+            owner.notify_on_order_status_changed = True
+            owner.notify_on_guest_calls = True
+            owner.notify_on_billing_requests = True
+            owner.is_active = True
+            owner.save()
+            notes.append(f"вы — владелец {owner.user.username}")
+
+        guest, _ = GuestProfile.objects.get_or_create(partner=partner, telegram_account=tester)
+        if start_bonuses > 0:
+            if self._grant_start_bonuses(guest, start_bonuses):
+                notes.append(f"начислено {start_bonuses.normalize():f} бонусов")
+            else:
+                notes.append("стартовые бонусы уже начислены")
+        return ", ".join(notes)
+
+    @staticmethod
+    def _grant_start_bonuses(guest: GuestProfile, amount: Decimal) -> bool:
+        """One manual ledger credit per venue, guarded like every balance change."""
+
+        guest = GuestProfile.objects.select_for_update().get(pk=guest.pk)
+        if BonusTransaction.objects.filter(
+            partner_id=guest.partner_id, idempotency_key=START_BONUS_KEY
+        ).exists():
+            return False
+        assert_bonus_balance_reconciled(guest)
+        BonusTransaction.objects.create(
+            partner_id=guest.partner_id,
+            guest=guest,
+            transaction_type=BonusTransaction.TransactionType.MANUAL,
+            amount=amount,
+            comment="Стартовые бонусы для проверки (демо-данные)",
+            source_type="demo_seed",
+            idempotency_key=START_BONUS_KEY,
+        )
+        sync_bonus_balance_from_ledger(guest)
+        return True
+
+    # ----------------------------------------------------------------- report
+
+    def _print_report(self, report: dict, options) -> None:
+        out = self.stdout.write
+        url = options["public_url"].rstrip("/")
+        out(self.style.SUCCESS("Демо-данные Botera Shop готовы."))
+        out("")
+        out(f"Admin: {url}/admin/")
+        if options["keep_existing"] and not report["admin_created"]:
+            out(f"  администратор платформы: {options['admin_username']} (пароль не менялся)")
         else:
-            if not bot_instance.username:
-                bot_instance.username = bot_username
-            bot_instance.display_name = bot_display_name
-            bot_instance.mode = BotInstance.Mode.POLLING
-            if not bot_instance.has_usable_token:
-                bot_instance.is_active = False
-                bot_instance.set_token(f"seed-placeholder-token-{slug}")
-        bot_instance.save()
-        return partner
+            out(
+                f"  администратор платформы: {options['admin_username']} / "
+                f"{options['admin_password']}"
+            )
+        out(
+            "  владельцы заведений (видят только своё): smoke_owner_1, cafe_owner_1 / "
+            f"{options['staff_password']} (при первом создании)"
+        )
+        for venue in report["venues"]:
+            partner: Partner = venue["partner"]
+            bot: BotInstance = venue["bot"]
+            out("")
+            state = "создано" if venue["created"] else "уже было"
+            out(self.style.MIGRATE_HEADING(f"{partner.name} ({partner.slug}, {state})"))
+            if bot.is_active and bot.has_usable_token:
+                out(f"  бот: @{bot.username} — подключён, открыть: https://t.me/{bot.username}")
+            else:
+                env_name = next(v.env_name for v in VENUES if v.slug == partner.slug)
+                out(self.style.WARNING(f"  бот: не подключён — впишите токен в {env_name}"))
+            pickup = PartnerBotSettings.objects.filter(partner=partner).first()
+            if pickup is not None and pickup.module_pickup_enabled:
+                hours = OpeningHours.objects.filter(partner=partner).first()
+                hours_text = (
+                    f"ежедневно {hours.opens_at:%H:%M}–{hours.closes_at:%H:%M}"
+                    if hours is not None
+                    else "открыто всегда"
+                )
+                out(f"  самовывоз: включён, {hours_text}")
+            if venue["tester"]:
+                out(f"  ваш Telegram: {venue['tester']}")
+            out("  столы (ссылка = содержимое QR-кода):")
+            for table in Table.objects.filter(partner=partner, is_active=True).order_by("number"):
+                link = (
+                    table.telegram_start_url(bot.username)
+                    if bot.is_active
+                    else f"/start {table.deep_link_payload}"
+                )
+                out(f"    {table.number:>2}. {table.name}: {link}")
+        if not any(venue["tester"] for venue in report["venues"]):
+            out("")
+            out(
+                self.style.WARNING(
+                    "Чтобы проверять работу персонала (/staff) и получать уведомления, "
+                    "впишите свой Telegram ID в DEMO_TELEGRAM_ID (узнать: @userinfobot)."
+                )
+            )
+
+    # -------------------------------------------------------------- catalogue
 
     @staticmethod
     def _seed_staff(partner: Partner, staff_rows: list[StaffSeed], password: str) -> None:
@@ -308,7 +622,9 @@ class Command(BaseCommand):
     def _seed_category_items(
         partner: Partner,
         category: MenuCategory,
+        *,
         items: list[MenuItemSeed],
+        pickup: bool = True,
     ) -> None:
         for item in items:
             MenuItem.objects.update_or_create(
@@ -322,6 +638,9 @@ class Command(BaseCommand):
                     "sort_order": item.sort_order,
                     "item_type": MenuItem.ItemType.INTERNAL,
                     "is_available": True,
+                    "available_at_table": True,
+                    "available_for_pickup": pickup,
+                    "available_for_delivery": pickup,
                 },
             )
 
@@ -334,7 +653,8 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             hookahs,
-            [
+            pickup=False,
+            items=[
                 MenuItemSeed("SMKHK001", "Classic Hookah", Decimal("450.00"), 10),
                 MenuItemSeed("SMKHK002", "Premium Hookah", Decimal("650.00"), 20),
                 MenuItemSeed("SMKHK003", "Fruit Bowl Hookah", Decimal("820.00"), 30),
@@ -343,7 +663,8 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             signatures,
-            [
+            pickup=False,
+            items=[
                 MenuItemSeed(
                     "SMKSG001",
                     "Night Owl Mix",
@@ -363,7 +684,7 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             soft_drinks,
-            [
+            items=[
                 MenuItemSeed("SMKDR001", "Homemade Lemonade", Decimal("150.00"), 10),
                 MenuItemSeed("SMKDR002", "Espresso", Decimal("95.00"), 20),
                 MenuItemSeed("SMKDR003", "Craft Tea Pot", Decimal("180.00"), 30),
@@ -372,7 +693,8 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             alcohol,
-            [
+            pickup=False,
+            items=[
                 MenuItemSeed("SMKAL001", "Aperol Spritz", Decimal("240.00"), 10),
                 MenuItemSeed("SMKAL002", "Negroni", Decimal("250.00"), 20),
                 MenuItemSeed("SMKAL003", "Whiskey Sour", Decimal("260.00"), 30),
@@ -391,7 +713,7 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             breakfast,
-            [
+            items=[
                 MenuItemSeed("CAFBR001", "Syrniki", Decimal("220.00"), 10),
                 MenuItemSeed("CAFBR002", "Eggs Benedict", Decimal("295.00"), 20),
                 MenuItemSeed("CAFBR003", "Granola Bowl", Decimal("180.00"), 30),
@@ -400,7 +722,7 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             salads,
-            [
+            items=[
                 MenuItemSeed("CAFSL001", "Caesar with Chicken", Decimal("260.00"), 10),
                 MenuItemSeed("CAFSL002", "Greek Salad", Decimal("210.00"), 20),
             ],
@@ -408,7 +730,7 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             mains,
-            [
+            items=[
                 MenuItemSeed("CAFMN001", "Chicken Steak", Decimal("340.00"), 10),
                 MenuItemSeed("CAFMN002", "Pasta Carbonara", Decimal("285.00"), 20),
                 MenuItemSeed("CAFMN003", "Salmon with Vegetables", Decimal("420.00"), 30),
@@ -417,7 +739,7 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             desserts,
-            [
+            items=[
                 MenuItemSeed("CAFDS001", "Cheesecake", Decimal("170.00"), 10),
                 MenuItemSeed("CAFDS002", "Napoleon", Decimal("165.00"), 20),
             ],
@@ -425,7 +747,7 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             soft_drinks,
-            [
+            items=[
                 MenuItemSeed("CAFDR001", "Cappuccino", Decimal("110.00"), 10),
                 MenuItemSeed("CAFDR002", "Flat White", Decimal("125.00"), 20),
                 MenuItemSeed("CAFDR003", "Tea Pot", Decimal("140.00"), 30),
@@ -434,7 +756,8 @@ class Command(BaseCommand):
         self._seed_category_items(
             partner,
             alcohol,
-            [
+            pickup=False,
+            items=[
                 MenuItemSeed("CAFAL001", "Mimosa", Decimal("210.00"), 10),
                 MenuItemSeed("CAFAL002", "House White Wine", Decimal("195.00"), 20),
                 MenuItemSeed("CAFAL003", "Craft Beer", Decimal("165.00"), 30),
@@ -512,24 +835,6 @@ class Command(BaseCommand):
                     "is_active": True,
                 },
             )
-
-    def _print_partner_summary(self, partner: Partner) -> None:
-        bot_instance = partner.bot_instances.order_by("created_at").first()
-        table_count = partner.tables_tables.count()
-        employee_count = partner.employees_employeeprofiles.count()
-        owner_count = partner.employees_employeeprofiles.filter(user__role="owner").count()
-        menu_item_count = partner.menu_menuitems.count()
-        bot_username = bot_instance.username if bot_instance is not None else "n/a"
-        print_line = (
-            f"  - {partner.slug}: bot=@{bot_username}, tables={table_count}, "
-            f"employees={employee_count}, owners={owner_count}, menu_items={menu_item_count}"
-        )
-        # Summary is intentionally compact so the command can be reused in QA scripts and CI logs.
-        self.stdout.write(print_line)
-
-    def _print_staff_summary(self, partner_slug: str, staff_rows: list[StaffSeed]) -> None:
-        usernames = ", ".join(staff.username for staff in staff_rows)
-        self.stdout.write(f"  - {partner_slug}: {usernames}")
 
     @staticmethod
     def _smoke_staff() -> list[StaffSeed]:

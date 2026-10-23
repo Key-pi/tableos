@@ -1,3 +1,40 @@
+# Botera Shop for local development and testing.
+#
+#   cp .env.example .env      # then fill BOT_TOKEN_ENCRYPTION_KEY (and bots)
+#   docker compose up --build
+#
+# Start order: db, redis (healthy) → init (migrations + demo data, then exits)
+# → web, worker, beat, bot. Full guide: docs/engineering/DEVELOPMENT.md.
+name: botera-shop
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: infrastructure/docker/Dockerfile
+  image: botera-shop:dev
+  env_file:
+    - .env
+  # Inside Docker the database and Redis are the `db` and `redis` services;
+  # these values win over the localhost ones in .env.
+  environment:
+    DJANGO_USE_SQLITE: "false"
+    POSTGRES_HOST: db
+    POSTGRES_PORT: "5432"
+    REDIS_URL: redis://redis:6379/0
+    CELERY_BROKER_URL: redis://redis:6379/0
+    CELERY_RESULT_BACKEND: redis://redis:6379/0
+    CELERY_TASK_ALWAYS_EAGER: "false"
+  # The working copy is mounted: code changes need no rebuild. `web`
+  # reloads by itself; restart worker/beat/bot after a change.
+  volumes:
+    - .:/app
+  restart: unless-stopped
+
+x-after-init: &after-init
+  depends_on:
+    init:
+      condition: service_completed_successfully
+
 services:
   db:
     image: postgres:16-alpine
@@ -5,74 +42,83 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-tableos}
       POSTGRES_USER: ${POSTGRES_USER:-tableos}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tableos}
+      TZ: Europe/Kyiv
     ports:
-      - "5432:5432"
+      - "${DB_PORT_ON_HOST:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT_ON_HOST:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot: checks BOT_TOKEN_ENCRYPTION_KEY, applies migrations and loads
+  # demo data (seed_baseline_demo --keep-existing; DEMO_SEED=false to skip).
+  # Its log has the logins and table links: `docker compose logs init`.
+  init:
+    <<: *app
+    command: ["sh", "infrastructure/docker/init.sh"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   web:
-    build:
-      context: .
-      dockerfile: infrastructure/docker/Dockerfile
-    env_file:
-      - .env
-    command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - .:/app
+    <<: [*app, *after-init]
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     ports:
-      - "8000:8000"
-    depends_on:
-      - db
-      - redis
+      - "${WEB_PORT_ON_HOST:-8000}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 6
 
+  # Staff notifications, guest order updates and broadcasts.
   worker:
-    build:
-      context: .
-      dockerfile: infrastructure/docker/Dockerfile
-    env_file:
-      - .env
-    command: celery -A core.celery worker -Q default,broadcasts --loglevel=info
-    volumes:
-      - .:/app
-    depends_on:
-      - db
-      - redis
+    <<: [*app, *after-init]
+    command: ["celery", "-A", "core.celery", "worker", "-Q", "default,broadcasts", "--loglevel=info"]
 
   # Periodic jobs: scheduled broadcasts, stalled-broadcast recovery, daily
-  # metrics (core/settings/base.py:CELERY_BEAT_SCHEDULE). Run exactly one.
+  # metrics (core/settings/base.py:CELERY_BEAT_SCHEDULE). Exactly one.
   beat:
-    build:
-      context: .
-      dockerfile: infrastructure/docker/Dockerfile
-    env_file:
-      - .env
-    command: celery -A core.celery beat --loglevel=info --schedule /tmp/celerybeat-schedule
-    volumes:
-      - .:/app
-    depends_on:
-      - db
-      - redis
+    <<: [*app, *after-init]
+    command:
+      - celery
+      - -A
+      - core.celery
+      - beat
+      - --loglevel=info
+      - --schedule=/tmp/celerybeat-schedule
 
-  # Telegram polling for every active partner bot (bot/management/commands/runbot.py).
-  # Run exactly one: two pollers of the same token conflict.
+  # Telegram polling for every active partner bot. Exactly one: two pollers of
+  # the same token conflict. Waits instead of exiting while no bot has a real
+  # token; after bot changes in Admin run `docker compose restart bot`.
   bot:
-    build:
-      context: .
-      dockerfile: infrastructure/docker/Dockerfile
-    env_file:
-      - .env
-    command: python manage.py runbot
-    restart: unless-stopped
-    volumes:
-      - .:/app
-    depends_on:
-      - db
-      - redis
+    <<: [*app, *after-init]
+    command: ["python", "manage.py", "runbot", "--wait"]
 
 volumes:
   postgres_data:
+  redis_data:

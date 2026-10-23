@@ -37,7 +37,8 @@ DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q broadcasts --
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery beat --loglevel=info
 ```
 
-Docker Compose поднимает все нужные процессы — `db`, `redis`, `web`,
+Проще всего — Docker (пошагово: [DEVELOPMENT.md](docs/engineering/DEVELOPMENT.md#запуск-в-docker-с-нуля)).
+Docker Compose поднимает все нужные процессы — `db`, `redis`, разовый `init`, `web`,
 `worker`, `beat`, `bot` (с B4). `beat` и `bot` должны работать в одном
 экземпляре:
 
@@ -55,11 +56,9 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py ensure_admin --username admi
 DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py seed_baseline_demo
 ```
 
-Быстрое наполнение одного демо-заведения:
-
-```bash
-DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py seed_demo --slug demo-lounge --name "Demo Lounge" --with-admin --with-manager
-```
+Токены ботов и свой Telegram ID для демо-данных задаются в `.env`
+(`DEMO_CAFE_BOT_TOKEN`, `DEMO_HOOKAH_BOT_TOKEN`, `DEMO_TELEGRAM_ID`), список
+параметров — `manage.py seed_baseline_demo --help`.
 
 ## Полная проверка после изменений
 
@@ -77,7 +76,8 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 - `makemigrations --check --dry-run`: изменений нет.
 - `ruff check --no-cache .`: 21 старое замечание; `ruff format --check --no-cache .`: 54 файла были бы переформатированы. Это не «зелёная» база.
 
-После B1–B5, самовывоза и упорядочивания каналов тестов стало 331, они
+После B1–B5, самовывоза, упорядочивания каналов и настройки Docker тестов
+стало 344, они
 зелёные на SQLite и PostgreSQL 16; актуальные команды и журнал прогонов — в
 [TESTING.md](docs/engineering/TESTING.md).
 

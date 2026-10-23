@@ -65,13 +65,9 @@ def demo_home(_: HttpRequest) -> HttpResponse:
             <div class="stat"><strong>Заказов</strong><br>{orders_count}</div>
           </div>
           <p><a href="/admin/">Открыть Admin</a> · <a href="/health/">Проверка работы</a></p>
-          <p>Быстрый старт локально:</p>
-          <p>
-            <code>
-              python manage.py seed_demo --with-admin --with-manager
-              --bot-username your_bot_username
-            </code>
-          </p>
+          <p>Демо-данные (логины, ссылки на столы):
+            <code>docker compose run --rm web python manage.py seed_baseline_demo
+            --keep-existing</code></p>
         </div>
       </body>
     </html>

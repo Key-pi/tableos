@@ -41,9 +41,15 @@ flowchart LR
 | Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `refresh-daily-partner-metrics` (15 мин) | `core.settings.local` |
 | PostgreSQL 16, Redis 7 | `docker-compose.yml` | долговечные данные; брокер и хранилище результатов Celery | — |
 
-`docker-compose.yml` объявляет `db`, `redis`, `web` (Django `runserver`),
-`worker` (очереди `default,broadcasts`), `beat` и `bot` (`manage.py runbot`);
-`beat` и `bot` должны работать ровно в одном экземпляре. Продакшен-веб-сервера,
+`docker-compose.yml` объявляет `db`, `redis` (оба с healthcheck), разовый
+`init` (`infrastructure/docker/init.sh`: проверка `BOT_TOKEN_ENCRYPTION_KEY`,
+`migrate`, `seed_baseline_demo --keep-existing`, если `DEMO_SEED` не
+`false`), затем `web` (Django `runserver`), `worker` (очереди
+`default,broadcasts`), `beat` и `bot` (`manage.py runbot --wait`); они
+стартуют только после успешного `init`. Хосты базы и Redis внутри Docker
+подставляет сам compose (`db`, `redis`), рабочая копия смонтирована в `/app`.
+`beat` и `bot` должны работать ровно в одном экземпляре. Пошаговый запуск —
+`docs/engineering/DEVELOPMENT.md`. Продакшен-веб-сервера,
 CI и манифестов развёртывания в репозитории нет. Все процессы, кроме веба,
 по умолчанию берут `core.settings.local` (`DEBUG=True`), если
 `DJANGO_SETTINGS_MODULE` не задан явно.
@@ -113,7 +119,10 @@ apps.notifications.tasks` — цикл, разорванный только им
    старте `runbot`. Процесс не запускается, если хоть один активный
    `BotInstance` принадлежит неактивному партнёру, работает в режиме webhook
    или имеет нерасшифровываемый, шаблонный, некорректный или повторяющийся
-   токен. Строится карта токен → `BotRuntimeConfig`.
+   токен, а также если активных ботов нет. С `--wait` (так запускает Docker)
+   он в этих случаях не выходит, а пишет причину и перепроверяет каждые
+   `--wait-interval` секунд (по умолчанию 30). Строится карта токен →
+   `BotRuntimeConfig`.
 2. На **каждое обновление** `bot/middlewares/partner_runtime.py` вызывает
    `bot/services/context.py:resolve_partner_for_bot_token`, который заново
    загружает `BotInstance` и `Partner`. Обновление отключённого экземпляра
@@ -347,7 +356,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 331 тест после упорядочивания каналов (ADR-0009), зелёные на SQLite и на
+- 344 теста после настройки Docker и демо-данных, зелёные на SQLite и на
   PostgreSQL 16. Десять выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа
