@@ -29,6 +29,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from apps.analytics.models import TrafficSource
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import assert_bonus_balance_reconciled, sync_bonus_balance_from_ledger
 from apps.employees.models import EmployeeProfile
@@ -367,6 +368,14 @@ class Command(BaseCommand):
             self._seed_tables(partner, self._cafe_tables())
             self._seed_cafe_menu(partner)
             self._seed_bonus_programs(partner, include_milestone=True)
+        self._seed_traffic_sources(partner)
+
+    @staticmethod
+    def _seed_traffic_sources(partner: Partner) -> None:
+        for code, name in (("instagram", "Instagram"), ("flyer", "Листовка у входа")):
+            TrafficSource.objects.update_or_create(
+                partner=partner, code=code, defaults={"name": name, "is_active": True}
+            )
 
     @staticmethod
     def _ensure_bot(partner: Partner, venue: VenueSeed, token_and_username) -> BotInstance:
@@ -498,6 +507,16 @@ class Command(BaseCommand):
                 out(f"  самовывоз: включён, {hours_text}")
             if venue["tester"]:
                 out(f"  ваш Telegram: {venue['tester']}")
+            sources = TrafficSource.objects.filter(partner=partner, is_active=True)
+            if sources:
+                out("  источники переходов (счёт — в Admin → Analytics):")
+                for source in sources:
+                    link = (
+                        source.telegram_start_url(bot.username)
+                        if bot.is_active
+                        else f"/start {source.deep_link_payload}"
+                    )
+                    out(f"    {source.name}: {link}")
             out("  столы (ссылка = содержимое QR-кода):")
             for table in Table.objects.filter(partner=partner, is_active=True).order_by("number"):
                 link = (

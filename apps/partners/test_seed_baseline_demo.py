@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 
+from apps.analytics.models import TrafficSource
 from apps.bonuses.models import BonusTransaction
 from apps.bonuses.services import get_bonus_ledger_balance
 from apps.employees.models import EmployeeProfile
@@ -104,6 +105,8 @@ class SeedBaselineDemoTests(TestCase):
                 Decimal("500.00"),
             )
         self.assertIn("https://t.me/my_cafe_test_bot?start=table_1_river_tbl_01", output)
+        self.assertIn("https://t.me/my_cafe_test_bot?start=src_instagram", output)
+        self.assertEqual(TrafficSource.objects.filter(partner__slug="riverstone-cafe").count(), 2)
 
         # Rerun: no second credit, binding kept.
         _seed(

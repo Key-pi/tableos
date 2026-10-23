@@ -78,7 +78,7 @@ CI и манифестов развёртывания в репозитории 
 | Бонусы | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Баланс на основе журнала с проверкой сверки; быстрая продажа. |
 | Сотрудники | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | Запись — через Admin. |
 | Уведомления | `NotificationPreference`, `StaffNotification`, `BroadcastCampaign`, `BroadcastDelivery` | `notifications/services.py`, `tasks.py` | Вся отправка в Telegram — здесь. |
-| Аналитика | `PartnerDailyMetric` | `analytics/services.py` | Отчёт за день для персонала по запросу (с разбивкой по каналам заказа); снимок раз в 15 минут. |
+| Аналитика | `PartnerDailyMetric`, `TrafficSource`, `SourceVisit` | `analytics/services.py`, `analytics/sources.py` | Отчёт за день для персонала по запросу (с разбивкой по каналам заказа); снимок раз в 15 минут; источники переходов (PQ-031). |
 
 ### Фактические зависимости импорта
 
@@ -296,6 +296,23 @@ apps.notifications.tasks` — цикл, разорванный только им
 `apply_manual_purchase_bonus` начисляет без ключа источника, поэтому
 повторный запуск начисляет снова.
 
+### Источники переходов (PQ-031)
+
+Владелец создаёт в Admin (`apps/analytics/admin.py:TrafficSourceAdmin`,
+раздел Analytics) источник с названием; код подставляется сам и после
+создания не меняется. Ссылка `t.me/<бот>?start=src_<код>` показывается там
+же. `bot/handlers/start.py:start_handler` получает профиль гостя через
+`users/services.py:get_or_create_guest_profile_with_created` и, если параметр
+`/start` — ссылка источника (`analytics/sources.py:parse_source_payload`),
+вызывает `analytics/sources.py:record_source_visit` и показывает обычное
+приветствие (не QR стола). Каждый переход — строка `SourceVisit`; переход,
+создавший профиль гостя в заведении, помечен `is_new_guest` (первый
+источник), частичное уникальное ограничение
+`unique_acquiring_source_visit_per_guest` оставляет такой переход один на
+гостя. Неизвестный, чужой или выключенный код игнорируется. В Admin список
+источников показывает переходы и новых гостей за выбранный период; журнал
+переходов — только для чтения.
+
 ### Уведомления и рассылки
 
 - Договор доставки (ADR-0008, B4): ни один вызов Telegram не выполняется
@@ -358,7 +375,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 344 теста после настройки Docker и демо-данных, зелёные на SQLite и на
+- 362 теста после источников переходов, зелёные на SQLite и на
   PostgreSQL 16. Десять выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

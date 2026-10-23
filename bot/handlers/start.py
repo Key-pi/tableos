@@ -6,6 +6,7 @@ from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
+from apps.analytics.sources import parse_source_payload, record_source_visit
 from apps.employees.models import EmployeeProfile
 from apps.employees.selectors import get_staff_employee_by_telegram
 from apps.orders.models import Order
@@ -19,7 +20,7 @@ from apps.tables.services import (
     VisitChoiceRequired,
     activate_table_session,
 )
-from apps.users.services import get_or_create_guest_profile
+from apps.users.services import get_or_create_guest_profile_with_created
 from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.session import build_visit_choice_keyboard
 from bot.services.content import BotContent
@@ -34,7 +35,7 @@ router = Router()
 async def start_handler(message: Message, command: CommandObject, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
-    guest_profile = await sync_to_async(get_or_create_guest_profile)(
+    guest_profile, is_new_guest = await sync_to_async(get_or_create_guest_profile_with_created)(
         partner_id=partner.id,
         telegram_id=message.from_user.id,
         username=message.from_user.username or "",
@@ -43,6 +44,15 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
         language_code=message.from_user.language_code or "",
     )
     payload = (command.args or "").strip()
+    if parse_source_payload(payload) is not None:
+        # A traffic-source link (`src_<code>`): count it and greet as usual.
+        await sync_to_async(record_source_visit)(
+            partner_id=partner.id,
+            guest_id=guest_profile.id,
+            payload=payload,
+            is_new_guest=is_new_guest,
+        )
+        payload = ""
     try:
         employee = await sync_to_async(get_staff_employee_by_telegram)(
             partner.id,

@@ -12,6 +12,32 @@ def get_or_create_guest_profile(
     last_name: str = "",
     language_code: str = "",
 ) -> GuestProfile:
+    guest_profile, _ = get_or_create_guest_profile_with_created(
+        partner_id=partner_id,
+        telegram_id=telegram_id,
+        username=username,
+        first_name=first_name,
+        last_name=last_name,
+        language_code=language_code,
+    )
+    return guest_profile
+
+
+def get_or_create_guest_profile_with_created(
+    *,
+    partner_id,
+    telegram_id: int,
+    username: str = "",
+    first_name: str = "",
+    last_name: str = "",
+    language_code: str = "",
+) -> tuple[GuestProfile, bool]:
+    """Like ``get_or_create_guest_profile``; also says whether the guest is new here.
+
+    ``created`` is true for exactly one caller even when two /start updates race:
+    the profile is unique per partner and Telegram account.
+    """
+
     telegram_account, _ = TelegramAccount.objects.get_or_create(telegram_id=telegram_id)
     changed_fields = []
     if telegram_account.username != username:
@@ -30,11 +56,14 @@ def get_or_create_guest_profile(
         changed_fields.append("updated_at")
         telegram_account.save(update_fields=changed_fields)
 
-    guest_profile, _ = GuestProfile.objects.get_or_create(
+    guest_profile, created = GuestProfile.objects.get_or_create(
         partner_id=partner_id,
         telegram_account=telegram_account,
     )
-    return GuestProfile.objects.select_related("telegram_account").get(id=guest_profile.id)
+    return (
+        GuestProfile.objects.select_related("telegram_account").get(id=guest_profile.id),
+        created,
+    )
 
 
 def mark_guest_visit(guest_profile: GuestProfile) -> GuestProfile:

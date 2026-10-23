@@ -76,8 +76,8 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 - `makemigrations --check --dry-run`: изменений нет.
 - `ruff check --no-cache .`: 21 старое замечание; `ruff format --check --no-cache .`: 54 файла были бы переформатированы. Это не «зелёная» база.
 
-После B1–B5, самовывоза, упорядочивания каналов и настройки Docker тестов
-стало 344, они
+После B1–B5, самовывоза, упорядочивания каналов, Docker и источников переходов
+тестов стало 362, они
 зелёные на SQLite и PostgreSQL 16; актуальные команды и журнал прогонов — в
 [TESTING.md](docs/engineering/TESTING.md).
 
