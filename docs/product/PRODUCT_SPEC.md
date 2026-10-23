@@ -1,178 +1,186 @@
-# TableOS — каноническая продуктовая спецификация
+# Botera Shop — каноническая продуктовая спецификация
 
-**Статус:** canonical product contract for future approved work.  
-**Последняя сверка с кодом:** audit-and-governance, 2026-07-27; post-B3 review at `ddb7dce`, 2026-10-23.\
+**Статус:** канонический продуктовый договор для будущей утверждённой работы.
+**Последняя сверка с кодом:** аудит и правила, 2026-07-27; проверка после B3 и обновление после B4–B5, самовывоза и ADR-0009, 2026-10-23.\
 **Не является описанием текущего поведения:** реальное состояние зафиксировано в [AS_IS_ARCHITECTURE.md](../architecture/AS_IS_ARCHITECTURE.md), а расхождения — в [FEATURE_MATRIX.md](FEATURE_MATRIX.md) и [ARCHITECTURE_AUDIT.md](../audits/ARCHITECTURE_AUDIT.md).
 
 ## Как читать документ
 
-`TABLEOS_TZ.md` сохранён как полный legacy source и evidence желаемого поведения. Его разделы сопоставлены с этим набором документов в [LEGACY_TZ_MIGRATION_MAP.md](LEGACY_TZ_MIGRATION_MAP.md). Этот документ не объявляет желаемое поведение уже реализованным.
+`TABLEOS_TZ.md` сохранён как полный исторический источник и свидетельство желаемого поведения. Его разделы сопоставлены с этим набором документов в [LEGACY_TZ_MIGRATION_MAP.md](LEGACY_TZ_MIGRATION_MAP.md). Этот документ не объявляет желаемое поведение уже реализованным.
 
 Используются четыре статуса сверки:
 
 - **CONFIRMED_CURRENT** — поведение подтверждено кодом и входит в нынешний MVP;
-- **CODE_IS_BEHIND_SPEC** — продуктовый контракт принят как целевой, но код его не выполняет полностью;
-- **AMBIGUOUS_PRODUCT_DECISION** — нужен выбор владельца до изменения поведения;
-- **NEEDS_FOLLOW_UP** — утверждение требует отдельной проверки, измерения или design decision.
+- **CODE_IS_BEHIND_SPEC** — продуктовый договор принят как целевой, но код выполняет его не полностью;
+- **AMBIGUOUS_PRODUCT_DECISION** — до изменения поведения нужен выбор владельца;
+- **NEEDS_FOLLOW_UP** — утверждение требует отдельной проверки, измерения или решения по дизайну.
 
 ## 1. Назначение и границы продукта
 
-TableOS — multi-tenant white-label B2B платформа для заведений. Одна Django/aiogram codebase обслуживает несколько партнёров и их Telegram-ботов. Партнёр получает свой контент, меню, столы, сотрудников, операционную историю, лояльность и включённые capabilities; код не должен превращаться в отдельную версию продукта для каждого заведения.
+Botera Shop — multi-tenant B2B-платформа под брендом партнёра для заведений и магазинов, часть сети Botera ([ECOSYSTEM_DIRECTION.md](ECOSYSTEM_DIRECTION.md)). Один код на Django и aiogram обслуживает несколько партнёров и их Telegram-ботов. Партнёр получает свои тексты, меню, столы, сотрудников, рабочую историю, лояльность и включённые возможности; код не должен превращаться в отдельную версию продукта для каждого заведения.
 
 Базовая ценность продукта:
 
 1. зарегистрировать гостя в контексте конкретного заведения и выдать код клиента;
-2. дать заведению настраиваемый Telegram UX;
-3. подключать меню, столы, заказы, счета, быстрые продажи, отчёты и рассылки как capabilities;
+2. дать заведению настраиваемый интерфейс в Telegram;
+3. подключать меню, способы заказа (стол, самовывоз, затем доставка и отправка), счета, быстрые продажи, отчёты и рассылки как возможности;
 4. сохранять проверяемый след по заказам, оплатам, бонусам и уведомлениям;
 5. сохранять строгую изоляцию данных и действий партнёров.
 
-В текущий product scope **не входят как готовые journeys** public REST API, WebApp, production webhook runtime, POS/fiscal providers, online payments и delivery. Pickup реализован с предоплатой переводом ([PICKUP.md](../architecture/PICKUP.md)). Наличие model fields или flags не означает, что journey существует.
+В текущий объём продукта **не входят как готовые сценарии** публичный REST API, WebApp, продакшен-режим webhook, кассы и фискализация, онлайн-оплата, доставка и отправка. Самовывоз реализован с предоплатой переводом ([PICKUP.md](../architecture/PICKUP.md)). Наличие полей модели или флагов не означает, что сценарий существует.
 
 ## 2. Роли и контексты доступа
 
-| Роль/контекст | Продуктовое назначение | Граница полномочий |
+| Роль / контекст | Назначение в продукте | Граница полномочий |
 | --- | --- | --- |
-| Platform administrator | Управляет всей платформой, партнёрами, ботами и чувствительными настройками | Может пересекать tenant boundary только через явный platform access |
-| Partner owner | Владелец данных и конфигурации одного заведения | Только свой `partner` |
-| Partner manager | Операционное управление в рамках разрешённых секций | Только свой `partner` и выделенные admin sections |
-| Cashier | Счета, оплаты и быстрые продажи | Не получает права owner/manager автоматически |
-| Waiter / hookah master | Операционные staff actions и notifications | Доступ определяется employee profile, Telegram binding и role/capability |
-| Guest | Профиль лояльности, guest journeys | Один глобальный Telegram identity может иметь отдельные guest profiles у разных partners |
+| Администратор платформы | Управляет всей платформой, партнёрами, ботами и чувствительными настройками | Пересекает границу партнёра только через явный доступ платформы |
+| Владелец партнёра | Владелец данных и настроек одного заведения | Только свой `partner` |
+| Менеджер партнёра | Рабочее управление в пределах разрешённых разделов | Только свой `partner` и выделенные разделы Admin |
+| Кассир | Счета, оплаты, быстрые продажи, подтверждение переводов | Не получает автоматически прав владельца или менеджера |
+| Официант / кальянщик | Рабочие действия персонала и уведомления | Доступ определяется профилем сотрудника, привязкой Telegram и ролью/правом |
+| Гость | Профиль лояльности, сценарии гостя | Одна глобальная Telegram-личность может иметь отдельные профили гостя у разных партнёров |
 
-**Обязательное разделение:** Django-admin RBAC, `User.role`, `EmployeeProfile`, Telegram binding и notification preferences — самостоятельные доказательства доступа. Ни одна из этих сущностей сама по себе не должна автоматически доказывать другую.
+**Обязательное разделение:** права Django Admin, `User.role`, `EmployeeProfile`, привязка Telegram и настройки уведомлений — самостоятельные доказательства доступа. Ни одна из этих сущностей сама по себе не доказывает другую.
 
-## 3. Непереговорные продуктовые инварианты
+## 3. Непреложные продуктовые инварианты
 
-1. **Tenant isolation.** Tenant-owned entity, read, callback, background job и related-object choice должны быть ограничены тем же `partner`. Глобальный `TelegramAccount` допустим только как identity; guest/employee/admin context остаётся partner-scoped.
-2. **Активность и доступ.** Suspended partner не обслуживает реальные guest/staff flows. Staff action требует активных `EmployeeProfile` **и** `User`, явной Telegram binding и разрешённой capability.
-3. **Auditability.** Изменение заказа, счёта, оплаты, бонусного баланса и уведомления оставляет persisted trace. Админский UI не является обходом domain transition.
-4. **Money integrity.** Денежные суммы — decimal values. Один order item не может быть распределён в два открытых/оплаченных счёта; платежи, bonus redemption и bill state должны быть идемпотентны и конкурентно безопасны.
-5. **State integrity.** Все state transitions проходят через единственный безопасный use case с разрешёнными переходами, actor/capability checks и транзакционной защитой.
-6. **Delivery boundary.** Бизнес-событие не откатывается потому, что Telegram delivery не удалась. Network I/O не выполняется внутри DB transaction; delivery имеет наблюдаемый result и определённую семантику retry/idempotency.
-7. **Capability-driven UX.** Включённые capability и текущий journey определяют, что видит пользователь. Выключенная capability даёт понятный fallback и не раскрывает недоступное действие.
+1. **Изоляция партнёров.** Сущность партнёра, чтение, callback, фоновая задача и выбор связанного объекта ограничены тем же `partner`. Глобальный `TelegramAccount` допустим только как личность; контексты гостя, сотрудника и Admin остаются в пределах партнёра.
+2. **Активность и доступ.** Приостановленный партнёр не обслуживает реальные сценарии гостей и персонала. Действие сотрудника требует активных `EmployeeProfile` **и** `User`, явной привязки Telegram и разрешённого права.
+3. **Проверяемость.** Изменение заказа, счёта, оплаты, бонусного баланса и уведомления оставляет сохранённый след. Интерфейс Admin — не обход доменного перехода.
+4. **Целостность денег.** Денежные суммы — десятичные значения. Одна позиция заказа не может быть распределена в два открытых или оплаченных счёта; оплаты, списание бонусов и состояние счёта идемпотентны и безопасны при конкуренции.
+5. **Целостность состояний.** Все переходы состояний идут через единственный безопасный сценарий с разрешёнными переходами, проверками исполнителя и права и транзакционной защитой.
+6. **Граница доставки.** Бизнес-событие не откатывается из-за того, что доставка в Telegram не удалась. Сетевой ввод-вывод не выполняется внутри транзакции базы; у доставки наблюдаемый итог и определённый смысл повтора и идемпотентности.
+7. **Интерфейс по возможностям.** Включённые возможности и текущий сценарий определяют, что видит пользователь. Выключенная возможность даёт понятный запасной вариант и не раскрывает недоступное действие.
+8. **Один заказ на все каналы.** Стол — один из способов заказа. Одна модель заказа, корзины, счёта и оплаты; способ заказа — атрибут заказа (ADR-0009).
 
-## 4. Capability model
+## 4. Модель возможностей
 
-| Capability | Целевой контракт | Зависимости | Статус сверки |
+| Возможность | Целевой договор | Зависимости | Статус сверки |
 | --- | --- | --- | --- |
-| Guest profile and loyalty identity | `/start`, partner-scoped `GuestProfile`, customer code, profile | Always available | CONFIRMED_CURRENT, с отдельными bonus gaps |
-| Menu browsing | Active categories/items, configurable label, optional browse without table | Menu | CONFIRMED_CURRENT |
-| Tables and QR sessions | Stable QR payload, many guests per table, one active session per guest/partner | Tables | PARTIAL_CURRENT — B2 закрепил одну активную сессию (partial unique constraint, PostgreSQL-тест); expiry не реализован (PQ-008) |
-| Cart and table ordering | Guest-owned cart, order snapshots, staff notification | Menu + orders; table journey requires tables | CONFIRMED_CURRENT for main journey; integrity work remains |
-| Billing | Personal/shared bill, custom split request, partial/full payment, partner-defined bonus payment with a monetary remainder | Orders + loyalty | Scoped to the table visit since B3.2 part B (AA-020); payment rollback (AA-021) and PostgreSQL bill creation (AA-033) fixed in B3.1; bill changes/void (AA-022) in B3.2 part A |
-| Staff call | Role-directed notification from active table | Tables | CONFIRMED_CURRENT, cooldown is check-then-create and not race-safe |
-| Bonus programmes | Visit, manual purchase, and extensible partner-defined reward triggers; auditable ledger | Guest profile + billing settlement | PARTIAL_CURRENT; paid settlement is the current order-reward baseline; cashback accrues on the full total or only on money paid, per programme (PQ-030, B3.2 part C); programme trigger expansion remains future work |
-| Quick sale | Staff sale with optional customer code and bonus redemption | Menu; staff capability | CONFIRMED_CURRENT |
-| Staff operations | Orders, notifications, tables, billing, quick sale, reports by capability | Employee + Telegram binding | PARTIAL_CURRENT — B1 rechecks active user/profile/partner and capability on every callback; formal role matrix is PQ-004 |
-| Daily report | Operational day summary, tails, bills/quick sales | Billing and/or quick sale | CONFIRMED_CURRENT as on-demand MVP |
-| Broadcasts | Partner-scoped marketing respecting preferences; scheduled delivery | Celery + Telegram | CONFIRMED_CURRENT since B4: at most once per guest and campaign (PQ-014, ADR-0008) |
-| Pickup | Prepaid by transfer (with optional bonuses), ASAP / 30 / 60 min within opening hours, phone required, staff confirms the transfer | Menu + orders + cart; billing used internally | CONFIRMED_CURRENT ([PICKUP.md](../architecture/PICKUP.md)) |
-| Delivery / shipping | Separate journeys, not merely flags | Product design required | CODE_IS_BEHIND_SPEC / future scope |
-| Webhook runtime | Explicit production runtime with observability | Product/ops decision | CODE_IS_BEHIND_SPEC / future scope |
+| Профиль гостя и личность в лояльности | `/start`, `GuestProfile` в пределах партнёра, код клиента, профиль | Всегда доступно | CONFIRMED_CURRENT, с отдельными пробелами по бонусам |
+| Просмотр меню | Активные категории и позиции, настраиваемая подпись, просмотр без стола по желанию, только позиции выбранного способа заказа | Меню | CONFIRMED_CURRENT |
+| Столы и сессии по QR | Стабильные данные QR, много гостей за столом, одна активная сессия на гостя и партнёра, визиты стола | Столы | PARTIAL_CURRENT — B2 закрепил одну активную сессию (частичное уникальное ограничение, тест на PostgreSQL); истечение не реализовано (PQ-008) |
+| Корзина и заказ за столом | Личная корзина гостя, снимки позиций в заказе, уведомление персонала | Меню + заказы; сценарию стола нужны столы | CONFIRMED_CURRENT для основного сценария; работа по целостности остаётся |
+| Счета | Личный и общий счёт, запрос особого деления, частичная и полная оплата, оплата бонусами по правилам партнёра с денежным остатком | Заказы + лояльность | Ограничены визитом стола с B3.2 часть B (AA-020); откат оплаты (AA-021) и создание счёта на PostgreSQL (AA-033) исправлены в B3.1; изменения и аннулирование счёта (AA-022) — в B3.2 часть A |
+| Вызов персонала | Уведомление ролям от активного стола | Столы | CONFIRMED_CURRENT; пауза по схеме «проверить, затем создать» не защищена от гонки |
+| Бонусные программы | За визит, за ручную покупку и расширяемые события партнёра; проверяемый журнал | Профиль гостя + расчёт по счёту | PARTIAL_CURRENT; расчёт по оплате — текущая основа награды за заказ; кешбэк начисляется с полной суммы или только с оплаченного деньгами, на программу (PQ-030, B3.2 часть C); расширение событий программ — будущая работа |
+| Быстрая продажа | Продажа персоналом с кодом клиента по желанию и списанием бонусов | Меню; право сотрудника | CONFIRMED_CURRENT |
+| Работа персонала | Заказы, уведомления, столы, счета, быстрая продажа, отчёты по правам | Сотрудник + привязка Telegram | PARTIAL_CURRENT — B1 перепроверяет активность пользователя, профиля, партнёра и право на каждом callback; формальная матрица ролей — PQ-004 |
+| Отчёт за день | Сводка рабочего дня, хвосты, счета, быстрые продажи, разбивка по способам заказа | Счета и/или быстрая продажа | CONFIRMED_CURRENT как MVP по запросу |
+| Рассылки | Маркетинг в пределах партнёра с учётом настроек; доставка по расписанию | Celery + Telegram | CONFIRMED_CURRENT с B4: не больше одного раза на гостя и кампанию (PQ-014, ADR-0008) |
+| Самовывоз | Предоплата переводом (с бонусами по желанию), «как можно скорее» / 30 / 60 минут в часы работы, телефон обязателен, персонал подтверждает перевод | Меню + заказы + корзина; счета используются внутри | CONFIRMED_CURRENT ([PICKUP.md](../architecture/PICKUP.md)) |
+| Доставка и отправка | Отдельные сценарии, а не просто флаги | Нужен продуктовый дизайн; модель — по ADR-0009 | CODE_IS_BEHIND_SPEC / будущий объём |
+| Режим webhook | Явный продакшен-режим с наблюдаемостью | Продуктовое и эксплуатационное решение | CODE_IS_BEHIND_SPEC / будущий объём |
 
-### Capability dependencies
+### Зависимости возможностей
 
-- Cart requires menu and orders.
-- Billing requires orders.
-- Table ordering and staff call require tables.
-- Quick sale requires menu.
-- Reports require a defined source: billing and/or quick sale.
-- Delivery and pickup, once approved, are **parallel journeys**, not mutually exclusive global “order mode” switches.
+- Корзине нужны меню и заказы.
+- Счетам нужны заказы.
+- Заказу за столом и вызову персонала нужны столы.
+- Быстрой продаже нужно меню.
+- Отчётам нужен определённый источник: счета и/или быстрая продажа.
+- Самовывоз, доставка и отправка — **параллельные сценарии**, а не взаимоисключающие глобальные переключатели «режима заказа». Гость выбирает способ заказа сначала (кнопка или QR стола).
 
-## 5. Core user journeys
+## 5. Основные сценарии пользователя
 
-### 5.1 Loyalty-only guest
+### 5.1 Гость только с лояльностью
 
-1. Guest opens `/start` for a partner bot.
-2. System resolves partner from bot runtime, creates or updates a partner-scoped guest profile, and shows customer code/profile entry point.
-3. Cashier/staff may record an auditable manual purchase or approved bonus operation.
-4. Guest sees balance and transaction history without being forced into table/order UX.
+1. Гость открывает `/start` в боте партнёра.
+2. Система определяет партнёра по процессу бота, создаёт или обновляет профиль гостя в пределах партнёра и показывает код клиента и вход в профиль.
+3. Кассир или сотрудник может записать проверяемую ручную покупку или утверждённую бонусную операцию.
+4. Гость видит баланс и историю операций, и его не заставляют проходить интерфейс стола и заказа.
 
-### 5.2 Menu-only guest
+### 5.2 Гость только с меню
 
-1. Guest starts bot and opens menu.
-2. Only active categories and available items are shown.
-3. If ordering requires a table session, the UI presents a clear hint and no add-to-cart action.
-4. A menu-only partner must not be told to scan a table QR.
+1. Гость запускает бота и открывает меню.
+2. Показываются только активные категории и доступные позиции.
+3. Если для заказа нужна сессия стола, интерфейс даёт понятную подсказку и не показывает добавление в корзину.
+4. Партнёру только с меню нельзя предлагать сканировать QR стола.
 
-### 5.3 Table order
+### 5.3 Заказ за столом
 
-1. Guest scans `table_<number>_<token>` QR deep link.
-2. System validates partner, table, token and table availability; it resolves/creates the guest profile.
-   - If the table already has an active visit of other guests, the bot asks whether to **join** that visit or **start a new one** (ADR-0007, approved 2026-10-23). Starting a new visit leaves the previous visit open and flags the table to staff, who close it manually.
-3. A new session closes that guest’s prior active session in the same partner only after defined settlement rules are considered.
-4. Guest builds a personal cart; price/name snapshots are written to order items at checkout.
-5. Staff receives a durable operational notification; staff accepts, prepares, marks ready/completed through the allowed state machine.
-6. Guest can view only their active-session orders and may confirm receipt from any non-final status, including `new`; the confirmation completes the order and is recorded as a guest action (PQ-029).
+1. Гость сканирует QR-ссылку `table_<номер>_<токен>`.
+2. Система проверяет партнёра, стол, токен и доступность стола; определяет или создаёт профиль гостя.
+   - Если за столом уже есть активный визит других гостей, бот спрашивает, **подсесть** к этому визиту или **начать новый** (ADR-0007, утверждено 2026-10-23). Новый визит оставляет предыдущий открытым и отмечает стол для персонала, который закрывает его вручную.
+3. Новая сессия закрывает предыдущую активную сессию этого гостя у того же партнёра только с учётом определённых правил расчёта.
+4. Гость собирает личную корзину; при оформлении цены и названия фиксируются в позициях заказа.
+5. Персонал получает долговечное рабочее уведомление; принимает, готовит, отмечает готовность и завершение по разрешённой машине статусов.
+6. Гость видит только заказы своей активной сессии и может подтвердить получение из любого нефинального статуса, включая `new`; подтверждение завершает заказ и записывается как действие гостя (PQ-029).
 
-Several guests may use one table. Their carts and orders remain personal; a shared bill aggregates only orders of the same visit.
+За одним столом могут сидеть несколько гостей. Их корзины и заказы остаются личными; общий счёт собирает только заказы одного визита.
 
-### 5.4 Billing and payment
+### 5.4 Самовывоз
 
-1. Guest asks for personal, shared, or custom-split settlement.
-2. Personal/shared request prepares or extends an eligible draft bill; custom split creates a request for staff handling.
-3. A bill contains only same-partner eligible order items of one visit (personal: one guest within the visit).
-4. Staff issues the bill and may choose “pay with bonuses”; the command applies the partner-allowed amount at 1 bonus = 1 UAH and leaves any monetary remainder on the bill.
-5. Staff records the remaining cash/terminal payment, or the bonus command closes a fully covered bill with the normal `bonuses` payment method; if the partner enables auto-close, only sessions whose orders are all paid are closed, and auto-close never blocks the payment (PQ-027).
-6. Staff with a bill-change permission granted by the venue owner may change a bill (remove/add lines, including a cancelled order's lines) or void it. Each change recalculates the bill and is kept in an audit history with actor, time and reason. A change may not reduce the total below the amount already paid; voiding releases the orders for re-billing (PQ-028).
+1. Гость нажимает «Самовывоз»; корзина переходит в этот способ, меню показывает только позиции самовывоза.
+2. При оформлении гость выбирает время («как можно скорее», через 30 или 60 минут) в часы работы заведения, делится телефоном и решает, списать ли бонусы.
+3. Создаётся заказ и сразу личный счёт; гость видит реквизиты для перевода и сумму к оплате.
+4. Владелец, менеджер или кассир подтверждает перевод (заказ принимается в работу) или отклоняет (счёт аннулируется, бонусы возвращаются, заказ отменяется). Подробности — [PICKUP.md](../architecture/PICKUP.md).
 
-### 5.5 Staff operations
+### 5.5 Счёт и оплата
 
-1. `/staff` resolves partner from bot token, then employee from the explicit partner-scoped binding.
-2. Each screen/action rechecks active identity, role and enabled capability; a stale button cannot retain an authority that was revoked.
-3. Staff actions use named domain services, not direct model edits.
-4. A staff member may see exactly the operational records allowed for their partner and role.
+1. Гость просит личный, общий расчёт или особое деление.
+2. Личный или общий запрос готовит или расширяет подходящий черновик счёта; особое деление создаёт запрос для персонала.
+3. В счёте только подходящие позиции заказов того же партнёра из одного визита (личный счёт — один гость в пределах визита).
+4. Персонал выставляет счёт и может выбрать «Оплатить бонусами»; команда применяет разрешённую партнёром сумму по курсу 1 бонус = 1 грн и оставляет денежный остаток в счёте.
+5. Персонал записывает оставшуюся оплату наличными или терминалом, либо команда бонусов закрывает полностью покрытый счёт обычным способом оплаты `bonuses`; если партнёр включил автозакрытие, закрываются только сессии, все заказы которых оплачены, и автозакрытие никогда не блокирует оплату (PQ-027).
+6. Сотрудник с правом на изменение счетов, выданным владельцем заведения, может менять счёт (убирать и добавлять строки, в том числе строки отменённого заказа) или аннулировать его. Каждое изменение пересчитывает счёт и сохраняется в истории аудита с исполнителем, временем и причиной. Изменение не может опустить итог ниже уже оплаченного; аннулирование освобождает заказы для нового счёта (PQ-028).
 
-### 5.6 Broadcasts and notifications
+### 5.6 Работа персонала
 
-1. A domain service records the business event and schedules delivery only after commit.
-2. A task invokes an idempotent delivery use case using primitive identifiers.
-3. Delivery result is visible; retry behavior cannot silently double-send a campaign batch or hold a DB transaction during Telegram I/O.
-4. Marketing recipient selection respects partner, subscription/preference and blocked-account state at send time.
+1. `/staff` определяет партнёра по токену бота, затем сотрудника по явной привязке в пределах партнёра.
+2. Каждый экран и действие заново проверяют активность личности, роль и включённое право; устаревшая кнопка не сохраняет отозванные полномочия.
+3. Действия персонала используют именованные доменные сервисы, а не прямую правку моделей.
+4. Сотрудник видит ровно те рабочие записи, которые разрешены его партнёру и роли.
 
-## 6. State contracts
+### 5.7 Рассылки и уведомления
 
-| Aggregate | Expected states / rule |
+1. Доменный сервис записывает бизнес-событие и ставит доставку только после коммита.
+2. Задача вызывает идемпотентный сценарий доставки с простыми идентификаторами.
+3. Итог доставки виден; повтор не может тихо отправить пачку кампании дважды или держать транзакцию базы во время ввода-вывода Telegram.
+4. Отбор получателей маркетинга учитывает партнёра, подписку и настройки, а также блокировку аккаунта в момент отправки.
+
+## 6. Договоры состояний
+
+| Агрегат | Ожидаемые состояния / правило |
 | --- | --- |
-| Partner | `draft -> active -> suspended`; a suspended partner must not serve traffic or delivery |
-| TableSession | `active`, `closed`, `timed_out`; exactly one active session per guest/partner, many active guests per table; every session belongs to one table visit (ADR-0007) |
-| Cart | `active -> checked_out` or `abandoned`; stale cart must not silently migrate to a new table session |
-| Order | `new -> accepted -> preparing? -> ready -> delivering? -> completed`, with cancellation only through allowed paths; `completed` does not necessarily mean paid |
-| Bill | `draft -> issued -> partially_paid -> paid` or `canceled` (void, owner-granted permission, releases allocations); a paid/canceled bill cannot accept an ordinary payment; line changes are audited and never drop the total below the paid amount |
-| BillingRequest | `open`, `auto_prepared`, `processed`, `canceled`; only legal service transitions |
-| BonusTransaction | immutable ledger rows for accrual, redemption, expiration and manual adjustment |
-| BroadcastCampaign | `draft -> scheduled -> sending -> sent/failed`; per-guest `BroadcastDelivery` `pending -> sending -> sent/failed/skipped/unknown`, never resent (ADR-0008) |
+| Partner | `draft -> active -> suspended`; приостановленный партнёр не обслуживает трафик и доставку |
+| TableSession | `active`, `closed`, `timed_out`; ровно одна активная сессия на гостя и партнёра, много активных гостей за столом; каждая сессия принадлежит одному визиту стола (ADR-0007) |
+| Cart | `active -> checked_out` или `abandoned`; способ заказа в `Cart.channel`; устаревшая корзина не должна тихо переезжать в новую сессию стола |
+| Order | `new -> accepted -> preparing? -> ready -> delivering? -> completed`, отмена только разрешёнными путями; `completed` не обязательно означает «оплачен»; способ заказа в `Order.channel`; заказ с предоплатой принимается только после подтверждения оплаты |
+| Bill | `draft -> issued -> partially_paid -> paid` или `canceled` (аннулирование по праву от владельца, освобождает распределения); оплаченный или аннулированный счёт не принимает обычную оплату; изменения строк проходят аудит и не опускают итог ниже оплаченного |
+| BillingRequest | `open`, `auto_prepared`, `processed`, `canceled`; только законные переходы сервиса |
+| BonusTransaction | неизменяемые строки журнала: начисление, списание, сгорание, ручная корректировка, возврат |
+| BroadcastCampaign | `draft -> scheduled -> sending -> sent/failed`; на каждого гостя `BroadcastDelivery` `pending -> sending -> sent/failed/skipped/unknown`, повторно не отправляется (ADR-0008) |
 
-## 7. Content and configuration contract
+## 7. Договор текстов и настроек
 
-Partners configure approved labels, templates and capability flags through `PartnerBotSettings`. Empty configuration falls back to safe default text; rendering errors must not crash update handling. The product requires stable intent routing even when display labels collide or are renamed. Therefore labels are presentation data, not an authority or an unvalidated routing key.
+Партнёры настраивают утверждённые подписи, шаблоны и флаги возможностей через `PartnerBotSettings`. Пустая настройка даёт безопасный текст по умолчанию; ошибка отрисовки не должна ронять обработку обновления. Продукту нужна стабильная маршрутизация намерений, даже если подписи совпадают или переименованы. Поэтому подписи — данные представления, а не права и не непроверенный ключ маршрута.
 
-The desired configuration UX includes dependency validation, human-readable preview and a documented set of supported template variables. It does not require a separate code branch per partner.
+Желаемый интерфейс настройки включает проверку зависимостей, понятный предпросмотр и задокументированный набор переменных шаблонов. Отдельная ветка кода на каждого партнёра не нужна.
 
-## 8. Confirmed divergence register
+## 8. Реестр подтверждённых расхождений
 
-The following are not silently “normalised” in this product document; implementation requires approved roadmap work.
+Здесь расхождения не «нормализуются» молча; реализация требует утверждённой работы по дорожной карте.
 
-| Product requirement | Code evidence | Classification | Consequence / target |
+| Требование продукта | Доказательство в коде | Классификация | Последствие / цель |
 | --- | --- | --- | --- |
-| Inactive `User` must not retain staff access | `TABLEOS_TZ.md:284-295`; B1: `apps/employees/selectors.py:get_staff_employee_by_telegram` requires active profile, active user and matching partner; every staff callback re-resolves the actor | RESOLVED_IN_B1 | Keep the characterization tests green |
-| Suspended partner must not serve ongoing flows | `TABLEOS_TZ.md:1880-1892`; B1: `bot/middlewares/partner_runtime.py:PartnerRuntimeMiddleware` and `bot/services/context.py:resolve_partner_for_bot_token` recheck partner and bot status on every update | RESOLVED_IN_B1 | Polling transport stops only on process restart (PQ-013) |
-| One active session per guest/partner | `TABLEOS_TZ.md:1900-1907`; B2: `TableSession.unique_active_table_session_per_partner_guest`; `apps/tables/services.py:activate_table_session` locks `GuestProfile → Table → active sessions` | RESOLVED_IN_B2 | Run the duplicate audit and the PostgreSQL test before production migration |
-| A bill item cannot appear in two active/paid bills | `apps/billing/services.py:create_bill_from_orders` and `attach_orders_to_bill` lock `OrderItem` rows; `BillItem.unique_order_item_bill_allocation` guards `(partner, order_item)` | PARTIALLY_RESOLVED_FOR_B3 | Repeat the duplicate audit; a PostgreSQL allocation test still has to be written; bill void/release is PQ-028 (AA-022) |
-| Order status transition is serialized | `TABLEOS_TZ.md:531-691`; B2: `apps/orders/services.py:transition_order_status` reloads the order under `select_for_update()`; guest confirmation still bypasses the transition table (AA-025) | RESOLVED_IN_B2; guest rule RESOLVED_IN_B3.1 | Guest may confirm from any non-final status (PQ-029) |
-| Order reward programmes accrue | `apps/billing/services.py:_sync_orders_after_bill_paid` dispatches the existing programme event after first paid settlement with source-linked idempotency | PARTIALLY_RESOLVED_FOR_B3 | Paid is the current baseline; partner-specific trigger expansion and refund/cancellation treatment remain deferred |
-| Labels cannot misroute guest actions | `TABLEOS_TZ.md:1512-1537`; `bot/filters/content.py:PartnerButtonFilter` compares raw message text; B1: `apps/partners/models.py:PartnerBotSettings.clean` rejects empty and duplicate routed labels | RESOLVED_IN_B1 (validation) | Stable intent routing remains a future choice (PQ-016) |
-| Telegram I/O is outside transaction and broadcasts are retry-safe | `TABLEOS_TZ.md:1852-1877`; B4: `apps/notifications/services.py:send_broadcast_campaign_now` claims `BroadcastDelivery` rows, sends with no transaction open and records each outcome; `recover_stalled_broadcast_campaigns` | RESOLVED_IN_B4 (AA-008, AA-030) | At most once for broadcasts, at least once for operational notifications (PQ-014, PQ-015) |
-| Admin cannot bypass operational transition rules | B2/B3 make lifecycle, allocation, bonus balance and ledger fields readonly; payment/bonus commands remain owner services and no special bonus-settlement Admin action exists | PARTIALLY_RESOLVED_FOR_B3 | Correction policy (PQ-018), order relations read-only since B3.1, PostgreSQL rollout gate remain open |
-| Delivery/pickup are usable journeys | Pickup: `apps/billing/remote_orders.py`, `bot/handlers/remote_checkout.py` (one flow for every remote channel, ADR-0009); delivery has only its flag | Pickup RESOLVED; delivery CODE_IS_BEHIND_SPEC | Delivery and shipping are the next channels (ECOSYSTEM_DIRECTION.md) |
-| A bill contains only the current visit's orders | B3.2 part B: `apps/billing/table_bills.py:get_table_billable_orders` filters by `TableSession.visit`; `create_bill_from_orders` rejects orders of different visits; `bot/services/navigation.py` checks the guest's visit | RESOLVED_IN_B3.2B (AA-020) | Guest chooses to join a party or start a new visit (PQ-026); staff close leftover visits |
-| Recording a payment does not fail because of follow-up steps | Before B3.1 the table-wide auto-close raised `TableSessionError` inside the payment transaction; now `apps/billing/table_bills.py:_close_settled_sessions_of_bill` skips non-closable sessions | RESOLVED_IN_B3.1 (AA-021) | Payment always persists; auto-close closes only fully paid sessions (PQ-027) |
-| A guest is not charged for a cancelled order | `apps/orders/services.py:transition_order_status` cancels allocated orders; `recalculate_bill_totals` keeps their lines; no bill void command exists | RESOLVED_IN_B3.2A (AA-022) | Owner-granted, audited bill change/void; void releases allocations (PQ-028) |
-| Messages render any venue/guest text | All messages use HTML parse mode; no dynamic value is escaped | RESOLVED_IN_B3.1 (AA-024) | Broadcast text remains partner markup until B4 |
+| Неактивный `User` не сохраняет доступ сотрудника | `TABLEOS_TZ.md:284-295`; B1: `apps/employees/selectors.py:get_staff_employee_by_telegram` требует активного профиля, активного пользователя и совпадения партнёра; каждый callback персонала заново определяет исполнителя | RESOLVED_IN_B1 | Держать характеризующие тесты зелёными |
+| Приостановленный партнёр не обслуживает текущие сценарии | `TABLEOS_TZ.md:1880-1892`; B1: `bot/middlewares/partner_runtime.py:PartnerRuntimeMiddleware` и `bot/services/context.py:resolve_partner_for_bot_token` перепроверяют партнёра и бота на каждом обновлении | RESOLVED_IN_B1 | Транспорт polling останавливается только при перезапуске процесса (PQ-013) |
+| Одна активная сессия на гостя и партнёра | `TABLEOS_TZ.md:1900-1907`; B2: `TableSession.unique_active_table_session_per_partner_guest`; `apps/tables/services.py:activate_table_session` блокирует `GuestProfile → Table → активные сессии → TableVisit` | RESOLVED_IN_B2 | Перед миграцией в продакшене провести аудит дублей и прогон на PostgreSQL |
+| Позиция не может оказаться в двух активных или оплаченных счетах | `apps/billing/services.py:create_bill_from_orders` и `attach_orders_to_bill` блокируют строки `OrderItem`; `BillItem.unique_active_order_item_bill_allocation` охраняет активное распределение | RESOLVED_IN_B3.1 | Тест распределения на PostgreSQL добавлен в B3.1; аннулирование освобождает распределения (PQ-028); перед продакшеном повторить аудит дублей |
+| Смена статуса заказа сериализована | `TABLEOS_TZ.md:531-691`; B2: `apps/orders/services.py:transition_order_status` перезагружает заказ под `select_for_update()`; подтверждение гостем — отдельное явное правило | RESOLVED_IN_B2; правило гостя RESOLVED_IN_B3.1 | Гость может подтвердить из любого нефинального статуса (PQ-029) |
+| Программы награды за заказ начисляются | `apps/billing/services.py:_sync_orders_after_bill_paid` запускает существующее событие программы после первой оплаты с идемпотентностью по источнику | PARTIALLY_RESOLVED_FOR_B3 | Оплата — текущая основа; события под партнёра и обработка возвратов и отмен отложены |
+| Подписи не направляют действия гостя не туда | `TABLEOS_TZ.md:1512-1537`; `bot/filters/content.py:PartnerButtonFilter` сравнивает сырой текст; B1: `apps/partners/models.py:PartnerBotSettings.clean` отклоняет пустые и повторяющиеся подписи с маршрутизацией | RESOLVED_IN_B1 (проверка) | Стабильная маршрутизация намерений — будущий выбор (PQ-016) |
+| Ввод-вывод Telegram вне транзакции, рассылки безопасны при повторе | `TABLEOS_TZ.md:1852-1877`; B4: `apps/notifications/services.py:send_broadcast_campaign_now` захватывает строки `BroadcastDelivery`, отправляет без открытой транзакции и записывает каждый итог; `recover_stalled_broadcast_campaigns` | RESOLVED_IN_B4 (AA-008, AA-030) | Не больше одного раза для рассылок, хотя бы один раз для рабочих уведомлений (PQ-014, PQ-015) |
+| Admin не обходит правила рабочих переходов | B2/B3 делают поля жизненного цикла, распределения, бонусного баланса и журнала только для чтения; команды оплаты и бонусов остаются сервисами-владельцами, особого действия Admin для бонусного расчёта нет | PARTIALLY_RESOLVED_FOR_B3 | Политика исправлений (PQ-018) открыта; связи заказа только для чтения с B3.1 |
+| Доставка и самовывоз — рабочие сценарии | Самовывоз: `apps/billing/remote_orders.py`, `bot/handlers/remote_checkout.py` (один сценарий для всех удалённых каналов, ADR-0009); у доставки только флаг и отметка позиции | Самовывоз RESOLVED; доставка CODE_IS_BEHIND_SPEC | Доставка и отправка — следующие каналы (ECOSYSTEM_DIRECTION.md) |
+| Счёт содержит только заказы текущего визита | B3.2 часть B: `apps/billing/table_bills.py:get_table_billable_orders` фильтрует по `TableSession.visit`; `create_bill_from_orders` отклоняет заказы разных визитов; `bot/services/navigation.py` проверяет визит гостя | RESOLVED_IN_B3.2B (AA-020) | Гость выбирает подсесть или начать новый визит (PQ-026); персонал закрывает оставшиеся визиты |
+| Запись оплаты не падает из-за последующих шагов | До B3.1 автозакрытие по всему столу бросало `TableSessionError` внутри транзакции оплаты; теперь `apps/billing/table_bills.py:_close_settled_sessions_of_bill` пропускает незакрываемые сессии | RESOLVED_IN_B3.1 (AA-021) | Оплата всегда сохраняется; автозакрытие закрывает только полностью оплаченные сессии (PQ-027) |
+| С гостя не берут деньги за отменённый заказ | Раньше `transition_order_status` отменял заказы в счёте, а `recalculate_bill_totals` сохранял их строки и команды аннулирования не было; теперь отмена заказа с активными строками счёта отклоняется, а `remove_bill_lines`, `void_bill` и `cancel_order` дают изменения с аудитом | RESOLVED_IN_B3.2A (AA-022) | Изменение и аннулирование счёта по праву от владельца с аудитом; аннулирование освобождает распределения (PQ-028) |
+| Сообщения корректно показывают любой текст заведения и гостя | Раньше все сообщения шли в режиме HTML без экранирования; с B3.1 динамические значения экранируются (`bot/utils/html.py:escape_html`, `notifications/services.py:_escape_html`) | RESOLVED_IN_B3.1 (AA-024) | Текст рассылки остаётся разметкой партнёра |
 
-## 9. Future scope and exclusions
+## 9. Будущий объём и исключения
 
-The following need their own approved product/design batch before implementation: delivery/shipping data model and UX, WebApp, webhook runtime, online payment provider callbacks, POS/fiscal integrations, refund lifecycle, loyalty expiry automation, segmentation/preview/unsubscribe for broadcasts, export/dashboard UX, multilingual policy, inventory/stop-lists, service charge/tips and table-session expiry policy.
+До реализации нужен отдельный утверждённый продуктовый и дизайнерский батч для: модели данных и интерфейса доставки и отправки, WebApp, режима webhook, обратных вызовов провайдеров онлайн-оплаты, интеграций с кассами и фискализацией, жизненного цикла возвратов, автоматического сгорания бонусов, сегментации, предпросмотра и отписки в рассылках, интерфейса выгрузок и панелей, многоязычной политики, остатков и стоп-листов, сервисного сбора и чаевых, политики истечения сессий стола.
 
-Open choices that affect behavior are maintained in [OPEN_PRODUCT_QUESTIONS.md](OPEN_PRODUCT_QUESTIONS.md); they are not resolved by this audit.
+Открытые варианты, влияющие на поведение, ведутся в [OPEN_PRODUCT_QUESTIONS.md](OPEN_PRODUCT_QUESTIONS.md); этот документ их не решает.
