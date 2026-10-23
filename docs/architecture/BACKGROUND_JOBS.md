@@ -6,13 +6,17 @@
 
 Celery autodiscovery currently registers these first-party tasks:
 
-| Task | Source | Trigger / role |
-|---|---|---|
-| `analytics.refresh_daily_partner_metrics` | `apps/analytics/tasks.py` | refresh/reporting work for a partner |
-| `notifications.deliver_staff_notification` | `apps/notifications/tasks.py` | deliver a persisted staff notification |
-| `notifications.process_scheduled_broadcast_campaigns` | `apps/notifications/tasks.py` | find scheduled campaigns ready to process |
-| `notifications.send_broadcast_campaign` | `apps/notifications/tasks.py` | send a campaign |
-| `notifications.send_guest_order_status_update` | `apps/notifications/tasks.py` | deliver guest order status message |
+| Task | Source | Queue | Trigger | Retry | Idempotency today |
+|---|---|---|---|---|---|
+| `notifications.deliver_staff_notification` | `apps/notifications/tasks.py` | `default` | `on_commit` after a `StaffNotification` row is created | `autoretry_for=Exception`, backoff, max 5 | none: does not skip an already `sent` row; recipient not rechecked (AA-030) |
+| `notifications.send_guest_order_status_update` | `apps/notifications/tasks.py` | `default` | `on_commit` after an order status change, if guest allows updates | same | none (AA-030) |
+| `notifications.send_broadcast_campaign` | `apps/notifications/tasks.py` | `broadcasts` | `on_commit` from `send_broadcast_campaign`; chains itself per batch of 250 | same | none; Telegram I/O inside the DB transaction (AA-008) |
+| `notifications.process_scheduled_broadcast_campaigns` | `apps/notifications/tasks.py` | `default` | beat, every minute | none | relies on campaign status; no row lock |
+| `analytics.refresh_daily_partner_metrics` | `apps/analytics/tasks.py` | `default` | beat, every 15 minutes | none | `update_or_create` per partner and day; only the current day (AA-029) |
+
+Telegram API errors inside `_send_telegram_messages` are captured as failed
+results and are not re-raised, so the retry policy applies only to unexpected
+exceptions (database errors, decryption errors and similar).
 
 The legacy cheatsheet omitted scheduled campaign processing; this list is the
 source-verified registration map. Placeholder `tasks.py` files in other apps
@@ -27,9 +31,11 @@ messages/sleeps within an atomic transaction and the task lacks a durable
 recipient claim/lease/idempotency record. See AA-008 for exact evidence.
 
 Deployment documentation must distinguish the processes actually required:
-web/admin, bot polling, Celery worker(s), Redis, PostgreSQL, and a scheduler if
-scheduled campaigns are intended to run. The supplied compose configuration
-does not by itself establish all of those process roles.
+web/admin, bot polling, Celery worker(s), Celery beat, Redis and PostgreSQL.
+`docker-compose.yml` declares only `db`, `redis`, `web` and `worker`; without
+separately started `runbot` and `celery beat` processes nothing polls
+Telegram, scheduled campaigns are never sent and daily metrics are never
+refreshed.
 
 ## Target task contract
 

@@ -1,5 +1,7 @@
 # Baseline audit — 2026-07-27
 
+> **Historical snapshot** of the 2026-07-27 audit at commit `b17ce5b`. It is kept as evidence and is not updated as code changes. Batches B1–B3 report passing SQLite runs but did not record counts or output; how to run checks today is in [`../engineering/TESTING.md`](../engineering/TESTING.md).
+
 ## Repository state
 
 | Item | Observed value |

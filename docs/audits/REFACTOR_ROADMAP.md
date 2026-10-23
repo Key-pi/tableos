@@ -1,9 +1,10 @@
 # TableOS — Refactor roadmap
 
-**Status:** B0–B2 are complete; B3 was owner-approved on 2026-08-06 and its
-implementation update is recorded below. B4–B5 remain proposals and require
-owner approval before any application-code, migration, dependency, or runtime
-change begins.
+**Status (2026-10-23):** B0–B3 are complete in application code. B0.1, a
+documentation refresh after the post-B3 review, is complete. B3.1 (post-B3
+correctness fixes), B4 and B5 are proposals and require owner approval before
+any application-code, migration, dependency, or runtime change begins. The
+PostgreSQL verification gate for B2/B3 has not been passed yet.
 
 ## Operating rules for every batch
 
@@ -130,8 +131,10 @@ production rollout of the migration.
 4. Gross/net/payment/bonus dashboard definitions remain deferred until the
    owner reviews concrete report examples.
 5. Verification is intentionally risk-weighted: critical money, ledger,
-   allocation, Admin and PostgreSQL concurrency paths are covered; no blanket
-   test is added for every presentation branch.
+   allocation and Admin paths are covered by SQLite tests; no blanket test is
+   added for every presentation branch. *(Corrected 2026-10-23: PostgreSQL
+   concurrency coverage exists only for order transitions and table
+   activation; see AA-032.)*
 
 **B3 implementation update — 2026-08-06:** B3 adds locked/source-linked bonus
 ledger mutations, guest-balance reconciliation guards and per-partner
@@ -142,9 +145,34 @@ active allocations with no duplicates; restricts direct bonus ledger/balance
 Admin edits; and exposes one service-backed bonus-payment command that applies
 partial coverage or closes a fully covered bill. The separate zero-total Admin
 action was removed. Refund/cancellation semantics and revenue metric
-definitions remain out of scope. PostgreSQL-only allocation, redemption and
-accrual tests are included but require the production-like PostgreSQL
-verification gate.
+definitions remain out of scope. *(Corrected 2026-10-23: the earlier text
+said PostgreSQL-only allocation, redemption and accrual tests were included.
+They are not in the repository; writing and running them is part of the
+PostgreSQL verification gate and of B3.1.)*
+
+## Batch B0.1 — Documentation refresh after B3 (complete, 2026-10-23)
+
+| Field | Result |
+|---|---|
+| **Goal** | Bring canonical documents back in line with the code after B1–B3 and record the post-B3 review. |
+| **Scope** | Rewrote `AS_IS_ARCHITECTURE.md` for commit `ddb7dce`; replaced line-number citations in current-state documents with `path:symbol`; marked audit-time snapshots as historical; corrected the PostgreSQL-test claims and the payment lock order; added AA-020–AA-032, PQ-026–PQ-030 and batch B3.1; updated engineering, runtime and background-job documents. |
+| **Not in scope** | Application code, migrations, dependencies, runtime configuration. |
+| **Verification** | Repository-wide check that every cited file exists and that `path:symbol` citations resolve; `git diff --check`. Tests were not executed (no environment); the recorded test baseline remains the 2026-07-27 run. |
+| **Rollback** | Revert the documentation commit. |
+
+## Batch B3.1 — Post-B3 correctness fixes
+
+| Field | Proposal |
+|---|---|
+| **Goal** | Fix the money, state and presentation defects found after B3 without redesigning the billing model. |
+| **Scope** | AA-021 (payment never fails because of auto-close); AA-022 (cancelled order inside a bill; bill void/release command); AA-020 (visit-scoped billing eligibility, request button and auto-close); AA-023 (order relations read-only in Admin); AA-024 (HTML escaping at the presentation boundary); AA-025 (one transition policy for guest confirmation); AA-026 (exclude superusers from tenant `UserAdmin`); AA-027 (no comment from the checkout reply button); AA-028 (no write on Bill changelist); AA-029 (venue-timezone day boundaries, previous-day snapshot). Also: the missing PostgreSQL tests for allocation, bonus redemption and paid-order accrual. |
+| **Not in scope** | Broadcast delivery redesign (B4), refunds, revenue definitions, module moves. |
+| **Evidence / risks** | AA-020–AA-029, AA-032. |
+| **Dependencies** | PQ-026 for AA-020, PQ-027 for the auto-close part of AA-021, PQ-028 for AA-022, PQ-029 for AA-025. AA-021's "payment must persist" part, AA-023, AA-024, AA-026–AA-029 need no product decision. A working Python environment and a PostgreSQL instance. |
+| **Suggested order** | 1) characterization tests reproducing each defect; 2) decision-free fixes (AA-021 persistence, AA-023, AA-024, AA-026, AA-027, AA-028, AA-029); 3) decision-dependent fixes once PQ-026–PQ-029 are answered; 4) PostgreSQL tests and run. |
+| **Required verification** | Each finding's verification line in the audit register; full test suite in SQLite and the PostgreSQL-gated tests on PostgreSQL. |
+| **Rollback** | One finding per commit; a constraint change (if PQ-028 makes allocation conditional) ships as a reversible migration after a data audit. |
+| **Exit criterion** | Each finding has a regression test that failed before and passes after; no adapter can record a payment that later rolls back because of session handling. |
 
 ## Batch B4 — Durable async delivery and operational runtime
 
@@ -153,7 +181,7 @@ verification gate.
 | **Goal** | Make notification/broadcast delivery recoverable without database transactions spanning Telegram I/O. |
 | **Scope** | Separate commit from send; introduce the smallest durable delivery/lease/idempotency record necessary for campaign fan-out; align exception/retry policy; recheck recipient eligibility as product requires; document/deploy actual bot/worker/scheduler topology. |
 | **Not in scope** | A generic event bus, message broker replacement, microservice extraction, unmeasured caching. |
-| **Evidence / risks** | AA-008, AA-009, AA-016, AA-018. |
+| **Evidence / risks** | AA-008, AA-009, AA-016, AA-018, AA-030; `docker-compose.yml` has no bot or beat service. |
 | **Dependencies** | B1 live eligibility semantics; owner decision on delivery guarantee and recipient preference behavior; operational deployment owner. |
 | **Required verification** | Worker retry, duplicate task, concurrent worker, crash-after-send/before-persist, disabled recipient, and campaign counter tests; instrumentation showing no network I/O in the source transaction; compose/runbook review. |
 | **Rollback** | Retain original campaign records and make the new delivery worker opt-in per campaign version until recovery behavior is proven; migration must preserve unsent work. |
@@ -166,7 +194,7 @@ verification gate.
 | **Goal** | Remove only proven-unused scaffolding and tighten lower-risk reliability/performance issues after behavior is protected. |
 | **Scope** | Resolve empty services/tasks/interfaces/repositories through static + dynamic consumer proof; break notifications task/service cycle; make demo seed atomic/idempotent; measure and address confirmed filter/report performance issues. |
 | **Not in scope** | Broad folder renames, code formatting sweep, dependency upgrade, speculative cache/event-engine abstraction. |
-| **Evidence / risks** | AA-017, AA-019 and lower-priority observations in architecture audit. |
+| **Evidence / risks** | AA-017, AA-019, AA-031 and lower-priority observations in architecture audit. |
 | **Dependencies** | Characterization coverage from B1–B4; public import compatibility plan (ADR-0005). |
 | **Required verification** | Import/API search, Django/Celery/aiogram registration search, focused tests, seed failure rollback test, before/after query/latency measurement for any performance change. |
 | **Rollback** | One small deletion/consolidation per commit with re-export shims where public imports existed; revert without data migration. |
@@ -176,10 +204,11 @@ verification gate.
 
 | Gate | Required before |
 |---|---|
-| Product owner decision | B1 stale callbacks/global identity; B3 bonus timing, zero bill, revenue semantics, refund policy; B4 delivery guarantee/preference policy. |
+| Product owner decision | B1 stale callbacks/global identity; B3 bonus timing, zero bill, revenue semantics, refund policy; B3.1 visit scope, auto-close, bill void, guest confirmation (PQ-026–PQ-029); B4 delivery guarantee/preference policy. |
 | Data owner review | Any migration or constraint in B2/B3, after reporting invalid existing rows. |
 | Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
 | Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
 
-The next safe action is to resolve the listed B3 product/data decisions before
-starting financial-integrity implementation.
+The next safe action is to start B3.1 with characterization tests and the
+decision-free fixes, while the owner answers PQ-026–PQ-029. The PostgreSQL
+verification gate for B2/B3 must be passed before production rollout.

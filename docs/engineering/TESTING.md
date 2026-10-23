@@ -14,7 +14,11 @@ docker compose config --quiet
 ```
 
 At the 2026-07-27 baseline, Django check/migration check/tests/compose config
-passed; the test suite ran **139 tests**. Ruff reported **21 pre-existing
+passed; the test suite ran **139 tests**. Since then B1–B3 added tests: at
+commit `ddb7dce` the source contains **20 test modules with 179 test
+functions**, not yet re-run as a recorded baseline. Record the next full run
+(date, commit, database, result, test count) in the table at the end of this
+document. Ruff reported **21 pre-existing
 check violations** and **54 files that would be reformatted**. Do not state
 that Ruff is green until the actual baseline changes and is rerun. Full output
 and tool versions are recorded in [`../audits/BASELINE.md`](../audits/BASELINE.md).
@@ -31,6 +35,23 @@ and tool versions are recorded in [`../audits/BASELINE.md`](../audits/BASELINE.m
 | Bot routing/content | router/filter ordering, stale callback, changed label/callback schema tests |
 | Celery/notifications | after-commit, retry/duplicate worker/crash behavior, task registration tests |
 | Cleanup/move | import/API search, dynamic registration checks, characterization tests, `git diff --check` |
+
+## Running the PostgreSQL-gated tests
+
+Two tests run only when the database vendor is PostgreSQL and are skipped on
+SQLite: `apps/orders/test_concurrency.py` and `apps/tables/test_concurrency.py`.
+Bill allocation, bonus redemption and paid-order accrual have no PostgreSQL
+test yet (roadmap B3.1).
+
+```bash
+docker compose up -d db
+env DJANGO_USE_SQLITE=false POSTGRES_HOST=localhost PYTHONDONTWRITEBYTECODE=1 \
+  ./.venv/bin/python manage.py test apps.orders.test_concurrency apps.tables.test_concurrency
+```
+
+The compose database user owns the database and may create the test database.
+Run the whole suite the same way before a production rollout of B2/B3
+migrations.
 
 ## Concurrency protocol
 
@@ -56,3 +77,11 @@ initial cases are in AA-004 through AA-008.
 4. Migration/data/rollback implications are documented.
 5. Full relevant test set and documented baseline checks are run; unrelated
    pre-existing lint failures are reported separately, not hidden.
+
+## Recorded runs
+
+There is no CI; every run is manual. Add a row for each full run.
+
+| Date | Commit | Database | Command scope | Result |
+|---|---|---|---|---|
+| 2026-07-27 | `b17ce5b` | SQLite | full suite | 139 tests OK; Ruff: 21 findings, 54 files to reformat |

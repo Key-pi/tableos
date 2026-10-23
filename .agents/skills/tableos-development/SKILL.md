@@ -39,12 +39,13 @@ If the request depends on an open product decision, stop after safe characteriza
 - Reload the canonical mutable row under the right lock inside the transaction; do not transition from a stale object fetched earlier.
 - Do not mutate money/state/ledger/derived totals through raw `QuerySet.update`, direct Admin fields, or a duplicate adapter-specific implementation.
 - Do not call Telegram/network I/O or retry/sleep inside `transaction.atomic`. Persist/commit first, then schedule or perform idempotent work.
+- Escape every dynamic value in Telegram messages; bot and notifications use HTML parse mode.
 - Do not add an interface/repository/policy/rule/engine without a real consumer and a distinct responsibility.
 - Do not perform a broad formatting sweep, dependency upgrade, or module move while fixing an unrelated behavior.
 
 ## Verification baseline
 
-Use the project virtual environment and the commands in `docs/engineering/TESTING.md`. The audited baseline has 139 passing Django tests in SQLite mode, while Ruff currently has pre-existing failures; report those separately rather than masking them. Run `manage.py makemigrations --check --dry-run` for model changes and `docker compose config --quiet` for deployment configuration changes. Add PostgreSQL verification where required by the change.
+Use the project virtual environment and the commands in `docs/engineering/TESTING.md`. The 2026-07-27 audited baseline had 139 passing Django tests in SQLite mode (179 test functions exist at `ddb7dce`; record new runs in `TESTING.md`), while Ruff has pre-existing failures; report those separately rather than masking them. Run `manage.py makemigrations --check --dry-run` for model changes and `docker compose config --quiet` for deployment configuration changes. Add PostgreSQL verification where required by the change.
 
 ## Completion checklist
 

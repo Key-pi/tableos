@@ -17,8 +17,11 @@ monolith with an aiogram Telegram bot, Celery, PostgreSQL, and Redis.
   [`docs/engineering/DEVELOPMENT.md`](docs/engineering/DEVELOPMENT.md) and
   [`docs/engineering/TESTING.md`](docs/engineering/TESTING.md)
 - Repository rules for contributors and agents: [`AGENTS.md`](AGENTS.md)
-- Audited baseline, findings, and proposed batches:
-  [`docs/audits/`](docs/audits/)
+- Open findings and batch status:
+  [`docs/audits/ARCHITECTURE_AUDIT.md`](docs/audits/ARCHITECTURE_AUDIT.md) and
+  [`docs/audits/REFACTOR_ROADMAP.md`](docs/audits/REFACTOR_ROADMAP.md)
+- Open product decisions:
+  [`docs/product/OPEN_PRODUCT_QUESTIONS.md`](docs/product/OPEN_PRODUCT_QUESTIONS.md)
 
 `TABLEOS_TZ.md` and `PROJECT_CHEATSHEET.md` are retained as legacy/evidence
 documents. Their relationship to current code is mapped in

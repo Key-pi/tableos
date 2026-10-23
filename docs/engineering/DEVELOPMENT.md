@@ -17,6 +17,22 @@ file was present in the audited tree. Use the project virtual environment or an
 equivalent isolated environment, and do not record personal/production secrets
 in documentation, command history, or fixtures.
 
+## First-time setup (macOS / Linux)
+
+```bash
+git clone https://github.com/Key-pi/tableos.git && cd tableos
+python3 -m venv .venv
+./.venv/bin/pip install -e ".[dev]"
+cp .env.example .env
+# Generate a Fernet key and put it into BOT_TOKEN_ENCRYPTION_KEY in .env:
+./.venv/bin/python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+`core/settings/env.py` reads `.env` from the working directory; real
+environment variables override it. `.env.example` defaults to PostgreSQL
+(`DJANGO_USE_SQLITE=false`), so either start `docker compose up -d db redis`
+or prefix commands with `DJANGO_USE_SQLITE=true`.
+
 ## Local setup
 
 SQLite is allowed for quick local exploration only:
@@ -38,9 +54,15 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py runbot
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker --loglevel=info
 ```
 
-If scheduled broadcast processing is part of the environment, explicitly run
-and document the scheduler/beat process as well. The supplied compose file does
-not alone prove that bot polling and beat are deployed.
+Scheduled broadcasts and daily metric snapshots need Celery beat as well:
+
+```bash
+DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery beat --loglevel=info
+```
+
+`docker-compose.yml` starts only `db`, `redis`, `web` and `worker`; it does not
+start `runbot` or beat. Non-web processes use `core.settings.local`
+(`DEBUG=True`) unless `DJANGO_SETTINGS_MODULE` is set.
 
 ## Seeds and local data
 

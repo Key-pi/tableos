@@ -32,12 +32,18 @@
 | PQ-023 | Is a WebApp a replacement or optional enhancement? | Prevents duplicating business rules and fragmented UX | Bot fallback + WebApp; bot only; WebApp primary later | Legacy proposes fallback; no implementation scope — AMBIGUOUS_PRODUCT_DECISION |
 | PQ-024 | What analytics retention/export/privacy policy is needed? | Determines snapshots, access control and operational data lifecycle | On-demand only; scheduled retention; exports; dashboard; data deletion policy | Current metrics/report exist, product policy is incomplete — NEEDS_FOLLOW_UP |
 | PQ-025 | Which capabilities are commercial entitlements versus technical flags? | Avoids flags becoming an ungoverned product/tariff layer | Separate entitlement policy; technical flags only; partner plan rules | Legacy requests tariff limits; no canonical decision — AMBIGUOUS_PRODUCT_DECISION |
+| PQ-026 | What is the billing scope of a table visit, and what happens to unpaid orders left behind? | Today bills, the "request bill" button and auto-close look at every unbilled order ever placed at the table (AA-020) | Active sessions at the table only; sessions since the table was last fully settled; an explicit staff-opened table tab; orphaned orders go to a staff "unpaid" list / are cancelled / stay with the guest | Added 2026-10-23 from the post-B3 review — AMBIGUOUS_PRODUCT_DECISION; blocks the AA-020 fix together with PQ-007/PQ-008 |
+| PQ-027 | Which sessions does "auto-close after payment" close? | A non-closable session currently aborts the whole payment (AA-021) | Only sessions whose orders were in the paid bill; every settled session at the table, skipping the rest; all sessions with pending requests auto-cancelled; never auto-close (staff only) | Added 2026-10-23 — AMBIGUOUS_PRODUCT_DECISION; the "payment must never fail because of auto-close" part is a defect fix and needs no decision |
+| PQ-028 | What happens when an order already in a bill is cancelled, and who may void a bill? | Cancelled orders stay charged; a bill cannot be voided and its items cannot be re-billed (AA-022) | Block cancellation once allocated; cancellation removes lines while the bill is unpaid; manager-only bill void with reason that releases allocations; combinations | Added 2026-10-23 — AMBIGUOUS_PRODUCT_DECISION; replaces the "bill-cancel/release semantics deferred" note in earlier batches |
+| PQ-029 | What may a guest's "received" confirmation do? | The guest path completes orders the transition table forbids (AA-025) | Allowed only from `ready`/`delivering`; allowed from any accepted state (current); records `received_at` without completing | Added 2026-10-23 — related to PQ-006 |
+| PQ-030 | Does cashback accrue on the part paid with bonuses? | Paid-order and quick-sale accrual use the full total, including the bonus-paid part | Accrue on full total (current); accrue on money paid only; partner-configurable per programme | Added 2026-10-23 — related to PQ-002 and AA-013 |
 
 ## Decisions that should precede high-risk roadmap batches
 
 1. **PQ-014, PQ-017, PQ-020** — delivery guarantee, administrative mutation and tenant relation integrity alter security/financial guarantees.
 2. **PQ-002, PQ-006, PQ-007, PQ-009** — order/bonus/session/bill semantics determine the correct state-machine and migration tests.
 3. **PQ-004, PQ-005** — staff authority must be settled before further callback hardening.
+4. **PQ-026, PQ-027, PQ-028** — visit scope, auto-close and bill void semantics must be decided before the money fixes in B3.1 (AA-020–AA-022).
 
 ## Decisions that do not block characterization testing
 

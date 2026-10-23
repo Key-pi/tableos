@@ -36,7 +36,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q broadcasts --
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery beat --loglevel=info
 ```
 
-Если запускаешь через Docker Compose:
+Если запускаешь через Docker Compose (в compose нет сервисов `runbot` и `beat` — их запускай отдельно):
 
 ```bash
 docker compose up db redis web worker
@@ -73,6 +73,8 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 - `manage.py check`: no issues.
 - `makemigrations --check --dry-run`: no changes detected.
 - `ruff check --no-cache .`: 21 pre-existing violations; `ruff format --check --no-cache .`: 54 files would reformat. Это не green baseline.
+
+После B1–B3 тестов стало больше (179 тестовых функций на `ddb7dce`); актуальные команды и журнал прогонов — в [TESTING.md](docs/engineering/TESTING.md).
 
 ## Как работает Celery
 

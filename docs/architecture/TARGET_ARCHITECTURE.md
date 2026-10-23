@@ -124,18 +124,22 @@ flowchart TB
 B2 фиксирует lifecycle lock order для уже поддержанных команд: активация
 сессии — `GuestProfile → Table → active TableSession`; order transition
 блокирует canonical `Order`; payment completion — `Bill → Order →
-BillingRequest → TableSession`. Partial unique constraint на активную сессию
-применяется только после duplicate-data audit. SQLite-тесты не заменяют
-PostgreSQL concurrency evidence.
+GuestProfile → BillingRequest → TableSession` (`GuestProfile` блокируется
+начислением бонуса за оплаченный заказ; уточнено 2026-10-23). Partial
+unique constraint на активную сессию применяется только после
+duplicate-data audit. SQLite-тесты не заменяют PostgreSQL concurrency
+evidence.
 
-B3 adds the billing/bonus command boundary: `pay_bill_with_bonuses` locks
-`Bill → Order → GuestProfile`, verifies the partner-scoped ledger balance,
-applies the partner-program cap at a 1:1 bonus-to-UAH rate, and either leaves
-the monetary remainder payable or writes the ordinary `bonuses` payment for
-the nominal bonus value when the bill is fully covered. `Bill.paid_amount`
-counts money payments only. The bot exposes this as one payment intent; Admin has no alternate bonus-settlement action. The current paid-order
-reward trigger is a baseline compatibility mapping, not a universal limit on
-future partner programme triggers.
+B3 добавляет командную границу для бонусной оплаты: `pay_bill_with_bonuses`
+блокирует `Bill → Order → GuestProfile`, сверяет кэш баланса с бонусным
+ledger партнёра, применяет лимит программы партнёра по курсу 1 бонус = 1 грн
+и либо оставляет денежный остаток к оплате, либо — при полном покрытии —
+записывает обычный платёж методом `bonuses` на номинал бонусов.
+`Bill.paid_amount` учитывает только денежные платежи. В боте это одно
+действие «Оплатить бонусами»; альтернативного Admin-пути для бонусного
+расчёта нет. Начисление бонусов после оплаты заказа — текущая базовая
+привязка триггера, а не универсальное ограничение для будущих программ
+партнёра.
 
 ### 6.2. Внешние эффекты
 

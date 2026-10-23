@@ -4,8 +4,10 @@
 
 ## Current topology
 
-The aiogram polling process starts from `bot/main.py`. `bot/dispatcher.py`
-includes routers in the order `start → session → menu → order → profile →
+The aiogram polling process starts from `manage.py runbot` →
+`bot/main.py:run_polling`. `bot/main.py:create_dispatcher` registers
+`PartnerRuntimeMiddleware` as an outer middleware and includes routers in the
+order `start → session → menu → order → profile →
 billing → guest_call → staff`. Aiogram resolves the first matching handler, so
 router order and text filters are observable behavior.
 
@@ -17,6 +19,8 @@ router order and text filters are observable behavior.
 | Callback data | handler resolves domain record/employee | callback identifier is not authorization; reload scoped current state |
 | ORM access | handlers generally wrap Django access with `sync_to_async` | retain non-blocking adapter behavior; do not put business invariants in handler |
 | Runtime cache | partner bot runtime built at startup | cache cannot be sole source for revocable status/capability |
+| Message formatting | every bot and notification message uses `ParseMode.HTML`; dynamic values are currently not escaped (AA-024) | escape every interpolated value (partner, menu, guest, employee, comment text) at render time; only reviewed partner templates may carry markup |
+| Per-update lookups | the middleware, every `PartnerButtonFilter` evaluation and each handler reload the partner and `BotContent` | acceptable for MVP; measure before caching, and never cache status or capability |
 
 ## Handler contract
 

@@ -1,5 +1,7 @@
 # Codebase inventory
 
+> **Historical snapshot** of the 2026-07-27 audit at commit `b17ce5b`. It is kept as evidence and is not updated as code changes. Current figures (files, migrations, tests, dependencies) are in [`../architecture/AS_IS_ARCHITECTURE.md`](../architecture/AS_IS_ARCHITECTURE.md); several gaps listed here were closed in B1–B3.
+
 This inventory is evidence-based. It combines an AST parse of all 221 tracked Python files, a review of all first-party source/test/configuration units, migration history review, and focused domain traces. Generated caches, virtual environments, and VCS internals were not treated as source.
 
 ## System footprint
@@ -45,7 +47,7 @@ The deployable application is a modular Django monolith with an aiogram polling 
 
 ## Layer inventory and dependency direction
 
-Every domain app has the same scaffolded filenames (`interfaces.py`, `repositories.py`, `selectors.py`, `services.py`, `tasks.py`), but their real use is uneven. Only analytics and notifications contain concrete Celery tasks. Most interfaces are unused `Protocol` placeholders; several services/tasks contain only reserved docstrings. See [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#layer-consistency) for symbol-level decisions.
+Every domain app has the same scaffolded filenames (`interfaces.py`, `repositories.py`, `selectors.py`, `services.py`, `tasks.py`), but their real use is uneven. Only analytics and notifications contain concrete Celery tasks. Most interfaces are unused `Protocol` placeholders; several services/tasks contain only reserved docstrings. See [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#aa-017--layer-labels-hide-unused-abstractions-and-a-taskservice-cycle) for symbol-level decisions.
 
 Production-oriented imports flow broadly from orchestration apps toward domain models/services:
 

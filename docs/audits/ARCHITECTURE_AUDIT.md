@@ -4,6 +4,14 @@
 **Audit date:** 2026-07-27  
 **Scope:** every first-party source module, model, migration, admin/form, bot handler/router, Celery task, test module, root configuration, compose file, and the required root documents. No application code was changed.
 
+> **Reading this register.** Findings AA-001–AA-019 and their line-numbered
+> evidence describe the audit baseline commit `b17ce5b`; they are preserved as
+> historical evidence and are not rewritten when code moves. The B1–B3 update
+> sections record what changed. Findings AA-020–AA-032 come from the
+> [post-B3 review](#post-b3-review--2026-10-23) at commit `ddb7dce` and cite code
+> as `path:symbol`. The current implemented state is in
+> [`../architecture/AS_IS_ARCHITECTURE.md`](../architecture/AS_IS_ARCHITECTURE.md).
+
 ## Method and terminology
 
 The source tree and executable baseline are the primary evidence. `README.md`, `PROJECT_CHEATSHEET.md`, and `TABLEOS_TZ.md` are important product/documentary evidence but are not silently treated as executable truth. File-by-file coverage is in [`FILE_COVERAGE.md`](FILE_COVERAGE.md); inventory and commands are in [`CODEBASE_INVENTORY.md`](CODEBASE_INVENTORY.md) and [`BASELINE.md`](BASELINE.md).
@@ -315,3 +323,145 @@ partner programme model already carries trigger values, and future batches may
 add partner-specific trigger dispatch; no universal product rule is inferred
 from the current paid baseline. Refund/cancellation and revenue semantics stay
 deferred.
+
+## Post-B3 review — 2026-10-23
+
+**Scope:** a full re-read of documentation, models, services, Admin, Celery
+tasks and bot handlers at commit `ddb7dce` (branch `clean-project-rules`).
+**Method:** source reading and call-chain tracing. The test suite was not
+executed in this review (no Python environment with project dependencies was
+available); AA-027 was confirmed by executing the isolated function. Every
+finding below must receive a characterization test before its fix, as required
+by `AGENTS.md`.
+
+### Risk register (post-B3)
+
+| ID | Category | Severity | Confidence | Short conclusion | Roadmap batch |
+|---|---|---:|---:|---|---|
+| AA-020 | BUG / FINANCIAL_INTEGRITY | High | High | Billing, bill-request visibility and auto-close are scoped to the table's whole history, not the current visit. | B3.1 (needs PQ-026) |
+| AA-021 | BUG / FINANCIAL_INTEGRITY | High | Medium–High | Post-payment auto-close can raise `TableSessionError` and roll back a payment; adapters do not handle it. | B3.1 (PQ-027) |
+| AA-022 | BUG / FINANCIAL_INTEGRITY | High | High | A cancelled order stays charged in its bill; bills cannot be cancelled and allocations cannot be released. | B3.1 (PQ-028) |
+| AA-023 | BUG / ADMIN_BYPASS | Medium | High | `OrderAdmin` leaves `guest`, `table`, `table_session` editable. | B3.1 |
+| AA-024 | BUG / RELIABILITY | Medium | High | Text is sent with HTML parse mode but never escaped. | B3.1 |
+| AA-025 | BUG / STATE_MACHINE | Medium | High | Guest receipt confirmation bypasses `ORDER_STATUS_TRANSITIONS`. | B3.1 (PQ-006) |
+| AA-026 | SECURITY / PERMISSION | Medium | High (conditional) | Tenant `UserAdmin` does not exclude superusers that carry the tenant's `partner`. | B3.1 |
+| AA-027 | BUG / DATA_QUALITY | Low | High (executed) | Checking out via the reply button stores part of the button label as the order comment. | B3.1 |
+| AA-028 | BUG / PERFORMANCE | Low | High | The Bill changelist recalculates and saves every listed bill on a GET. | B3.1 |
+| AA-029 | BUG / TIME_BOUNDARY | Low | High | Visit bonus "once per day" uses the UTC day; the daily metric snapshot never revisits the previous day. | B3.1 |
+| AA-030 | BUG / ASYNC | Low | High | Notification tasks re-send on retry and do not recheck the recipient at delivery time. | B4 |
+| AA-031 | NAMING_PLACEMENT / LAYERING | Low | High | `core` imports domain apps; unused unscoped selectors and a legacy bonus service remain. | B5 |
+| AA-032 | DOCUMENTATION_DRIFT | Medium | High | Canonical docs described pre-B1 runtime, cited moved line numbers and claimed PostgreSQL tests that do not exist. | B0.1 (resolved by this review) |
+
+### AA-020 — billing and settlement use the table's history instead of the current visit
+
+- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High.
+- **Evidence:** `apps/billing/services.py:get_table_billable_orders` returns every non-cancelled order with `table_id` that is not yet in a bill, with no session or time filter; `get_or_create_personal_bill_for_guest_table` and `get_or_create_shared_bill_for_table` build bills from it. `_close_table_sessions_if_fully_settled` refuses to close if any order ever placed at the table is unsettled. `bot/services/navigation.py:resolve_guest_navigation_state` shows "request bill" when any order ever existed at the table. `apps/tables/services.py:activate_table_session` closes a guest's previous session without checking unpaid orders, and there is no session expiry.
+- **Current behavior:** unpaid orders of a guest who left or moved to another table remain attached to the table. The next party's shared bill includes them, a guest re-scanning the same table later gets them in a personal bill, and auto-close after payment never succeeds again for that table.
+- **Why it matters:** guests can be charged for other people's orders, and staff see permanent "unsettled" tables.
+- **Target behavior:** billing eligibility and settlement checks are scoped to an explicit visit (active session or sessions), and orphaned unpaid orders follow an owner-approved policy.
+- **Roadmap batch:** B3.1, after PQ-026 (and PQ-007) are decided.
+- **Verification:** two consecutive parties at one table with an unpaid order from the first; assert the second party's shared bill, request button and auto-close behaviour.
+
+### AA-021 — post-payment auto-close can roll back a payment
+
+- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, Medium–High (traced, not executed).
+- **Evidence:** `apps/billing/services.py:_process_post_payment_updates` → `_close_table_sessions_if_fully_settled` checks open bills, carts and order settlement at table level, then calls `apps/tables/services.py:close_table_session_if_settled` for each active session. That function raises `TableSessionError` when `can_close_table_session` finds an `open`/`auto_prepared` billing request for the session — for example a custom-split request — which the table-level pre-check does not consider (pending requests are processed only after the loop). The exception propagates out of `record_payment` / `pay_bill_with_bonuses`. `bot/handlers/staff.py:staff_bill_pay_callback_handler` catches only `OrderFlowError` and `BillingServiceError`; `BillAdmin._record_remaining_payment` catches only `BillingServiceError`; `PaymentAdmin.save_model` catches nothing.
+- **Current behavior:** the payment transaction rolls back; the staff callback raises an unhandled exception without answering; the Admin returns an error page.
+- **Why it matters:** cash that was physically taken cannot be recorded, and the cashier receives no explanation.
+- **Target behavior:** recording a payment never fails because of a secondary session-closing step. Auto-close either skips non-closable sessions or follows an owner-approved rule.
+- **Roadmap batch:** B3.1 (PQ-027 decides which sessions auto-close).
+- **Verification:** table with an open custom-split request; record the final payment through the service, staff callback and Admin; assert the payment persists and the session outcome follows PQ-027.
+
+### AA-022 — cancelled orders remain charged; bills cannot be cancelled
+
+- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High.
+- **Evidence:** `apps/orders/services.py:transition_order_status` allows `canceled` from every non-final state and does not look at bill allocation. `apps/billing/services.py:recalculate_bill_totals` sums all `BillItem.line_total` regardless of order status. No service, handler or Admin action sets `Bill.Status.CANCELED`. `BillItem.unique_order_item_bill_allocation` is unconditional, so an allocated `OrderItem` can never be billed elsewhere.
+- **Current behavior:** cancelling an order that is already in a draft/issued bill leaves its lines in the bill total; the guest is asked to pay for it. A wrong bill cannot be voided, and its items cannot be re-billed.
+- **Why it matters:** overcharging customers and no correction path for staff.
+- **Target behavior:** an owner-approved policy for cancelling an allocated order (block, or remove lines and recalculate before payment) and an explicit bill cancel/release command that frees allocations.
+- **Roadmap batch:** B3.1, after PQ-028.
+- **Verification:** cancel an order inside a draft bill and inside a partially paid bill; cancel a draft bill and re-bill its orders; PostgreSQL constraint behaviour if the allocation constraint becomes conditional.
+
+### AA-023 — order relations are editable in Admin
+
+- **Category / severity / confidence:** `BUG / ADMIN_BYPASS`, Medium, High.
+- **Evidence:** `apps/orders/admin.py:OrderAdmin.readonly_fields` protects status, money and timestamps but not `guest`, `table`, `table_session` (or `comment`). `core/tests_admin.py:test_order_admin_hides_lifecycle_and_derived_fields` checks lifecycle/derived fields only.
+- **Current behavior:** a tenant user with Orders change permission can move an order to another guest, table or session of the same partner, including an order that is already billed or paid.
+- **Why it matters:** bill context, personal-bill eligibility, bonus accrual target and session settlement depend on these relations; B2 intended relation fields to be protected.
+- **Target behavior:** relation fields read-only after creation; any reassignment is an explicit owner-service command.
+- **Roadmap batch:** B3.1.
+- **Verification:** Admin form test asserting the fields are read-only for tenant and platform users.
+
+### AA-024 — HTML parse mode without escaping
+
+- **Category / severity / confidence:** `BUG / RELIABILITY`, Medium, High.
+- **Evidence:** `bot/main.py:run_polling` and `apps/notifications/services.py:_send_telegram_messages` set `ParseMode.HTML` by default. No module escapes interpolated values; partner name, menu item names, Telegram usernames, order comments, bill labels and employee names are inserted raw into bot messages and notifications.
+- **Current behavior:** Telegram rejects any message containing a bare `&`, `<` or `>` outside a tag (for example a venue named "Bar & Grill"). Handlers raise `TelegramBadRequest`; notifications are recorded as failed.
+- **Target behavior:** every dynamic value is escaped at the presentation boundary; templates that intentionally contain markup are treated as trusted partner content and documented.
+- **Roadmap batch:** B3.1.
+- **Verification:** rendering tests with `&`, `<`, `>` in each interpolated field.
+
+### AA-025 — guest receipt confirmation bypasses the transition table
+
+- **Category / severity / confidence:** `BUG / STATE_MACHINE`, Medium, High.
+- **Evidence:** `apps/orders/services.py:confirm_order_received_by_guest` moves any order that is not `new`, `completed` or `canceled` to `completed`. `ORDER_STATUS_TRANSITIONS` does not allow `accepted → completed` or `preparing → completed`.
+- **Current behavior:** two sources of truth for the order state machine; a guest can complete an order the kitchen has not marked ready.
+- **Target behavior:** one transition policy that explicitly states what a guest confirmation may do (PQ-006).
+- **Roadmap batch:** B3.1.
+- **Verification:** state-matrix test covering staff and guest paths.
+
+### AA-026 — tenant user list can contain superusers
+
+- **Category / severity / confidence:** `SECURITY / PERMISSION`, Medium, High (conditional).
+- **Evidence:** `apps/users/admin.py:UserAdmin` inherits `ScopedAdminMixin.get_queryset`, which filters by `partner_id` only. `ScopedAdminMixin._scoped_related_queryset` excludes superusers from foreign-key choices, but the changelist, change form and password-change view do not. `AdminAccessProfile.save` sets `User.partner` for the linked user.
+- **Current behavior:** if a superuser ever has `partner` set to a venue (manually or through an access profile), that venue's owner can open the superuser's account and reset its password. Seeds do not create this state today.
+- **Target behavior:** tenant user querysets always exclude superusers and platform-only accounts.
+- **Roadmap batch:** B3.1.
+- **Verification:** Admin request test with a partner-linked superuser.
+
+### AA-027 — reply-button checkout writes the label into the order comment
+
+- **Category / severity / confidence:** `BUG / DATA_QUALITY`, Low, High (function executed).
+- **Evidence:** `bot/handlers/order.py:checkout_handler` passes the message text to `_split_checkout_comment`, which returns everything after the first space. The message is the button label itself; the default label `Оформить заказ` yields the comment `заказ`.
+- **Current behavior:** every order placed through the reply button has a comment equal to the tail of the label. It appears in the staff order card (`Комментарий: заказ`) and in guest status messages.
+- **Target behavior:** the reply button never produces a comment; a comment, if supported, comes from an explicit input step.
+- **Roadmap batch:** B3.1.
+- **Verification:** handler test with default and multi-word custom labels.
+
+### AA-028 — Bill changelist writes on read
+
+- **Category / severity / confidence:** `BUG / PERFORMANCE`, Low, High.
+- **Evidence:** `apps/billing/admin.py:BillAdmin.remaining_amount` (a `list_display` column) calls `apps/billing/services.py:get_bill_remaining_amount`, which reloads the bill and calls `recalculate_bill_totals`, which saves the bill.
+- **Current behavior:** opening the bill list performs an extra query and an unlocked write per row; a concurrent payment can be overwritten by stale totals in a narrow window.
+- **Target behavior:** read paths compute the remaining amount without saving.
+- **Roadmap batch:** B3.1.
+- **Verification:** query-count test for the changelist; no `save` on GET.
+
+### AA-029 — time boundaries ignore the venue timezone
+
+- **Category / severity / confidence:** `BUG / TIME_BOUNDARY`, Low, High.
+- **Evidence:** `apps/bonuses/strategies.py:_visit_bonus` computes "today" as `timezone.now().replace(hour=0, …)`, i.e. midnight UTC. `apps/analytics/services.py:refresh_daily_partner_metrics` refreshes only the current local day, every 15 minutes.
+- **Current behavior:** in Kyiv the visit-bonus day starts at 02:00 or 03:00 local time. Payments made after the last run of a day are never included in that day's `PartnerDailyMetric`.
+- **Target behavior:** day boundaries use `Partner.timezone`; the snapshot task also finalises the previous day.
+- **Roadmap batch:** B3.1.
+- **Verification:** tests around local midnight for both paths.
+
+### AA-030 — notification tasks are not idempotent and do not recheck recipients
+
+- **Category / severity / confidence:** `BUG / ASYNC`, Low, High.
+- **Evidence:** `apps/notifications/tasks.py:deliver_staff_notification_task` and `send_guest_order_status_update_task` retry on any exception but do not skip a notification already `sent`; `deliver_staff_notification_now` does not recheck that the employee and user are still active.
+- **Current behavior:** an exception after a successful send repeats the message; a disabled employee still receives notifications queued before the change.
+- **Target behavior:** part of the B4 delivery contract (PQ-015).
+- **Roadmap batch:** B4.
+
+### AA-031 — layering leftovers
+
+- **Category / severity / confidence:** `NAMING_PLACEMENT / LAYERING`, Low, High.
+- **Evidence:** `core/admin_mixins.py` imports `apps.partners.models` and `apps.users.models`; `core/urls.py` imports order, partner and table models for the demo page. `apps/orders/selectors.py:get_order_with_items`, `get_cart_with_items` and `apps/tables/selectors.py:get_table_by_qr_token` are unscoped and have no callers; `get_orders_for_session` is unscoped by partner. `apps/billing/services.py:redeem_bonus_for_bill` is used only by tests since B3. Enum classes in `*/constants.py` duplicate the model `TextChoices` and have drifted (`orders/constants.py:PaymentMethod`, `notifications/constants.py:BroadcastStatus`). `core/logging/handlers.py` is not wired into `LOGGING` and its `partner_id` regex captures a single digit.
+- **Roadmap batch:** B5, under ADR-0005 compatibility rules.
+
+### AA-032 — documentation drift after B1–B3
+
+- **Category / severity / confidence:** `DOCUMENTATION_DRIFT`, Medium, High.
+- **Evidence:** before this review `AS_IS_ARCHITECTURE.md` described the pre-B1 runtime and cited `bot/dispatcher.py`, `config/celery.py`, `config/settings/base.py`; `BOT_RUNTIME.md` cited `bot/dispatcher.py`; most line-numbered citations pointed at moved code. `REFACTOR_ROADMAP.md` and `FEATURE_MATRIX.md` stated that B3 added PostgreSQL tests for allocation, redemption and accrual, but the repository contains only two PostgreSQL-gated tests (order transition, table activation). The payment lock order in `ADR-0003.md` and `TARGET_ARCHITECTURE.md` omitted `GuestProfile`, which the paid-order bonus accrual locks.
+- **Resolution:** corrected in the B0.1 documentation refresh (see `REFACTOR_ROADMAP.md`). Current-state documents now cite `path:symbol`.

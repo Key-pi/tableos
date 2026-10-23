@@ -1,16 +1,23 @@
 # TableOS — Architecture as implemented
 
-**Status:** audited current state, 2026-07-27.  This document describes
-implemented behavior, not the intended future design.  When it differs from
-the legacy specification, the discrepancy is recorded in
+**Status:** current implemented behaviour, verified against source at commit
+`ddb7dce` (branch `clean-project-rules`, after roadmap batches B0–B3) on
+2026-10-23. This document describes what the code does today, not the intended
+design. The intended design is in
+[`TARGET_ARCHITECTURE.md`](TARGET_ARCHITECTURE.md); open defects are in
 [`../audits/ARCHITECTURE_AUDIT.md`](../audits/ARCHITECTURE_AUDIT.md).
+
+**Reference convention:** code is cited as `path:symbol` rather than by line
+number, so that references survive ordinary edits. Line-numbered citations in
+the audit register refer to the audit baseline commit `b17ce5b` and are kept as
+historical evidence.
 
 ## System boundary and processes
 
-TableOS is a Django 5 modular monolith with one PostgreSQL database in the
-normal deployment, Redis, an aiogram Telegram bot process, and Celery worker
-processes.  Local verification can use SQLite with `DJANGO_USE_SQLITE=true`,
-but its locking behavior is not representative of production PostgreSQL.
+TableOS is a Django 5 modular monolith: one PostgreSQL database, Redis, an
+aiogram polling process and Celery workers. SQLite is available only as an
+explicit local mode (`DJANGO_USE_SQLITE=true`); its locking behaviour is not
+representative of PostgreSQL.
 
 ```mermaid
 flowchart LR
@@ -18,176 +25,251 @@ flowchart LR
   BOT --> DJ[Django domain modules]
   ADMIN[Django Admin] --> DJ
   DJ --> PG[(PostgreSQL)]
-  DJ --> REDIS[(Redis)]
-  DJ --> CELERY[Celery worker]
+  DJ -->|on_commit .delay| REDIS[(Redis broker)]
+  BEAT[Celery beat] --> REDIS
+  REDIS --> CELERY[Celery worker]
+  CELERY --> DJ
   CELERY --> TG
 ```
 
-| Process | Entry point / registration | Responsibility | Notes |
+| Process | Entry point | Responsibility | Settings module by default |
 |---|---|---|---|
-| Django web/admin | `config.asgi`, `config.wsgi`, `config.urls` | HTTP health endpoint and Django Admin | `ScopedAdminMixin` scopes normal partner-owned querysets. |
-| Telegram bot | `bot/main.py` → `bot/dispatcher.py` | Polling and handler router assembly | Bot token selects a `Partner`; partner runtime configuration is cached at startup. |
-| Celery worker | `config/celery.py` | Notification delivery, scheduled broadcasts, analytics refresh | Autodiscovery registers tasks in `apps.notifications.tasks` and `apps.analytics.tasks`. |
-| PostgreSQL | `docker-compose.yml` | durable domain data and transactions | Production default; SQLite exists only as an explicit local mode. |
-| Redis | `config/settings/base.py` | Celery broker/result backend | There is no independently deployed bot or beat service in the supplied compose file. |
+| Django web/admin | `core/wsgi.py`, `core/asgi.py`, `core/urls.py` | Demo home page, `/admin/`, `/health/` | `core.settings.production` |
+| Management commands, `runserver` | `manage.py` | Migrations, seeds, `runbot`, `ensure_admin` | `core.settings.local` |
+| Telegram bot | `manage.py runbot` → `bot/main.py:run_polling` | Polls every active polling `BotInstance` in one process | `core.settings.local` (via `manage.py`) |
+| Celery worker | `celery -A core.celery worker` → `core/celery.py` | Staff/guest notifications, broadcasts, metric refresh | `core.settings.local` |
+| Celery beat | `celery -A core.celery beat` | `process-scheduled-broadcast-campaigns` (1 min), `refresh-daily-partner-metrics` (15 min) from `CELERY_BEAT_SCHEDULE` | `core.settings.local` |
+| PostgreSQL 16, Redis 7 | `docker-compose.yml` | Durable data; Celery broker and result backend | — |
+
+`docker-compose.yml` declares only `db`, `redis`, `web` (Django `runserver`)
+and `worker`. It declares **no `runbot` and no `beat` service**, so a
+compose-only environment does not poll Telegram, does not send scheduled
+broadcasts and does not refresh daily metrics. There is no production web
+server, no CI configuration and no deployment manifest in the repository.
+Every non-web process falls back to `core.settings.local` (`DEBUG=True`)
+unless `DJANGO_SETTINGS_MODULE` is set explicitly.
+
+Queues: `default` and `broadcasts`; only
+`notifications.send_broadcast_campaign` is routed to `broadcasts`. Because
+`CELERY_TASK_QUEUES` is declared, a worker without `-Q` consumes both queues.
 
 ## Application modules and ownership
 
-The installed Django apps are `partners`, `users`, `tables`, `menu`, `orders`,
-`billing`, `bonuses`, `employees`, `notifications`, and `analytics`; `bot` is
-the integration/UI app.  `core` supplies shared primitives and `config` supplies
-runtime configuration.  `apps/background` is not an installed or implemented
-background subsystem.
+Installed apps, in order: `unfold`, Django contrib, `bot`, then `partners`,
+`users`, `tables`, `menu`, `orders`, `billing`, `bonuses`, `employees`,
+`notifications`, `analytics`. `core` holds shared bases, Admin scoping, Celery,
+crypto, logging and settings.
 
-| Area | Persistent concepts | Primary orchestration | External boundary |
+| Area | Persisted concepts | Real orchestration | Notes |
 |---|---|---|---|
-| Partners | partner, bot settings, content configuration | `apps/partners/services.py`, selectors | Telegram token resolves the partner. |
-| Users / identity | global Telegram identity, guest profiles | `apps/users/services.py` | Telegram user data is captured by bot flows. |
-| Tables | table, QR token, table session | `apps/tables/services.py` | QR scan starts/resumes a guest session. |
-| Menu | categories, menu items | selectors/repositories | Guest menu keyboard and staff configuration. |
-| Orders | cart, order, order items, status history | `apps/orders/services.py` | Guest confirm and staff status callbacks. |
-| Billing | requests, bills, allocations, payments | `apps/billing/services.py` | Staff billing flows and admin. |
-| Bonuses | programs, transactions, walk-in sale | `apps/bonuses/services.py`, `strategies.py` | QR visit, quick sale, bill redemption. |
-| Employees | staff profiles, roles and preferences | `apps/employees/selectors.py` | Staff router authorization and delivery targeting. |
-| Notifications | notification rows, broadcast campaigns | `apps/notifications/services.py`, tasks | Celery → Telegram. |
-| Analytics | daily metrics / report snapshots | `apps/analytics/services.py`, task | Admin/report views. |
+| Partners | `Partner`, `BotInstance`, `PartnerBotSettings` | model `clean()`, `partners/services.py:rotate_bot_token` | `PartnerBotSettings` holds module flags, button labels and message templates. |
+| Users / identity | `User`, global `TelegramAccount`, partner `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile` | One Telegram identity → one guest profile per partner. |
+| Tables | `Table`, `TableSession` | `tables/services.py` | QR activation, settlement-gated close. `timed_out` and `expires_at` exist but nothing sets them. |
+| Menu | `MenuCategory`, `MenuItem` | selectors/repositories only | Price must be positive (`menu_item_price_positive`). |
+| Orders | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py` | Cart lifecycle, order creation, status machine, guest receipt confirmation. |
+| Billing | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment` | `billing/services.py` | Bill creation/extension, payment, bonus payment, post-payment settlement. |
+| Bonuses | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Ledger-backed balance with reconciliation guard; quick sale. |
+| Employees | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | `services.py` is a docstring only. |
+| Notifications | `NotificationPreference`, `StaffNotification`, `BroadcastCampaign` | `notifications/services.py`, `tasks.py` | All Telegram sending lives here. |
+| Analytics | `PartnerDailyMetric` | `analytics/services.py` | On-demand day report for staff; 15-minute snapshot task. |
+
+### Actual import dependencies
+
+The target allows `tables → users` only and forbids `core → apps`. The code
+today has these direct dependencies (production modules, excluding tests):
+
+```text
+bot           -> every domain app
+analytics     -> billing, bonuses, orders, partners, tables, users
+billing       -> bonuses, notifications, orders, partners, tables, users
+orders        -> employees, menu, notifications, tables, users
+tables        -> billing, bonuses, orders, users
+notifications -> employees, orders, partners, tables, users
+bonuses       -> menu, orders, users
+core          -> partners, users (core/admin_mixins.py); orders, partners, tables (core/urls.py)
+```
+
+`apps.notifications.services ↔ apps.notifications.tasks` is a cycle broken
+only by function-local imports. `core → apps` contradicts the rule in
+`AGENTS.md` and is recorded as AA-031.
 
 ## Runtime and bot routing
 
-`bot/dispatcher.py` includes routers in this order: `start`, `session`,
-`menu`, `order`, `profile`, `billing`, `guest_call`, `staff`.  aiogram uses
-first matching handlers, so the order is behaviorally significant.  Many
-partner-configurable button labels are matched by exact text in
-`bot/filters/content.py:10-21`; the model validation in
-`apps/partners/models.py:251-286` does not establish a cross-field uniqueness
-rule for those labels.  Equal/stale labels can therefore route to the first
-matching handler rather than to a deterministic product action.
+`bot/main.py:create_dispatcher` registers `PartnerRuntimeMiddleware` as an
+outer update middleware and then includes routers in this order: `start`,
+`session`, `menu`, `order`, `profile`, `billing`, `guest_call`, `staff`.
+aiogram stops at the first matching handler, so this order is behaviour.
 
-The partner runtime (`bot/services/runtime.py:21-79`) is loaded when polling
-starts.  It rejects a suspended partner at startup, but per-update context
-(`bot/services/context.py:5-7`) fetches a partner without a status guard.
-Suspending an already-running partner consequently does not prove that new
-updates will stop being processed.
+1. `bot/services/runtime.py:load_active_bot_configs` runs once at `runbot`
+   start. It refuses to start if any active `BotInstance` belongs to a
+   non-active partner, uses webhook mode, has an undecryptable, placeholder,
+   malformed or duplicated token. It builds a token → `BotRuntimeConfig` map.
+2. For **every update**, `bot/middlewares/partner_runtime.py` calls
+   `bot/services/context.py:resolve_partner_for_bot_token`, which reloads the
+   `BotInstance` and `Partner`. A disabled bot instance drops the update
+   silently; a suspended partner receives
+   `Работа бота приостановлена, ожидайте обновлений.` (message or callback
+   alert). The polling connection itself stays open until the process restarts.
+3. Handlers call `resolve_partner_for_bot_token` again and build
+   `bot/services/content.py:BotContent` from `PartnerBotSettings`.
+4. Reply-keyboard actions are matched by exact text through
+   `bot/filters/content.py:PartnerButtonFilter`; each filter evaluation reloads
+   the partner and its content. `PartnerBotSettings.clean` rejects empty or
+   duplicate routed labels.
+5. Staff handlers resolve the actor through
+   `bot/handlers/staff.py:_resolve_staff_employee_by_telegram_id` →
+   `employees/selectors.py:get_staff_employee_by_telegram`, which requires an
+   active `EmployeeProfile`, an active `User`, and `User.partner` equal to the
+   bot partner. Every staff callback resolves the actor again and checks the
+   relevant capability (`_can_manage_billing`, `_can_view_tables`,
+   `_ensure_open_orders_allowed`, `_ensure_quick_sale_allowed`). Capabilities
+   combine `User.role` with the partner's module flags.
 
-Guest flows generally derive `partner` from the bot token and use partner-scoped
-lookups.  Staff routes use an employee profile resolved for the partner.  The
-staff selector filters `EmployeeProfile.is_active` but not `User.is_active`
-(`apps/employees/selectors.py:11-16`); this is a confirmed revocation gap.
+All bot messages are sent with `ParseMode.HTML` (default bot properties in
+`bot/main.py` and `notifications/services.py:_send_telegram_messages`). No
+handler or notification escapes interpolated text (AA-024).
 
 ## Key domain flows
 
 ### Guest session, menu, cart and order
 
-1. A QR token resolves a table and `activate_table_session()` creates or
-   resumes a `TableSession`.
-2. The guest navigates menu content and maintains an active cart.
-3. `create_order_from_session()` / `create_order()` creates the order and
-   order items.
-4. Guest confirmation reloads the order under a row lock
-   (`apps/orders/services.py:235-287`).  Staff state transitions use
-   `transition_order_status()` but currently trust a passed instance instead
-   of reloading it under lock (`:185-232`).
-5. Notifications are scheduled through `transaction.on_commit()` for normal
-   order events.
-
-The active-session rule is not a durable invariant: `TableSession` has no
-partial unique constraint for active `(partner, guest)` rows
-(`apps/tables/models.py:43-66`), while activation locks only the selected
-table (`apps/tables/services.py:43-91`).  Concurrent scans of distinct tables
-can therefore create two active sessions.
+1. `/start table_<number>_<token>` → `tables/services.py:activate_table_session`
+   locks `GuestProfile → Table`, closes the guest's previous active session in
+   the same partner **regardless of unpaid orders**, creates a new session and
+   applies `VISIT` bonus programmes with idempotency key
+   `table_session:<id>:program:<id>`. The partial unique constraint
+   `unique_active_table_session_per_partner_guest` guarantees one active
+   session per guest and partner.
+2. Cart commands in `orders/services.py` lock the guest's active `Cart`.
+   A cart with items that belongs to an older session is abandoned; an empty
+   one is moved to the new session. `unique_active_cart_per_partner_guest`
+   allows one active cart per guest and partner.
+3. Checkout → `create_order`, which validates that guest, table, session and
+   every menu item belong to the partner, snapshots item names and the prices
+   stored in the cart, writes `OrderStatusHistory` and creates
+   `StaffNotification` rows dispatched with `transaction.on_commit`.
+   Availability of menu items is checked when items are added to the cart,
+   not again at checkout.
+4. Staff status changes use `transition_order_status`, which reloads the order
+   with `select_for_update()` and validates against `ORDER_STATUS_TRANSITIONS`:
+   `new → accepted|canceled`, `accepted → preparing|ready|canceled`,
+   `preparing → ready|canceled`, `ready → delivering|completed|canceled`,
+   `delivering → completed|canceled`. Completion sets `received_at`.
+5. Guest receipt confirmation (`confirm_order_received_by_guest`) locks the
+   order and moves any non-new, non-final order straight to `completed`,
+   which the transition table does not allow for `accepted`/`preparing`
+   (AA-025).
 
 ### Billing and settlement
 
-1. Staff creates or processes a billing request, creates/updates a bill, and
-   attaches orders and order items.
-2. A payment is recorded against the bill.
-3. Payment completion synchronizes order state and may close the table session.
+1. A guest billing request (`create_billing_request_for_telegram_user`)
+   either prepares a draft personal/shared bill (`auto_prepared`) or records a
+   custom-split request (`open`) for staff. Staff can also build shared or
+   personal bills per table from the bot or Admin.
+2. Eligible orders are selected by **table, not by session or visit**:
+   `get_table_billable_orders` returns every non-cancelled order on the table
+   that has no bill yet, from any time (AA-020).
+3. `create_bill_from_orders` locks `Order → OrderItem`; `attach_orders_to_bill`
+   locks `Bill → OrderItem`. `BillItem.unique_order_item_bill_allocation`
+   allows an `OrderItem` to be allocated **once per partner forever**; there is
+   no bill-cancel or release command, so `Bill.Status.CANCELED` is unreachable
+   (AA-022).
+4. `record_payment` locks the bill, rejects bonus method, non-positive and
+   over-remaining amounts, then sets `partially_paid` or `paid`.
+   `pay_bill_with_bonuses` locks `Bill → Order → GuestProfile`, checks
+   ledger/balance reconciliation, applies the partner cap at 1 bonus = 1 UAH
+   and writes a `bonuses` payment only when the bill is fully covered.
+   `Bill.paid_amount` counts money payments only.
+5. When a bill becomes `paid`, `_process_post_payment_updates`, still inside
+   the payment transaction: locks the bill's orders, completes `ready` and
+   `delivering` orders, sets `paid_at`, accrues `ORDER_COMPLETED` programmes
+   once per order (key `order_paid:<order_id>:program:<id>`), marks the bill's
+   billing requests processed and, if
+   `PartnerBotSettings.auto_close_table_session_after_payment` is on, tries to
+   close **every** active session at the table. A session that is not
+   closable raises `TableSessionError` and rolls back the payment (AA-021).
 
-The service methods carry most intended lifecycle logic, but not all mutation
-surfaces use them.  `BillingRequestAdmin` actions perform direct
-`queryset.update()` (`apps/billing/admin.py:72-88`), while service validation
-rejects transitions such as processed → cancelled
-(`apps/billing/services.py:786-803`).  Bill and order fields/inlines remain
-editable in admin.  Additionally, allocation checks in
-`create_bill_from_orders()` and `attach_orders_to_bill()` are check-then-create
-without locks on the canonical order/item rows
-(`apps/billing/services.py:134-182,252-309`) and `BillItem` has no durable
-uniqueness rule for one allocated order item.
+Effective lock order of the payment path:
+`Bill → Order → GuestProfile → BillingRequest → TableSession`.
 
 ### Loyalty and quick sale
 
-Visit bonuses are invoked after table-session activation
-(`apps/tables/services.py:83-90`); manual-purchase bonuses are invoked for a
-walk-in sale.  The default `ORDER_COMPLETED` trigger is present in models and
-seed data, but no production caller dispatches it from an order lifecycle.
-`apply_bonus_programs()` and bill redemption mutate the guest wallet without a
-canonical guest-row lock, so concurrent redemption/accrual remains unsafe.
+`GuestProfile.loyalty_balance` is a cached projection of the immutable
+`BonusTransaction` ledger. Every mutation locks the guest row, refuses to act if
+the cached balance differs from the ledger (`assert_bonus_balance_reconciled`)
+and then resynchronises it. Source-linked idempotency keys are unique per
+partner. Quick sale (`register_walk_in_sale*`) requires a positive amount,
+optionally redeems bonuses before accrual and accrues `MANUAL_PURCHASE`
+programmes. `expires_at` is written on accruals but nothing expires bonuses.
+The management command `apply_manual_purchase_bonus` accrues without a source
+key, so re-running it accrues again.
 
 ### Notifications and broadcasts
 
-Order-related notification enqueueing normally uses `on_commit`.  Broadcast
-delivery is materially different: `send_broadcast_campaign_now()` is
-transactional while it calls Telegram and can sleep for retries
-(`apps/notifications/services.py:440-547`).  Its Celery task fetches a
-campaign without a lease, cursor, recipient delivery ledger, or idempotency
-guard (`apps/notifications/tasks.py:59-72`).  Multiple workers or retries may
-duplicate delivery and counters.
+- Staff notifications and guest order-status updates are queued with
+  `transaction.on_commit` and delivered by Celery tasks that create a new
+  aiogram `Bot` per call. Telegram errors are captured as a failed result and
+  not re-raised, so `autoretry_for=(Exception,)` retries only unexpected
+  errors. Neither task skips work that was already sent (AA-030).
+- Guest calls (`request_staff_assistance`) target roles by `User.role` and use
+  a check-then-create cooldown on recent notifications for the same table.
+- Broadcasts: `send_broadcast_campaign` marks the campaign `scheduled` and
+  enqueues it after commit. `send_broadcast_campaign_now` is
+  `@transaction.atomic` and sends a batch of up to 250 recipients to Telegram
+  **inside** that transaction (with `RetryAfter` sleeps), then chains the next
+  batch by guest ID cursor. There is no lease, per-recipient delivery record or
+  idempotency key (AA-008, open for B4).
 
-## Data ownership, tenancy, and authorization
+## Data ownership, tenancy and authorization
 
-Most domain models inherit `PartnerBoundModel`, which only supplies a Partner
-foreign key (`core/database/models.py:22-33`).  Ordinary Django foreign keys
-cannot ensure that all linked records have the same partner, and no service or
-database invariant universally fills that gap.  Normal bot paths are generally
-scoped; however direct service APIs (for example `create_order`) accept objects
-without universally validating a common partner.  The Django Admin presents a
-second write boundary where mutable lifecycle/financial fields and inlines can
-bypass the services.
+Most domain models inherit `core/database/models.py:PartnerBoundModel`, which
+adds only a `partner` foreign key. No database rule ties related rows to the
+same partner (AA-002, PQ-020). Application-level checks exist in
+`create_order`, the bonus services, billing locks scoped by `partner_id`, and
+the bot's partner-derived lookups.
 
-`ScopedAdminMixin` scopes change lists and direct related field choices.  It
-does not scope the `partner` list filter: an audited tenant-owner probe showed
-four global partner choices with a one-partner data scope.  Inline classes are
-not themselves `ScopedAdminMixin` subclasses; current default seed permissions
-hide several child inlines, but granting child permissions would expose an
-unscoped write surface.
+`core/admin_mixins.py:ScopedAdminMixin` scopes changelists, object
+permissions, foreign-key/M2M choices and inline saves by the user's
+`AdminAccessProfile.partner`, hides the `partner` list filter and `partner`
+field from tenant users, and maps Admin sections to CRUD/sensitive
+permissions. Superusers bypass scoping. Gaps that remain: `UserAdmin` does not
+exclude superusers from a tenant's user list (AA-026), and `OrderAdmin` leaves
+`guest`, `table` and `table_session` editable (AA-023).
 
-## States and constraints actually enforced
+## States and protections actually enforced
 
-| Concept | Intended transition mechanism in code | Durable protection today |
+| Concept | Transition mechanism | Durable or locked protection today |
 |---|---|---|
-| Order | `transition_order_status()` service and staff/admin actions | State choice and history model; no locked reload for generic transition. |
-| Billing request | billing service | Admin bulk actions bypass service state guard. |
-| Bill/payment | billing services | Bill row is locked for payment; allocations/wallet have gaps. |
-| Table session | table service | No unique active session per guest; admin can edit status directly. |
-| Bonus wallet | bonus/billing services | Ledger has no source FK/idempotency key; no guest-row serialization. |
-| Broadcast | notification service/task | No worker lease, recipient ledger, or idempotent send boundary. |
+| Order status | `transition_order_status`; guest confirmation; post-payment completion | Locked reload; transition table (bypassed by guest confirmation) |
+| Table session | `activate_table_session`, `close_table_session_if_settled`, post-payment auto-close | Partial unique active session per guest; locks; no expiry processor |
+| Cart | cart services, checkout | Partial unique active cart per guest; cart row lock |
+| Bill | create/attach/issue/payment services | Bill lock; `unique_order_item_bill_allocation`; no cancel/release path |
+| Billing request | `mark_billing_request_processed`, `cancel_billing_request` | Locked reload; processed and cancelled are terminal |
+| Payment | `record_payment`, `pay_bill_with_bonuses` | Bill lock; positive and ≤ remaining; Admin cannot edit existing payments |
+| Bonus ledger | bonus services, billing bonus payment | Guest lock; reconciliation guard; idempotency key unique per partner |
+| Broadcast | notification service and task | None beyond status field (AA-008) |
 
-## Import and dependency map
+Admin shows lifecycle, derived and ledger fields read-only for orders, carts,
+bills, allocations, payments, sessions, guest balances and bonus
+transactions; allowed operations are actions that call owner services.
 
-The repository has 221 first-party Python files (20,516 LOC) and 25 numbered
-migrations.  Direct static app dependencies are intentionally not acyclic:
-`analytics` depends on billing/bonuses/orders/partners/tables/users;
-`billing` on bonuses/notifications/orders/partners/tables; `orders` on
-employees/menu/notifications/tables/users; and `tables` on billing/bonuses/
-orders/users.  `bot` imports all domain applications.  The only direct module
-SCC found by AST analysis is `apps.notifications.services ↔
-apps.notifications.tasks` through a function-local task import.
+## Tests and checks
 
-`services.py`, `selectors.py`, and `repositories.py` are naming conventions,
-not an enforced architecture.  Several `interfaces.py` modules contain
-protocols with no application consumers; `apps/employees/services.py` and
-`apps/menu/services.py` contain only docstrings; most app `tasks.py` modules
-are placeholders.  There are no production `policies.py`, `rules.py`, or
-`engine.py` modules.  These are recorded as consolidation candidates rather
-than deleted during this audit.
+- 20 test modules with 179 test functions (counted from source, not executed in
+  this revision). Two of them are PostgreSQL-only and skipped on SQLite:
+  `apps/orders/test_concurrency.py` (concurrent order transition) and
+  `apps/tables/test_concurrency.py` (concurrent QR scans of two tables). There
+  are no PostgreSQL tests for bill allocation, bonus redemption or accrual.
+- The last recorded full run is the audit baseline (139 tests, SQLite,
+  2026-07-27). See [`../engineering/TESTING.md`](../engineering/TESTING.md).
+- There is no CI pipeline; every check is run by hand.
 
-## Observability and tests
+## Codebase figures at `ddb7dce`
 
-The project has structured logging helpers and 17 test modules.  The baseline
-ran 139 tests successfully in SQLite mode, which does not characterize
-PostgreSQL locking.  There are no audited tests for the concurrent session,
-order transition, bill allocation, wallet, broadcast, inactive-staff,
-suspended-runtime, stale-callback, or admin cross-tenant/lifecycle cases.
-See [`../audits/BASELINE.md`](../audits/BASELINE.md) and
-[`../audits/FILE_COVERAGE.md`](../audits/FILE_COVERAGE.md) for reproducible
-coverage and command results.
+233 tracked Python files (22,828 lines), 31 numbered migrations, 20 test
+modules. Largest non-test units: `bot/handlers/staff.py` (2,366 lines),
+`apps/billing/services.py` (1,068),
+`apps/partners/management/commands/seed_baseline_demo.py` (728),
+`bot/keyboards/staff.py` (723), `apps/orders/services.py` (722),
+`apps/analytics/services.py` (718). The audit-time inventory is preserved in
+[`../audits/CODEBASE_INVENTORY.md`](../audits/CODEBASE_INVENTORY.md).

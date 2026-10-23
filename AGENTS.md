@@ -18,7 +18,12 @@ Read [README.md](README.md) for onboarding. The canonical governance map is:
   `BACKGROUND_JOBS.md` in `docs/architecture/`;
 - decisions: `docs/decisions/ADR-0001.md` through `ADR-0006.md`;
 - engineering: `docs/engineering/`;
-- evidence/roadmap: `docs/audits/`.
+- evidence/roadmap: `docs/audits/` (open findings: `ARCHITECTURE_AUDIT.md`;
+  batch status: `REFACTOR_ROADMAP.md`).
+
+Current-state documents cite code as `path:symbol`, not by line number. When a
+change alters behaviour described in `AS_IS_ARCHITECTURE.md`,
+`FEATURE_MATRIX.md` or an ADR, update them in the same change.
 
 `TABLEOS_TZ.md` and `PROJECT_CHEATSHEET.md` are retained legacy/evidence
 documents. Do not treat them as a higher source of truth than the source code,
@@ -78,13 +83,17 @@ canonical docs, or an approved ADR.
   policy rather than silently editing history.
 - Telegram/network I/O, retry sleep, and fan-out never run inside an open
   database transaction. Persist/commit first; task delivery must be idempotent.
+- Bot and notification messages use HTML parse mode: escape every dynamic
+  value (partner, menu, guest, employee, comment text) when rendering.
 
 ## Checks and definition of done
 
-Use the exact commands in `docs/engineering/TESTING.md`. At the audited
-baseline, `manage.py check`, migration dry-run, tests (139), and compose config
-passed in local SQLite mode; Ruff had pre-existing failures. Do not claim a
-green lint baseline without rerunning it.
+Use the exact commands in `docs/engineering/TESTING.md`. At the 2026-07-27
+audited baseline, `manage.py check`, migration dry-run, tests (139), and compose
+config passed in local SQLite mode; Ruff had pre-existing failures. The suite
+has grown since (179 test functions at `ddb7dce`); record every full run in
+`TESTING.md`. Do not claim a green test or lint baseline without rerunning it,
+and do not claim PostgreSQL coverage that is not in the repository.
 
 A change is done only when its owner/adapter boundaries, tenant/actor checks,
 transaction/lock/idempotency behavior, alternate Admin/bot/task paths, tests,

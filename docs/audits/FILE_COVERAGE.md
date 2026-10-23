@@ -1,5 +1,7 @@
 # File coverage ledger
 
+> **Historical snapshot** of the 2026-07-27 audit at commit `b17ce5b`. It is kept as evidence and is not updated as code changes. The post-B3 review on 2026-10-23 re-read all first-party source at `ddb7dce`; see [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#post-b3-review--2026-10-23).
+
 ## Method
 
 The audit used `rg --files`, Python AST parsing, migration-operation inspection, direct source review, runtime call-chain tracing, configuration inspection, and the baseline test/check commands recorded in [BASELINE.md](BASELINE.md). `REVIEWED` means a first-party unit was included in this audit's source/AST/domain review; it does not mean every line is defect-free. `GENERATED/HISTORICAL` means read for schema/history but not evaluated against current style rules.

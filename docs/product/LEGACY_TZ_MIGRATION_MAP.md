@@ -37,7 +37,7 @@ Do not delete or rename the legacy files in an implementation batch merely becau
 | 7.11 Staff-бот | [PRODUCT_SPEC §§2, 5.5](PRODUCT_SPEC.md#2-роли-и-контексты-доступа), [OPEN_PRODUCT_QUESTIONS PQ-004/PQ-005](OPEN_PRODUCT_QUESTIONS.md) | Product role/capability contract retained; active-user gap explicit |
 | 7.12 Отчёт дня | [PRODUCT_SPEC §§4–5](PRODUCT_SPEC.md#4-capability-model), [FEATURE_MATRIX](FEATURE_MATRIX.md) | Current on-demand MVP vs future reporting preserved |
 | 7.13 Рассылки | [PRODUCT_SPEC §5.6](PRODUCT_SPEC.md#56-broadcasts-and-notifications), [OPEN_PRODUCT_QUESTIONS PQ-014/PQ-015](OPEN_PRODUCT_QUESTIONS.md) | Delivery promise must be chosen before redesign |
-| 8. Настройки бота (8.1–8.3) | [PRODUCT_SPEC §7](PRODUCT_SPEC.md#7-контент-и-конфигурация-контракт), [FEATURE_MATRIX](FEATURE_MATRIX.md) | Capability/template requirements retained; label collision not hidden |
+| 8. Настройки бота (8.1–8.3) | [PRODUCT_SPEC §7](PRODUCT_SPEC.md#7-content-and-configuration-contract), [FEATURE_MATRIX](FEATURE_MATRIX.md) | Capability/template requirements retained; label collision not hidden |
 | 9. Back-office/admin (9.1–9.10) | [PRODUCT_SPEC §§2–3](PRODUCT_SPEC.md#2-роли-и-контексты-доступа), [OPEN_PRODUCT_QUESTIONS PQ-017/PQ-019](OPEN_PRODUCT_QUESTIONS.md), `docs/architecture/TENANCY_AND_PERMISSIONS.md` | Desired scoped/safe admin contract retained; current bypass paths audited |
 | 10. Telegram runtime | [PRODUCT_SPEC §§3, 5.5](PRODUCT_SPEC.md#3-непереговорные-продуктовые-инварианты), `docs/architecture/BOT_RUNTIME.md` | Polling current; webhook explicitly future scope |
 | 11. Уведомления и фоновые задачи | [PRODUCT_SPEC §§3, 5.6](PRODUCT_SPEC.md#3-непереговорные-продуктовые-инварианты), `docs/architecture/BACKGROUND_JOBS.md` | `on_commit` intent retained; transaction/duplicate-delivery defect explicit |
@@ -53,6 +53,22 @@ Do not delete or rename the legacy files in an implementation batch merely becau
 | 21. Карта текущей реализации (21.1–21.10) | [FEATURE_MATRIX](FEATURE_MATRIX.md), `docs/architecture/AS_IS_ARCHITECTURE.md`, `docs/audits/CODEBASE_INVENTORY.md` | Replaced by source-verified mapping; every claim now needs code evidence |
 
 ## Legacy-document contradictions and evidence
+
+The code evidence below was recorded at the audit baseline `b17ce5b`; line
+numbers refer to that commit. Status at `ddb7dce` (2026-10-23):
+
+| Legacy assertion | Status now |
+| --- | --- |
+| Staff requires active `User` | Resolved in B1 (`employees/selectors.py:get_staff_employee_by_telegram`) |
+| Suspended partner does not serve flows | Resolved in B1 (`bot/middlewares/partner_runtime.py`) |
+| One active table session per guest/partner | Resolved in B2 (partial unique constraint); PostgreSQL run pending |
+| One order item in at most one bill | Resolved in B3 (row locks + unique allocation); cancelled orders stay charged — AA-022 |
+| Safe order transitions | Resolved in B2 for staff; guest confirmation bypass — AA-025 |
+| Order-completed bonuses operate | Partially resolved in B3 (accrual on paid settlement) |
+| Labels do not break routing | Validation added in B1; raw-text routing remains |
+| Telegram calls outside DB transactions | Still open for broadcasts (AA-008, B4) |
+| Admin uses safe actions | Mostly resolved in B2/B3; order relations still editable — AA-023 |
+| Delivery/pickup are usable journeys | Still future scope |
 
 | Legacy assertion / location | Code evidence | Classification | Canonical handling |
 | --- | --- | --- | --- |
@@ -72,7 +88,7 @@ Do not delete or rename the legacy files in an implementation batch merely becau
 | Document item | Evidence | Classification | Canonical destination / required safe documentation correction |
 | --- | --- | --- | --- |
 | CHEATSHEET said `manage.py test: 66 tests OK` and Ruff fully passed at audit baseline | Verified baseline in `docs/audits/BASELINE.md`: 139 tests pass; `ruff check --no-cache .` has 21 pre-existing violations | DOC_DRIFT | Root cheatsheet now carries a status banner/current baseline and links to `docs/audits/BASELINE.md`; original claim remains audit evidence |
-| CHEATSHEET task list omitted scheduled broadcast processing at audit baseline | `apps/notifications/tasks.py:79-82` registers `process_scheduled_broadcast_campaigns_task` | DOC_DRIFT | Root cheatsheet and `docs/architecture/BACKGROUND_JOBS.md` now list the task |
+| CHEATSHEET task list omitted scheduled broadcast processing at audit baseline | `apps/notifications/tasks.py:process_scheduled_broadcast_campaigns_task` is registered | DOC_DRIFT | Root cheatsheet and `docs/architecture/BACKGROUND_JOBS.md` now list the task |
 | CHEATSHEET contained machine-specific `/Users/danil/projects/tableos/...` Markdown links at audit baseline | Baseline root document scan | DOC_DRIFT | Replaced with repository-relative links; scan is recorded in audit summary |
 | Root docs included demo passwords/tokens as command examples at audit baseline | Original `README.md` and `PROJECT_CHEATSHEET.md` seed/bootstrap examples | DOCUMENTATION_HYGIENE | Canonical onboarding now uses placeholders/local environment values; no real/production credentials are documented |
 | README offered bare `python`/`celery` commands while verified environment uses project `.venv` and optional `DJANGO_USE_SQLITE=true` | `docs/audits/BASELINE.md`, `pyproject.toml`, actual verified command set | DOC_DRIFT / operational ambiguity | Canonical `docs/engineering/DEVELOPMENT.md` and `TESTING.md` now contain verified commands |

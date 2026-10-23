@@ -1,5 +1,7 @@
 # TableOS — Audit and governance summary
 
+> **Historical snapshot** of the 2026-07-27 audit at commit `b17ce5b`. It is kept as evidence and is not updated as code changes. Batch status and the next proposed action live in [REFACTOR_ROADMAP.md](REFACTOR_ROADMAP.md); later findings are in [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#post-b3-review--2026-10-23).
+
 **Mode completed:** `AUDIT_AND_GOVERNANCE`  
 **Date:** 2026-07-27  
 **Implementation status:** no application-code, model, migration, dependency, runtime, commit, or push change was made.
