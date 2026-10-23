@@ -29,7 +29,7 @@ from apps.notifications.services import notify_staff_about_billing_request
 from apps.orders.models import Order, OrderItem
 from apps.orders.services import transition_order_status
 from apps.partners.models import PartnerBotSettings
-from apps.tables.models import TableSession
+from apps.tables.models import TableSession, TableVisit
 from apps.tables.services import (
     TableSessionError,
     can_close_table_session,
@@ -79,11 +79,45 @@ def get_bill_context_label(bill: Bill) -> str:
     return "заказ без привязки к столу"
 
 
+_VISIT_NOT_GIVEN = object()
+
+
+def resolve_table_visit_for_billing(*, partner_id, table_id, visit_id=_VISIT_NOT_GIVEN):
+    """Return the visit id a table-level staff/Admin bill should use (ADR-0007).
+
+    An explicit ``visit_id`` wins. Otherwise the table's single active visit is
+    used; with no active visit the legacy orders without a visit are billed;
+    with several active visits staff must choose one.
+    """
+
+    if visit_id is not _VISIT_NOT_GIVEN:
+        return visit_id
+    active_visit_ids = list(
+        TableVisit.objects.filter(
+            partner_id=partner_id,
+            table_id=table_id,
+            status=TableVisit.Status.ACTIVE,
+        ).values_list("id", flat=True)
+    )
+    if len(active_visit_ids) > 1:
+        raise BillingServiceError(
+            "За столом несколько визитов — выставьте счёт из карточки нужного визита."
+        )
+    return active_visit_ids[0] if active_visit_ids else None
+
+
 def get_table_billable_orders(
     *,
     partner_id,
     table_id,
+    visit_id,
 ) -> list[Order]:
+    """Unbilled, not cancelled orders of one table visit.
+
+    ``visit_id=None`` selects the legacy orders of the table that belong to no
+    visit (sessions closed before visits existed, or orders without session).
+    """
+
     allocated_order_ids = set(
         BillItem.objects.filter(
             partner_id=partner_id,
@@ -96,17 +130,30 @@ def get_table_billable_orders(
             ],
         ).values_list("order_id", flat=True)
     )
-    return list(
+    orders = list(
         Order.objects.select_related("table", "guest", "guest__telegram_account")
         .prefetch_related("items")
         .filter(
             partner_id=partner_id,
             table_id=table_id,
+            table_session__visit_id=visit_id,
         )
         .exclude(status=Order.Status.CANCELED)
         .exclude(id__in=allocated_order_ids)
         .order_by("guest_id", "created_at")
     )
+    if visit_id is None:
+        # Orders placed without any table session also belong to no visit.
+        orders += list(
+            Order.objects.select_related("table", "guest", "guest__telegram_account")
+            .prefetch_related("items")
+            .filter(partner_id=partner_id, table_id=table_id, table_session__isnull=True)
+            .exclude(status=Order.Status.CANCELED)
+            .exclude(id__in=allocated_order_ids)
+            .order_by("guest_id", "created_at")
+        )
+        orders.sort(key=lambda order: (str(order.guest_id), order.created_at))
+    return orders
 
 
 @transaction.atomic
@@ -130,7 +177,7 @@ def attach_orders_to_bill(
     requested_order_ids = {str(order_id) for order_id in order_ids}
     existing_order_ids = set(bill.bill_orders.values_list("order_id", flat=True))
     requested_orders = list(
-        Order.objects.select_related("table", "guest")
+        Order.objects.select_related("table", "guest", "table_session")
         .prefetch_related("items")
         .filter(
             partner_id=bill.partner_id,
@@ -144,6 +191,8 @@ def attach_orders_to_bill(
         invalid_context = [order for order in requested_orders if order.table_id != bill.table_id]
         if invalid_context:
             raise BillingServiceError("В этот счёт можно добавлять только заказы того же стола.")
+        if any(_order_visit_id(order) != bill.visit_id for order in requested_orders):
+            raise BillingServiceError("В этот счёт можно добавлять только заказы того же визита.")
     else:
         if any(order.table_id is not None for order in requested_orders):
             raise BillingServiceError(
@@ -250,6 +299,10 @@ def _compute_bill_totals(bill: Bill) -> tuple[Decimal, Decimal, Decimal]:
     return subtotal, total_amount, paid_amount.quantize(Decimal("0.01"))
 
 
+def _order_visit_id(order: Order):
+    return order.table_session.visit_id if order.table_session_id else None
+
+
 def recalculate_bill_totals(bill: Bill) -> Bill:
     subtotal, total_amount, paid_amount = _compute_bill_totals(bill)
     bill.subtotal_amount = subtotal
@@ -285,7 +338,7 @@ def create_bill_from_orders(
     # (`table` is nullable), so lock only the order rows themselves.
     orders = list(
         Order.objects.select_for_update(of=("self",))
-        .select_related("table", "guest")
+        .select_related("table", "guest", "table_session")
         .prefetch_related("items")
         .filter(
             partner_id=partner_id,
@@ -307,6 +360,11 @@ def create_bill_from_orders(
         raise BillingServiceError(
             "Заказы без стола можно объединять только в рамках одного гостя."
         )
+    visit_ids = {_order_visit_id(order) for order in orders}
+    if len(visit_ids) != 1:
+        # ADR-0007: orders of one table visit never enter another visit's bill.
+        raise BillingServiceError("В один счёт можно объединять только заказы одного визита.")
+    (bill_visit_id,) = visit_ids
 
     order_items = list(
         OrderItem.objects.select_for_update()
@@ -336,6 +394,7 @@ def create_bill_from_orders(
     bill = Bill.objects.create(
         partner_id=partner_id,
         table=orders[0].table if orders[0].table_id is not None else None,
+        visit_id=bill_visit_id,
         primary_guest=primary_guest,
         kind=kind,
         source=created_source,
@@ -383,10 +442,16 @@ def create_shared_bill_for_table(
     partner_id,
     table_id,
     label: str = "",
+    visit_id=_VISIT_NOT_GIVEN,
 ) -> Bill:
     orders = get_table_billable_orders(
         partner_id=partner_id,
         table_id=table_id,
+        visit_id=resolve_table_visit_for_billing(
+            partner_id=partner_id,
+            table_id=table_id,
+            visit_id=visit_id,
+        ),
     )
     if not orders:
         raise BillingServiceError("На этом столе нет заказов, доступных для нового счёта.")
@@ -405,10 +470,16 @@ def create_personal_bills_for_table(
     *,
     partner_id,
     table_id,
+    visit_id=_VISIT_NOT_GIVEN,
 ) -> list[Bill]:
     orders = get_table_billable_orders(
         partner_id=partner_id,
         table_id=table_id,
+        visit_id=resolve_table_visit_for_billing(
+            partner_id=partner_id,
+            table_id=table_id,
+            visit_id=visit_id,
+        ),
     )
     if not orders:
         raise BillingServiceError("На этом столе нет заказов, доступных для split bill.")
@@ -434,11 +505,13 @@ def get_or_create_personal_bill_for_guest_table(
     partner_id,
     table_id,
     guest_id,
+    visit_id,
 ) -> Bill:
     open_bill = (
         Bill.objects.filter(
             partner_id=partner_id,
             table_id=table_id,
+            visit_id=visit_id,
             primary_guest_id=guest_id,
             kind=Bill.Kind.PERSONAL,
             status__in=[Bill.Status.DRAFT, Bill.Status.ISSUED, Bill.Status.PARTIALLY_PAID],
@@ -448,7 +521,11 @@ def get_or_create_personal_bill_for_guest_table(
     )
     guest_orders = [
         order
-        for order in get_table_billable_orders(partner_id=partner_id, table_id=table_id)
+        for order in get_table_billable_orders(
+            partner_id=partner_id,
+            table_id=table_id,
+            visit_id=visit_id,
+        )
         if order.guest_id == guest_id
     ]
     if open_bill is not None:
@@ -473,18 +550,24 @@ def get_or_create_shared_bill_for_table(
     *,
     partner_id,
     table_id,
+    visit_id,
 ) -> Bill:
     open_bill = (
         Bill.objects.filter(
             partner_id=partner_id,
             table_id=table_id,
+            visit_id=visit_id,
             kind=Bill.Kind.SHARED,
             status__in=[Bill.Status.DRAFT, Bill.Status.ISSUED, Bill.Status.PARTIALLY_PAID],
         )
         .order_by("-created_at")
         .first()
     )
-    orders = get_table_billable_orders(partner_id=partner_id, table_id=table_id)
+    orders = get_table_billable_orders(
+        partner_id=partner_id,
+        table_id=table_id,
+        visit_id=visit_id,
+    )
     if open_bill is not None:
         return attach_orders_to_bill(
             bill=open_bill,
@@ -535,6 +618,7 @@ def create_billing_request_for_telegram_user(
             partner_id=partner_id,
             table_id=table_session.table_id,
             guest_id=table_session.guest_id,
+            visit_id=table_session.visit_id,
         )
         status = BillingRequest.Status.AUTO_PREPARED
         note = "Personal draft bill prepared automatically."
@@ -542,6 +626,7 @@ def create_billing_request_for_telegram_user(
         bill = get_or_create_shared_bill_for_table(
             partner_id=partner_id,
             table_id=table_session.table_id,
+            visit_id=table_session.visit_id,
         )
         status = BillingRequest.Status.AUTO_PREPARED
         note = "Shared draft bill prepared automatically."

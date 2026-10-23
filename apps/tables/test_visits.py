@@ -22,9 +22,7 @@ from apps.tables.services import (
 from apps.users.models import TelegramAccount, User
 
 
-class TableVisitActivationTests(TestCase):
-    """ADR-0007 / PQ-026: join-or-new choice when a party already sits there."""
-
+class VisitFixtureMixin:
     def setUp(self):
         self.partner = Partner.objects.create(
             name="Visit Venue", slug="visit-venue", status=Partner.Status.ACTIVE
@@ -72,6 +70,11 @@ class TableVisitActivationTests(TestCase):
                 }
             ],
         )
+
+
+
+class TableVisitActivationTests(VisitFixtureMixin, TestCase):
+    """ADR-0007 / PQ-026: join-or-new choice when a party already sits there."""
 
     def test_first_guest_starts_a_visit_without_a_question(self):
         session = self._scan(770001, choice=VISIT_CHOICE_ASK)
@@ -169,3 +172,71 @@ class TableVisitActivationTests(TestCase):
         first.visit.refresh_from_db()
         self.assertEqual(first.status, TableSession.Status.CLOSED)
         self.assertEqual(first.visit.status, TableVisit.Status.CLOSED)
+
+
+class VisitScopedBillingTests(VisitFixtureMixin, TestCase):
+    """AA-020: orders of one visit never enter another visit's bill."""
+
+    def setUp(self):
+        super().setUp()
+        self.old_party = self._scan(771001)
+        self.old_order = self._order(self.old_party)
+        # The old party leaves without paying; a new party sits down.
+        self.new_party = self._scan(771002, choice=VISIT_CHOICE_NEW)
+        self.new_order = self._order(self.new_party)
+
+    def test_shared_bill_request_takes_only_the_new_party_orders(self):
+        from apps.billing.models import BillingRequest
+        from apps.billing.services import create_billing_request_for_telegram_user
+
+        result = create_billing_request_for_telegram_user(
+            partner_id=self.partner.id,
+            telegram_id=771002,
+            request_type=BillingRequest.RequestType.SHARED,
+        )
+
+        billed_orders = set(result.bill.bill_orders.values_list("order_id", flat=True))
+        self.assertEqual(billed_orders, {self.new_order.id})
+        self.assertEqual(result.bill.visit_id, self.new_party.visit_id)
+
+    def test_orders_of_two_visits_cannot_share_a_bill(self):
+        from apps.billing.services import BillingServiceError
+
+        with self.assertRaises(BillingServiceError):
+            create_bill_from_orders(
+                partner_id=self.partner.id,
+                order_ids=[str(self.old_order.id), str(self.new_order.id)],
+            )
+
+    def test_staff_table_bill_needs_a_visit_when_several_are_open(self):
+        from apps.billing.services import BillingServiceError, create_shared_bill_for_table
+
+        with self.assertRaisesMessage(BillingServiceError, "визит"):
+            create_shared_bill_for_table(partner_id=self.partner.id, table_id=self.table.id)
+
+        bill = create_shared_bill_for_table(
+            partner_id=self.partner.id,
+            table_id=self.table.id,
+            visit_id=self.old_party.visit_id,
+        )
+        self.assertEqual(
+            set(bill.bill_orders.values_list("order_id", flat=True)),
+            {self.old_order.id},
+        )
+
+    def test_request_bill_button_follows_the_guest_visit(self):
+        from bot.services.content import BotContent
+        from bot.services.navigation import GuestAction, resolve_guest_navigation_state
+
+        content = BotContent.defaults()
+        content.module_billing_enabled = True
+        newcomer = self._scan(771003, choice=VISIT_CHOICE_NEW)
+
+        state = resolve_guest_navigation_state(
+            partner_id=self.partner.id,
+            telegram_id=771003,
+            content=content,
+        )
+
+        self.assertIsNotNone(newcomer.visit_id)
+        self.assertFalse(state.has_action(GuestAction.REQUEST_BILL))

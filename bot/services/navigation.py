@@ -95,13 +95,18 @@ def resolve_guest_navigation_state(
         status=Cart.Status.ACTIVE,
         items__isnull=False,
     ).exists()
+    # Billing is scoped to the guest's table visit (ADR-0007), not to the
+    # table's whole history.
     has_billable_orders = Order.objects.filter(
         partner_id=partner_id,
         table_id=session.table_id,
+        table_session__visit_id=session.visit_id,
+        paid_at__isnull=True,
     ).exclude(status=Order.Status.CANCELED).exists()
     has_open_bills = Bill.objects.filter(
         partner_id=partner_id,
         table_id=session.table_id,
+        visit_id=session.visit_id,
         status__in=[
             Bill.Status.DRAFT,
             Bill.Status.ISSUED,
