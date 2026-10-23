@@ -16,7 +16,11 @@ from apps.partners.admin import BotInstanceAdmin, PartnerAdmin, PartnerBotSettin
 from apps.partners.models import BotInstance, Partner, PartnerBotSettings
 from apps.tables.admin import TableSessionAdmin
 from apps.tables.models import Table, TableSession
-from apps.tables.services import close_table_session_if_settled
+from apps.tables.services import (
+    activate_table_session,
+    close_table_session_if_settled,
+    close_table_visit,
+)
 from apps.users.admin import TelegramAccountAdmin, UserAdmin
 from apps.users.constants import AdminAccessPreset
 from apps.users.models import AdminAccessProfile, GuestProfile, TelegramAccount, User
@@ -390,3 +394,53 @@ class OwnerFacingAdminTests(TestCase):
         close_session.assert_called_once()
         session.refresh_from_db()
         self.assertEqual(session.status, TableSession.Status.CLOSED)
+
+
+class TableVisitAdminTests(TestCase):
+    """ADR-0007: visits are read-only in Admin and close through the service."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.partner = Partner.objects.create(
+            name="Visit Admin Venue", slug="visit-admin-venue", status=Partner.Status.ACTIVE
+        )
+        self.owner = User.objects.create_user(
+            username="visit_owner",
+            password="pass12345",
+            partner=self.partner,
+            role=User.Role.OWNER,
+            is_staff=True,
+        )
+        AdminAccessProfile.objects.create(
+            user=self.owner,
+            partner=self.partner,
+            preset=AdminAccessPreset.OWNER,
+            is_partner_owner=True,
+            can_access_admin=True,
+        )
+        table = Table.objects.create(partner=self.partner, number=2, qr_token="visitadm2")
+        self.session = activate_table_session(
+            partner_id=self.partner.id, telegram_id=990501, payload=table.deep_link_payload
+        )
+
+    def test_visit_admin_is_read_only_and_closes_through_service(self):
+        from apps.tables.admin import TableVisitAdmin
+        from apps.tables.models import TableVisit
+
+        request = self.factory.post("/admin/")
+        request.user = self.owner
+        model_admin = TableVisitAdmin(TableVisit, admin.site)
+        visit = self.session.visit
+        form = model_admin.get_form(request, visit)(instance=visit)
+        for field_name in ("table", "status", "closed_at"):
+            self.assertNotIn(field_name, form.fields)
+
+        with patch(
+            "apps.tables.admin.close_table_visit", wraps=close_table_visit
+        ) as service, patch.object(model_admin, "message_user"):
+            model_admin.close_settled_visits(request, TableVisit.objects.filter(id=visit.id))
+
+        service.assert_called_once()
+        visit.refresh_from_db()
+        self.assertEqual(visit.status, TableVisit.Status.CLOSED)
+        self.assertEqual(visit.closed_by, self.owner)

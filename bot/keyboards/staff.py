@@ -705,8 +705,34 @@ def build_staff_table_actions_keyboard(
     can_create_shared_bill: bool,
     can_create_personal_bills: bool,
     session_actions: list[tuple[str, str]] | None = None,
+    visit_actions: list[tuple[str, str, bool]] | None = None,
 ) -> InlineKeyboardMarkup:
+    """Table card actions; ``visit_actions`` are (visit id, title, has unbilled orders)."""
+
     keyboard: list[list[InlineKeyboardButton]] = []
+    for visit_id, title, can_bill in visit_actions or []:
+        visit_hex = str(visit_id).replace("-", "")
+        row = []
+        if can_bill:
+            row.extend(
+                [
+                    InlineKeyboardButton(
+                        text=f"{title}: общий счёт",
+                        callback_data=f"stafftvshared:{visit_hex}",
+                    ),
+                    InlineKeyboardButton(
+                        text="По гостям",
+                        callback_data=f"stafftvpersonal:{visit_hex}",
+                    ),
+                ]
+            )
+        row.append(
+            InlineKeyboardButton(
+                text="Закрыть визит" if can_bill else f"{title}: закрыть",
+                callback_data=f"stafftvclose:{visit_hex}",
+            )
+        )
+        keyboard.append(row)
     if can_create_shared_bill or can_create_personal_bills:
         row: list[InlineKeyboardButton] = []
         if can_create_shared_bill:

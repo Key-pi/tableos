@@ -1,4 +1,5 @@
 from decimal import Decimal
+from uuid import UUID
 
 from aiogram import Bot, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -6,6 +7,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
+from django.db.models import Count
 from django.utils import timezone
 
 from apps.analytics.services import (
@@ -65,11 +67,12 @@ from apps.orders.services import (
     is_order_received,
     transition_order_status,
 )
-from apps.tables.models import Table, TableSession
+from apps.tables.models import Table, TableSession, TableVisit
 from apps.tables.services import (
     TableSessionError,
     can_close_table_session,
     close_table_session_if_settled,
+    close_table_visit,
 )
 from bot.keyboards.staff import (
     STATUS_LABELS,
@@ -516,7 +519,13 @@ def _render_billing_overview(requests, bills, unbilled_orders) -> str:
     return "\n".join(lines)
 
 
-def _build_active_table_shortcuts(active_sessions, unbilled_orders) -> list[tuple[str, str]]:
+def _build_active_table_shortcuts(
+    active_sessions,
+    unbilled_orders,
+    visit_counts: dict[str, tuple[int, int]] | None = None,
+) -> list[tuple[str, str]]:
+    """Table shortcuts; ``visit_counts`` maps table id -> (number, active visits)."""
+
     tables_map: dict[str, dict] = {}
     for session in active_sessions:
         table_id = str(session.table_id)
@@ -542,10 +551,17 @@ def _build_active_table_shortcuts(active_sessions, unbilled_orders) -> list[tupl
             },
         )
         data["unbilled_orders"] += 1
+    for table_id, (table_number, _count) in (visit_counts or {}).items():
+        tables_map.setdefault(
+            table_id,
+            {"table_number": table_number, "guest_ids": set(), "unbilled_orders": 0},
+        )
     return [
         (
             table_id,
             (
+                # ⚠: several open visits at one table need staff attention (ADR-0007).
+                f"{'⚠ ' if (visit_counts or {}).get(table_id, (0, 0))[1] > 1 else ''}"
                 f"Стол {data['table_number']} • гостей {len(data['guest_ids'])} "
                 f"• без счёта {data['unbilled_orders']}"
             ),
@@ -589,6 +605,7 @@ def _render_table_card(
     open_orders,
     unbilled_orders,
     open_bills,
+    visits=None,
 ) -> str:
     lines = [
         f"<b>Стол #{table.number}</b>",
@@ -605,6 +622,16 @@ def _render_table_card(
                 f"{session.started_at.strftime('%H:%M')}"
             )
         lines.extend(["", "Гости:"] + guest_lines)
+    if visits:
+        lines.append("")
+        if len(visits) > 1:
+            lines.append("⚠ За столом несколько визитов — рассчитайте и закройте предыдущий.")
+        lines.append("Визиты:")
+        for summary in visits:
+            lines.append(
+                f"• {summary['title']}: гостей {summary['guests']}, "
+                f"без счёта {summary['unbilled']}, открытых счетов {summary['open_bills']}"
+            )
     return "\n".join(lines)
 
 
@@ -1031,11 +1058,17 @@ async def _send_tables_feed(
     can_quick_sale: bool,
     can_view_day_report: bool,
 ) -> None:
-    active_sessions, unbilled_orders = await sync_to_async(_load_tables_feed_data)(partner_id)
+    active_sessions, unbilled_orders, visit_counts = await sync_to_async(
+        _load_tables_feed_data
+    )(partner_id)
     await message.answer(
         _render_tables_overview(active_sessions, unbilled_orders),
         reply_markup=build_staff_tables_overview_keyboard(
-            table_shortcuts=_build_active_table_shortcuts(active_sessions, unbilled_orders),
+            table_shortcuts=_build_active_table_shortcuts(
+                active_sessions,
+                unbilled_orders,
+                visit_counts,
+            ),
             can_quick_sale=can_quick_sale,
             can_view_day_report=can_view_day_report,
         ),
@@ -1043,9 +1076,17 @@ async def _send_tables_feed(
 
 
 def _load_tables_feed_data(partner_id):
+    visit_counts: dict[str, tuple[int, int]] = {}
+    for row in (
+        TableVisit.objects.filter(partner_id=partner_id, status=TableVisit.Status.ACTIVE)
+        .values("table_id", "table__number")
+        .annotate(active_visits=Count("id"))
+    ):
+        visit_counts[str(row["table_id"])] = (row["table__number"], row["active_visits"])
     return (
         list(BillingOperationsRepository.active_sessions_for_partner(partner_id)),
         list(BillingOperationsRepository.unbilled_open_orders_for_partner(partner_id)),
+        visit_counts,
     )
 
 
@@ -1056,23 +1097,67 @@ def _build_table_ops_view(*, partner_id, table_id):
     )
     open_orders = list(OrderRepository.open_for_partner(partner_id).filter(table_id=table_id))
     unbilled_orders = list(
-        BillingOperationsRepository.unbilled_open_orders_for_partner(partner_id).filter(table_id=table_id)
+        BillingOperationsRepository.unbilled_open_orders_for_partner(partner_id)
+        .filter(table_id=table_id)
+        .select_related("table_session")
     )
     open_bills = list(BillRepository.open_for_partner(partner_id).filter(table_id=table_id))
+    visits = _table_visit_summaries(
+        partner_id=partner_id,
+        table_id=table_id,
+        active_sessions=active_sessions,
+        unbilled_orders=unbilled_orders,
+        open_bills=open_bills,
+    )
+    legacy_unbilled = [
+        order
+        for order in unbilled_orders
+        if order.table_session_id is None or order.table_session.visit_id is None
+    ]
     text = _render_table_card(
         table=table,
         active_sessions=active_sessions,
         open_orders=open_orders,
         unbilled_orders=unbilled_orders,
         open_bills=open_bills,
+        visits=visits,
     )
     keyboard = build_staff_table_actions_keyboard(
         table_id=str(table.id),
-        can_create_shared_bill=bool(unbilled_orders),
-        can_create_personal_bills=bool(unbilled_orders),
+        # Table-level buttons bill orders without a visit (created before visits).
+        can_create_shared_bill=bool(legacy_unbilled) and not visits,
+        can_create_personal_bills=bool(legacy_unbilled) and not visits,
         session_actions=_build_session_close_actions(active_sessions),
+        visit_actions=[
+            (summary["id"], summary["title"], summary["unbilled"] > 0) for summary in visits
+        ],
     )
     return text, keyboard
+
+
+def _table_visit_summaries(*, partner_id, table_id, active_sessions, unbilled_orders, open_bills):
+    summaries = []
+    visits = TableVisit.objects.filter(
+        partner_id=partner_id,
+        table_id=table_id,
+        status=TableVisit.Status.ACTIVE,
+    ).order_by("started_at")
+    for index, visit in enumerate(visits, start=1):
+        started = timezone.localtime(visit.started_at).strftime("%H:%M")
+        summaries.append(
+            {
+                "id": str(visit.id),
+                "title": f"Визит {index} (с {started})",
+                "guests": sum(1 for session in active_sessions if session.visit_id == visit.id),
+                "unbilled": sum(
+                    1
+                    for order in unbilled_orders
+                    if order.table_session_id and order.table_session.visit_id == visit.id
+                ),
+                "open_bills": sum(1 for bill in open_bills if bill.visit_id == visit.id),
+            }
+        )
+    return summaries
 
 
 async def _render_staff_sale_message(
@@ -1394,6 +1479,80 @@ async def staff_table_personal_bills_callback_handler(callback: CallbackQuery, b
 
     await _safe_edit_message_text(callback.message, text, reply_markup=keyboard)
     await callback.answer("Персональные счета подготовлены")
+
+
+def _load_staff_visit(*, partner_id, raw_id: str) -> TableVisit:
+    try:
+        visit_id = UUID(hex=raw_id)
+    except ValueError as exc:
+        raise TableVisit.DoesNotExist from exc
+    return TableVisit.objects.select_related("table").get(partner_id=partner_id, id=visit_id)
+
+
+@router.callback_query(
+    lambda c: c.data and c.data.split(":", 1)[0] in {"stafftvshared", "stafftvpersonal"}
+)
+async def staff_visit_bill_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        if not _can_manage_billing(employee):
+            raise OrderFlowError(
+                "Работа со столами и счетами доступна только владельцу, менеджеру или кассиру."
+            )
+        prefix, raw_visit_id = (callback.data or "").split(":", 1)
+        visit = await sync_to_async(_load_staff_visit)(partner_id=partner.id, raw_id=raw_visit_id)
+        if visit.status != TableVisit.Status.ACTIVE:
+            raise OrderFlowError("Этот визит уже закрыт.")
+        builder = (
+            create_shared_bill_for_table
+            if prefix == "stafftvshared"
+            else create_personal_bills_for_table
+        )
+        await sync_to_async(builder)(
+            partner_id=partner.id,
+            table_id=visit.table_id,
+            visit_id=visit.id,
+        )
+        text, keyboard = await sync_to_async(_build_table_ops_view)(
+            partner_id=partner.id,
+            table_id=visit.table_id,
+        )
+    except TableVisit.DoesNotExist:
+        await callback.answer("Визит не найден.", show_alert=True)
+        return
+    except (BillingServiceError, OrderFlowError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    await _safe_edit_message_text(callback.message, text, reply_markup=keyboard)
+    await callback.answer("Счёт визита подготовлен")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("stafftvclose:"))
+async def staff_visit_close_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        if not _can_view_tables(employee):
+            raise OrderFlowError(
+                "Закрытие визитов доступно только владельцу, менеджеру или кассиру "
+                "при включённом модуле столов."
+            )
+        _, raw_visit_id = (callback.data or "").split(":", 1)
+        visit = await sync_to_async(_load_staff_visit)(partner_id=partner.id, raw_id=raw_visit_id)
+        await sync_to_async(close_table_visit)(visit, actor=employee.user)
+        text, keyboard = await sync_to_async(_build_table_ops_view)(
+            partner_id=partner.id,
+            table_id=visit.table_id,
+        )
+    except TableVisit.DoesNotExist:
+        await callback.answer("Визит не найден.", show_alert=True)
+        return
+    except (TableSessionError, OrderFlowError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    await _safe_edit_message_text(callback.message, text, reply_markup=keyboard)
+    await callback.answer("Визит закрыт")
 
 
 @router.callback_query(lambda c: c.data == "staffreport:today")

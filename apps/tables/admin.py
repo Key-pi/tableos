@@ -9,8 +9,12 @@ from apps.billing.services import (
     create_shared_bill_for_table,
 )
 from apps.orders.models import Order
-from apps.tables.models import Table, TableSession
-from apps.tables.services import TableSessionError, close_table_session_if_settled
+from apps.tables.models import Table, TableSession, TableVisit
+from apps.tables.services import (
+    TableSessionError,
+    close_table_session_if_settled,
+    close_table_visit,
+)
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 
@@ -309,13 +313,14 @@ class TableSessionAdmin(ScopedAdminMixin):
     admin_section = AdminSection.TABLES
     allow_partner_add = False
     allow_partner_delete = False
-    list_display = ("table", "guest", "partner", "status", "started_at", "closed_at")
+    list_display = ("table", "guest", "visit", "partner", "status", "started_at", "closed_at")
     list_filter = ("partner", "status")
     search_fields = ("table__number", "guest__telegram_account__username", "partner__name")
     readonly_fields = (
         "partner",
         "guest",
         "table",
+        "visit",
         "started_at",
         "expires_at",
         "closed_at",
@@ -343,3 +348,45 @@ class TableSessionAdmin(ScopedAdminMixin):
                 closed_count += 1
         if closed_count:
             self.message_user(request, f"Закрыто сессий стола: {closed_count}.")
+
+
+@admin.register(TableVisit)
+class TableVisitAdmin(ScopedAdminMixin):
+    """Table visits (ADR-0007): read-only; closing goes through the owner service."""
+
+    admin_section = AdminSection.TABLES
+    allow_partner_add = False
+    allow_partner_delete = False
+    list_display = ("table", "partner", "status", "started_at", "closed_at", "closed_by")
+    list_filter = ("partner", "status")
+    search_fields = ("table__number", "partner__name")
+    readonly_fields = (
+        "partner",
+        "table",
+        "status",
+        "started_at",
+        "closed_at",
+        "closed_by",
+        "created_at",
+        "updated_at",
+    )
+    actions = ("close_settled_visits",)
+
+    @admin.action(description="Close selected settled visits")
+    def close_settled_visits(self, request, queryset):
+        closed_count = 0
+        for visit in queryset.select_related("table"):
+            was_active = visit.status == TableVisit.Status.ACTIVE
+            try:
+                closed_visit = close_table_visit(visit, actor=request.user)
+            except TableSessionError as exc:
+                self.message_user(
+                    request,
+                    f"Визит стола #{visit.table.number}: {exc}",
+                    level=messages.WARNING,
+                )
+                continue
+            if was_active and closed_visit.status == TableVisit.Status.CLOSED:
+                closed_count += 1
+        if closed_count:
+            self.message_user(request, f"Закрыто визитов: {closed_count}.")

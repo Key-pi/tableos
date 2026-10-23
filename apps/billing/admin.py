@@ -182,6 +182,7 @@ class BillAdmin(ScopedAdminMixin):
     readonly_fields = (
         "public_id",
         "table",
+        "visit",
         "primary_guest",
         "status",
         "kind",
