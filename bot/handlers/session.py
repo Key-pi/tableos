@@ -7,6 +7,7 @@ from apps.orders.models import Order
 from apps.orders.selectors import get_orders_for_session
 from apps.orders.services import (
     OrderFlowError,
+    can_guest_confirm_receipt,
     confirm_order_received_by_guest,
     is_order_final,
     is_order_paid,
@@ -132,7 +133,7 @@ def _build_guest_order_card_text(order: Order) -> str:
                 ),
             ]
         )
-    if order.status not in {Order.Status.NEW, Order.Status.CANCELED, Order.Status.COMPLETED}:
+    if can_guest_confirm_receipt(order):
         lines.extend(
             [
                 "",
@@ -222,8 +223,7 @@ async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
         _build_guest_order_card_text(order),
         reply_markup=build_guest_order_card_keyboard(
             order_public_id=order.public_id,
-            can_confirm_received=order.status
-            not in {Order.Status.NEW, Order.Status.CANCELED, Order.Status.COMPLETED},
+            can_confirm_received=can_guest_confirm_receipt(order),
         ),
     )
     if updated:

@@ -30,6 +30,26 @@ ORDER_STATUS_TRANSITIONS: dict[str, set[str]] = {
 }
 
 
+# PQ-029: a guest may confirm receipt from any non-final status, including
+# `new`, because staff may not update orders in time during rush hours. This is
+# the only guest-initiated transition; staff transitions use the table above.
+GUEST_RECEIPT_CONFIRMABLE_STATUSES: frozenset[str] = frozenset(
+    {
+        Order.Status.NEW,
+        Order.Status.ACCEPTED,
+        Order.Status.PREPARING,
+        Order.Status.READY,
+        Order.Status.DELIVERING,
+    }
+)
+
+
+def can_guest_confirm_receipt(order: Order) -> bool:
+    """Return whether the guest may mark this order as received."""
+
+    return order.status in GUEST_RECEIPT_CONFIRMABLE_STATUSES
+
+
 def get_available_next_statuses(current_status: str) -> list[str]:
     """Return allowed next statuses in a stable order for UI consumers."""
 
@@ -296,10 +316,8 @@ def confirm_order_received_by_guest(
     except Order.DoesNotExist as exc:
         raise OrderFlowError("Заказ не найден для этого гостя и стола.") from exc
 
-    if order.status in {Order.Status.CANCELED, Order.Status.COMPLETED}:
+    if not can_guest_confirm_receipt(order):
         raise OrderFlowError("Этот заказ уже завершён или отменён.")
-    if order.status == Order.Status.NEW:
-        raise OrderFlowError("Нельзя подтвердить получение нового заказа.")
 
     from_status = order.status
     order.status = Order.Status.COMPLETED
@@ -315,7 +333,7 @@ def confirm_order_received_by_guest(
         order=order,
         from_status=from_status,
         to_status=order.status,
-        note="Confirmed as received by guest.",
+        note="Guest action: confirmed as received.",
     )
     _create_staff_notifications_for_status_change(
         order=order,

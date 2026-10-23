@@ -11,6 +11,8 @@ from apps.orders.selectors import get_open_orders_for_partner
 from apps.orders.services import (
     add_items_to_cart_for_telegram_user,
     checkout_active_cart_for_telegram_user,
+    GUEST_RECEIPT_CONFIRMABLE_STATUSES,
+    can_guest_confirm_receipt,
     confirm_order_received_by_guest,
     create_order,
     get_active_cart_for_telegram_user,
@@ -619,6 +621,42 @@ class OrderFinalityVisibilityTests(TestCase):
         self.assertEqual(order.status, Order.Status.COMPLETED)
         self.assertIsNotNone(order.received_at)
         self.assertIsNone(order.paid_at)
+
+    def test_guest_can_confirm_received_for_new_order(self):
+        # PQ-029: staff may not keep up during rush hours, so the guest may
+        # confirm receipt even before the order was accepted.
+        order = confirm_order_received_by_guest(
+            partner_id=self.partner.id,
+            telegram_id=self.telegram_account.telegram_id,
+            order_public_id=self.order.public_id,
+        )
+
+        self.assertEqual(order.status, Order.Status.COMPLETED)
+        self.assertIsNotNone(order.received_at)
+        history = order.status_history.order_by("-created_at").first()
+        self.assertEqual(history.from_status, Order.Status.NEW)
+        self.assertEqual(history.to_status, Order.Status.COMPLETED)
+        self.assertIsNone(history.changed_by)
+        self.assertIn("guest", history.note.lower())
+
+    def test_guest_cannot_confirm_final_orders(self):
+        for final_status in (Order.Status.COMPLETED, Order.Status.CANCELED):
+            self.order.status = final_status
+            self.order.save(update_fields=["status", "updated_at"])
+            self.assertFalse(can_guest_confirm_receipt(self.order))
+            with self.assertRaises(OrderFlowError):
+                confirm_order_received_by_guest(
+                    partner_id=self.partner.id,
+                    telegram_id=self.telegram_account.telegram_id,
+                    order_public_id=self.order.public_id,
+                )
+
+    def test_guest_confirmation_rule_covers_every_non_final_status(self):
+        non_final = set(Order.Status.values) - {
+            Order.Status.COMPLETED,
+            Order.Status.CANCELED,
+        }
+        self.assertEqual(set(GUEST_RECEIPT_CONFIRMABLE_STATUSES), non_final)
 
     def test_order_repository_open_for_partner_includes_completed_unpaid_order(self):
         self.order.status = Order.Status.COMPLETED
