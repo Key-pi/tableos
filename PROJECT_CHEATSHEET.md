@@ -74,7 +74,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 - `makemigrations --check --dry-run`: no changes detected.
 - `ruff check --no-cache .`: 21 pre-existing violations; `ruff format --check --no-cache .`: 54 files would reformat. Это не green baseline.
 
-После B1–B4 тестов стало 286, они зелёные на SQLite и PostgreSQL 16; актуальные команды и журнал прогонов — в [TESTING.md](docs/engineering/TESTING.md).
+После B1–B5 тестов стало 296, они зелёные на SQLite и PostgreSQL 16; актуальные команды и журнал прогонов — в [TESTING.md](docs/engineering/TESTING.md).
 
 ## Как работает Celery
 

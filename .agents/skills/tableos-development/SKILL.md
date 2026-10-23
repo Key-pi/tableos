@@ -45,7 +45,7 @@ If the request depends on an open product decision, stop after safe characteriza
 
 ## Verification baseline
 
-Use the project virtual environment and the commands in `docs/engineering/TESTING.md`. The 2026-07-27 audited baseline had 139 passing Django tests in SQLite mode (286 tests after B4, green on SQLite and PostgreSQL 16; record new runs in `TESTING.md`), while Ruff has pre-existing failures; report those separately rather than masking them. Run `manage.py makemigrations --check --dry-run` for model changes and `docker compose config --quiet` for deployment configuration changes. Add PostgreSQL verification where required by the change; any change that adds or edits `select_for_update` needs the whole suite on PostgreSQL, because SQLite ignores row locks.
+Use the project virtual environment and the commands in `docs/engineering/TESTING.md`. The 2026-07-27 audited baseline had 139 passing Django tests in SQLite mode (296 tests after B5, green on SQLite and PostgreSQL 16; record new runs in `TESTING.md`), while Ruff has pre-existing failures; report those separately rather than masking them. Run `manage.py makemigrations --check --dry-run` for model changes and `docker compose config --quiet` for deployment configuration changes. Add PostgreSQL verification where required by the change; any change that adds or edits `select_for_update` needs the whole suite on PostgreSQL, because SQLite ignores row locks.
 
 ## Completion checklist
 

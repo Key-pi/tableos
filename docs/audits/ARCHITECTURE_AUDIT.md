@@ -38,9 +38,9 @@ Severity is the impact if a supported/authorized flow is exercised: **High** can
 | AA-014 | AMBIGUOUS_PRODUCT_DECISION | Medium | High | Full bonus redemption can leave an unpayable zero bill. | B3 |
 | AA-015 | SECURITY / TENANCY_RISK | Medium | High | Admin filters, inlines, and global Telegram identity have gaps. | B1 |
 | AA-016 | TEST_GAP | Medium | High | No PostgreSQL concurrency/admin-isolation characterization coverage. | B1–B4 |
-| AA-017 | PREMATURE_ABSTRACTION / NAMING_PLACEMENT | Medium | High | Interfaces/repositories/tasks are uneven and mostly unconsumed. | B5 |
+| AA-017 | PREMATURE_ABSTRACTION / NAMING_PLACEMENT | Medium | High | Interfaces/repositories/tasks are uneven and mostly unconsumed. | B5 — resolved |
 | AA-018 | DOCUMENTATION_DRIFT | Medium | High | Root docs claim stale tests/lint/deployment paths and local links. | B0 |
-| AA-019 | BUG / RELIABILITY | Low | High | Demo seed is non-atomic and can leave partial identity changes. | B5 |
+| AA-019 | BUG / RELIABILITY | Low | High | Demo seed is non-atomic and can leave partial identity changes. | B5 — resolved |
 
 ## Findings
 
@@ -349,10 +349,10 @@ by `AGENTS.md`.
 | AA-028 | BUG / PERFORMANCE | Low | High | The Bill changelist recalculates and saves every listed bill on a GET. | B3.1 — resolved |
 | AA-029 | BUG / TIME_BOUNDARY | Low | High | Visit bonus "once per day" uses the UTC day; the daily metric snapshot never revisits the previous day. | B3.1 — resolved |
 | AA-030 | BUG / ASYNC | Low | High | Notification tasks re-send on retry and do not recheck the recipient at delivery time. | B4 — resolved |
-| AA-031 | NAMING_PLACEMENT / LAYERING | Low | High | `core` imports domain apps; unused unscoped selectors and a legacy bonus service remain. | B5 |
+| AA-031 | NAMING_PLACEMENT / LAYERING | Low | High | `core` imports domain apps; unused unscoped selectors and a legacy bonus service remain. | B5 — resolved |
 | AA-032 | DOCUMENTATION_DRIFT | Medium | High | Canonical docs described pre-B1 runtime, cited moved line numbers and claimed PostgreSQL tests that do not exist. | B0.1 (resolved by this review) |
 | AA-033 | BUG / FINANCIAL_INTEGRITY | High | High (executed) | On PostgreSQL every bill creation failed: `FOR UPDATE` on a nullable outer join. | B3.1 (resolved) |
-| AA-034 | OPERATIONS / PORTABILITY | Low | Medium | `Europe/Kiev` is a legacy timezone alias that recent tz databases ship only as an optional package. | B5 |
+| AA-034 | OPERATIONS / PORTABILITY | Low | Medium | `Europe/Kiev` is a legacy timezone alias that recent tz databases ship only as an optional package. | B5 — resolved |
 
 ### AA-020 — billing and settlement use the table's history instead of the current visit
 
@@ -500,8 +500,8 @@ PostgreSQL 16 (199 tests; 5 PostgreSQL-only tests skipped on SQLite).
 | AA-024 | Dynamic text escaped in bot messages, partner template values and notifications; broadcast text remains partner markup (B4). |
 | AA-032 (tests) | PostgreSQL concurrency tests for bill allocation, bonus payment and final payment; a mutation check confirms they fail without the locks. |
 
-Remaining from the post-B3 review: AA-031 and AA-034 (B5). AA-030 is resolved
-in B4.
+All post-B3 review findings are resolved: AA-030 in B4; AA-031 and AA-034 in
+B5.
 AA-020 is resolved in B3.2 part B and AA-022 in B3.2 part A (see below).
 
 ## B3.2 part A implementation update — 2026-10-23
@@ -599,3 +599,17 @@ Deviation from the roadmap rollback note: instead of an opt-in per campaign
 version, tasks queued by the old sender resume after their cursor, and an
 old campaign mid-way without a cursor is marked failed rather than resent.
 Counters of such a campaign count only messages sent after the upgrade.
+
+## B5 implementation update — 2026-10-23
+
+Committed directly on `clean-project-rules`.
+
+| Finding | Result |
+|---|---|
+| AA-034 | Defaults (`core/settings/env.py`, `.env.example`, `Partner.timezone`) use `Europe/Kyiv`; `partners.0006` renames stored `Europe/Kiev`; an old `DJANGO_TIMEZONE=Europe/Kiev` is read as `Europe/Kyiv`; `Partner.clean` rejects unknown zones; `tzdata` is a dependency. Verified with the system `Europe/Kiev` link removed — which also stopped a local PostgreSQL whose `postgresql.conf` named `Europe/Kiev` (see `TESTING.md`). |
+| AA-019 | `seed_demo` runs in one transaction and refuses to take over another venue's account or promote a venue account to platform admin; idempotent rerun and rollback tests, mutation-checked. |
+| AA-017 | Removed modules with no static or dynamic consumer: all `interfaces.py`, eight placeholder `tasks.py`, docstring-only `services.py` (employees, menu), zero-consumer repositories and selectors, duplicate drifted `constants.py` enums, unwired `core/logging/handlers.py`, `partners/services.py:rotate_bot_token`. Celery registrations compared before/after: identical. The notifications services/tasks cycle is accepted (function-local imports at enqueue time; breaking it would move fan-out control into tasks with no runtime gain). |
+| AA-031 | Unscoped unused selectors removed; `get_orders_for_session` requires `partner_id`. `core → apps` kept in two adapters and documented; the public root page no longer discloses platform-wide counts outside `DEBUG` (new finding while reviewing it). `redeem_bonus_for_bill` stays: it is the service for redeeming an explicit amount, used by tests. |
+
+Not done: the roadmap's "measure filter/report performance" item — no
+measured problem exists yet; revisit with production data.

@@ -5,9 +5,8 @@
 PostgreSQL-gated test, passes on PostgreSQL 16 in a development environment;
 the production data audits for the B2/B3 migrations are still required before
 rollout. B3.2 is complete: parts A (bill changes and void), B (table visits)
-and C (cashback base). B4 (durable delivery, ADR-0008) is complete. B5 is a
-proposal and requires owner approval before any application-code, migration,
-dependency, or runtime change begins.
+and C (cashback base). B4 (durable delivery, ADR-0008) and B5 (hygiene) are complete. Product work
+continues per [ECOSYSTEM_DIRECTION.md](../product/ECOSYSTEM_DIRECTION.md).
 
 ## Operating rules for every batch
 
@@ -216,6 +215,7 @@ PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implem
 
 | Field | Proposal |
 |---|---|
+| **Status** | **Complete** (2026-10-23). Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b5-implementation-update--2026-10-23). |
 | **Goal** | Remove only proven-unused scaffolding and tighten lower-risk reliability/performance issues after behavior is protected. |
 | **Scope** | Resolve empty services/tasks/interfaces/repositories through static + dynamic consumer proof; break notifications task/service cycle; make demo seed atomic/idempotent; measure and address confirmed filter/report performance issues. |
 | **Not in scope** | Broad folder renames, code formatting sweep, dependency upgrade, speculative cache/event-engine abstraction. |
@@ -234,7 +234,9 @@ PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implem
 | Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
 | Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
 
-B3.2 and B4 are complete. The next step is owner approval of B5 (AA-031,
-AA-034, AA-017, AA-019). Before production rollout of B2/B3/B3.1/B3.2/B4:
+B3.2, B4 and B5 are complete. Next (owner-approved order,
+`ECOSYSTEM_DIRECTION.md`): pickup ordering, renaming what people see to
+Botera Shop, source tracking for deep links. Before production rollout of
+B2–B5:
 run the duplicate-data audits on a production copy and the full suite on
 PostgreSQL.

@@ -14,15 +14,18 @@ docker compose config --quiet
 ```
 
 At the 2026-07-27 baseline, Django check/migration check/tests/compose config
-passed; the test suite ran **139 tests**. After B4 the suite has **286 tests**; it passes on SQLite (10
+passed; the test suite ran **139 tests**. After B5 the suite has **296 tests**; it passes on SQLite (10
 PostgreSQL-only tests skipped) and on PostgreSQL 16. Record every full run in
 the table at the end of this document.
 
 **Environment requirements.** Tests encrypt bot tokens, so
 `BOT_TOKEN_ENCRYPTION_KEY` must be a valid Fernet key — put it into `.env`
 (see `DEVELOPMENT.md`); without it about 60 tests error with
-`BOT_TOKEN_ENCRYPTION_KEY must be configured`. The default timezone
-`Europe/Kiev` must exist in the system tz database (AA-034). Ruff reported **21 pre-existing
+`BOT_TOKEN_ENCRYPTION_KEY must be configured`. Since B5 the default
+timezone is `Europe/Kyiv` and an old `DJANGO_TIMEZONE=Europe/Kiev` is read as
+`Europe/Kyiv` (AA-034). A local PostgreSQL created by `initdb` on such a
+system may itself have `timezone = 'Europe/Kiev'` in `postgresql.conf` and
+refuse to start once the legacy name is gone; change it to `Europe/Kyiv`. Ruff reported **21 pre-existing
 check violations** and **54 files that would be reformatted**. Do not state
 that Ruff is green until the actual baseline changes and is rerun. Full output
 and tool versions are recorded in [`../audits/BASELINE.md`](../audits/BASELINE.md).
@@ -106,3 +109,5 @@ There is no CI; every run is manual. Add a row for each full run.
 | 2026-10-23 | B3.2 part C branch | PostgreSQL 16 | full suite + `bonuses.0008` backward/forward | 265 tests OK |
 | 2026-10-23 | B4 branch | SQLite | full suite | 286 tests OK (10 skipped); Ruff: no new findings in changed files |
 | 2026-10-23 | B4 branch | PostgreSQL 16 | full suite + `notifications.0004` backward/forward | 286 tests OK; broadcast race test repeated 10× |
+| 2026-10-23 | B5 (`clean-project-rules`) | SQLite, `Europe/Kiev` link removed | full suite | 296 tests OK (10 skipped); Ruff: no new findings repository-wide |
+| 2026-10-23 | B5 (`clean-project-rules`) | PostgreSQL 16 | full suite + `partners.0006` backward/forward | 296 tests OK |

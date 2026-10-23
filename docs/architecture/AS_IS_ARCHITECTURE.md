@@ -62,14 +62,14 @@ crypto, logging and settings.
 
 | Area | Persisted concepts | Real orchestration | Notes |
 |---|---|---|---|
-| Partners | `Partner`, `BotInstance`, `PartnerBotSettings` | model `clean()`, `partners/services.py:rotate_bot_token` | `PartnerBotSettings` holds module flags, button labels and message templates. |
+| Partners | `Partner`, `BotInstance`, `PartnerBotSettings` | model `clean()` (`Partner.clean` rejects unknown timezones), `BotInstance.set_token` | `PartnerBotSettings` holds module flags, button labels and message templates. Default timezone `Europe/Kyiv`. |
 | Users / identity | `User`, global `TelegramAccount`, partner `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile` | One Telegram identity → one guest profile per partner. |
 | Tables | `Table`, `TableSession` | `tables/services.py` | QR activation, settlement-gated close. `timed_out` and `expires_at` exist but nothing sets them. |
-| Menu | `MenuCategory`, `MenuItem` | selectors/repositories only | Price must be positive (`menu_item_price_positive`). |
+| Menu | `MenuCategory`, `MenuItem` | `menu/repositories.py` reads; Admin writes | Price must be positive (`menu_item_price_positive`). |
 | Orders | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py` | Cart lifecycle, order creation, status machine, guest receipt confirmation. |
 | Billing | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment` | `billing/services.py` | Bill creation/extension, payment, bonus payment, post-payment settlement. |
 | Bonuses | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Ledger-backed balance with reconciliation guard; quick sale. |
-| Employees | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | `services.py` is a docstring only. |
+| Employees | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | Writes go through Admin. |
 | Notifications | `NotificationPreference`, `StaffNotification`, `BroadcastCampaign` | `notifications/services.py`, `tasks.py` | All Telegram sending lives here. |
 | Analytics | `PartnerDailyMetric` | `analytics/services.py` | On-demand day report for staff; 15-minute snapshot task. |
 
@@ -90,8 +90,10 @@ core          -> partners, users (core/admin_mixins.py); orders, partners, table
 ```
 
 `apps.notifications.services ↔ apps.notifications.tasks` is a cycle broken
-only by function-local imports. `core → apps` contradicts the rule in
-`AGENTS.md` and is recorded as AA-031.
+only by function-local imports; accepted in B5. `core → apps` remains in two
+adapters: `core/admin_mixins.py` (Admin scoping needs the tenancy models) and
+`core/urls.py` (the demo root page, which outside `DEBUG` returns only `ok`
+and discloses no counts). Both are accepted adapter exceptions (AA-031).
 
 ## Runtime and bot routing
 
@@ -300,7 +302,7 @@ transactions; allowed operations are actions that call owner services.
 
 ## Tests and checks
 
-- 286 tests after B4, green on SQLite and on PostgreSQL 16. Ten are
+- 296 tests after B5, green on SQLite and on PostgreSQL 16. Ten are
   PostgreSQL-only and skipped on SQLite: parallel broadcast workers
   (`apps/notifications/test_delivery.py`); concurrent order transition
   (`apps/orders/test_concurrency.py`); concurrent QR scans, two guests
