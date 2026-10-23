@@ -1,16 +1,4 @@
-from apps.orders.models import Cart, Order
-
-
-def get_order_with_items(order_id):
-    return Order.objects.select_related("guest", "table").prefetch_related("items").get(id=order_id)
-
-
-def get_cart_with_items(cart_id):
-    return (
-        Cart.objects.select_related("guest", "table_session__table")
-        .prefetch_related("items")
-        .get(id=cart_id)
-    )
+from apps.orders.models import Order
 
 
 def get_open_orders_for_partner(partner_id):
@@ -31,9 +19,9 @@ def get_open_orders_for_partner(partner_id):
     )
 
 
-def get_orders_for_session(session_id):
+def get_orders_for_session(session_id, *, partner_id):
     return (
-        Order.objects.filter(table_session_id=session_id)
+        Order.objects.filter(partner_id=partner_id, table_session_id=session_id)
         .exclude(status=Order.Status.CANCELED)
         .select_related(
             "table",

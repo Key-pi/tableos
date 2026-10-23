@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
 from django.urls import path
@@ -12,6 +13,10 @@ def healthcheck(_: HttpRequest) -> HttpResponse:
 
 
 def demo_home(_: HttpRequest) -> HttpResponse:
+    if not settings.DEBUG:
+        # The demo page is public: in production it must not disclose
+        # platform-wide counts of partners, bots, tables or orders.
+        return HttpResponse("ok")
     partners_count = Partner.objects.count()
     bots_count = BotInstance.objects.filter(is_active=True).count()
     tables_count = Table.objects.filter(is_active=True).count()

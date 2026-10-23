@@ -185,7 +185,9 @@ async def session_handler(message: Message, bot: Bot) -> None:
         )
         return
 
-    orders = await sync_to_async(list)(get_orders_for_session(session.id))
+    orders = await sync_to_async(list)(
+        get_orders_for_session(session.id, partner_id=session.partner_id)
+    )
     session_text, order_shortcuts = await sync_to_async(_build_guest_session_view)(
         partner=partner,
         session=session,
@@ -212,7 +214,9 @@ async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
         await callback.answer("Активная сессия уже закрыта.", show_alert=True)
         return
 
-    orders = await sync_to_async(list)(get_orders_for_session(session.id))
+    orders = await sync_to_async(list)(
+        get_orders_for_session(session.id, partner_id=session.partner_id)
+    )
     try:
         order = next(order for order in orders if order.public_id == order_public_id)
     except StopIteration:
@@ -245,7 +249,9 @@ async def guest_session_back_callback(callback: CallbackQuery, bot: Bot) -> None
         await callback.answer("Активная сессия уже закрыта.", show_alert=True)
         return
 
-    orders = await sync_to_async(list)(get_orders_for_session(session.id))
+    orders = await sync_to_async(list)(
+        get_orders_for_session(session.id, partner_id=session.partner_id)
+    )
     session_text, order_shortcuts = await sync_to_async(_build_guest_session_view)(
         partner=partner,
         session=session,
