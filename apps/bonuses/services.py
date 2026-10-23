@@ -42,6 +42,7 @@ def get_bonus_ledger_balance(*, partner_id, guest_id) -> Decimal:
         if bonus_transaction.transaction_type in {
             BonusTransaction.TransactionType.ACCRUAL,
             BonusTransaction.TransactionType.MANUAL,
+            BonusTransaction.TransactionType.REVERSAL,
         }:
             balance += amount
         else:

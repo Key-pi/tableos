@@ -4,6 +4,7 @@ from uuid import UUID
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from apps.billing.models import BillItem
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuItem
 from apps.notifications.models import StaffNotification
@@ -256,6 +257,16 @@ def transition_order_status(
     allowed_statuses = ORDER_STATUS_TRANSITIONS[order.status]
     if to_status not in allowed_statuses:
         raise OrderFlowError(f"Нельзя перевести заказ из `{order.status}` в `{to_status}`.")
+    if to_status == Order.Status.CANCELED and BillItem.objects.filter(
+        partner_id=order.partner_id,
+        order_id=order.id,
+        is_active=True,
+    ).exists():
+        # Checked after the order lock, so a concurrently created bill is seen.
+        raise OrderFlowError(
+            "Заказ уже в счёте. Отменить его можно через карточку счёта "
+            "(нужно право изменять счета)."
+        )
 
     from_status = order.status
     responsible_employee = _resolve_actor_employee(order=order, actor_user=actor_user)

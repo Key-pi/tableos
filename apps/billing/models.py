@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
 
@@ -163,13 +164,24 @@ class BillItem(PartnerBoundModel):
     quantity = models.PositiveIntegerField(default=1)
     line_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     comment = models.CharField(max_length=255, blank=True)
+    # Removed lines stay for history; only active lines count and allocate.
+    is_active = models.BooleanField(default=True)
+    removed_at = models.DateTimeField(null=True, blank=True)
+    removed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="removed_bill_items",
+    )
 
     class Meta:
         ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
                 fields=["partner", "order_item"],
-                name="unique_order_item_bill_allocation",
+                condition=Q(is_active=True),
+                name="unique_active_order_item_bill_allocation",
             )
         ]
 
@@ -220,3 +232,39 @@ class Payment(PartnerBoundModel):
 
     def __str__(self) -> str:
         return f"{self.bill.public_id} / {self.method} / {self.amount}"
+
+
+class BillAdjustment(PartnerBoundModel):
+    """Append-only record of a correction made to a bill by an authorised person."""
+
+    class Kind(models.TextChoices):
+        REMOVE_LINE = "remove_line", "Line removed"
+        ORDER_CANCELED = "order_canceled", "Order cancelled"
+        VOID = "void", "Bill voided"
+
+    class ReasonCode(models.TextChoices):
+        INPUT_ERROR = "input_error", "Ошибка ввода"
+        GUEST_REFUSED = "guest_refused", "Отказ гостя"
+        COMPLIMENT = "compliment", "Комплимент заведения"
+        OTHER = "other", "Другое"
+
+    bill = models.ForeignKey(Bill, on_delete=models.PROTECT, related_name="adjustments")
+    kind = models.CharField(max_length=24, choices=Kind.choices)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bill_adjustments",
+    )
+    reason_code = models.CharField(max_length=24, choices=ReasonCode.choices)
+    reason_text = models.CharField(max_length=255, blank=True)
+    total_before = models.DecimalField(max_digits=10, decimal_places=2)
+    total_after = models.DecimalField(max_digits=10, decimal_places=2)
+    payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.bill.public_id} / {self.kind} / {self.reason_code}"

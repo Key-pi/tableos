@@ -27,6 +27,13 @@ class EmployeeProfile(PartnerBoundModel):
     notify_on_order_status_changed = models.BooleanField(default=True)
     notify_on_guest_calls = models.BooleanField(default=True)
     notify_on_billing_requests = models.BooleanField(default=True)
+    # Granted only by the venue owner: change or void bills (PQ-028).
+    can_adjust_bills = models.BooleanField(
+        default=False,
+        verbose_name="Может изменять счета",
+        help_text="Убирать позиции, отменять заказы в счёте и аннулировать счета. "
+        "Выдаёт только владелец заведения.",
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:

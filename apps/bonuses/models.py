@@ -66,6 +66,8 @@ class BonusTransaction(PartnerBoundModel):
         REDEMPTION = "redemption", "Redemption"
         EXPIRATION = "expiration", "Expiration"
         MANUAL = "manual", "Manual"
+        # Compensating credit, e.g. bonuses returned when a bill is voided.
+        REVERSAL = "reversal", "Reversal"
 
     guest = models.ForeignKey(
         "users.GuestProfile",

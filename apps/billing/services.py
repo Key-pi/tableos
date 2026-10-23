@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from apps.billing.models import (
     Bill,
+    BillAdjustment,
     BillingRequest,
     BillItem,
     BillOrder,
@@ -23,6 +24,7 @@ from apps.bonuses.services import (
     get_redeemable_bonus_amount,
     sync_bonus_balance_from_ledger,
 )
+from apps.employees.models import EmployeeProfile
 from apps.notifications.services import notify_staff_about_billing_request
 from apps.orders.models import Order, OrderItem
 from apps.orders.services import transition_order_status
@@ -34,7 +36,7 @@ from apps.tables.services import (
     close_table_session_if_settled,
     get_active_table_session,
 )
-from apps.users.models import GuestProfile
+from apps.users.models import AdminAccessProfile, GuestProfile, User
 
 
 class BillingServiceError(Exception):
@@ -85,6 +87,7 @@ def get_table_billable_orders(
     allocated_order_ids = set(
         BillItem.objects.filter(
             partner_id=partner_id,
+            is_active=True,
             bill__status__in=[
                 Bill.Status.DRAFT,
                 Bill.Status.ISSUED,
@@ -176,6 +179,7 @@ def attach_orders_to_bill(
     allocated_order_item_ids = set(
         BillItem.objects.filter(
             partner_id=bill.partner_id,
+            is_active=True,
             order_item_id__in=target_order_item_ids,
             bill__status__in=[
                 Bill.Status.DRAFT,
@@ -227,7 +231,10 @@ def attach_orders_to_bill(
 def _compute_bill_totals(bill: Bill) -> tuple[Decimal, Decimal, Decimal]:
     """Return (subtotal, total, money paid) from the bill's items and payments."""
 
-    subtotal = sum((item.line_total for item in bill.items.all()), Decimal("0.00"))
+    subtotal = sum(
+        (item.line_total for item in bill.items.all() if item.is_active),
+        Decimal("0.00"),
+    )
     paid_amount = sum(
         (
             payment.amount
@@ -310,6 +317,7 @@ def create_bill_from_orders(
     allocated_order_item_ids = set(
         BillItem.objects.filter(
             partner_id=partner_id,
+            is_active=True,
             order_item_id__in=[order_item.id for order_item in order_items],
             bill__status__in=[
                 Bill.Status.DRAFT,
@@ -1066,3 +1074,291 @@ def cancel_billing_request(billing_request: BillingRequest) -> BillingRequest:
         billing_request.processed_at = timezone.now()
         billing_request.save(update_fields=["status", "processed_at", "updated_at"])
     return billing_request
+
+
+# --- Bill corrections (B3.2 part A, PQ-028) ---------------------------------------
+#
+# Lock order: Bill -> BillItem -> GuestProfile (void with bonuses) -> Order
+# (cancel_order). Every change is recorded as an append-only BillAdjustment.
+
+
+def user_can_adjust_bills(user, partner_id) -> bool:
+    """Return whether ``user`` may change or void bills of ``partner_id``.
+
+    The venue owner always may; other staff only when the owner granted
+    ``EmployeeProfile.can_adjust_bills``.
+    """
+
+    if user is None or not getattr(user, "is_active", False):
+        return False
+    if user.is_superuser:
+        return True
+    if str(user.partner_id) != str(partner_id):
+        return False
+    if user.role == User.Role.OWNER:
+        return True
+    if AdminAccessProfile.objects.filter(
+        user=user,
+        partner_id=partner_id,
+        is_partner_owner=True,
+        can_access_admin=True,
+        is_active=True,
+    ).exists():
+        return True
+    return EmployeeProfile.objects.filter(
+        user=user,
+        partner_id=partner_id,
+        is_active=True,
+        can_adjust_bills=True,
+    ).exists()
+
+
+def _validate_adjustment_reason(reason_code: str) -> None:
+    if reason_code not in BillAdjustment.ReasonCode.values:
+        raise BillingServiceError("Укажите причину изменения счёта.")
+
+
+def _lock_bill_for_change(bill: Bill, actor) -> Bill:
+    try:
+        locked_bill = Bill.objects.select_for_update().get(
+            id=bill.id,
+            partner_id=bill.partner_id,
+        )
+    except Bill.DoesNotExist as exc:
+        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
+    if not user_can_adjust_bills(actor, locked_bill.partner_id):
+        raise BillingServiceError("Нет права изменять счета. Его выдаёт владелец заведения.")
+    if locked_bill.status == Bill.Status.PAID:
+        raise BillingServiceError("Оплаченный счёт изменить нельзя.")
+    if locked_bill.status == Bill.Status.CANCELED:
+        raise BillingServiceError("Счёт уже аннулирован.")
+    return locked_bill
+
+
+def _release_bill_lines(*, bill: Bill, items: list[BillItem], actor) -> None:
+    now = timezone.now()
+    for item in items:
+        item.is_active = False
+        item.removed_at = now
+        item.removed_by = actor
+        item.updated_at = now
+    BillItem.objects.bulk_update(items, ["is_active", "removed_at", "removed_by", "updated_at"])
+    affected_order_ids = {item.order_id for item in items}
+    still_billed = set(
+        BillItem.objects.filter(
+            bill_id=bill.id,
+            is_active=True,
+            order_id__in=affected_order_ids,
+        ).values_list("order_id", flat=True)
+    )
+    BillOrder.objects.filter(
+        bill_id=bill.id,
+        order_id__in=affected_order_ids - still_billed,
+    ).delete()
+
+
+@transaction.atomic
+def remove_bill_lines(
+    *,
+    bill: Bill,
+    order_item_ids: list,
+    actor,
+    reason_code: str,
+    reason_text: str = "",
+    kind: str = BillAdjustment.Kind.REMOVE_LINE,
+) -> BillAdjustment:
+    """Remove lines from an unpaid bill; the total may not drop below the paid amount."""
+
+    _validate_adjustment_reason(reason_code)
+    bill = _lock_bill_for_change(bill, actor)
+    if bill.bonus_spent_amount > 0:
+        raise BillingServiceError(
+            "По счёту применены бонусы: его нельзя менять по позициям, только аннулировать."
+        )
+
+    requested_ids = list(dict.fromkeys(str(item_id) for item_id in order_item_ids))
+    if not requested_ids:
+        raise BillingServiceError("Выберите позиции, которые нужно убрать из счёта.")
+    items = list(
+        BillItem.objects.select_for_update()
+        .filter(
+            partner_id=bill.partner_id,
+            bill_id=bill.id,
+            is_active=True,
+            order_item_id__in=requested_ids,
+        )
+        .order_by("id")
+    )
+    if len(items) != len(requested_ids):
+        raise BillingServiceError("Часть позиций не найдена среди активных позиций счёта.")
+
+    bill = Bill.objects.prefetch_related("items", "payments").get(id=bill.id)
+    _subtotal, total_before, paid_amount = _compute_bill_totals(bill)
+    removed_total = sum((item.line_total for item in items), Decimal("0.00"))
+    total_after = max(Decimal("0.00"), total_before - removed_total).quantize(Decimal("0.01"))
+    if total_after < paid_amount:
+        raise BillingServiceError(
+            f"Нельзя уменьшить счёт ниже уже оплаченной суммы ({paid_amount} грн)."
+        )
+
+    _release_bill_lines(bill=bill, items=items, actor=actor)
+    bill = Bill.objects.prefetch_related("items", "payments", "bill_orders").get(id=bill.id)
+    recalculate_bill_totals(bill)
+    adjustment = BillAdjustment.objects.create(
+        partner_id=bill.partner_id,
+        bill=bill,
+        kind=kind,
+        actor=actor,
+        reason_code=reason_code,
+        reason_text=reason_text[:255],
+        total_before=total_before,
+        total_after=bill.total_amount,
+        payload={
+            "order_item_ids": requested_ids,
+            "order_ids": sorted({str(item.order_id) for item in items}),
+        },
+    )
+
+    if bill.paid_amount > 0 and bill.paid_amount == bill.total_amount:
+        # The remaining lines are already covered by money payments.
+        bill.status = Bill.Status.PAID
+        bill.closed_at = timezone.now()
+        bill.save(update_fields=["status", "closed_at", "updated_at"])
+        _process_post_payment_updates(bill)
+    return adjustment
+
+
+@transaction.atomic
+def void_bill(*, bill: Bill, actor, reason_code: str, reason_text: str = "") -> BillAdjustment:
+    """Void an unpaid bill, release its orders and return applied bonuses."""
+
+    _validate_adjustment_reason(reason_code)
+    bill = _lock_bill_for_change(bill, actor)
+    bill = Bill.objects.prefetch_related("items", "payments").get(id=bill.id)
+    _subtotal, total_before, paid_amount = _compute_bill_totals(bill)
+    if paid_amount > 0:
+        raise BillingServiceError("По счёту уже есть оплата деньгами — аннулировать его нельзя.")
+
+    items = list(
+        BillItem.objects.select_for_update()
+        .filter(partner_id=bill.partner_id, bill_id=bill.id, is_active=True)
+        .order_by("id")
+    )
+    bonus_returned = Decimal(bill.bonus_spent_amount).quantize(Decimal("0.01"))
+    if bonus_returned > 0:
+        _return_bill_bonuses(bill=bill, amount=bonus_returned, actor=actor)
+
+    _release_bill_lines(bill=bill, items=items, actor=actor)
+    bill.status = Bill.Status.CANCELED
+    bill.closed_at = timezone.now()
+    bill.save(update_fields=["status", "closed_at", "updated_at"])
+
+    reopened_requests = list(
+        BillingRequest.objects.select_for_update()
+        .filter(
+            partner_id=bill.partner_id,
+            bill_id=bill.id,
+            status__in=[BillingRequest.Status.OPEN, BillingRequest.Status.AUTO_PREPARED],
+        )
+        .order_by("id")
+    )
+    for billing_request in reopened_requests:
+        billing_request.status = BillingRequest.Status.OPEN
+        billing_request.bill = None
+        billing_request.note = f"Счёт #{bill.public_id} аннулирован."
+        billing_request.save(update_fields=["status", "bill", "note", "updated_at"])
+
+    return BillAdjustment.objects.create(
+        partner_id=bill.partner_id,
+        bill=bill,
+        kind=BillAdjustment.Kind.VOID,
+        actor=actor,
+        reason_code=reason_code,
+        reason_text=reason_text[:255],
+        total_before=total_before,
+        total_after=Decimal("0.00"),
+        payload={
+            "order_item_ids": [str(item.order_item_id) for item in items],
+            "order_ids": sorted({str(item.order_id) for item in items}),
+            "bonus_returned": str(bonus_returned),
+            "reopened_request_ids": [str(request.id) for request in reopened_requests],
+        },
+    )
+
+
+def _return_bill_bonuses(*, bill: Bill, amount: Decimal, actor) -> None:
+    if bill.primary_guest_id is None:
+        raise BillingServiceError("У счёта с бонусами нет гостя — вернуть бонусы некому.")
+    guest = GuestProfile.objects.select_for_update().get(
+        id=bill.primary_guest_id,
+        partner_id=bill.partner_id,
+    )
+    try:
+        assert_bonus_balance_reconciled(guest)
+    except BonusServiceError as exc:
+        raise BillingServiceError(str(exc)) from exc
+    actor_label = getattr(actor, "username", "")
+    BonusTransaction.objects.create(
+        partner_id=bill.partner_id,
+        guest=guest,
+        bill=bill,
+        transaction_type=BonusTransaction.TransactionType.REVERSAL,
+        amount=amount,
+        source_type="bill_void",
+        source_id=str(bill.id),
+        idempotency_key=f"bill:{bill.id}:redemption_reversal",
+        comment=(
+            f"Bill #{bill.public_id} voided, bonuses returned"
+            f"{f' by {actor_label}' if actor_label else ''}."
+        ),
+    )
+    sync_bonus_balance_from_ledger(guest)
+
+
+@transaction.atomic
+def cancel_order(
+    *,
+    order: Order,
+    actor=None,
+    reason_code: str = "",
+    reason_text: str = "",
+    note: str = "",
+) -> Order:
+    """Cancel an order; if it is in an open bill, remove its lines first.
+
+    Removing the lines of a billed order is a bill change: it needs the bill
+    permission and a reason. Orders in a paid bill cannot be cancelled.
+    """
+
+    active_items = list(
+        BillItem.objects.filter(
+            partner_id=order.partner_id,
+            order_id=order.id,
+            is_active=True,
+        ).select_related("bill")
+    )
+    bills = {item.bill_id: item.bill for item in active_items}
+    for bill in sorted(bills.values(), key=lambda value: str(value.id)):
+        if bill.status == Bill.Status.PAID:
+            raise BillingServiceError(
+                f"Заказ уже оплачен в счёте #{bill.public_id}, отменить его нельзя."
+            )
+        if not reason_code:
+            raise BillingServiceError(
+                f"Заказ уже в счёте #{bill.public_id}. Отмените его через карточку счёта "
+                "с указанием причины."
+            )
+        remove_bill_lines(
+            bill=bill,
+            order_item_ids=[item.order_item_id for item in active_items if item.bill_id == bill.id],
+            actor=actor,
+            reason_code=reason_code,
+            reason_text=reason_text,
+            kind=BillAdjustment.Kind.ORDER_CANCELED,
+        )
+    return transition_order_status(
+        order=order,
+        to_status=Order.Status.CANCELED,
+        actor_user=actor,
+        note=note or reason_text,
+    )

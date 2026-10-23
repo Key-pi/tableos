@@ -6,21 +6,24 @@ from unittest import skipUnless
 from django.db import close_old_connections, connection
 from django.test import TransactionTestCase
 
-from apps.billing.models import Bill, BillItem, Payment
+from apps.billing.models import Bill, BillAdjustment, BillItem, Payment
 from apps.billing.services import (
     BillingServiceError,
+    cancel_order,
     create_bill_from_orders,
     pay_bill_with_bonuses,
     record_payment,
+    void_bill,
 )
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import get_bonus_ledger_balance
 from apps.menu.models import MenuCategory, MenuItem
-from apps.orders.services import create_order_from_session
+from apps.orders.models import Order
+from apps.orders.services import OrderFlowError, create_order_from_session
 from apps.partners.models import Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.tables.services import activate_table_session
-from apps.users.models import GuestProfile
+from apps.users.models import GuestProfile, User
 
 
 def _run_concurrently(callables):
@@ -34,7 +37,7 @@ def _run_concurrently(callables):
             barrier.wait(timeout=10)
             try:
                 return fn()
-            except BillingServiceError:
+            except (BillingServiceError, OrderFlowError):
                 return "rejected"
         finally:
             close_old_connections()
@@ -172,3 +175,57 @@ class BillingConcurrencyTests(TransactionTestCase):
         )
         self.assertEqual(accruals.count(), 1)
         self.assertEqual(accruals.get().amount, Decimal("15.00"))
+
+    def test_concurrent_void_and_payment_have_exactly_one_effect(self):
+        owner = User.objects.create_user(
+            username="concurrency_owner",
+            password="pass12345",
+            partner=self.partner,
+            role=User.Role.OWNER,
+        )
+        bill = create_bill_from_orders(
+            partner_id=self.partner.id,
+            order_ids=[str(self._order().id)],
+        )
+
+        def _void():
+            void_bill(bill=bill, actor=owner, reason_code=BillAdjustment.ReasonCode.OTHER)
+            return "voided"
+
+        def _pay():
+            record_payment(bill=bill, amount=bill.total_amount, method=Payment.Method.CASH)
+            return "paid"
+
+        results = _run_concurrently([_void, _pay])
+
+        bill.refresh_from_db()
+        self.assertEqual(results.count("rejected"), 1, results)
+        if "paid" in results:
+            self.assertEqual(bill.status, Bill.Status.PAID)
+            self.assertFalse(BillAdjustment.objects.filter(bill=bill).exists())
+        else:
+            self.assertEqual(bill.status, Bill.Status.CANCELED)
+            self.assertFalse(Payment.objects.filter(bill=bill).exists())
+
+    def test_concurrent_cancel_and_billing_never_leave_a_cancelled_order_billed(self):
+        order = self._order()
+
+        def _bill():
+            create_bill_from_orders(partner_id=self.partner.id, order_ids=[str(order.id)])
+            return "billed"
+
+        def _cancel():
+            cancel_order(order=order)
+            return "cancelled"
+
+        results = _run_concurrently([_bill, _cancel])
+
+        order.refresh_from_db()
+        active_lines = BillItem.objects.filter(order=order, is_active=True).exists()
+        self.assertEqual(results.count("rejected"), 1, results)
+        if "billed" in results:
+            self.assertTrue(active_lines)
+            self.assertNotEqual(order.status, Order.Status.CANCELED)
+        else:
+            self.assertFalse(active_lines)
+            self.assertEqual(order.status, Order.Status.CANCELED)
