@@ -42,6 +42,15 @@ class Bill(PartnerBoundModel):
         blank=True,
         related_name="billing_bills",
     )
+    # Bills of a table belong to one table visit (ADR-0007); bills without a
+    # table and bills created before visits existed have none.
+    visit = models.ForeignKey(
+        "tables.TableVisit",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="bills",
+    )
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.SHARED)
     source = models.CharField(max_length=16, choices=Source.choices, default=Source.INTERNAL)

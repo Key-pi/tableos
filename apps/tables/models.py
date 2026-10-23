@@ -41,6 +41,35 @@ class Table(PartnerBoundModel):
         return super().save(*args, **kwargs)
 
 
+class TableVisit(PartnerBoundModel):
+    """One party sitting at a table: groups guest sessions and scopes billing (ADR-0007)."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        CLOSED = "closed", "Closed"
+
+    table = models.ForeignKey(Table, on_delete=models.CASCADE, related_name="visits")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    started_at = models.DateTimeField(auto_now_add=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="closed_table_visits",
+    )
+
+    class Meta:
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["partner", "table", "status"], name="table_visit_lookup_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.partner.name} / table {self.table.number} / visit {self.status}"
+
+
 class TableSession(PartnerBoundModel):
     """Active or historical guest session created after scanning a table QR code."""
 
@@ -55,6 +84,14 @@ class TableSession(PartnerBoundModel):
         related_name="table_sessions",
     )
     table = models.ForeignKey(Table, on_delete=models.CASCADE, related_name="sessions")
+    # Historical sessions closed before table visits existed have no visit.
+    visit = models.ForeignKey(
+        TableVisit,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="sessions",
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     closed_at = models.DateTimeField(null=True, blank=True)
