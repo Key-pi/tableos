@@ -67,11 +67,12 @@ class OrderAdmin(ScopedAdminMixin):
         "table",
         "guest",
         "assigned_employee",
+        "channel",
         "status",
         "payment_method",
         "total_amount",
     )
-    list_filter = ("partner", "status", "payment_method")
+    list_filter = ("partner", "channel", "status", "payment_method")
     search_fields = ("public_id", "guest__telegram_account__username", "partner__name")
     readonly_fields = (
         "public_id",
@@ -80,6 +81,8 @@ class OrderAdmin(ScopedAdminMixin):
         "guest",
         "table",
         "table_session",
+        "channel",
+        "pickup_at",
         "assigned_employee",
         "status",
         "payment_method",

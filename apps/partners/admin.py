@@ -1,9 +1,25 @@
 from django.contrib import admin
 
 from apps.partners.forms import BotInstanceAdminForm
-from apps.partners.models import BotInstance, Partner, PartnerBotSettings
+from apps.partners.models import BotInstance, OpeningHours, Partner, PartnerBotSettings
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
+
+
+class OpeningHoursInline(admin.TabularInline):
+    """Venue hours in the venue timezone; closing before opening = past midnight.
+
+    No rows means always open. Pickup orders are accepted only within hours.
+    """
+
+    model = OpeningHours
+    extra = 0
+    fields = ("weekday", "opens_at", "closes_at")
+    verbose_name = "Интервал работы"
+    verbose_name_plural = (
+        "Часы работы (время заведения; закрытие раньше открытия — после полуночи; "
+        "пусто — всегда открыто)"
+    )
 
 
 class PartnerBotSettingsInline(admin.StackedInline):
@@ -34,6 +50,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                     "module_tables_enabled",
                     "module_delivery_enabled",
                     "module_pickup_enabled",
+                    "pickup_payment_details",
                 ),
             },
         ),
@@ -138,7 +155,7 @@ class PartnerAdmin(ScopedAdminMixin):
     list_filter = ("status", "timezone")
     search_fields = ("name", "slug", "contact_phone")
     prepopulated_fields = {"slug": ("name",)}
-    inlines = [PartnerBotSettingsInline]
+    inlines = [PartnerBotSettingsInline, OpeningHoursInline]
 
     def get_list_display(self, request):
         if request.user.is_superuser:

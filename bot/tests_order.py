@@ -33,6 +33,8 @@ class CheckoutReplyButtonTests(SimpleTestCase):
             patch("bot.handlers.order.resolve_guest_navigation_state", return_value=navigation),
             patch("bot.handlers.order.build_main_keyboard", return_value=None),
             patch("bot.handlers.order.checkout_active_cart_for_telegram_user", checkout),
+            # A table checkout: no channel choice (pickup is covered in tests_pickup).
+            patch("bot.handlers.order._route_checkout", AsyncMock(return_value=False)),
         ):
             async_to_sync(checkout_handler)(message, bot)
         return checkout

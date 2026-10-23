@@ -19,6 +19,12 @@ from apps.analytics.services import (
     build_daily_walk_in_sales_page,
 )
 from apps.billing.models import Bill, BillAdjustment, BillingRequest, BillItem, Payment
+from apps.billing.pickup import (
+    PickupError,
+    confirm_pickup_payment,
+    pickup_awaits_payment,
+    reject_pickup_payment,
+)
 from apps.billing.repositories import (
     BillingOperationsRepository,
     BillingRequestRepository,
@@ -65,6 +71,7 @@ from apps.orders.services import (
     get_available_staff_actions,
     is_order_paid,
     is_order_received,
+    pickup_time_label,
     transition_order_status,
 )
 from apps.tables.models import Table, TableSession, TableVisit
@@ -87,6 +94,7 @@ from bot.keyboards.staff import (
     build_staff_notifications_keyboard,
     build_staff_order_actions_keyboard,
     build_staff_orders_overview_keyboard,
+    build_staff_pickup_reject_confirm_keyboard,
     build_staff_report_section_keyboard,
     build_staff_report_summary_keyboard,
     build_staff_report_table_detail_keyboard,
@@ -149,12 +157,33 @@ def _employee_label(employee: EmployeeProfile | None) -> str:
 
 
 def _order_context_label(order: Order) -> str:
+    if order.channel == Order.Channel.PICKUP:
+        phone = order.guest.phone or "не указан"
+        return f"Самовывоз: {pickup_time_label(order)}\nТелефон: {escape_html(phone)}"
     if order.table_id is not None:
         return f"Стол: #{order.table.number}"
     return "Сценарий: заказ без привязки к столу"
 
 
+def _order_actions_keyboard(order: Order):
+    return build_staff_order_actions_keyboard(
+        order_public_id=order.public_id,
+        available_statuses=get_available_staff_actions(order.status),
+        pickup_payment_pending=pickup_awaits_payment(order),
+    )
+
+
+def _order_payment_label(order: Order) -> str:
+    if pickup_awaits_payment(order):
+        to_transfer = order.total_amount - order.bonus_spent
+        bonus_note = f" (ещё {order.bonus_spent} бонусами)" if order.bonus_spent else ""
+        return f"ждёт подтверждения перевода {to_transfer} грн{bonus_note}"
+    return "Оплачен" if is_order_paid(order) else "Не оплачен"
+
+
 def _order_short_context_label(order: Order) -> str:
+    if order.channel == Order.Channel.PICKUP:
+        return "Самовывоз"
     if order.table_id is not None:
         return f"T{order.table.number}"
     return "Вне стола"
@@ -167,7 +196,7 @@ def _render_order_card(order: Order) -> str:
     guest_label = order.guest.telegram_account.username or order.guest.telegram_account.telegram_id
     comment_text = order.comment or "Без комментария"
     assignee_label = _employee_label(order.assigned_employee) or "Пока не назначен"
-    payment_label = "Оплачен" if is_order_paid(order) else "Не оплачен"
+    payment_label = _order_payment_label(order)
     received_label = "Получен" if is_order_received(order) else "Не получен"
     return (
         f"<b>Заказ #{order.public_id}</b>\n"
@@ -1314,10 +1343,7 @@ async def staff_order_open_callback_handler(callback: CallbackQuery, bot: Bot) -
 
     await callback.message.answer(
         _render_order_card(order),
-        reply_markup=build_staff_order_actions_keyboard(
-            order_public_id=order.public_id,
-            available_statuses=get_available_staff_actions(order.status),
-        ),
+        reply_markup=_order_actions_keyboard(order),
     )
     await callback.answer("Открываю заказ")
 
@@ -1734,10 +1760,7 @@ async def staff_order_status_callback_handler(callback: CallbackQuery, bot: Bot)
         await _safe_edit_message_text(
             callback.message,
             _render_order_card(refreshed_order),
-            reply_markup=build_staff_order_actions_keyboard(
-                order_public_id=refreshed_order.public_id,
-                available_statuses=get_available_staff_actions(refreshed_order.status),
-            ),
+            reply_markup=_order_actions_keyboard(refreshed_order),
         )
         if refreshed_order.status != previous_status:
             await callback.answer("Заказ уже обновлён, показываю актуальный статус")
@@ -1752,10 +1775,7 @@ async def staff_order_status_callback_handler(callback: CallbackQuery, bot: Bot)
     await _safe_edit_message_text(
         callback.message,
         _render_order_card(refreshed_order),
-        reply_markup=build_staff_order_actions_keyboard(
-            order_public_id=refreshed_order.public_id,
-            available_statuses=get_available_staff_actions(refreshed_order.status),
-        ),
+        reply_markup=_order_actions_keyboard(refreshed_order),
     )
     await callback.answer(f"Статус: {STATUS_LABELS.get(to_status, to_status)}")
 
@@ -1782,12 +1802,70 @@ async def staff_order_refresh_callback_handler(callback: CallbackQuery, bot: Bot
     updated = await _safe_edit_message_text(
         callback.message,
         _render_order_card(order),
-        reply_markup=build_staff_order_actions_keyboard(
-            order_public_id=order.public_id,
-            available_statuses=get_available_staff_actions(order.status),
-        ),
+        reply_markup=_order_actions_keyboard(order),
     )
     await callback.answer("Карточка обновлена" if updated else "Без изменений")
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffpk"))
+async def staff_pickup_payment_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    """Pickup prepayment check: confirm, ask to confirm a rejection, reject."""
+
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_open_orders_allowed(employee)
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    action, _, order_public_id = (callback.data or "").partition(":")
+    if action not in {"staffpkok", "staffpkno", "staffpknoy"} or not order_public_id:
+        await callback.answer("Неизвестное действие.", show_alert=True)
+        return
+    try:
+        order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
+            partner.id,
+            order_public_id,
+        )
+    except Order.DoesNotExist:
+        await callback.answer("Заказ не найден.", show_alert=True)
+        return
+
+    if action == "staffpkno":
+        if not pickup_awaits_payment(order):
+            await callback.answer("Оплата по этому заказу уже обработана.", show_alert=True)
+            return
+        await _safe_edit_message_text(
+            callback.message,
+            _render_order_card(order)
+            + "\n\n<b>Отменить заказ, потому что оплата не поступила?</b> "
+            "Списанные бонусы вернутся гостю, гость получит сообщение.",
+            reply_markup=build_staff_pickup_reject_confirm_keyboard(order.public_id),
+        )
+        await callback.answer()
+        return
+
+    service = confirm_pickup_payment if action == "staffpkok" else reject_pickup_payment
+    try:
+        await sync_to_async(service)(order=order, actor=employee.user)
+    except (PickupError, BillingServiceError, OrderFlowError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    refreshed_order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
+        partner.id,
+        order_public_id,
+    )
+    await _safe_edit_message_text(
+        callback.message,
+        _render_order_card(refreshed_order),
+        reply_markup=_order_actions_keyboard(refreshed_order),
+    )
+    await callback.answer(
+        "Оплата подтверждена, заказ в работе."
+        if action == "staffpkok"
+        else "Заказ отменён: оплата не поступила."
+    )
 
 
 @router.callback_query(lambda c: c.data == "staffnotif:refresh")
@@ -1868,10 +1946,7 @@ async def staff_notification_open_order_callback_handler(
 
     await callback.message.answer(
         _render_order_card(order),
-        reply_markup=build_staff_order_actions_keyboard(
-            order_public_id=order.public_id,
-            available_statuses=get_available_staff_actions(order.status),
-        ),
+        reply_markup=_order_actions_keyboard(order),
     )
     await callback.answer("Открываю заказ")
 
@@ -1908,10 +1983,7 @@ async def staff_notification_accept_order_callback_handler(
         )
         await callback.message.answer(
             _render_order_card(refreshed_order),
-            reply_markup=build_staff_order_actions_keyboard(
-                order_public_id=refreshed_order.public_id,
-                available_statuses=get_available_staff_actions(refreshed_order.status),
-            ),
+            reply_markup=_order_actions_keyboard(refreshed_order),
         )
         await callback.answer("Заказ уже в работе, показываю актуальную карточку")
         return
@@ -1940,10 +2012,7 @@ async def staff_notification_accept_order_callback_handler(
         )
         await callback.message.answer(
             _render_order_card(refreshed_order),
-            reply_markup=build_staff_order_actions_keyboard(
-                order_public_id=refreshed_order.public_id,
-                available_statuses=get_available_staff_actions(refreshed_order.status),
-            ),
+            reply_markup=_order_actions_keyboard(refreshed_order),
         )
         await callback.answer("Заказ уже изменился, показываю актуальную карточку")
         return
@@ -1954,10 +2023,7 @@ async def staff_notification_accept_order_callback_handler(
     )
     await callback.message.answer(
         _render_order_card(refreshed_order),
-        reply_markup=build_staff_order_actions_keyboard(
-            order_public_id=refreshed_order.public_id,
-            available_statuses=get_available_staff_actions(refreshed_order.status),
-        ),
+        reply_markup=_order_actions_keyboard(refreshed_order),
     )
     if updated:
         await _safe_edit_message_text(

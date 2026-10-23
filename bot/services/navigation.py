@@ -76,6 +76,18 @@ def resolve_guest_navigation_state(
         actions = []
         if content.supports_menu():
             actions.append(GuestAction.MENU)
+        has_pickup_cart = False
+        if content.supports_cart() and content.supports_pickup_orders():
+            # Without a table the cart is a pickup cart.
+            actions.append(GuestAction.CART)
+            has_pickup_cart = Cart.objects.filter(
+                partner_id=partner_id,
+                guest__telegram_account__telegram_id=telegram_id,
+                status=Cart.Status.ACTIVE,
+                items__isnull=False,
+            ).exists()
+            if has_pickup_cart:
+                actions.append(GuestAction.CHECKOUT)
         if content.supports_delivery_orders():
             actions.append(GuestAction.DELIVERY)
         if content.supports_pickup_orders():
@@ -87,6 +99,7 @@ def resolve_guest_navigation_state(
         return GuestNavigationState(
             journey=GuestJourney.BROWSE,
             available_actions=tuple(actions),
+            has_active_cart=has_pickup_cart,
         )
 
     has_active_cart = Cart.objects.filter(

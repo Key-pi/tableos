@@ -192,6 +192,7 @@ class StaffOrderRenderingTests(SimpleTestCase):
             (),
             {
                 "public_id": "abcd1234",
+                "channel": Order.Channel.TABLE,
                 "guest": guest,
                 "assigned_employee": assigned_employee,
                 "status": Order.Status.NEW,
@@ -263,6 +264,7 @@ class StaffBillingHelperTests(SimpleTestCase):
             (),
             {
                 "public_id": public_id,
+                "channel": Order.Channel.TABLE,
                 "table": table,
                 "table_id": table_id,
                 "status": status,

@@ -66,6 +66,7 @@ class GuestAndStaffRenderingTests(SimpleTestCase):
     def test_staff_order_card_escapes_items_and_comment(self):
         order = SimpleNamespace(
             public_id="ABCD1234",
+            channel=Order.Channel.TABLE,
             table_id=1,
             table=SimpleNamespace(number=4),
             guest=SimpleNamespace(telegram_account=SimpleNamespace(username="", telegram_id=42)),

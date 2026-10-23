@@ -233,6 +233,8 @@ def place_pickup_order(
             raise PickupError("Бонусы сейчас списать нельзя — проверьте сумму ещё раз.") from exc
         bill = result.bill
     bill.refresh_from_db()
+    if bill.bonus_spent_amount:
+        Order.objects.filter(id=order.id).update(bonus_spent=bill.bonus_spent_amount)
     to_pay = _money(bill.total_amount - bill.paid_amount)
     if bill.status == Bill.Status.PAID:
         to_pay = Decimal("0.00")

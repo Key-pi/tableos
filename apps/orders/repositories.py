@@ -23,6 +23,7 @@ class OrderRepository:
     def by_public_id_for_partner(partner_id, public_id: str):
         return (
             Order.objects.select_related(
+                "partner",
                 "table",
                 "guest",
                 "guest__telegram_account",

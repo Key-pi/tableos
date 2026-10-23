@@ -58,9 +58,13 @@ def _render_menu_category_view(*, partner, content, category, menu_items, sessio
             lines.append("")
 
     if session is None:
-        # Guests may browse categories and positions freely, but ordering
-        # remains locked until a real in-venue table session exists.
-        if content.supports_cart():
+        # Without a table session ordering is possible only as pickup.
+        if content.supports_cart() and content.supports_pickup_orders():
+            lines.append(
+                "Нажмите кнопку с позицией ниже, чтобы добавить её в корзину — "
+                "заказ можно забрать самовывозом."
+            )
+        elif content.supports_cart():
             lines.append(content.menu_requires_session_hint())
     else:
         if content.supports_cart():
@@ -152,7 +156,7 @@ async def _send_menu_view(*, target, bot: Bot, category_id: str | None = None) -
         categories=categories,
         active_category_id=category.id,
         items=menu_items,
-        has_session=session is not None,
+        has_session=session is not None or content.supports_pickup_orders(),
         supports_cart=content.supports_cart(),
     )
     if isinstance(target, CallbackQuery):

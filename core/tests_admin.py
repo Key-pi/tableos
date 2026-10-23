@@ -492,3 +492,24 @@ class BroadcastDeliveryAdminTests(TestCase):
         self.assertFalse(model_admin.has_add_permission(request))
         self.assertFalse(model_admin.has_change_permission(request, self.deliveries[0]))
         self.assertFalse(model_admin.has_delete_permission(request, self.deliveries[0]))
+
+
+class PickupAdminTests(TestCase):
+    """Pickup settings live on the partner card: requisites and opening hours."""
+
+    def test_partner_admin_has_opening_hours_and_requisites(self):
+        from apps.partners.admin import OpeningHoursInline, PartnerAdmin, PartnerBotSettingsInline
+
+        self.assertIn(OpeningHoursInline, PartnerAdmin.inlines)
+        fields = [
+            field
+            for _name, options in PartnerBotSettingsInline.fieldsets
+            for field in options["fields"]
+        ]
+        self.assertIn("pickup_payment_details", fields)
+
+    def test_order_admin_shows_channel_read_only(self):
+        from apps.orders.admin import OrderAdmin
+
+        self.assertIn("channel", OrderAdmin.readonly_fields)
+        self.assertIn("pickup_at", OrderAdmin.readonly_fields)

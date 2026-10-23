@@ -1,8 +1,9 @@
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from asgiref.sync import sync_to_async
 
+from apps.billing.pickup import available_slots, closed_message
 from apps.orders.services import (
     OrderFlowError,
     change_cart_item_quantity_for_telegram_user,
@@ -11,7 +12,9 @@ from apps.orders.services import (
     get_active_cart_for_telegram_user,
     remove_cart_item_for_telegram_user,
 )
+from apps.tables.services import get_active_table_session
 from bot.filters.content import PartnerButtonFilter
+from bot.handlers.pickup import message_of, start_pickup_checkout
 from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.menu import build_cart_keyboard
 from bot.services.content import BotContent
@@ -27,8 +30,13 @@ def _render_cart(cart) -> str:
         return "Корзина пуста."
 
     preview_items = list(cart.items.all()[:6])
+    place = (
+        f"стол #{cart.table_session.table.number}"
+        if cart.table_session is not None
+        else "самовывоз"
+    )
     lines = [
-        f"<b>Корзина</b> • стол #{cart.table_session.table.number}",
+        f"<b>Корзина</b> • {place}",
     ]
     for item in preview_items:
         line_total = item.unit_price * item.quantity
@@ -53,6 +61,43 @@ async def _safe_edit_cart_message(message: Message, text: str, *, reply_markup=N
         if "message is not modified" in str(exc).lower():
             return False
         raise
+
+
+async def _route_checkout(target, bot: Bot, partner, content: BotContent) -> bool:
+    """Choose the ordering channel. Returns True when the step was handled.
+
+    Without a table the only channel is pickup. At a table with pickup on,
+    the guest chooses between the table and pickup.
+    """
+
+    session = None
+    if content.supports_tables():
+        session = await sync_to_async(get_active_table_session)(
+            partner_id=partner.id,
+            telegram_id=target.from_user.id,
+        )
+    if session is None:
+        if content.supports_pickup_orders():
+            await start_pickup_checkout(target, bot)
+            return True
+        return False
+    if not content.supports_pickup_orders():
+        return False
+    await message_of(target).answer(
+        "Как получить заказ?",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=f"🍽 К столу #{session.table.number}",
+                        callback_data="co:table",
+                    ),
+                    InlineKeyboardButton(text="🥡 Самовывоз", callback_data="co:pickup"),
+                ]
+            ]
+        ),
+    )
+    return True
 
 
 def _ensure_cart_enabled(content: BotContent) -> None:
@@ -107,10 +152,23 @@ async def delivery_handler(message: Message, bot: Bot) -> None:
 async def pickup_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
-    if not content.supports_pickup_orders():
-        text = "Самовывоз сейчас отключён для этого бота."
+    if content.supports_pickup_orders():
+        cart = await sync_to_async(get_active_cart_for_telegram_user)(
+            partner_id=partner.id,
+            telegram_id=message.from_user.id,
+        )
+        if cart is not None and cart.items.all():
+            await start_pickup_checkout(message, bot)
+            return
+        if await sync_to_async(available_slots)(partner):
+            text = (
+                f"Соберите заказ в меню («{escape_html(content.button_menu_label)}»), "
+                "затем в корзине нажмите «Оформить» — выберете время и оплатите переводом."
+            )
+        else:
+            text = await sync_to_async(closed_message)(partner)
     else:
-        text = "Сценарий самовывоза включён в настройках и будет доступен в следующем шаге."
+        text = "Самовывоз сейчас отключён для этого бота."
     await _send_navigation_keyboard_message(
         message=message,
         partner_id=partner.id,
@@ -170,6 +228,8 @@ async def checkout_handler(message: Message, bot: Bot) -> None:
             str(exc),
             reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
         )
+        return
+    if await _route_checkout(message, bot, partner, content):
         return
     try:
         order = await sync_to_async(checkout_active_cart_for_telegram_user)(
@@ -282,6 +342,31 @@ async def cart_clear_callback(callback: CallbackQuery, bot: Bot) -> None:
 async def cart_checkout_callback(callback: CallbackQuery, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
+    try:
+        _ensure_cart_enabled(content)
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    if await _route_checkout(callback, bot, partner, content):
+        await callback.answer()
+        return
+    await _checkout_at_table(callback, partner, content)
+
+
+@router.callback_query(F.data == "co:pickup")
+async def checkout_pickup_choice_callback(callback: CallbackQuery, bot: Bot) -> None:
+    await start_pickup_checkout(callback, bot)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "co:table")
+async def checkout_table_choice_callback(callback: CallbackQuery, bot: Bot) -> None:
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    await _checkout_at_table(callback, partner, content)
+
+
+async def _checkout_at_table(callback: CallbackQuery, partner, content) -> None:
     try:
         _ensure_cart_enabled(content)
         order = await sync_to_async(checkout_active_cart_for_telegram_user)(
