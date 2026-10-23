@@ -1,5 +1,9 @@
 """Guest checkout for remote channels (pickup, delivery): phone, address
-(delivery), time, bonuses, transfer details, "I paid" (ADR-0009, PQ-032).
+(delivery), time, bonuses, how to pay, summary (ADR-0009, PQ-032, PQ-033).
+
+Payment options are the module's settings: transfer in advance (requisites,
+"I paid") and/or on receipt; with both on, the guest picks one
+(``rc:<c>:m:<slot>:<bonus>:<t|r>``).
 
 The flow is stateless: every step carries the channel and its choices in
 ``rc:<channel>:…`` callback data, so a bot restart does not lose it. The
@@ -31,6 +35,8 @@ from asgiref.sync import sync_to_async
 
 from apps.billing.remote_orders import (
     CHANNEL_TITLES,
+    ON_RECEIPT,
+    PREPAID,
     RemoteOrderError,
     available_slots,
     closed_message,
@@ -64,6 +70,15 @@ ADDRESS_PROMPT = "🏠 Адрес доставки"
 # One-letter channel codes keep callback_data short.
 CHANNEL_CODES = {"p": Order.Channel.PICKUP, "d": Order.Channel.DELIVERY}
 CODE_OF = {channel: code for code, channel in CHANNEL_CODES.items()}
+# Payment option codes in callback data; a summary sent before PQ-033 has none
+# and means transfer.
+PAYMENT_CODES = {"t": PREPAID, "r": ON_RECEIPT}
+PAYMENT_CODE_OF = {mode: code for code, mode in PAYMENT_CODES.items()}
+# Where the guest pays on receipt.
+ON_RECEIPT_WHERE = {
+    Order.Channel.PICKUP: "на месте",
+    Order.Channel.DELIVERY: "курьеру",
+}
 TIME_QUESTIONS = {
     Order.Channel.PICKUP: "Когда заберёте заказ?",
     Order.Channel.DELIVERY: "Когда доставить?",
@@ -246,7 +261,7 @@ async def _send_time_step(target, partner, channel: str, *, edit: bool = False) 
 
 
 def _summary(
-    quote, channel: str, slot: str, use_bonuses: bool
+    quote, channel: str, slot: str, use_bonuses: bool, payment: str = PREPAID
 ) -> tuple[str, InlineKeyboardMarkup]:
     lines = [f"<b>{_title(channel)}</b>", f"Время: {SLOT_LABELS[slot].lower()}"]
     if channel == Order.Channel.DELIVERY:
@@ -258,7 +273,15 @@ def _summary(
     lines.append(f"Сумма заказа: {quote.total} грн")
     if quote.bonus_to_spend:
         lines.append(f"Бонусами: −{quote.bonus_to_spend} грн")
-    if quote.to_pay > 0:
+    if quote.to_pay > 0 and payment == ON_RECEIPT:
+        lines.extend(
+            [
+                f"<b>К оплате при получении: {quote.to_pay} грн</b>",
+                f"Оплатите {ON_RECEIPT_WHERE[channel]} наличными или картой.",
+            ]
+        )
+        button_text = "✅ Оформить заказ"
+    elif quote.to_pay > 0:
         lines.extend(
             [
                 f"<b>К оплате переводом: {quote.to_pay} грн</b>",
@@ -276,7 +299,7 @@ def _summary(
         button_text = "✅ Оформить"
     callback_data = (
         f"rc:{CODE_OF[channel]}:p:{slot}:{int(use_bonuses)}:"
-        f"{_cents(quote.total)}:{_cents(quote.to_pay)}"
+        f"{_cents(quote.total)}:{_cents(quote.to_pay)}:{PAYMENT_CODE_OF[payment]}"
     )
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -288,16 +311,57 @@ def _summary(
 
 
 async def _send_summary(
-    callback: CallbackQuery, partner, channel: str, slot: str, use_bonuses: bool
+    callback: CallbackQuery,
+    partner,
+    channel: str,
+    slot: str,
+    use_bonuses: bool,
+    payment: str | None = None,
 ) -> None:
+    """The summary; with several payment options and none chosen, ask first."""
+
     quote = await sync_to_async(get_remote_quote)(
         partner_id=partner.id,
         telegram_id=callback.from_user.id,
         use_bonuses=use_bonuses,
         channel=channel,
     )
-    text, keyboard = _summary(quote, channel, slot, use_bonuses)
+    if payment is None:
+        if len(quote.payment_modes) > 1 and quote.to_pay > 0:
+            await _send_payment_step(callback, channel, slot, use_bonuses, quote.to_pay)
+            return
+        payment = quote.payment_modes[0]
+    elif payment not in quote.payment_modes:
+        raise RemoteOrderError("Этот способ оплаты сейчас недоступен — выберите другой.")
+    text, keyboard = _summary(quote, channel, slot, use_bonuses, payment)
     await _reply(callback, text, reply_markup=keyboard, edit=True)
+
+
+async def _send_payment_step(
+    callback: CallbackQuery, channel: str, slot: str, use_bonuses: bool, to_pay
+) -> None:
+    prefix = f"rc:{CODE_OF[channel]}:m:{slot}:{int(use_bonuses)}"
+    await _reply(
+        callback,
+        f"<b>{_title(channel)}</b>\nК оплате {to_pay} грн. Как оплатите?",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="💳 Переводом сейчас", callback_data=f"{prefix}:t"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=f"💵 При получении ({ON_RECEIPT_WHERE[channel]})",
+                        callback_data=f"{prefix}:r",
+                    )
+                ],
+                _cancel_row(),
+            ]
+        ),
+        edit=True,
+    )
 
 
 @router.message(F.contact)
@@ -460,8 +524,25 @@ async def checkout_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
             await _send_summary(callback, partner, channel, parts[2], parts[3] == "1")
             await callback.answer()
             return
-        if action == "p" and len(parts) == 6 and parts[2] in SLOT_LABELS:
+        if (
+            action == "m"
+            and len(parts) == 5
+            and parts[2] in SLOT_LABELS
+            and parts[4] in PAYMENT_CODES
+        ):
+            await _send_summary(
+                callback, partner, channel, parts[2], parts[3] == "1", PAYMENT_CODES[parts[4]]
+            )
+            await callback.answer()
+            return
+        if (
+            action == "p"
+            and len(parts) in (6, 7)
+            and parts[2] in SLOT_LABELS
+            and (len(parts) == 6 or parts[6] in PAYMENT_CODES)
+        ):
             slot, use_bonuses = parts[2], parts[3] == "1"
+            payment = PAYMENT_CODES[parts[6]] if len(parts) == 7 else PREPAID
             order = await sync_to_async(place_remote_order)(
                 partner_id=partner.id,
                 telegram_id=callback.from_user.id,
@@ -470,14 +551,20 @@ async def checkout_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
                 expected_total=_from_cents(parts[4]),
                 expected_to_pay=_from_cents(parts[5]),
                 channel=channel,
+                payment=payment,
             )
-            await _send_placed(callback, partner, content, order, paid=parts[5] == "0")
+            await _send_placed(
+                callback, partner, content, order, to_pay=_from_cents(parts[5])
+            )
             return
     except RemoteOrderError as exc:
         text = str(exc)
         if "изменилась" in text and action == "p":
+            payment = PAYMENT_CODES.get(parts[6]) if len(parts) == 7 else PREPAID
             try:
-                await _send_summary(callback, partner, channel, parts[2], parts[3] == "1")
+                await _send_summary(
+                    callback, partner, channel, parts[2], parts[3] == "1", payment
+                )
             except RemoteOrderError:
                 pass
         await callback.answer(text, show_alert=True)
@@ -486,12 +573,17 @@ async def checkout_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer("Это действие устарело. Откройте корзину ещё раз.", show_alert=True)
 
 
-async def _send_placed(callback: CallbackQuery, partner, content, order, *, paid: bool) -> None:
+async def _send_placed(callback: CallbackQuery, partner, content, order, *, to_pay) -> None:
     time_label = await sync_to_async(requested_time_label)(order)
     title = CHANNEL_TITLES[order.channel]
     if order.channel == Order.Channel.DELIVERY:
         time_label = f"{time_label}, {escape_html(order.delivery_address)}"
-    if paid:
+    if to_pay > 0 and order.payment_timing == ON_RECEIPT:
+        text = (
+            f"Заказ #{order.public_id} ({title}) оформлен ({time_label}). "
+            f"Оплата при получении: {to_pay} грн. Пришлём сообщение, когда начнём готовить."
+        )
+    elif to_pay <= 0:
         text = (
             f"Заказ #{order.public_id} ({title}) оформлен и оплачен бонусами "
             f"({time_label}). Заведение скоро возьмёт его в работу."

@@ -113,6 +113,15 @@ VENUES = (
 # The owner whose Telegram is replaced by DEMO_TELEGRAM_ID in each venue.
 TESTER_OWNER_USERNAME = {HOOKAH_SLUG: "smoke_owner_1", CAFE_SLUG: "cafe_owner_1"}
 
+def _payment_options(settings: PartnerBotSettings, module: str) -> str:
+    options = []
+    if getattr(settings, f"{module}_pay_transfer"):
+        options.append("переводом заранее")
+    if getattr(settings, f"{module}_pay_on_receipt"):
+        options.append("при получении")
+    return " или ".join(options) or "не настроена"
+
+
 TRANSFER_DETAILS = (
     "Карта 4149 0000 0000 0000 (демо), получатель ФОП Демо Демо. "
     "В комментарии к переводу укажите номер заказа."
@@ -344,6 +353,12 @@ class Command(BaseCommand):
         settings.delivery_free_from = Decimal("800.00")
         settings.delivery_min_order = Decimal("200.00")
         settings.module_pickup_enabled = True
+        # Payment options (PQ-033): Riverstone offers both, so the guest is
+        # asked how to pay; Night Owl takes only transfers in advance.
+        settings.pickup_pay_transfer = True
+        settings.pickup_pay_on_receipt = not is_hookah
+        settings.delivery_pay_transfer = True
+        settings.delivery_pay_on_receipt = not is_hookah
         settings.transfer_payment_details = TRANSFER_DETAILS
         settings.button_my_profile = "Мой профиль"
         settings.staff_call_waiter_enabled = True
@@ -509,7 +524,8 @@ class Command(BaseCommand):
                     if hours is not None
                     else "открыто всегда"
                 )
-                out(f"  самовывоз: включён, {hours_text}")
+                payment = _payment_options(pickup, "pickup")
+                out(f"  самовывоз: включён, {hours_text}, оплата: {payment}")
             if pickup is not None and pickup.module_delivery_enabled:
                 fee = pickup.delivery_fee
                 free = pickup.delivery_free_from
@@ -517,6 +533,7 @@ class Command(BaseCommand):
                     f"  доставка: включена, {fee:.0f} грн"
                     + (f", бесплатно от {free:.0f} грн" if free is not None else "")
                     + f", минимальный заказ {pickup.delivery_min_order:.0f} грн"
+                    + f", оплата: {_payment_options(pickup, 'delivery')}"
                 )
             if venue["tester"]:
                 out(f"  ваш Telegram: {venue['tester']}")

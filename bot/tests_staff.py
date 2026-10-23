@@ -193,6 +193,7 @@ class StaffOrderRenderingTests(SimpleTestCase):
             {
                 "public_id": "abcd1234",
                 "channel": Order.Channel.TABLE,
+                "payment_timing": "",
                 "guest": guest,
                 "assigned_employee": assigned_employee,
                 "status": Order.Status.NEW,

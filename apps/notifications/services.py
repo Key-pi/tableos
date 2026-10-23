@@ -304,10 +304,11 @@ def _order_delivery_context_label(order) -> str:
 
 
 def _remote_status_note(order, to_status: str) -> str:
-    if order.channel not in order.PREPAID_CHANNELS:
+    if order.channel not in order.REMOTE_CHANNELS:
         return ""
+    prepaid = order.payment_timing == order.PaymentTiming.PREPAID
     if to_status == order.Status.ACCEPTED:
-        return "Оплата подтверждена — готовим ваш заказ."
+        return "Оплата подтверждена — готовим ваш заказ." if prepaid else "Заказ принят — готовим."
     if to_status == order.Status.READY and order.channel == order.Channel.PICKUP:
         return "Заказ готов — можно забирать."
     if order.channel == order.Channel.DELIVERY:
@@ -317,7 +318,7 @@ def _remote_status_note(order, to_status: str) -> str:
             return "Заказ в пути — курьер уже едет к вам."
         if to_status == order.Status.COMPLETED:
             return "Заказ доставлен. Приятного аппетита!"
-    if to_status == order.Status.CANCELED and order.paid_at is None:
+    if to_status == order.Status.CANCELED and prepaid and order.paid_at is None:
         return (
             "Оплата не поступила, заказ отменён. Если вы переводили деньги, "
             "свяжитесь с заведением."

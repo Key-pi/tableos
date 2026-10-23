@@ -73,7 +73,7 @@ CI и манифестов развёртывания в репозитории 
 | Пользователи и личность | `User`, глобальный `TelegramAccount`, партнёрский `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile` | Одна Telegram-личность → один профиль гостя на партнёра. Телефон гостя хранится в профиле. |
 | Столы | `Table`, `TableSession`, `TableVisit` | `tables/services.py` | Активация по QR, визиты стола, закрытие только после расчёта. `timed_out` и `expires_at` есть, но ничто их не выставляет. |
 | Меню | `MenuCategory`, `MenuItem` | чтение — `menu/repositories.py`; запись — Admin | Цена должна быть положительной (`menu_item_price_positive`). Отметки каналов: `available_at_table`, `available_for_pickup`, `available_for_delivery`; `MenuItem.is_sold_in(channel)`. |
-| Заказы | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py`; удалённые каналы с предоплатой — в `billing/remote_orders.py` | Корзина, создание заказа по каналу (стол / самовывоз), машина статусов, подтверждение получения гостем. `Order.channel`, `Order.requested_for`, `Order.PREPAID_CHANNELS`. |
+| Заказы | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py`; удалённые каналы с предоплатой — в `billing/remote_orders.py` | Корзина, создание заказа по каналу (стол / самовывоз), машина статусов, подтверждение получения гостем. `Order.channel`, `Order.requested_for`, `Order.payment_timing`, `Order.REMOTE_CHANNELS` (старое имя `PREPAID_CHANNELS` — синоним). |
 | Счета | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment`, `BillAdjustment` | ядро — `billing/services.py`; стол — `billing/table_bills.py`; удалённые каналы — `billing/remote_orders.py` | Создание и расширение счёта, оплата деньгами и бонусами, изменения и аннулирование, действия после оплаты. |
 | Бонусы | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Баланс на основе журнала с проверкой сверки; быстрая продажа. |
 | Сотрудники | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | Запись — через Admin. |
@@ -209,8 +209,17 @@ apps.notifications.tasks` — цикл, разорванный только им
    `PartnerBotSettings.transfer_payment_details`. Персонал (владелец,
    менеджер, кассир) подтверждает (оплата `transfer`, статус `accepted`) или
    отклоняет (счёт аннулируется с причиной `payment_not_received`, бонусы
-   возвращаются, статус `canceled`); неоплаченный заказ самовывоза иначе
-   принять нельзя.
+   возвращаются, статус `canceled`); неоплаченный заказ с переводом
+   заранее иначе принять нельзя.
+   **Способы оплаты** (PQ-033, [PAYMENT_OPTIONS.md](PAYMENT_OPTIONS.md)) —
+   настройки модуля: `PartnerBotSettings.<модуль>_pay_transfer` /
+   `<модуль>_pay_on_receipt`; `remote_orders.py:payment_modes_for` отдаёт
+   включённые, гость выбирает, выбор пишется в `Order.payment_timing`
+   (`prepaid` / `on_receipt`). Заказ с оплатой при получении принимается
+   как обычно; персонал отмечает оплату
+   (`record_payment_on_receipt`: `cash` или `terminal`) или отказ гостя
+   (`cancel_unpaid_remote_order`: счёт аннулируется с причиной
+   `guest_refused`, бонусы возвращаются).
    **Доставка** (`Order.channel = delivery`, [DELIVERY.md](DELIVERY.md), PQ-032)
    идёт тем же путём, плюс адрес: текст обязателен
    (`remote_orders.py:save_guest_delivery_address`), геолокация по желанию
@@ -235,7 +244,8 @@ apps.notifications.tasks` — цикл, разорванный только им
 `apps/billing/services.py` (счета из заказов, оплаты, бонусы, изменения,
 аннулирование); расчёт канала «стол» — `apps/billing/table_bills.py` (выбор
 визита, счета стола, запросы счёта гостем, действия после оплаты счёта
-стола); удалённые каналы с предоплатой — `apps/billing/remote_orders.py`.
+стола); удалённые каналы (перевод заранее или оплата при получении) —
+`apps/billing/remote_orders.py`.
 Ядро не импортирует `apps.tables`.
 
 1. Запрос счёта гостем (`create_billing_request_for_telegram_user`) либо
@@ -370,7 +380,7 @@ apps.notifications.tasks` — цикл, разорванный только им
 
 | Понятие | Механизм перехода | Долговечная защита или блокировка сейчас |
 |---|---|---|
-| Статус заказа | `transition_order_status`; `cancel_order`; подтверждение гостем; завершение после оплаты; подтверждение/отклонение перевода (самовывоз) | Перезагрузка под блокировкой; таблица переходов персонала и явное правило подтверждения гостем; отмена заказа с активными строками счёта отклоняется; неоплаченный заказ с предоплатой не принимается |
+| Статус заказа | `transition_order_status`; `cancel_order`; подтверждение гостем; завершение после оплаты; подтверждение/отклонение перевода, оплата при получении и отказ гостя (самовывоз, доставка) | Перезагрузка под блокировкой; таблица переходов персонала и явное правило подтверждения гостем; отмена заказа с активными строками счёта отклоняется; неоплаченный заказ с переводом заранее (`payment_timing = prepaid`) не принимается |
 | Сессия стола | `activate_table_session`, `close_table_session_if_settled`, автозакрытие после оплаты | Частичная уникальность активной сессии на гостя; блокировки; обработчика истечения нет |
 | Визит стола | активация (подсесть/новый/auto), автоматическое закрытие пустого рассчитанного визита, `close_table_visit` | Блокировка строки стола сериализует создание визита и присоединение; блокировка строки визита перед присоединением и закрытием |
 | Корзина | сервисы корзины, оформление, смена способа заказа | Частичная уникальность активной корзины на гостя; блокировка строки корзины |
@@ -387,7 +397,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 390 тестов после доставки, зелёные на SQLite и на
+- 415 тестов после способов оплаты, зелёные на SQLite и на
   PostgreSQL 16. Десять выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

@@ -67,6 +67,7 @@ class GuestAndStaffRenderingTests(SimpleTestCase):
         order = SimpleNamespace(
             public_id="ABCD1234",
             channel=Order.Channel.TABLE,
+            payment_timing="",
             table_id=1,
             table=SimpleNamespace(number=4),
             guest=SimpleNamespace(telegram_account=SimpleNamespace(username="", telegram_id=42)),

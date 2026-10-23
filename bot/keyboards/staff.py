@@ -21,10 +21,27 @@ def build_staff_order_actions_keyboard(
     order_public_id: str,
     available_statuses: list[str],
     transfer_check_pending: bool = False,
+    receipt_payment_pending: bool = False,
     status_labels: dict[str, str] | None = None,
 ) -> InlineKeyboardMarkup | None:
     labels = status_labels or STATUS_LABELS
     keyboard = []
+    if receipt_payment_pending:
+        # Paid on receipt (PQ-033): record the money when the guest pays; a
+        # refusal replaces the plain cancel, so bonuses come back.
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text="💵 Оплачено наличными",
+                    callback_data=f"staffrccash:{order_public_id}",
+                ),
+                InlineKeyboardButton(
+                    text="💳 Оплачено картой",
+                    callback_data=f"staffrccard:{order_public_id}",
+                ),
+            ]
+        )
+        available_statuses = [status for status in available_statuses if status != "canceled"]
     if transfer_check_pending:
         # A prepaid order goes into work only after the transfer is checked.
         keyboard.append(
@@ -47,6 +64,13 @@ def build_staff_order_actions_keyboard(
         )
         for status in available_statuses
     ]
+    if receipt_payment_pending:
+        status_buttons.append(
+            InlineKeyboardButton(
+                text="❌ Гость не забрал",
+                callback_data=f"staffrcno:{order_public_id}",
+            )
+        )
     if status_buttons:
         for index in range(0, len(status_buttons), 2):
             keyboard.append(status_buttons[index:index + 2])
@@ -68,6 +92,25 @@ def build_staff_transfer_reject_confirm_keyboard(order_public_id: str) -> Inline
                 InlineKeyboardButton(
                     text="Да, оплаты нет — отменить заказ",
                     callback_data=f"stafftxnoy:{order_public_id}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Назад",
+                    callback_data=f"stafforderrefresh:{order_public_id}",
+                )
+            ],
+        ]
+    )
+
+
+def build_staff_receipt_refusal_confirm_keyboard(order_public_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Да, отменить заказ",
+                    callback_data=f"staffrcnoy:{order_public_id}",
                 )
             ],
             [

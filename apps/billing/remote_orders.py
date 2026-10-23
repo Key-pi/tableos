@@ -12,17 +12,22 @@ minimum order; the fee is an ordinary order line «Доставка».
 
 Owner decisions (2026-10-23, docs/architecture/PICKUP.md):
 
-- the guest pays in advance by bank transfer to the venue's requisites
-  (``PartnerBotSettings.transfer_payment_details``) and may spend bonuses;
+- payment options are the module's settings (PQ-033): in advance by bank
+  transfer to the venue's requisites
+  (``PartnerBotSettings.transfer_payment_details``) and/or on receipt (cash
+  or card at the venue, to the courier); with both on, the guest chooses; the
+  guest may spend bonuses either way;
 - time: as soon as possible, or in 30 / 60 minutes (``Order.requested_for``);
 - the guest's phone is required (shared once through Telegram);
 - orders are accepted only within the venue's opening hours.
 
-An order is placed when the guest says they have paid. It gets a personal
-bill at once; bonuses, if chosen, are applied to that bill. Staff then
-confirm the transfer (the money part is recorded as a ``transfer`` payment
-and the order is accepted) or reject it (order cancelled, bill voided,
-bonuses returned).
+An order is placed when the guest says they have paid, or, paying on
+receipt, when they confirm the order. It gets a personal bill at once;
+bonuses, if chosen, are applied to that bill. A transfer is then confirmed
+by staff (recorded as a ``transfer`` payment, the order is accepted) or
+rejected (order cancelled, bill voided, bonuses returned). An order paid on
+receipt is accepted as usual; staff record the cash or card payment when the
+guest gets the order, or cancel it if the guest refuses.
 """
 
 from __future__ import annotations
@@ -68,6 +73,19 @@ CHANNEL_TITLES = {Order.Channel.PICKUP: "самовывоз", Order.Channel.DELI
 
 MAX_ADDRESS_LENGTH = 500
 
+PREPAID = Order.PaymentTiming.PREPAID
+ON_RECEIPT = Order.PaymentTiming.ON_RECEIPT
+# The settings that turn each payment option on, per module (PQ-033).
+PAYMENT_OPTION_FIELDS = {
+    Order.Channel.PICKUP: {PREPAID: "pickup_pay_transfer", ON_RECEIPT: "pickup_pay_on_receipt"},
+    Order.Channel.DELIVERY: {
+        PREPAID: "delivery_pay_transfer",
+        ON_RECEIPT: "delivery_pay_on_receipt",
+    },
+}
+# How staff take the money on receipt.
+ON_RECEIPT_METHODS = frozenset({Payment.Method.CASH, Payment.Method.TERMINAL})
+
 # Staff roles that may confirm or reject a guest's transfer.
 PAYMENT_CHECK_ROLES = frozenset({User.Role.OWNER, User.Role.MANAGER, User.Role.CASHIER})
 
@@ -88,6 +106,7 @@ class RemoteQuote:
     delivery_fee: Decimal = Decimal("0.00")
     delivery_address: str = ""
     has_delivery_location: bool = False
+    payment_modes: tuple[str, ...] = (PREPAID,)
 
 
 def _money(value) -> Decimal:
@@ -110,9 +129,26 @@ def _settings(partner_id, channel: str) -> PartnerBotSettings:
         and settings.module_menu_enabled
     ):
         raise RemoteOrderError(CHANNEL_OFF_MESSAGES[channel])
-    if not settings.transfer_payment_details.strip():
-        raise RemoteOrderError("Заведение ещё не указало реквизиты для оплаты переводом.")
+    if not payment_modes_for(settings, channel):
+        if getattr(settings, PAYMENT_OPTION_FIELDS[channel][PREPAID]):
+            raise RemoteOrderError("Заведение ещё не указало реквизиты для оплаты переводом.")
+        raise RemoteOrderError("Заведение ещё не настроило оплату заказов.")
     return settings
+
+
+def payment_modes_for(settings: PartnerBotSettings, channel: str) -> tuple[str, ...]:
+    """Payment options the module offers, transfer first.
+
+    Transfer counts only with the venue's requisites filled in.
+    """
+
+    fields = PAYMENT_OPTION_FIELDS[channel]
+    modes = []
+    if getattr(settings, fields[PREPAID]) and settings.transfer_payment_details.strip():
+        modes.append(PREPAID)
+    if getattr(settings, fields[ON_RECEIPT]):
+        modes.append(ON_RECEIPT)
+    return tuple(modes)
 
 
 def _guest(partner_id, telegram_id: int, *, lock: bool = False) -> GuestProfile:
@@ -259,6 +295,7 @@ def get_remote_quote(
         has_delivery_location=(
             channel == Order.Channel.DELIVERY and guest.delivery_latitude is not None
         ),
+        payment_modes=payment_modes_for(settings, channel),
     )
 
 
@@ -332,9 +369,13 @@ def place_remote_order(
     expected_total: Decimal | str,
     expected_to_pay: Decimal | str,
     channel: str = Order.Channel.PICKUP,
+    payment: str = PREPAID,
     now: datetime | None = None,
 ) -> Order:
-    """Turn the guest's cart into a remote order once they say they paid.
+    """Turn the guest's cart into a remote order.
+
+    Paying by transfer, the guest calls this once they say they paid; paying
+    on receipt, once they confirm the order.
 
     ``expected_total`` / ``expected_to_pay`` are the amounts the guest saw;
     if the cart or the bonus amount changed since, nothing is created and the
@@ -344,6 +385,8 @@ def place_remote_order(
     now = now or timezone.now()
     settings = _settings(partner_id, channel)
     partner = settings.partner
+    if payment not in payment_modes_for(settings, channel):
+        raise RemoteOrderError("Этот способ оплаты сейчас недоступен — выберите другой.")
     if slot not in TIME_SLOTS:
         raise RemoteOrderError("Выберите время ещё раз.")
     if slot not in available_slots(partner, now):
@@ -382,6 +425,7 @@ def place_remote_order(
         channel=channel,
         requested_for=now + timedelta(minutes=minutes) if minutes else None,
         notify_staff=False,
+        payment_timing=payment,
         **(
             {
                 "delivery_address": guest.delivery_address,
@@ -419,7 +463,12 @@ def place_remote_order(
     if to_pay != _money(expected_to_pay):
         raise RemoteOrderError("Сумма к оплате изменилась — проверьте её ещё раз.")
 
-    if to_pay > 0:
+    if to_pay > 0 and payment == ON_RECEIPT:
+        note = (
+            f"Оплата при получении: {to_pay} грн (наличные или карта). Отметьте оплату "
+            "в карточке заказа, когда гость заплатит."
+        )
+    elif to_pay > 0:
         note = (
             f"Гость сообщил о переводе {to_pay} грн. Проверьте поступление и "
             "подтвердите оплату в карточке заказа."
@@ -461,22 +510,34 @@ def _check_actor(actor, partner_id) -> None:
         raise RemoteOrderError("Подтверждать оплату может владелец, менеджер или кассир.")
 
 
-def _lock_remote_order(order: Order) -> Order:
+def _lock_remote_order(order: Order, payment: str = PREPAID) -> Order:
     order = (
         Order.objects.select_for_update(of=("self",))
         .select_related("partner")
         .get(id=order.id, partner_id=order.partner_id)
     )
-    if order.channel not in Order.PREPAID_CHANNELS:
-        raise RemoteOrderError("У этого заказа нет оплаты переводом.")
+    if order.payment_timing != payment:
+        if payment == PREPAID:
+            raise RemoteOrderError("У этого заказа нет оплаты переводом.")
+        raise RemoteOrderError("Этот заказ оплачивается переводом заранее, а не при получении.")
     return order
 
 
 def awaits_transfer_check(order: Order) -> bool:
     return (
-        order.channel in Order.PREPAID_CHANNELS
+        order.payment_timing == PREPAID
         and order.paid_at is None
         and order.status == Order.Status.NEW
+    )
+
+
+def awaits_payment_on_receipt(order: Order) -> bool:
+    """An order paid on receipt whose money staff have not recorded yet."""
+
+    return (
+        order.payment_timing == ON_RECEIPT
+        and order.paid_at is None
+        and order.status != Order.Status.CANCELED
     )
 
 
@@ -532,6 +593,58 @@ def reject_transfer(*, order: Order, actor, comment: str = "") -> Order:
     )
 
 
+@transaction.atomic
+def record_payment_on_receipt(*, order: Order, actor, method: str) -> Order:
+    """The guest paid on receipt: record the rest of the bill in cash or by card.
+
+    Lock order as for any payment: Bill → Order (AGENTS.md); the bill lock
+    makes a repeated press see the bill already paid.
+    """
+
+    _check_actor(actor, order.partner_id)
+    if method not in ON_RECEIPT_METHODS:
+        raise RemoteOrderError("При получении принимаем наличные или карту — выберите способ.")
+    bill = _order_bill(order)
+    order = _lock_remote_order(order, ON_RECEIPT)
+    if bill.status == Bill.Status.PAID or order.paid_at is not None:
+        raise RemoteOrderError("Заказ уже оплачен.")
+    record_payment(
+        bill=bill,
+        amount=_money(bill.total_amount - bill.paid_amount),
+        method=method,
+        created_by=actor,
+        comment=f"Оплата при получении за заказ #{order.public_id}.",
+    )
+    return Order.objects.select_related("partner").get(id=order.id)
+
+
+@transaction.atomic
+def cancel_unpaid_remote_order(*, order: Order, actor, comment: str = "") -> Order:
+    """The guest did not take an order paid on receipt: cancel it, return bonuses."""
+
+    _check_actor(actor, order.partner_id)
+    bill = _order_bill(order)
+    order = _lock_remote_order(order, ON_RECEIPT)
+    if order.status in {Order.Status.COMPLETED, Order.Status.CANCELED}:
+        raise RemoteOrderError("Заказ уже закрыт.")
+    if bill.status == Bill.Status.PAID or bill.payments.exclude(
+        method=Payment.Method.BONUSES
+    ).filter(status=Payment.Status.PAID).exists():
+        raise RemoteOrderError("По заказу уже есть оплата — отменить его так нельзя.")
+    _void_locked_bill(
+        bill=bill,
+        actor=actor,
+        reason_code=BillAdjustment.ReasonCode.GUEST_REFUSED,
+        reason_text=comment,
+    )
+    return transition_order_status(
+        order=order,
+        to_status=Order.Status.CANCELED,
+        actor_user=actor,
+        note="Гость не забрал заказ.",
+    )
+
+
 __all__ = [
     "CHANNEL_TITLES",
     "REMOTE_CHANNELS",
@@ -546,7 +659,11 @@ __all__ = [
     "get_delivery_terms",
     "map_link",
     "get_remote_quote",
+    "awaits_payment_on_receipt",
     "awaits_transfer_check",
+    "cancel_unpaid_remote_order",
+    "payment_modes_for",
+    "record_payment_on_receipt",
     "requested_time_label",
     "place_remote_order",
     "reject_transfer",

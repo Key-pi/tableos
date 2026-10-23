@@ -158,6 +158,28 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name="Самовывоз",
         help_text="Сценарий заказа на самовывоз. Включается независимо от столов.",
     )
+    # Payment options per remote module (PQ-033): the owner turns on what the
+    # bot offers; when both are on, the guest chooses at checkout.
+    pickup_pay_transfer = models.BooleanField(
+        default=True,
+        verbose_name="Самовывоз: оплата переводом заранее",
+        help_text="Гость переводит деньги на реквизиты, персонал подтверждает поступление.",
+    )
+    pickup_pay_on_receipt = models.BooleanField(
+        default=False,
+        verbose_name="Самовывоз: оплата при получении",
+        help_text="Гость платит на месте наличными или картой, заказ сразу идёт в работу.",
+    )
+    delivery_pay_transfer = models.BooleanField(
+        default=True,
+        verbose_name="Доставка: оплата переводом заранее",
+        help_text="Гость переводит деньги на реквизиты, персонал подтверждает поступление.",
+    )
+    delivery_pay_on_receipt = models.BooleanField(
+        default=False,
+        verbose_name="Доставка: оплата курьеру при получении",
+        help_text="Гость платит курьеру наличными или картой, заказ сразу идёт в работу.",
+    )
     transfer_payment_details = models.TextField(
         blank=True,
         verbose_name="Реквизиты для оплаты переводом",
@@ -328,16 +350,24 @@ class PartnerBotSettings(TimeStampedModel):
                 "module_orders_enabled",
                 "Orders module requires tables, delivery, or pickup module.",
             )
-        if self.module_pickup_enabled and not self.transfer_payment_details.strip():
-            add_error(
-                "transfer_payment_details",
-                "Для самовывоза укажите реквизиты для оплаты переводом.",
-            )
-        if self.module_delivery_enabled and not self.transfer_payment_details.strip():
-            add_error(
-                "transfer_payment_details",
-                "Для доставки укажите реквизиты для оплаты переводом.",
-            )
+        for module, title, transfer_field, on_receipt_field in (
+            ("module_pickup_enabled", "самовывоза", "pickup_pay_transfer", "pickup_pay_on_receipt"),
+            (
+                "module_delivery_enabled",
+                "доставки",
+                "delivery_pay_transfer",
+                "delivery_pay_on_receipt",
+            ),
+        ):
+            if not getattr(self, module):
+                continue
+            if not (getattr(self, transfer_field) or getattr(self, on_receipt_field)):
+                add_error(transfer_field, f"Для {title} включите хотя бы один способ оплаты.")
+            if getattr(self, transfer_field) and not self.transfer_payment_details.strip():
+                add_error(
+                    "transfer_payment_details",
+                    f"Для {title} с оплатой переводом укажите реквизиты.",
+                )
         for field in ("delivery_fee", "delivery_free_from", "delivery_min_order"):
             value = getattr(self, field)
             if value is not None and value < 0:

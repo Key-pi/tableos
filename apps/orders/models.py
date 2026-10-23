@@ -33,8 +33,19 @@ class Order(PartnerBoundModel):
         PICKUP = "pickup", "Самовывоз"
         DELIVERY = "delivery", "Доставка"
 
-    # Channels paid in advance by transfer and checked by staff (ADR-0009).
-    PREPAID_CHANNELS = frozenset({Channel.PICKUP, Channel.DELIVERY})
+    class PaymentTiming(models.TextChoices):
+        # Remote orders (PQ-033): the guest pays in advance by transfer, which
+        # staff confirm, or on receipt. Empty for table orders (paid by bill).
+        PREPAID = "prepaid", "Переводом заранее"
+        ON_RECEIPT = "on_receipt", "При получении"
+
+    # Channels where the guest is not at a table (ADR-0009): they go through
+    # apps/billing/remote_orders.py. How each order is paid is
+    # ``payment_timing``, chosen at checkout from the module's options.
+    REMOTE_CHANNELS = frozenset({Channel.PICKUP, Channel.DELIVERY})
+    # Old name, kept for existing imports: these channels are no longer
+    # always prepaid.
+    PREPAID_CHANNELS = REMOTE_CHANNELS
 
     public_id = models.CharField(max_length=12, editable=False)
     guest = models.ForeignKey(
@@ -80,6 +91,13 @@ class Order(PartnerBoundModel):
     )
     delivery_longitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="Долгота"
+    )
+    payment_timing = models.CharField(
+        max_length=16,
+        choices=PaymentTiming.choices,
+        blank=True,
+        default="",
+        verbose_name="Когда оплата",
     )
     payment_method = models.CharField(
         max_length=16,

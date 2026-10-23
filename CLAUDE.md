@@ -27,9 +27,9 @@
 - **ADR-0009:** одна модель заказа/счёта/оплаты для всех каналов; никаких
   «ЗаказДоставки»/«СчётДоставки». Данные канала — поля заказа
   (`requested_for`, `delivery_*`), поведение — модуль на семейство: стол —
-  `apps/tables` + `apps/billing/table_bills.py`; удалённые каналы с
-  предоплатой — `apps/billing/remote_orders.py` (`REMOTE_CHANNELS`,
-  `Order.PREPAID_CHANNELS`) и бот `bot/handlers/remote_checkout.py`. Ядро
+  `apps/tables` + `apps/billing/table_bills.py`; удалённые каналы —
+  `apps/billing/remote_orders.py` (`REMOTE_CHANNELS`,
+  `Order.REMOTE_CHANNELS`) и бот `bot/handlers/remote_checkout.py`. Ядро
   счёта `apps/billing/services.py` про каналы не знает. Различать каналы по
   `order.channel`, а не по `order.table_id`.
 
@@ -42,7 +42,7 @@
 | Решения владельца и открытые вопросы | `docs/product/OPEN_PRODUCT_QUESTIONS.md` (PQ-…) |
 | Направление сети Botera | `docs/product/ECOSYSTEM_DIRECTION.md` |
 | Визиты стола, правка/аннулирование счёта, кешбэк | `docs/architecture/B3_2_VISITS_AND_BILL_CHANGES.md`, ADR-0007 |
-| Каналы заказа (стол, самовывоз, доставка) | ADR-0009, `docs/architecture/PICKUP.md`, `DELIVERY.md` |
+| Каналы заказа (стол, самовывоз, доставка) | ADR-0009, `docs/architecture/PICKUP.md`, `DELIVERY.md`, `PAYMENT_OPTIONS.md` |
 | Доставка уведомлений и рассылок | `docs/architecture/BACKGROUND_JOBS.md`, ADR-0008 |
 | Бот, callback-и | `docs/architecture/BOT_RUNTIME.md` |
 | Находки аудита и что сделано по батчам | `docs/audits/ARCHITECTURE_AUDIT.md`, `REFACTOR_ROADMAP.md` |
@@ -67,9 +67,13 @@
   переходы и новые гости, только в Admin.
 - **Доставка сообщений (ADR-0008):** рассылки — не больше одного раза на
   гостя (`BroadcastDelivery`); рабочие уведомления — хотя бы один раз.
-- **Самовывоз:** предоплата переводом на реквизиты заведения, бонусы по
-  желанию, телефон обязателен, только в часы работы (`OpeningHours`);
-  оплату подтверждает владелец/менеджер/кассир.
+- **Модули настраиваемые (PQ-033):** владелец включает варианты, гость
+  выбирает из включённых. Оплата удалённых заказов — «переводом заранее»
+  и/или «при получении» на модуль (`Order.payment_timing`); не зашивать
+  один вариант в канал.
+- **Самовывоз:** перевод на реквизиты заведения (подтверждает
+  владелец/менеджер/кассир) и/или оплата на месте, бонусы по желанию,
+  телефон обязателен, только в часы работы (`OpeningHours`).
 - **Доставка (PQ-032):** то же, что самовывоз, плюс адрес (текст
   обязателен, геолокация по желанию, последний запоминается); цена —
   фикс, бесплатно от суммы, минимальный заказ; цена — строка заказа

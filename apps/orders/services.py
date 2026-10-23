@@ -201,9 +201,14 @@ def create_order(
     delivery_latitude=None,
     delivery_longitude=None,
     delivery_fee: Decimal | str | None = None,
+    payment_timing: str = "",
 ) -> Order:
     if not items:
         raise OrderFlowError("Нельзя создать заказ без позиций.")
+    if payment_timing and payment_timing not in Order.PaymentTiming.values:
+        raise OrderFlowError("Неизвестный способ оплаты заказа.")
+    if bool(payment_timing) != (channel in Order.REMOTE_CHANNELS):
+        raise OrderFlowError("Когда платить, выбирают только в заказах навынос.")
     if channel not in Order.Channel.values:
         raise OrderFlowError("Неизвестный способ получения заказа.")
     if channel != Order.Channel.TABLE and (table is not None or table_session is not None):
@@ -239,6 +244,7 @@ def create_order(
         delivery_address=delivery_address.strip(),
         delivery_latitude=delivery_latitude,
         delivery_longitude=delivery_longitude,
+        payment_timing=payment_timing,
     )
 
     subtotal = Decimal("0.00")
@@ -315,13 +321,14 @@ def transition_order_status(
     if to_status not in allowed_statuses:
         raise OrderFlowError(f"Нельзя перевести заказ из `{order.status}` в `{to_status}`.")
     if (
-        order.channel in Order.PREPAID_CHANNELS
+        order.payment_timing == Order.PaymentTiming.PREPAID
         and to_status == Order.Status.ACCEPTED
         and order.paid_at is None
     ):
-        # A prepaid order (pickup, delivery) goes into work only after its
-        # transfer is confirmed
-        # (apps/billing/remote_orders.py:confirm_transfer).
+        # An order paid in advance by transfer (pickup, delivery) goes into
+        # work only after the transfer is confirmed
+        # (apps/billing/remote_orders.py:confirm_transfer). One paid on
+        # receipt is accepted as usual (PQ-033).
         raise OrderFlowError("Сначала подтвердите оплату переводом.")
     if to_status == Order.Status.CANCELED and BillItem.objects.filter(
         partner_id=order.partner_id,

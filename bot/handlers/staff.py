@@ -21,9 +21,12 @@ from apps.analytics.services import (
 from apps.billing.models import Bill, BillAdjustment, BillingRequest, BillItem, Payment
 from apps.billing.remote_orders import (
     RemoteOrderError,
+    awaits_payment_on_receipt,
     awaits_transfer_check,
+    cancel_unpaid_remote_order,
     confirm_transfer,
     map_link,
+    record_payment_on_receipt,
     reject_transfer,
 )
 from apps.billing.repositories import (
@@ -98,6 +101,7 @@ from bot.keyboards.staff import (
     build_staff_notifications_keyboard,
     build_staff_order_actions_keyboard,
     build_staff_orders_overview_keyboard,
+    build_staff_receipt_refusal_confirm_keyboard,
     build_staff_report_section_keyboard,
     build_staff_report_summary_keyboard,
     build_staff_report_table_detail_keyboard,
@@ -185,6 +189,7 @@ def _order_actions_keyboard(order: Order):
         order_public_id=order.public_id,
         available_statuses=get_available_staff_actions(order.status, channel=order.channel),
         transfer_check_pending=awaits_transfer_check(order),
+        receipt_payment_pending=awaits_payment_on_receipt(order),
         status_labels=_status_labels(order),
     )
 
@@ -200,6 +205,10 @@ def _order_payment_label(order: Order) -> str:
         to_transfer = order.total_amount - order.bonus_spent
         bonus_note = f" (ещё {order.bonus_spent} бонусами)" if order.bonus_spent else ""
         return f"ждёт подтверждения перевода {to_transfer} грн{bonus_note}"
+    if awaits_payment_on_receipt(order):
+        to_pay = order.total_amount - order.bonus_spent
+        bonus_note = f" (ещё {order.bonus_spent} бонусами)" if order.bonus_spent else ""
+        return f"при получении, {to_pay} грн{bonus_note}"
     return "Оплачен" if is_order_paid(order) else "Не оплачен"
 
 
@@ -1895,6 +1904,70 @@ async def staff_transfer_check_callback_handler(callback: CallbackQuery, bot: Bo
         "Оплата подтверждена, заказ в работе."
         if action == "stafftxok"
         else "Заказ отменён: оплата не поступила."
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffrc"))
+async def staff_receipt_payment_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    """Paid on receipt (PQ-033): cash, card, or the guest did not take it."""
+
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_open_orders_allowed(employee)
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    action, _, order_public_id = (callback.data or "").partition(":")
+    methods = {"staffrccash": Payment.Method.CASH, "staffrccard": Payment.Method.TERMINAL}
+    if action not in {*methods, "staffrcno", "staffrcnoy"} or not order_public_id:
+        await callback.answer("Неизвестное действие.", show_alert=True)
+        return
+    try:
+        order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
+            partner.id,
+            order_public_id,
+        )
+    except Order.DoesNotExist:
+        await callback.answer("Заказ не найден.", show_alert=True)
+        return
+
+    if action == "staffrcno":
+        if not awaits_payment_on_receipt(order):
+            await callback.answer("Оплата по этому заказу уже обработана.", show_alert=True)
+            return
+        await _safe_edit_message_text(
+            callback.message,
+            _render_order_card(order)
+            + "\n\n<b>Гость не забрал заказ и не заплатил — отменить заказ?</b> "
+            "Списанные бонусы вернутся гостю.",
+            reply_markup=build_staff_receipt_refusal_confirm_keyboard(order.public_id),
+        )
+        await callback.answer()
+        return
+
+    try:
+        if action in methods:
+            await sync_to_async(record_payment_on_receipt)(
+                order=order, actor=employee.user, method=methods[action]
+            )
+        else:
+            await sync_to_async(cancel_unpaid_remote_order)(order=order, actor=employee.user)
+    except (RemoteOrderError, BillingServiceError, OrderFlowError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+
+    refreshed_order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
+        partner.id,
+        order_public_id,
+    )
+    await _safe_edit_message_text(
+        callback.message,
+        _render_order_card(refreshed_order),
+        reply_markup=_order_actions_keyboard(refreshed_order),
+    )
+    await callback.answer(
+        "Оплата при получении отмечена." if action in methods else "Заказ отменён."
     )
 
 
