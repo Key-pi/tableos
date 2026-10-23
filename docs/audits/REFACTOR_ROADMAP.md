@@ -1,10 +1,12 @@
 # TableOS — Refactor roadmap
 
-**Status (2026-10-23):** B0–B3 are complete in application code. B0.1, a
-documentation refresh after the post-B3 review, is complete. B3.1 (post-B3
-correctness fixes), B3.2 (table visits and bill changes), B4 and B5 are proposals and require owner approval before
-any application-code, migration, dependency, or runtime change begins. The
-PostgreSQL verification gate for B2/B3 has not been passed yet.
+**Status (2026-10-23):** B0–B3, B0.1 (documentation refresh) and B3.1
+(post-B3 correctness fixes) are complete. The full suite, including every
+PostgreSQL-gated test, passes on PostgreSQL 16 in a development environment;
+the production data audits for the B2/B3 migrations are still required before
+rollout. B3.2 (table visits and bill changes), B4 and B5 are proposals and
+require owner approval before any application-code, migration, dependency, or
+runtime change begins.
 
 ## Operating rules for every batch
 
@@ -160,7 +162,7 @@ PostgreSQL verification gate and of B3.1.)*
 | **Verification** | Repository-wide check that every cited file exists and that `path:symbol` citations resolve; `git diff --check`. Tests were not executed (no environment); the recorded test baseline remains the 2026-07-27 run. |
 | **Rollback** | Revert the documentation commit. |
 
-## Batch B3.1 — Post-B3 correctness fixes (no schema change)
+## Batch B3.1 — Post-B3 correctness fixes (no schema change) — complete, 2026-10-23
 
 | Field | Proposal |
 |---|---|
@@ -173,6 +175,13 @@ PostgreSQL verification gate and of B3.1.)*
 | **Required verification** | Each finding's verification line in the audit register; full suite on SQLite; PostgreSQL-gated tests on PostgreSQL. |
 | **Rollback** | Revert the individual commit; no migrations. |
 | **Exit criterion** | Each finding has a regression test that failed before and passes after. |
+
+**B3.1 result — 2026-10-23:** all scope items done, plus AA-033 (bill
+creation failed on PostgreSQL), found when the suite was first run on
+PostgreSQL. Each fix has a regression test that failed before the change;
+the new billing concurrency tests fail when the row locks are removed. Full
+suite: 199 tests green on SQLite (5 PostgreSQL-only skipped) and on
+PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implementation-update--2026-10-23).
 
 ## Batch B3.2 — Table visits, bill changes and programme options (schema change)
 
@@ -222,7 +231,7 @@ PostgreSQL verification gate and of B3.1.)*
 | Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
 | Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
 
-The next safe action is B3.1: characterization tests and fixes, starting
-with AA-021. B3.2 follows with a written design for the visit model and bill
-changes. The PostgreSQL verification gate for B2/B3 must be passed before
-production rollout.
+The next safe action is the B3.2 design note (visit model, bill changes,
+cashback option) for owner review. Before production rollout of B2/B3/B3.1:
+run the duplicate-data audits on a production copy and the full suite on
+PostgreSQL.

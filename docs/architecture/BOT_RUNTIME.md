@@ -19,7 +19,7 @@ router order and text filters are observable behavior.
 | Callback data | handler resolves domain record/employee | callback identifier is not authorization; reload scoped current state |
 | ORM access | handlers generally wrap Django access with `sync_to_async` | retain non-blocking adapter behavior; do not put business invariants in handler |
 | Runtime cache | partner bot runtime built at startup | cache cannot be sole source for revocable status/capability |
-| Message formatting | every bot and notification message uses `ParseMode.HTML`; dynamic values are currently not escaped (AA-024) | escape every interpolated value (partner, menu, guest, employee, comment text) at render time; only reviewed partner templates may carry markup |
+| Message formatting | every bot and notification message uses `ParseMode.HTML`; since B3.1 dynamic values go through `bot/utils/html.py:escape_html` (bot) or `_escape_html` (notifications) | escape every interpolated value (partner, menu, guest, employee, comment text) at render time; never escape keyboard button labels; only partner templates and broadcast text may carry markup |
 | Per-update lookups | the middleware, every `PartnerButtonFilter` evaluation and each handler reload the partner and `BotContent` | acceptable for MVP; measure before caching, and never cache status or capability |
 
 ## Handler contract

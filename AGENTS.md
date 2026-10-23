@@ -78,7 +78,9 @@ canonical docs, or an approved ADR.
   writes use one owner service. Do not use raw `QuerySet.update()` or editable
   Admin fields as an alternate lifecycle path.
 - Document lock order and idempotency for concurrent commands. Use PostgreSQL
-  tests for locks and durable constraints.
+  tests for locks and durable constraints, and run the whole suite on
+  PostgreSQL for any change that adds or edits `select_for_update`: SQLite
+  ignores it (AA-033).
 - Keep money ledgers source-linked/traceable and use explicit compensating
   policy rather than silently editing history.
 - Telegram/network I/O, retry sleep, and fan-out never run inside an open
@@ -91,7 +93,7 @@ canonical docs, or an approved ADR.
 Use the exact commands in `docs/engineering/TESTING.md`. At the 2026-07-27
 audited baseline, `manage.py check`, migration dry-run, tests (139), and compose
 config passed in local SQLite mode; Ruff had pre-existing failures. The suite
-has grown since (179 test functions at `ddb7dce`); record every full run in
+has grown since (199 tests after B3.1, green on SQLite and PostgreSQL 16); record every full run in
 `TESTING.md`. Do not claim a green test or lint baseline without rerunning it,
 and do not claim PostgreSQL coverage that is not in the repository.
 

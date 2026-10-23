@@ -339,23 +339,25 @@ by `AGENTS.md`.
 | ID | Category | Severity | Confidence | Short conclusion | Roadmap batch |
 |---|---|---:|---:|---|---|
 | AA-020 | BUG / FINANCIAL_INTEGRITY | High | High | Billing, bill-request visibility and auto-close are scoped to the table's whole history, not the current visit. | B3.2 (PQ-026 decided, ADR-0007) |
-| AA-021 | BUG / FINANCIAL_INTEGRITY | High | Medium–High | Post-payment auto-close can raise `TableSessionError` and roll back a payment; adapters do not handle it. | B3.1 (PQ-027 decided) |
+| AA-021 | BUG / FINANCIAL_INTEGRITY | High | Medium–High | Post-payment auto-close can raise `TableSessionError` and roll back a payment; adapters do not handle it. | B3.1 — resolved |
 | AA-022 | BUG / FINANCIAL_INTEGRITY | High | High | A cancelled order stays charged in its bill; bills cannot be cancelled and allocations cannot be released. | B3.2 (PQ-028 decided) |
-| AA-023 | BUG / ADMIN_BYPASS | Medium | High | `OrderAdmin` leaves `guest`, `table`, `table_session` editable. | B3.1 |
-| AA-024 | BUG / RELIABILITY | Medium | High | Text is sent with HTML parse mode but never escaped. | B3.1 |
-| AA-025 | BUG / STATE_MACHINE | Medium | High | Guest receipt confirmation bypasses `ORDER_STATUS_TRANSITIONS`. | B3.1 (PQ-029 decided) |
-| AA-026 | SECURITY / PERMISSION | Medium | High (conditional) | Tenant `UserAdmin` does not exclude superusers that carry the tenant's `partner`. | B3.1 |
-| AA-027 | BUG / DATA_QUALITY | Low | High (executed) | Checking out via the reply button stores part of the button label as the order comment. | B3.1 |
-| AA-028 | BUG / PERFORMANCE | Low | High | The Bill changelist recalculates and saves every listed bill on a GET. | B3.1 |
-| AA-029 | BUG / TIME_BOUNDARY | Low | High | Visit bonus "once per day" uses the UTC day; the daily metric snapshot never revisits the previous day. | B3.1 |
+| AA-023 | BUG / ADMIN_BYPASS | Medium | High | `OrderAdmin` leaves `guest`, `table`, `table_session` editable. | B3.1 — resolved |
+| AA-024 | BUG / RELIABILITY | Medium | High | Text is sent with HTML parse mode but never escaped. | B3.1 — resolved |
+| AA-025 | BUG / STATE_MACHINE | Medium | High | Guest receipt confirmation bypasses `ORDER_STATUS_TRANSITIONS`. | B3.1 — resolved |
+| AA-026 | SECURITY / PERMISSION | Medium | High (conditional) | Tenant `UserAdmin` does not exclude superusers that carry the tenant's `partner`. | B3.1 — resolved |
+| AA-027 | BUG / DATA_QUALITY | Low | High (executed) | Checking out via the reply button stores part of the button label as the order comment. | B3.1 — resolved |
+| AA-028 | BUG / PERFORMANCE | Low | High | The Bill changelist recalculates and saves every listed bill on a GET. | B3.1 — resolved |
+| AA-029 | BUG / TIME_BOUNDARY | Low | High | Visit bonus "once per day" uses the UTC day; the daily metric snapshot never revisits the previous day. | B3.1 — resolved |
 | AA-030 | BUG / ASYNC | Low | High | Notification tasks re-send on retry and do not recheck the recipient at delivery time. | B4 |
 | AA-031 | NAMING_PLACEMENT / LAYERING | Low | High | `core` imports domain apps; unused unscoped selectors and a legacy bonus service remain. | B5 |
 | AA-032 | DOCUMENTATION_DRIFT | Medium | High | Canonical docs described pre-B1 runtime, cited moved line numbers and claimed PostgreSQL tests that do not exist. | B0.1 (resolved by this review) |
+| AA-033 | BUG / FINANCIAL_INTEGRITY | High | High (executed) | On PostgreSQL every bill creation failed: `FOR UPDATE` on a nullable outer join. | B3.1 (resolved) |
+| AA-034 | OPERATIONS / PORTABILITY | Low | Medium | `Europe/Kiev` is a legacy timezone alias that recent tz databases ship only as an optional package. | B5 |
 
 ### AA-020 — billing and settlement use the table's history instead of the current visit
 
 - **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High.
-- **Evidence:** `apps/billing/services.py:get_table_billable_orders` returns every non-cancelled order with `table_id` that is not yet in a bill, with no session or time filter; `get_or_create_personal_bill_for_guest_table` and `get_or_create_shared_bill_for_table` build bills from it. `_close_table_sessions_if_fully_settled` refuses to close if any order ever placed at the table is unsettled. `bot/services/navigation.py:resolve_guest_navigation_state` shows "request bill" when any order ever existed at the table. `apps/tables/services.py:activate_table_session` closes a guest's previous session without checking unpaid orders, and there is no session expiry.
+- **Evidence:** `apps/billing/services.py:get_table_billable_orders` returns every non-cancelled order with `table_id` that is not yet in a bill, with no session or time filter; `get_or_create_personal_bill_for_guest_table` and `get_or_create_shared_bill_for_table` build bills from it. `_close_table_sessions_if_fully_settled` refused to close if any order ever placed at the table was unsettled (replaced in B3.1 by the session-scoped `_close_settled_sessions_of_bill`). `bot/services/navigation.py:resolve_guest_navigation_state` shows "request bill" when any order ever existed at the table. `apps/tables/services.py:activate_table_session` closes a guest's previous session without checking unpaid orders, and there is no session expiry.
 - **Current behavior:** unpaid orders of a guest who left or moved to another table remain attached to the table. The next party's shared bill includes them, a guest re-scanning the same table later gets them in a personal bill, and auto-close after payment never succeeds again for that table.
 - **Why it matters:** guests can be charged for other people's orders, and staff see permanent "unsettled" tables.
 - **Target behavior:** billing eligibility and settlement checks are scoped to an explicit visit (active session or sessions), and orphaned unpaid orders follow an owner-approved policy.
@@ -465,3 +467,38 @@ by `AGENTS.md`.
 - **Category / severity / confidence:** `DOCUMENTATION_DRIFT`, Medium, High.
 - **Evidence:** before this review `AS_IS_ARCHITECTURE.md` described the pre-B1 runtime and cited `bot/dispatcher.py`, `config/celery.py`, `config/settings/base.py`; `BOT_RUNTIME.md` cited `bot/dispatcher.py`; most line-numbered citations pointed at moved code. `REFACTOR_ROADMAP.md` and `FEATURE_MATRIX.md` stated that B3 added PostgreSQL tests for allocation, redemption and accrual, but the repository contains only two PostgreSQL-gated tests (order transition, table activation). The payment lock order in `ADR-0003.md` and `TARGET_ARCHITECTURE.md` omitted `GuestProfile`, which the paid-order bonus accrual locks.
 - **Resolution:** corrected in the B0.1 documentation refresh (see `REFACTOR_ROADMAP.md`). Current-state documents now cite `path:symbol`.
+
+### AA-033 — bill creation fails on PostgreSQL
+
+- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High (executed).
+- **Evidence:** `apps/billing/services.py:create_bill_from_orders` used `Order.objects.select_for_update().select_related("table", "guest")`. `Order.table` is nullable, so Django emits a `LEFT OUTER JOIN`, and PostgreSQL rejects the query with `FOR UPDATE cannot be applied to the nullable side of an outer join`. Introduced in B3 (`ddb7dce`). SQLite ignores `FOR UPDATE`, so the SQLite suite stayed green; the full suite on PostgreSQL 16 had 29 errors, all from this call.
+- **Current behavior (before fix):** no bill could be created on PostgreSQL — guest bill requests, staff table bills and the Admin action all failed.
+- **Resolution:** `select_for_update(of=("self",))`; the full suite passes on PostgreSQL 16.
+- **Lesson:** run the whole suite on PostgreSQL before closing a batch that adds row locks (`TESTING.md`).
+
+### AA-034 — legacy `Europe/Kiev` timezone name
+
+- **Category / severity / confidence:** `OPERATIONS / PORTABILITY`, Low, Medium.
+- **Evidence:** `.env.example` (`DJANGO_TIMEZONE`), `core/settings/env.py` and `Partner.timezone` default to `Europe/Kiev`. The IANA name is `Europe/Kyiv`; `Europe/Kiev` remains only as a backward-compatible link, which newer Debian/Ubuntu tz packages move to an optional `tzdata-legacy` package. On such a system Django refuses to start (`Incorrect timezone setting: Europe/Kiev`), and `ZoneInfo("Europe/Kiev")` in reports and bonus rules fails. Observed in the review container; macOS still ships the link.
+- **Target behavior:** use `Europe/Kyiv` in defaults and migrate stored partner values, or add the `tzdata` Python package as a dependency; verify inside the production image.
+- **Roadmap batch:** B5.
+
+## B3.1 implementation update — 2026-10-23
+
+Branch `b3.1-correctness`, verified with the full suite on SQLite and on
+PostgreSQL 16 (199 tests; 5 PostgreSQL-only tests skipped on SQLite).
+
+| Finding | Result |
+|---|---|
+| AA-033 | Bill creation locks only order rows (`of=("self",)`). |
+| AA-021 | Auto-close (when enabled) closes only sessions whose orders are in the paid bill and fully settled; their pending requests are marked processed; nothing raises into the payment (PQ-027). |
+| AA-025 | `GUEST_RECEIPT_CONFIRMABLE_STATUSES` / `can_guest_confirm_receipt`: guest confirmation from any non-final status including `new`, recorded as a guest action (PQ-029). |
+| AA-023, AA-026 | Order `guest`/`table`/`table_session` read-only in Admin; tenant `UserAdmin` excludes superusers. |
+| AA-027 | Reply-button checkout passes no comment. |
+| AA-028 | `get_bill_remaining_amount` is read-only. |
+| AA-029 | Venue-local day for visit bonus; previous-day metric finalised after local midnight. |
+| AA-024 | Dynamic text escaped in bot messages, partner template values and notifications; broadcast text remains partner markup (B4). |
+| AA-032 (tests) | PostgreSQL concurrency tests for bill allocation, bonus payment and final payment; a mutation check confirms they fail without the locks. |
+
+Remaining from the post-B3 review: AA-020 and AA-022 (B3.2, schema change),
+AA-030 (B4), AA-031 and AA-034 (B5).

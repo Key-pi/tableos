@@ -12,7 +12,7 @@ Celery autodiscovery currently registers these first-party tasks:
 | `notifications.send_guest_order_status_update` | `apps/notifications/tasks.py` | `default` | `on_commit` after an order status change, if guest allows updates | same | none (AA-030) |
 | `notifications.send_broadcast_campaign` | `apps/notifications/tasks.py` | `broadcasts` | `on_commit` from `send_broadcast_campaign`; chains itself per batch of 250 | same | none; Telegram I/O inside the DB transaction (AA-008) |
 | `notifications.process_scheduled_broadcast_campaigns` | `apps/notifications/tasks.py` | `default` | beat, every minute | none | relies on campaign status; no row lock |
-| `analytics.refresh_daily_partner_metrics` | `apps/analytics/tasks.py` | `default` | beat, every 15 minutes | none | `update_or_create` per partner and day; only the current day (AA-029) |
+| `analytics.refresh_daily_partner_metrics` | `apps/analytics/tasks.py` | `default` | beat, every 15 minutes | none | `update_or_create` per partner and day; current day, plus the previous day once after the venue's local midnight |
 
 Telegram API errors inside `_send_telegram_messages` are captured as failed
 results and are not re-raised, so the retry policy applies only to unexpected

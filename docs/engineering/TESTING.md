@@ -14,11 +14,15 @@ docker compose config --quiet
 ```
 
 At the 2026-07-27 baseline, Django check/migration check/tests/compose config
-passed; the test suite ran **139 tests**. Since then B1–B3 added tests: at
-commit `ddb7dce` the source contains **20 test modules with 179 test
-functions**, not yet re-run as a recorded baseline. Record the next full run
-(date, commit, database, result, test count) in the table at the end of this
-document. Ruff reported **21 pre-existing
+passed; the test suite ran **139 tests**. After B3.1 the suite has **199 tests**; it passes on SQLite (5
+PostgreSQL-only tests skipped) and on PostgreSQL 16. Record every full run in
+the table at the end of this document.
+
+**Environment requirements.** Tests encrypt bot tokens, so
+`BOT_TOKEN_ENCRYPTION_KEY` must be a valid Fernet key — put it into `.env`
+(see `DEVELOPMENT.md`); without it about 60 tests error with
+`BOT_TOKEN_ENCRYPTION_KEY must be configured`. The default timezone
+`Europe/Kiev` must exist in the system tz database (AA-034). Ruff reported **21 pre-existing
 check violations** and **54 files that would be reformatted**. Do not state
 that Ruff is green until the actual baseline changes and is rerun. Full output
 and tool versions are recorded in [`../audits/BASELINE.md`](../audits/BASELINE.md).
@@ -38,15 +42,18 @@ and tool versions are recorded in [`../audits/BASELINE.md`](../audits/BASELINE.m
 
 ## Running the PostgreSQL-gated tests
 
-Two tests run only when the database vendor is PostgreSQL and are skipped on
-SQLite: `apps/orders/test_concurrency.py` and `apps/tables/test_concurrency.py`.
-Bill allocation, bonus redemption and paid-order accrual have no PostgreSQL
-test yet (roadmap B3.1).
+Five tests run only on PostgreSQL and are skipped on SQLite:
+`apps/orders/test_concurrency.py`, `apps/tables/test_concurrency.py` and
+`apps/billing/test_concurrency.py` (bill allocation, bonus payment, final
+payment). SQLite also ignores `select_for_update`, so a lock that PostgreSQL
+rejects (AA-033) is invisible there: **run the whole suite on PostgreSQL
+before closing any batch that touches locks, constraints or queries with
+`select_for_update`.**
 
 ```bash
 docker compose up -d db
 env DJANGO_USE_SQLITE=false POSTGRES_HOST=localhost PYTHONDONTWRITEBYTECODE=1 \
-  ./.venv/bin/python manage.py test apps.orders.test_concurrency apps.tables.test_concurrency
+  ./.venv/bin/python manage.py test
 ```
 
 The compose database user owns the database and may create the test database.
@@ -85,3 +92,7 @@ There is no CI; every run is manual. Add a row for each full run.
 | Date | Commit | Database | Command scope | Result |
 |---|---|---|---|---|
 | 2026-07-27 | `b17ce5b` | SQLite | full suite | 139 tests OK; Ruff: 21 findings, 54 files to reformat |
+| 2026-10-23 | `ddb7dce` | SQLite | full suite | 179 tests OK (2 skipped) |
+| 2026-10-23 | `ddb7dce` | PostgreSQL 16 | full suite | **29 errors** — AA-033 |
+| 2026-10-23 | B3.1 branch | SQLite | full suite | 199 tests OK (5 skipped); Ruff: no new findings in changed files |
+| 2026-10-23 | B3.1 branch | PostgreSQL 16 | full suite | 199 tests OK |

@@ -2,7 +2,7 @@
 
 **Status:** current implemented behaviour, verified against source at commit
 `ddb7dce` (branch `clean-project-rules`, after roadmap batches B0–B3) on
-2026-10-23. This document describes what the code does today, not the intended
+2026-10-23 and updated for batch B3.1 the same day. This document describes what the code does today, not the intended
 design. The intended design is in
 [`TARGET_ARCHITECTURE.md`](TARGET_ARCHITECTURE.md); open defects are in
 [`../audits/ARCHITECTURE_AUDIT.md`](../audits/ARCHITECTURE_AUDIT.md).
@@ -126,8 +126,12 @@ aiogram stops at the first matching handler, so this order is behaviour.
    combine `User.role` with the partner's module flags.
 
 All bot messages are sent with `ParseMode.HTML` (default bot properties in
-`bot/main.py` and `notifications/services.py:_send_telegram_messages`). No
-handler or notification escapes interpolated text (AA-024).
+`bot/main.py` and `notifications/services.py:_send_telegram_messages`). Since
+B3.1, free-text values (venue, menu, guest, staff, comments, labels) are
+escaped with `bot/utils/html.py:escape_html` in the bot and
+`notifications/services.py:_escape_html` in notifications; partner templates
+are trusted markup with escaped substituted values; broadcast text is sent as
+partner-authored markup.
 
 ## Key domain flows
 
@@ -156,9 +160,10 @@ handler or notification escapes interpolated text (AA-024).
    `preparing → ready|canceled`, `ready → delivering|completed|canceled`,
    `delivering → completed|canceled`. Completion sets `received_at`.
 5. Guest receipt confirmation (`confirm_order_received_by_guest`) locks the
-   order and moves any non-new, non-final order straight to `completed`,
-   which the transition table does not allow for `accepted`/`preparing`
-   (AA-025).
+   order and moves it to `completed` from any status in
+   `GUEST_RECEIPT_CONFIRMABLE_STATUSES` (every non-final status, including
+   `new`; owner decision PQ-029). This is the only guest-initiated transition;
+   history records it as a guest action.
 
 ### Billing and settlement
 
@@ -172,8 +177,10 @@ handler or notification escapes interpolated text (AA-024).
 3. `create_bill_from_orders` locks `Order → OrderItem`; `attach_orders_to_bill`
    locks `Bill → OrderItem`. `BillItem.unique_order_item_bill_allocation`
    allows an `OrderItem` to be allocated **once per partner forever**; there is
-   no bill-cancel or release command, so `Bill.Status.CANCELED` is unreachable
-   (AA-022).
+   no bill-cancel or release command, so `Bill.Status.CANCELED` is unreachable,
+   and a cancelled order stays charged in its bill (AA-022, planned for B3.2).
+   Bill creation locks orders with `select_for_update(of=("self",))`, because
+   PostgreSQL rejects `FOR UPDATE` on the nullable `table` join (AA-033).
 4. `record_payment` locks the bill, rejects bonus method, non-positive and
    over-remaining amounts, then sets `partially_paid` or `paid`.
    `pay_bill_with_bonuses` locks `Bill → Order → GuestProfile`, checks
@@ -185,9 +192,11 @@ handler or notification escapes interpolated text (AA-024).
    `delivering` orders, sets `paid_at`, accrues `ORDER_COMPLETED` programmes
    once per order (key `order_paid:<order_id>:program:<id>`), marks the bill's
    billing requests processed and, if
-   `PartnerBotSettings.auto_close_table_session_after_payment` is on, tries to
-   close **every** active session at the table. A session that is not
-   closable raises `TableSessionError` and rolls back the payment (AA-021).
+   `PartnerBotSettings.auto_close_table_session_after_payment` is on, runs
+   `_close_settled_sessions_of_bill`: only sessions that own orders of this
+   bill are candidates; a fully settled candidate has its pending requests
+   marked processed and is closed; any other session stays open. This step
+   never raises into the payment (PQ-027, fixed in B3.1).
 
 Effective lock order of the payment path:
 `Bill → Order → GuestProfile → BillingRequest → TableSession`.
@@ -232,15 +241,15 @@ the bot's partner-derived lookups.
 permissions, foreign-key/M2M choices and inline saves by the user's
 `AdminAccessProfile.partner`, hides the `partner` list filter and `partner`
 field from tenant users, and maps Admin sections to CRUD/sensitive
-permissions. Superusers bypass scoping. Gaps that remain: `UserAdmin` does not
-exclude superusers from a tenant's user list (AA-026), and `OrderAdmin` leaves
-`guest`, `table` and `table_session` editable (AA-023).
+permissions. Superusers bypass scoping. Since B3.1 the tenant `UserAdmin`
+excludes superusers and `OrderAdmin` keeps `guest`, `table` and
+`table_session` read-only.
 
 ## States and protections actually enforced
 
 | Concept | Transition mechanism | Durable or locked protection today |
 |---|---|---|
-| Order status | `transition_order_status`; guest confirmation; post-payment completion | Locked reload; transition table (bypassed by guest confirmation) |
+| Order status | `transition_order_status`; guest confirmation; post-payment completion | Locked reload; staff transition table plus explicit guest confirmation rule |
 | Table session | `activate_table_session`, `close_table_session_if_settled`, post-payment auto-close | Partial unique active session per guest; locks; no expiry processor |
 | Cart | cart services, checkout | Partial unique active cart per guest; cart row lock |
 | Bill | create/attach/issue/payment services | Bill lock; `unique_order_item_bill_allocation`; no cancel/release path |
@@ -255,13 +264,13 @@ transactions; allowed operations are actions that call owner services.
 
 ## Tests and checks
 
-- 20 test modules with 179 test functions (counted from source, not executed in
-  this revision). Two of them are PostgreSQL-only and skipped on SQLite:
-  `apps/orders/test_concurrency.py` (concurrent order transition) and
-  `apps/tables/test_concurrency.py` (concurrent QR scans of two tables). There
-  are no PostgreSQL tests for bill allocation, bonus redemption or accrual.
-- The last recorded full run is the audit baseline (139 tests, SQLite,
-  2026-07-27). See [`../engineering/TESTING.md`](../engineering/TESTING.md).
+- 199 tests after B3.1, green on SQLite and on PostgreSQL 16. Five are
+  PostgreSQL-only and skipped on SQLite: concurrent order transition
+  (`apps/orders/test_concurrency.py`), concurrent QR scans
+  (`apps/tables/test_concurrency.py`), and concurrent bill allocation, bonus
+  payment and final payment (`apps/billing/test_concurrency.py`).
+- Recorded runs are listed in
+  [`../engineering/TESTING.md`](../engineering/TESTING.md).
 - There is no CI pipeline; every check is run by hand.
 
 ## Codebase figures at `ddb7dce`
