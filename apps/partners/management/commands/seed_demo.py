@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 
 from apps.bonuses.models import BonusProgram
 from apps.employees.models import EmployeeProfile
@@ -29,6 +30,13 @@ class Command(BaseCommand):
         parser.add_argument("--manager-telegram-username", default="")
 
     def handle(self, *args, **options):
+        # One transaction: a failure part-way (for example a manager account
+        # owned by another venue) must not leave half-applied identity
+        # changes behind (AA-019). Re-running the command is idempotent.
+        with transaction.atomic():
+            self._seed(options)
+
+    def _seed(self, options):
         slug = options["slug"].strip()
         name = options["name"].strip()
         bot_username = options["bot_username"].strip().removeprefix("@")
@@ -212,6 +220,12 @@ class Command(BaseCommand):
     @staticmethod
     def _ensure_admin_user(*, username: str, email: str, password: str):
         user_model = get_user_model()
+        existing = user_model.objects.filter(username=username).first()
+        if existing is not None and existing.partner_id is not None:
+            raise CommandError(
+                f"User `{username}` is a venue account; refusing to make it a platform "
+                "admin. Choose another `--admin-username`."
+            )
         user, _ = user_model.objects.get_or_create(
             username=username,
             defaults={
@@ -240,6 +254,15 @@ class Command(BaseCommand):
         telegram_username: str,
     ):
         user_model = get_user_model()
+        existing = user_model.objects.filter(username=username).first()
+        if existing is not None and (
+            existing.is_superuser
+            or (existing.partner_id is not None and existing.partner_id != partner.id)
+        ):
+            raise CommandError(
+                f"User `{username}` already belongs to another venue or is a platform "
+                "admin; choose another `--manager-username`."
+            )
         user, _ = user_model.objects.get_or_create(
             username=username,
             defaults={

@@ -7,7 +7,6 @@ from django.db import models
 from core.database.models import TimeStampedModel
 from core.security.crypto import decrypt_text, encrypt_text
 
-
 _ROUTED_REPLY_LABEL_FIELDS = (
     "button_menu_label",
     "button_session_label",
