@@ -1,0 +1,13 @@
+# Opens PostgreSQL and Redis of the Docker stack on your computer, for running
+# Django, the bot or Celery outside Docker (or a database client):
+#
+#   docker compose -f docker-compose.yml -f infrastructure/docker/compose.ports.yml up -d db redis
+#
+# Ports can be changed in .env when 5432/6379 are taken.
+services:
+  db:
+    ports:
+      - "${DB_PORT_ON_HOST:-5432}:5432"
+  redis:
+    ports:
+      - "${REDIS_PORT_ON_HOST:-6379}:6379"

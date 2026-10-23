@@ -48,6 +48,8 @@ flowchart LR
 `default,broadcasts`), `beat` и `bot` (`manage.py runbot --wait`); они
 стартуют только после успешного `init`. Хосты базы и Redis внутри Docker
 подставляет сам compose (`db`, `redis`), рабочая копия смонтирована в `/app`.
+Наружу открыт только порт web (8000); база и Redis доступны с компьютера
+только с `infrastructure/docker/compose.ports.yml`.
 `beat` и `bot` должны работать ровно в одном экземпляре. Пошаговый запуск —
 `docs/engineering/DEVELOPMENT.md`. Продакшен-веб-сервера,
 CI и манифестов развёртывания в репозитории нет. Все процессы, кроме веба,

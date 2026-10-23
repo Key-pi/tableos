@@ -34,6 +34,10 @@ x-after-init: &after-init
   depends_on:
     init:
       condition: service_completed_successfully
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
 
 services:
   db:
@@ -43,8 +47,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-tableos}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tableos}
       TZ: Europe/Kyiv
-    ports:
-      - "${DB_PORT_ON_HOST:-5432}:5432"
+    # No host port: the stack reaches the database as `db` inside Docker, so a
+    # local PostgreSQL on 5432 does not get in the way. To reach it from your
+    # computer, add infrastructure/docker/compose.ports.yml (DEVELOPMENT.md).
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -56,8 +61,9 @@ services:
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "${REDIS_PORT_ON_HOST:-6379}:6379"
+    # No host port either (see db): a Redis already running on 6379 on your
+    # computer would otherwise stop this one from starting, and the worker
+    # and beat would fail with "Name or service not known" for `redis`.
     volumes:
       - redis_data:/data
     healthcheck:

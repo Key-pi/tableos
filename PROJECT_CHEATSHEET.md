@@ -142,13 +142,14 @@ DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q broadcasts --
 Если Redis не запущен, воркер будет ругаться на подключение к брокеру. Подними Redis:
 
 ```bash
-docker compose up redis
+docker compose -f docker-compose.yml -f infrastructure/docker/compose.ports.yml up -d redis
 ```
 
-или отдельным контейнером для локальных тестов:
+Для запуска Django без Docker база и Redis из Docker открываются на вашем
+компьютере так:
 
 ```bash
-docker run --name tableos-redis -p 6379:6379 -d redis:7-alpine
+docker compose -f docker-compose.yml -f infrastructure/docker/compose.ports.yml up -d db redis
 ```
 
 ## Как устроены основные сценарии
@@ -226,7 +227,7 @@ docker run --name tableos-redis -p 6379:6379 -d redis:7-alpine
 Воркер не подключается к Redis:
 
 ```bash
-docker compose up redis
+docker compose -f docker-compose.yml -f infrastructure/docker/compose.ports.yml up -d redis
 ```
 
 Бот не стартует:
