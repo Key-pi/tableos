@@ -232,7 +232,14 @@ the cached balance differs from the ledger (`assert_bonus_balance_reconciled`)
 and then resynchronises it. Source-linked idempotency keys are unique per
 partner. Quick sale (`register_walk_in_sale*`) requires a positive amount,
 optionally redeems bonuses before accrual and accrues `MANUAL_PURCHASE`
-programmes. `expires_at` is written on accruals but nothing expires bonuses.
+programmes. Cashback programmes have an accrual base
+(`BonusProgram.accrual_base`, PQ-030): `full_total` (default) accrues on the
+whole purchase; `money_paid` subtracts the bonus-paid part — for a quick sale
+its `bonus_spent_amount`, for a paid order its share of the bill's bonuses
+(`apps/billing/services.py:_bill_bonus_share_by_order`, proportional to its
+lines in the bill, remainder on the last order). The minimum order total is
+compared with the full total. `expires_at` is written on accruals but nothing
+expires bonuses.
 The management command `apply_manual_purchase_bonus` accrues without a source
 key, so re-running it accrues again.
 
@@ -288,7 +295,7 @@ transactions; allowed operations are actions that call owner services.
 
 ## Tests and checks
 
-- 250 tests after B3.2 part B, green on SQLite and on PostgreSQL 16. Nine
+- 265 tests after B3.2 part C, green on SQLite and on PostgreSQL 16. Nine
   are PostgreSQL-only and skipped on SQLite: concurrent order transition
   (`apps/orders/test_concurrency.py`); concurrent QR scans, two guests
   scanning an empty table, and paying a visit while a guest joins it

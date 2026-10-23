@@ -4,8 +4,8 @@
 (post-B3 correctness fixes) are complete. The full suite, including every
 PostgreSQL-gated test, passes on PostgreSQL 16 in a development environment;
 the production data audits for the B2/B3 migrations are still required before
-rollout. B3.2 is approved; parts A (bill changes and void) and B (table
-visits) are complete, part C (cashback base) is next. B4 and B5 are proposals
+rollout. B3.2 is complete: parts A (bill changes and void), B (table visits)
+and C (cashback base). B4 and B5 are proposals
 and require owner approval before any application-code, migration,
 dependency, or runtime change begins.
 
@@ -189,7 +189,7 @@ PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implem
 | Field | Proposal |
 |---|---|
 | **Goal** | Implement the owner decisions that need new data: visit-scoped billing, auditable bill changes, cashback base option. |
-| **Design** | [`../architecture/B3_2_VISITS_AND_BILL_CHANGES.md`](../architecture/B3_2_VISITS_AND_BILL_CHANGES.md) — approved 2026-10-23; parts A (bill changes), B (visits), C (cashback base) ship separately. **Parts A (AA-022) and B (AA-020) are complete**; part C is next. |
+| **Design** | [`../architecture/B3_2_VISITS_AND_BILL_CHANGES.md`](../architecture/B3_2_VISITS_AND_BILL_CHANGES.md) — approved 2026-10-23; parts A (bill changes), B (visits), C (cashback base) ship separately. **Parts A (AA-022), B (AA-020) and C (PQ-030) are complete.** |
 | **Scope** | 1) **Table visit** (ADR-0007, PQ-026, AA-020): visit model and backfill migration; join-or-new choice when scanning a table with an active visit; staff flag for tables with several visits and manual close of the old visit; billing eligibility, "request bill" button and settlement checks scoped to the visit. 2) **Bill changes and void** (PQ-028, AA-022): owner-granted permission to change or void bills; remove/add lines, including lines of a cancelled order; recalculation; audit history with actor, time and reason; total may not fall below the paid amount; void releases allocations (the unconditional `unique_order_item_bill_allocation` becomes conditional on the bill not being void). 3) **Cashback base option** (PQ-030): per-programme flag, default = accrue on the full total. |
 | **Not in scope** | Refunds, guest table moves (PQ-007), broadcast delivery. |
 | **Evidence / risks** | AA-020, AA-022, ADR-0007. Open design points to settle in the batch plan: how a bill with applied bonuses is changed (block vs. compensating ledger entry), and how historical sessions are grouped into visits by the backfill. |
@@ -233,6 +233,8 @@ PostgreSQL 16. Details: [ARCHITECTURE_AUDIT.md](ARCHITECTURE_AUDIT.md#b31-implem
 | Operations review | B4 process topology, worker/beat/bot deployment, retry monitoring. |
 | Code owner approval | Each batch’s implementation plan, test plan, rollback plan, and public compatibility impact. |
 
-The next safe action is B3.2 part C (cashback base, PQ-030). Before production rollout of B2/B3/B3.1:
+B3.2 is complete. The next step is owner approval of B4 (broadcast delivery
+durability, AA-030/AA-008) or B5 (AA-031, AA-034). Before production rollout
+of B2/B3/B3.1/B3.2:
 run the duplicate-data audits on a production copy and the full suite on
 PostgreSQL.

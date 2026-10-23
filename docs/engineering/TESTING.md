@@ -14,7 +14,7 @@ docker compose config --quiet
 ```
 
 At the 2026-07-27 baseline, Django check/migration check/tests/compose config
-passed; the test suite ran **139 tests**. After B3.2 part B the suite has **250 tests**; it passes on SQLite (9
+passed; the test suite ran **139 tests**. After B3.2 part C the suite has **265 tests**; it passes on SQLite (9
 PostgreSQL-only tests skipped) and on PostgreSQL 16. Record every full run in
 the table at the end of this document.
 
@@ -101,3 +101,5 @@ There is no CI; every run is manual. Add a row for each full run.
 | 2026-10-23 | B3.2 part A branch | PostgreSQL 16 | full suite | 227 tests OK |
 | 2026-10-23 | B3.2 part B branch | SQLite | full suite | 250 tests OK (9 skipped) |
 | 2026-10-23 | B3.2 part B branch | PostgreSQL 16 | full suite | 250 tests OK; visit race test repeated 6× |
+| 2026-10-23 | B3.2 part C branch | SQLite | full suite | 265 tests OK (9 skipped); Ruff: no new findings in changed files |
+| 2026-10-23 | B3.2 part C branch | PostgreSQL 16 | full suite + `bonuses.0008` backward/forward | 265 tests OK |

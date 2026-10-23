@@ -561,3 +561,16 @@ open — moving closes the old session, and the old visit stays open for staff
 when it has unpaid orders. Join choices show only visits with at least one
 seated guest; an open visit with nobody seated is staff work (⚠), not a
 party to join.
+
+## B3.2 part C implementation update — 2026-10-23
+
+PQ-030 is implemented on branch `b3.2c-cashback`: `BonusProgram.accrual_base`
+(`full_total` default, `money_paid`). With `money_paid` a cashback programme
+accrues on the money-paid part: quick sale `amount − bonus_spent_amount`; paid
+order `order total − its share of the bill's bonuses` (proportional to its
+active lines in the bill, rounding remainder on the last order). The minimum
+order total still compares with the full total; visit and milestone
+programmes are unchanged. The staff quick-sale preview projects the accrual
+for the chosen redemption. Verified: 265 tests on SQLite and PostgreSQL 16,
+mutation checks for the order and quick-sale paths, `bonuses.0008`
+backward/forward on PostgreSQL. B3.2 is complete.
