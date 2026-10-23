@@ -1,22 +1,23 @@
-# TableOS: шпаргалка по проекту
+# Botera Shop: шпаргалка по проекту
 
-> **Статус:** legacy operational reference, updated mechanically after the
-> 2026-07-27 audit. Canonical onboarding and verified commands live in
-> [`docs/engineering/`](docs/engineering/); current behavior and known gaps are
-> in [`docs/architecture/AS_IS_ARCHITECTURE.md`](docs/architecture/AS_IS_ARCHITECTURE.md)
-> and [`docs/audits/`](docs/audits/). Product/spec reconciliation is recorded in
+> **Статус:** старая рабочая шпаргалка, механически обновлённая после аудита
+> 2026-07-27 и последующих батчей. Каноническое вступление и проверенные
+> команды — в [`docs/engineering/`](docs/engineering/); текущее поведение и
+> известные пробелы — в
+> [`docs/architecture/AS_IS_ARCHITECTURE.md`](docs/architecture/AS_IS_ARCHITECTURE.md)
+> и [`docs/audits/`](docs/audits/). Сверка продукта и спецификации — в
 > [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](docs/product/LEGACY_TZ_MIGRATION_MAP.md).
-> This file is retained for historical navigation and does not override those
-> documents or source code.
+> Файл сохранён для исторической навигации и не важнее этих документов и кода.
 
 ## Что это
 
-TableOS сейчас работает как backend/admin/Telegram-bot MVP для заведений:
+Botera Shop (бывший TableOS) — MVP из бэкенда, Admin и Telegram-бота для
+заведений и магазинов:
 
-- Django хранит доменную модель, настройки, admin, seed-команды и health/demo endpoints.
-- aiogram обслуживает гостевой и staff Telegram flows.
-- Celery + Redis обрабатывают фоновые доставки: staff notifications, guest order status updates, broadcasts.
-- PostgreSQL предполагается для prod/shared окружений; SQLite можно использовать локально через `DJANGO_USE_SQLITE=true`.
+- Django хранит доменную модель, настройки, Admin, команды демо-данных и адреса проверки здоровья и демо-страницы.
+- aiogram обслуживает сценарии гостей и персонала в Telegram.
+- Celery + Redis выполняют фоновую доставку: уведомления персонала, обновления статуса заказа для гостей, рассылки.
+- PostgreSQL — для продакшена и общих окружений; локально можно использовать SQLite через `DJANGO_USE_SQLITE=true`.
 
 ## Главные процессы
 
@@ -28,7 +29,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py runbot
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker --loglevel=info
 ```
 
-Для production-like запуска лучше разделять очереди:
+Для запуска, близкого к продакшену, лучше разделять очереди:
 
 ```bash
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q default --loglevel=info
@@ -36,23 +37,25 @@ DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q broadcasts --
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery beat --loglevel=info
 ```
 
-Через Docker Compose поднимаются все нужные процессы — `db`, `redis`, `web`, `worker`, `beat`, `bot` (с B4). `beat` и `bot` должны быть в одном экземпляре:
+Docker Compose поднимает все нужные процессы — `db`, `redis`, `web`,
+`worker`, `beat`, `bot` (с B4). `beat` и `bot` должны работать в одном
+экземпляре:
 
 ```bash
 docker compose up
 ```
 
-Для реального Telegram-бота также нужен валидный `BOT_TOKEN_ENCRYPTION_KEY` и активный `BotInstance` с настоящим токеном.
+Для настоящего Telegram-бота также нужны корректный `BOT_TOKEN_ENCRYPTION_KEY` и активный `BotInstance` с настоящим токеном.
 
 ## Первичная подготовка
 
 ```bash
 DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py migrate
-DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py ensure_admin --username admin --email admin@botera.local --password "$TABLEOS_LOCAL_ADMIN_PASSWORD"
+DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py ensure_admin --username admin --email admin@botera.local --password "$ADMIN_PASSWORD"
 DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py seed_baseline_demo
 ```
 
-Быстрый seed одного демо-заведения:
+Быстрое наполнение одного демо-заведения:
 
 ```bash
 DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py seed_demo --slug demo-lounge --name "Demo Lounge" --with-admin --with-manager
@@ -67,14 +70,16 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 ./.venv/bin/ruff check .
 ```
 
-Проверенный baseline на 2026-07-27 (полный вывод и версии — в [BASELINE.md](docs/audits/BASELINE.md)):
+Проверенная база на 2026-07-27 (полный вывод и версии — в [BASELINE.md](docs/audits/BASELINE.md)):
 
-- `manage.py test`: 139 tests OK.
-- `manage.py check`: no issues.
-- `makemigrations --check --dry-run`: no changes detected.
-- `ruff check --no-cache .`: 21 pre-existing violations; `ruff format --check --no-cache .`: 54 files would reformat. Это не green baseline.
+- `manage.py test`: 139 тестов OK.
+- `manage.py check`: замечаний нет.
+- `makemigrations --check --dry-run`: изменений нет.
+- `ruff check --no-cache .`: 21 старое замечание; `ruff format --check --no-cache .`: 54 файла были бы переформатированы. Это не «зелёная» база.
 
-После B1–B5 и самовывоза тестов стало 331, они зелёные на SQLite и PostgreSQL 16; актуальные команды и журнал прогонов — в [TESTING.md](docs/engineering/TESTING.md).
+После B1–B5, самовывоза и упорядочивания каналов тестов стало 331, они
+зелёные на SQLite и PostgreSQL 16; актуальные команды и журнал прогонов — в
+[TESTING.md](docs/engineering/TESTING.md).
 
 ## Как работает Celery
 
@@ -82,10 +87,10 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 
 1. Бизнес-сервис создаёт объект, например `StaffNotification`.
 2. Сервис вызывает `transaction.on_commit(...)`.
-3. После успешного commit вызывается Celery `.delay(...)`.
+3. После успешного коммита вызывается `.delay(...)` Celery.
 4. Celery кладёт задачу в Redis.
-5. Отдельный worker забирает задачу.
-6. Worker отправляет сообщение через Telegram API.
+5. Отдельный воркер забирает задачу.
+6. Воркер отправляет сообщение через Telegram API.
 7. Результат пишется обратно в модель: `delivery_status`, `delivered_at`, `delivery_error`.
 
 Гарантии доставки (B4, [ADR-0008](docs/decisions/ADR-0008.md)): рабочие
@@ -101,9 +106,9 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 - [apps/notifications/services.py](apps/notifications/services.py)
 - [core/settings/base.py](core/settings/base.py)
 
-Важно: в тестах Celery работает в eager-режиме, потому что `CELERY_TASK_ALWAYS_EAGER` автоматически включается для `manage.py test`. Поэтому тесты не требуют живого Redis.
+Важно: в тестах Celery работает в режиме eager, потому что `CELERY_TASK_ALWAYS_EAGER` автоматически включается для `manage.py test`. Поэтому тестам не нужен живой Redis.
 
-## Как проверить Celery без реального Telegram
+## Как проверить Celery без настоящего Telegram
 
 Проверить, что задачи зарегистрированы:
 
@@ -121,79 +126,93 @@ notifications.send_broadcast_campaign
 notifications.send_guest_order_status_update
 ```
 
-Проверить worker локально:
+Проверить воркер локально:
 
 ```bash
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker --loglevel=info
 ```
 
-Проверить worker'ы по отдельным очередям:
+Проверить воркеры по отдельным очередям:
 
 ```bash
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q default --loglevel=info
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q broadcasts --loglevel=info
 ```
 
-Если Redis не запущен, worker будет ругаться на broker connection. Подними Redis:
+Если Redis не запущен, воркер будет ругаться на подключение к брокеру. Подними Redis:
 
 ```bash
 docker compose up redis
 ```
 
-## Как устроены основные flows
+или отдельным контейнером для локальных тестов:
 
-Гость:
+```bash
+docker run --name tableos-redis -p 6379:6379 -d redis:7-alpine
+```
 
-1. Открывает Telegram bot через QR deep link стола.
-2. `/start table_<number>_<token>` активирует `TableSession`.
-3. Гость смотрит меню, добавляет позиции в `Cart`.
-4. Checkout создаёт `Order` и `OrderItem`.
-5. Staff получает уведомление через Celery.
-6. Гость может смотреть `Мой стол`, подтвердить получение, запросить счёт или позвать персонал.
+## Как устроены основные сценарии
+
+Гость за столом:
+
+1. Сканирует QR стола — это deep link на бота.
+2. `/start table_<номер>_<токен>` активирует `TableSession` в визите стола (подсесть к компании или начать новый визит).
+3. Смотрит меню, добавляет позиции в `Cart`.
+4. Оформление создаёт `Order` и `OrderItem`.
+5. Персонал получает уведомление через Celery.
+6. Гость может открыть «Мой стол», подтвердить получение, запросить счёт или позвать персонал.
+
+Гость на самовывозе ([PICKUP.md](docs/architecture/PICKUP.md)):
+
+1. Нажимает «Самовывоз» — корзина переходит в этот способ заказа.
+2. Выбирает время, делится телефоном, решает, списать ли бонусы.
+3. Получает реквизиты для перевода; персонал подтверждает оплату и принимает заказ.
 
 Персонал:
 
-1. Сотрудник должен иметь `EmployeeProfile` с привязанным `TelegramAccount`.
-2. `/staff` открывает staff home.
-3. Staff видит открытые заказы, уведомления, столы, счета.
+1. У сотрудника должен быть `EmployeeProfile` с привязанным `TelegramAccount`.
+2. `/staff` открывает главный экран персонала.
+3. Персонал видит открытые заказы, уведомления, столы, счета, переводы самовывоза.
 4. Статус заказа меняется через `transition_order_status`.
-5. Оплаты идут через billing services и `Payment`.
+5. Оплаты идут через сервисы счетов и `Payment`.
 6. Быстрая продажа идёт через FSM `StaffQuickSaleStates` и `WalkInSale`.
 
-Биллинг:
+Счета:
 
-1. Заказы группируются в `Bill`.
-2. `BillItem` фиксирует позиции внутри счёта.
+1. Заказы группируются в `Bill` (за столом — в пределах визита).
+2. `BillItem` фиксирует позиции внутри счёта; изменения — в `BillAdjustment`.
 3. `Payment` фиксирует оплату.
 4. При полной оплате сервис синхронизирует `Order.paid_at`, статус и может закрыть `TableSession`.
-5. POS/fiscal/online payment интеграции пока только модельный задел.
+5. Кассы, фискализация и онлайн-оплата пока только заготовки в моделях.
 
 ## Где что искать
 
 - Настройки: [core/settings](core/settings/base.py)
 - URL: [core/urls.py](core/urls.py)
-- Admin scoping/RBAC: [core/admin_mixins.py](core/admin_mixins.py)
+- Ограничение Admin по партнёру и права: [core/admin_mixins.py](core/admin_mixins.py)
 - Celery: [core/celery.py](core/celery.py)
-- Партнёры и боты: [apps/partners](apps/partners/models.py)
-- Пользователи/гости/admin access: [apps/users](apps/users/models.py)
-- Столы/QR-сессии: [apps/tables](apps/tables/services.py)
+- Партнёры, боты, часы работы: [apps/partners](apps/partners/models.py)
+- Пользователи, гости, доступ к Admin: [apps/users](apps/users/models.py)
+- Столы, QR-сессии, визиты: [apps/tables](apps/tables/services.py)
 - Меню: [apps/menu](apps/menu/models.py)
-- Заказы/корзина: [apps/orders](apps/orders/services.py)
-- Биллинг: [apps/billing](apps/billing/services.py)
-- Бонусы/quick sale: [apps/bonuses](apps/bonuses/services.py)
+- Заказы и корзина: [apps/orders](apps/orders/services.py)
+- Счета: [apps/billing](apps/billing/services.py); стол — [table_bills.py](apps/billing/table_bills.py); самовывоз — [remote_orders.py](apps/billing/remote_orders.py)
+- Бонусы и быстрая продажа: [apps/bonuses](apps/bonuses/services.py)
 - Уведомления: [apps/notifications](apps/notifications/services.py)
-- Аналитика/отчёт дня: [apps/analytics](apps/analytics/services.py)
-- Bot handlers: [bot/handlers](bot/handlers/staff.py)
+- Аналитика и отчёт дня: [apps/analytics](apps/analytics/services.py)
+- Обработчики бота: [bot/handlers](bot/handlers/staff.py)
 
 ## Правила разработки
 
+Полные правила — в [AGENTS.md](AGENTS.md) и [CLAUDE.md](CLAUDE.md). Кратко:
+
 - Бизнес-логику держать в `services.py`.
-- Bot/admin handlers должны вызывать сервисы, а не повторять бизнес-правила.
-- Всё tenant-scoped должно иметь `partner_id` и фильтроваться по партнёру.
-- В мутирующих сценариях использовать `transaction.atomic`.
-- Внешние вызовы не делать внутри транзакции напрямую: Celery task через `transaction.on_commit`.
-- Массовые broadcast-задачи держать в отдельной Celery queue, чтобы они не мешали staff/order notifications.
-- Для aiogram handlers использовать `sync_to_async` вокруг Django ORM/service calls.
+- Обработчики бота и Admin вызывают сервисы, а не повторяют бизнес-правила.
+- Всё, что принадлежит партнёру, имеет `partner_id` и фильтруется по партнёру.
+- В изменяющих сценариях использовать `transaction.atomic`.
+- Внешние вызовы не делать внутри транзакции: задача Celery через `transaction.on_commit`.
+- Массовые рассылки держать в отдельной очереди Celery, чтобы они не мешали уведомлениям о заказах.
+- В обработчиках aiogram оборачивать вызовы Django ORM и сервисов в `sync_to_async`.
 - После изменения моделей всегда запускать `makemigrations --check --dry-run`.
 
 ## Частые проблемы
@@ -204,44 +223,41 @@ docker compose up redis
 ./.venv/bin/pip install -e .
 ```
 
-Worker не подключается к Redis:
+Воркер не подключается к Redis:
 
 ```bash
 docker compose up redis
 ```
 
-Bot не стартует:
+Бот не стартует:
 
 - Проверь `BOT_TOKEN_ENCRYPTION_KEY`.
 - Проверь, что `BotInstance` активный.
-- Проверь, что partner имеет `status=active`.
-- `runbot` поддерживает только polling mode.
-- Placeholder seed token не считается валидным.
+- Проверь, что у партнёра `status=active`.
+- `runbot` поддерживает только режим polling.
+- Шаблонный токен из демо-данных не считается корректным.
 
 Уведомления не приходят:
 
-- Запущен ли Celery worker?
+- Запущен ли воркер Celery?
 - Запущен ли Redis?
-- Есть ли у партнёра активный polling `BotInstance` с настоящим токеном?
-- У сотрудника есть `EmployeeProfile.telegram_account`?
+- Есть ли у партнёра активный `BotInstance` в режиме polling с настоящим токеном?
+- Есть ли у сотрудника `EmployeeProfile.telegram_account`?
 - Включены ли `bot_notifications_enabled` и нужный флаг уведомлений?
-- Смотри `StaffNotification.delivery_status` и `delivery_error` в admin.
+- Смотри `StaffNotification.delivery_status` и `delivery_error` в Admin.
 
 Admin не показывает данные партнёра:
 
 - Проверь `AdminAccessProfile`.
 - Проверь `can_access_admin`, `is_active`.
 - Проверь `AdminSectionPermission`.
-- Superuser видит всё, tenant admin видит только свой `partner`.
+- Суперпользователь видит всё, администратор арендатора — только свой `partner`.
 
-## Что ещё не закрыто
+## Что ещё не сделано
 
-- Нет публичного REST/API слоя.
-- Нет Telegram WebApp/frontend.
-- Webhook mode для Telegram пока не реализован.
-- Bonus expiration, POS sync и fiscal sync ещё не вынесены в полноценные фоновые интеграции.
-- POS/fiscal/online payment provider contracts пока не реализованы.
-
-
-
-docker run --name tableos-redis -p 6379:6379 -d redis:7-alpine - для поднятия контейнера редиса отдельно при локал тесете
+- Нет публичного REST/API-слоя.
+- Нет Telegram WebApp и фронтенда.
+- Режим webhook для Telegram не реализован.
+- Сгорание бонусов, синхронизация с кассой и фискализацией не вынесены в полноценные фоновые интеграции.
+- Договоры с провайдерами касс, фискализации и онлайн-оплаты не реализованы.
+- Доставка и отправка почтой — следующие способы заказа после самовывоза.

@@ -1,15 +1,17 @@
-# TableOS - подробное техническое задание
+# TableOS — подробное техническое задание (историческое)
 
-> **Статус после audit 2026-07-27:** legacy product/specification source. Этот
-> документ сохранён полностью как исходное требование и не является молчаливым
-> описанием фактически работающего кода. Canonical product contract находится в
-> [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md), current
-> implementation — в
+> **Статус:** исторический продуктовый источник, сохранён полностью после
+> аудита 2026-07-27. Продукт теперь называется **Botera Shop** (сеть Botera,
+> см. [`docs/product/ECOSYSTEM_DIRECTION.md`](docs/product/ECOSYSTEM_DIRECTION.md)).
+> Документ — исходное требование, а не описание работающего кода.
+> Канонический продуктовый договор — в
+> [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md), текущая
+> реализация — в
 > [`docs/architecture/AS_IS_ARCHITECTURE.md`](docs/architecture/AS_IS_ARCHITECTURE.md),
-> а построчное сопоставление и противоречия — в
+> а сопоставление разделов и противоречия — в
 > [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](docs/product/LEGACY_TZ_MIGRATION_MAP.md).
-> При расхождении сначала фиксируйте evidence и получите owner decision; не
-> меняйте код или смысл требования молча.
+> При расхождении сначала зафиксируйте доказательство и получите решение
+> владельца; не меняйте код или смысл требования молча.
 
 Дата актуализации: 2026-06-12  
 Контекст: документ составлен после анализа текущего проекта TableOS и исходного продуктового описания.

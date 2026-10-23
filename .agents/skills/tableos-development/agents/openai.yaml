@@ -1,4 +1,4 @@
 interface:
-  display_name: "TableOS Development"
-  short_description: "Implement TableOS changes safely"
-  default_prompt: "Use $tableos-development to make a focused, tenant-safe TableOS change that follows repository governance."
+  display_name: "Botera Shop: разработка"
+  short_description: "Безопасные изменения в Botera Shop"
+  default_prompt: "Используй $tableos-development, чтобы сделать точечное изменение в Botera Shop с соблюдением границ партнёров и правил репозитория."

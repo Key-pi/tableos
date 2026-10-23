@@ -1,615 +1,626 @@
-# TableOS — Architecture audit
+# Botera Shop (тогда TableOS) — архитектурный аудит
 
-**Mode:** `AUDIT_AND_GOVERNANCE`  
-**Audit date:** 2026-07-27  
-**Scope:** every first-party source module, model, migration, admin/form, bot handler/router, Celery task, test module, root configuration, compose file, and the required root documents. No application code was changed.
+**Режим:** `AUDIT_AND_GOVERNANCE`
+**Дата аудита:** 2026-07-27
+**Объём:** каждый собственный модуль исходного кода, модель, миграция, Admin и форма, обработчик и роутер бота, задача Celery, тестовый модуль, корневая конфигурация, файл compose и обязательные корневые документы. Код приложения не менялся.
 
-> **Reading this register.** Findings AA-001–AA-019 and their line-numbered
-> evidence describe the audit baseline commit `b17ce5b`; they are preserved as
-> historical evidence and are not rewritten when code moves. The B1–B3 update
-> sections record what changed. Findings AA-020–AA-032 come from the
-> [post-B3 review](#post-b3-review--2026-10-23) at commit `ddb7dce` and cite code
-> as `path:symbol`. The current implemented state is in
+> **Как читать реестр.** Находки AA-001–AA-019 и их доказательства с номерами
+> строк описывают базовый коммит аудита `b17ce5b`; они сохранены как
+> историческое свидетельство и не переписываются при переносе кода. Разделы
+> «Что сделано в …» записывают изменения. Находки AA-020–AA-034 получены в
+> [проверке после B3](#проверка-после-b3--2026-10-23) на коммите `ddb7dce` и
+> ссылаются на код как `path:symbol`. Текущее реализованное состояние — в
 > [`../architecture/AS_IS_ARCHITECTURE.md`](../architecture/AS_IS_ARCHITECTURE.md).
 
-## Method and terminology
+## Метод и термины
 
-The source tree and executable baseline are the primary evidence. `README.md`, `PROJECT_CHEATSHEET.md`, and `TABLEOS_TZ.md` are important product/documentary evidence but are not silently treated as executable truth. File-by-file coverage is in [`FILE_COVERAGE.md`](FILE_COVERAGE.md); inventory and commands are in [`CODEBASE_INVENTORY.md`](CODEBASE_INVENTORY.md) and [`BASELINE.md`](BASELINE.md).
+Основное доказательство — дерево исходников и исполняемая база. `README.md`, `PROJECT_CHEATSHEET.md` и `TABLEOS_TZ.md` — важные продуктовые и документальные свидетельства, но молча не считаются исполняемой правдой. Покрытие по файлам — в [`FILE_COVERAGE.md`](FILE_COVERAGE.md); инвентарь и команды — в [`CODEBASE_INVENTORY.md`](CODEBASE_INVENTORY.md) и [`BASELINE.md`](BASELINE.md).
 
-Severity is the impact if a supported/authorized flow is exercised: **High** can break tenant isolation, money/state integrity, or durable delivery; **Medium** causes material incorrect behavior or blocks a specification; **Low** is a contained operational or disclosure issue. Confidence describes how directly the behavior was established from source, tests, or a controlled admin probe. `AMBIGUOUS_PRODUCT_DECISION` means code must not guess the policy.
+Серьёзность — это последствия, если выполняется поддерживаемый и разрешённый сценарий: **High** может нарушить изоляцию партнёров, целостность денег и состояний или надёжную доставку; **Medium** даёт существенно неверное поведение или блокирует спецификацию; **Low** — ограниченная эксплуатационная проблема или раскрытие. Уверенность описывает, насколько прямо поведение установлено по коду, тестам или контролируемой пробе Admin. `AMBIGUOUS_PRODUCT_DECISION` значит, что код не должен угадывать политику.
 
-## Executive risk register
+## Сводный реестр рисков
 
-| ID | Category | Severity | Confidence | Short conclusion | Roadmap batch |
+| ID | Категория | Серьёзность | Уверенность | Краткий вывод | Батч |
 |---|---|---:|---:|---|---|
-| AA-001 | SECURITY / PERMISSION | High | High | Disabled user can remain a staff actor. | B1 |
-| AA-002 | SECURITY / TENANCY_RISK | High | High | Same-partner graph is not a durable invariant. | B1 |
-| AA-003 | BUG / FINANCIAL_INTEGRITY | High | High | Admin can bypass lifecycle and ledger services. | B2 |
-| AA-004 | BUG / CONCURRENCY | High | High | Order state transition uses stale unlocked row. | B2 |
-| AA-005 | BUG / CONCURRENCY | High | High | One guest can obtain concurrent active table sessions. | B2 |
-| AA-006 | BUG / FINANCIAL_INTEGRITY | High | High | One order item can be allocated to two bills. | B3 |
-| AA-007 | BUG / FINANCIAL_INTEGRITY | High | High | Loyalty wallet is not serialized or source-idempotent. | B3 |
-| AA-008 | BUG / ASYNC | High | High | Broadcast holds transaction over Telegram I/O and lacks lease/idempotency. | B4 — resolved |
-| AA-009 | BUG / PERMISSION | Medium | High | Suspension and stale staff capability are not rechecked at execution. | B1 |
-| AA-010 | BUG / ROUTING | Medium | High | Partner button-label collisions are nondeterministic. | B1 |
-| AA-011 | CODE_IS_BEHIND_SPEC | Medium | High | `ORDER_COMPLETED` loyalty trigger has no runtime dispatch. | B3 |
-| AA-012 | BUG / DATA_VALIDATION | Medium | High | Quick sale accepts non-positive amount. | B3 |
-| AA-013 | AMBIGUOUS_PRODUCT_DECISION | Medium | High | Analytics mixes gross quick-sale and net bill payment as revenue. | B3 |
-| AA-014 | AMBIGUOUS_PRODUCT_DECISION | Medium | High | Full bonus redemption can leave an unpayable zero bill. | B3 |
-| AA-015 | SECURITY / TENANCY_RISK | Medium | High | Admin filters, inlines, and global Telegram identity have gaps. | B1 |
-| AA-016 | TEST_GAP | Medium | High | No PostgreSQL concurrency/admin-isolation characterization coverage. | B1–B4 |
-| AA-017 | PREMATURE_ABSTRACTION / NAMING_PLACEMENT | Medium | High | Interfaces/repositories/tasks are uneven and mostly unconsumed. | B5 — resolved |
-| AA-018 | DOCUMENTATION_DRIFT | Medium | High | Root docs claim stale tests/lint/deployment paths and local links. | B0 |
-| AA-019 | BUG / RELIABILITY | Low | High | Demo seed is non-atomic and can leave partial identity changes. | B5 — resolved |
+| AA-001 | SECURITY / PERMISSION | High | High | Отключённый пользователь может оставаться сотрудником-исполнителем. | B1 |
+| AA-002 | SECURITY / TENANCY_RISK | High | High | Граф одного партнёра — не долговечный инвариант. | B1 |
+| AA-003 | BUG / FINANCIAL_INTEGRITY | High | High | Admin может обойти сервисы жизненного цикла и журнала. | B2 |
+| AA-004 | BUG / CONCURRENCY | High | High | Смена статуса заказа использует устаревшую незаблокированную строку. | B2 |
+| AA-005 | BUG / CONCURRENCY | High | High | Один гость может получить параллельные активные сессии стола. | B2 |
+| AA-006 | BUG / FINANCIAL_INTEGRITY | High | High | Одну позицию заказа можно распределить в два счёта. | B3 |
+| AA-007 | BUG / FINANCIAL_INTEGRITY | High | High | Бонусный кошелёк не сериализован и не идемпотентен по источнику. | B3 |
+| AA-008 | BUG / ASYNC | High | High | Рассылка держит транзакцию во время ввода-вывода Telegram и не имеет аренды и идемпотентности. | B4 — решено |
+| AA-009 | BUG / PERMISSION | Medium | High | Приостановка и устаревшие права сотрудника не перепроверяются при выполнении. | B1 |
+| AA-010 | BUG / ROUTING | Medium | High | Совпадения подписей кнопок партнёра недетерминированы. | B1 |
+| AA-011 | CODE_IS_BEHIND_SPEC | Medium | High | У события лояльности `ORDER_COMPLETED` нет запуска в работе. | B3 |
+| AA-012 | BUG / DATA_VALIDATION | Medium | High | Быстрая продажа принимает неположительную сумму. | B3 |
+| AA-013 | AMBIGUOUS_PRODUCT_DECISION | Medium | High | Аналитика смешивает брутто быстрых продаж и нетто оплат счетов как выручку. | B3 |
+| AA-014 | AMBIGUOUS_PRODUCT_DECISION | Medium | High | Полное списание бонусами может оставить неоплачиваемый нулевой счёт. | B3 |
+| AA-015 | SECURITY / TENANCY_RISK | Medium | High | Пробелы в фильтрах, inline и глобальной Telegram-личности в Admin. | B1 |
+| AA-016 | TEST_GAP | Medium | High | Нет характеризующего покрытия конкурентности на PostgreSQL и изоляции Admin. | B1–B4 |
+| AA-017 | PREMATURE_ABSTRACTION / NAMING_PLACEMENT | Medium | High | Интерфейсы, репозитории и задачи неравномерны и в основном без потребителей. | B5 — решено |
+| AA-018 | DOCUMENTATION_DRIFT | Medium | High | Корневые документы утверждают устаревшее о тестах, линтере, развёртывании и содержат локальные ссылки. | B0 |
+| AA-019 | BUG / RELIABILITY | Low | High | Наполнение демо-данными не атомарно и может оставить частичные изменения личности. | B5 — решено |
 
-## Findings
+## Находки
 
-### AA-001 — inactive Django users retain staff authority
+### AA-001 — неактивные пользователи Django сохраняют полномочия сотрудника
 
-- **Category / severity / confidence:** `SECURITY / PERMISSION`, High, High.
-- **Evidence:** `apps/employees/selectors.py:11-16` filters `EmployeeProfile.is_active` but not `EmployeeProfile.user.is_active`. `bot/handlers/staff.py:842-858` gates `/staff` through that resolver, and `apps/orders/services.py:290-299` resolves an actor in the same manner.
-- **Current behavior:** disabling a `User` does not itself prevent an otherwise active employee profile from opening staff menus or executing staff actions.
-- **Why it matters:** user disablement is expected to be an immediate access revocation boundary for orders, payment and bonus operations.
-- **Target behavior:** every staff actor resolution requires an active user, an active employee profile, matching partner, and the current capability.
-- **Risk:** former or suspended staff can perform authorized-but-unintended mutations after the account is disabled.
-- **Roadmap batch:** B1 — tenant, actor, and capability guardrails.
-- **Verification:** characterization tests for disabled user across `/staff`, order, billing, notification and bonus callbacks; then a regression suite that proves no service accepts the actor.
+- **Категория / серьёзность / уверенность:** `SECURITY / PERMISSION`, High, High.
+- **Доказательство:** `apps/employees/selectors.py:11-16` фильтрует `EmployeeProfile.is_active`, но не `EmployeeProfile.user.is_active`. `bot/handlers/staff.py:842-858` пропускает к `/staff` через этот селектор, и `apps/orders/services.py:290-299` определяет исполнителя так же.
+- **Текущее поведение:** отключение `User` само по себе не мешает в остальном активному профилю сотрудника открывать меню персонала и выполнять действия персонала.
+- **Почему важно:** отключение пользователя должно немедленно отзывать доступ к заказам, оплатам и бонусным операциям.
+- **Целевое поведение:** каждое определение сотрудника-исполнителя требует активного пользователя, активного профиля сотрудника, совпадения партнёра и текущего права.
+- **Риск:** бывшие или отстранённые сотрудники могут выполнять разрешённые, но нежелательные изменения после отключения аккаунта.
+- **Батч:** B1 — защиты партнёра, исполнителя и прав.
+- **Проверка:** характеризующие тесты отключённого пользователя на `/staff`, callback-ах заказов, счетов, уведомлений и бонусов; затем регрессионный набор, доказывающий, что ни один сервис не принимает такого исполнителя.
 
-### AA-002 — same-partner relationships are not durably enforced
+### AA-002 — связи одного партнёра не обеспечены долговечно
 
-- **Category / severity / confidence:** `SECURITY / TENANCY_RISK`, High, High.
-- **Evidence:** `core/database/models.py:22-33` supplies only a `partner` FK. `TableSession` (`apps/tables/models.py:43-66`), order/cart relations, billing allocation/payment relations, menu references, bonus references, employee references and notification references can link records whose individual `partner` FKs differ. `apps/orders/services.py:112-182` accepts guest/table/session/menu objects without universal common-partner validation.
-- **Current behavior:** normal bot paths usually scope each lookup to the bot partner, but neither the database nor all public services make a mismatched object graph impossible. Admin inline and direct-service paths widen the future misuse surface.
-- **Why it matters:** a tenant boundary based only on caller discipline is not sufficient for money, guest data, or staff authorization.
-- **Target behavior:** owner services validate a common partner before mutation; schema-level constraints/unique keys are added wherever expressible; admin and data migration checks reject invalid graphs.
-- **Risk:** a future caller, admin permission change, script, or bug can create cross-tenant links that later cause data exposure or foreign order settlement.
-- **Roadmap batch:** B1 for guards and characterization; B3 for financially critical durable constraints/migration plan.
-- **Verification:** PostgreSQL tests attempting mismatched relations through services/admin; a data audit query before migration; no cross-partner row can be created via supported write surfaces.
+- **Категория / серьёзность / уверенность:** `SECURITY / TENANCY_RISK`, High, High.
+- **Доказательство:** `core/database/models.py:22-33` даёт только FK `partner`. `TableSession` (`apps/tables/models.py:43-66`), связи заказа и корзины, распределения и оплаты счетов, ссылки меню, бонусов, сотрудников и уведомлений могут связывать записи, у которых собственные FK `partner` различаются. `apps/orders/services.py:112-182` принимает объекты гостя, стола, сессии и меню без общей проверки одного партнёра.
+- **Текущее поведение:** обычные пути бота, как правило, ограничивают каждый поиск партнёром бота, но ни база, ни все публичные сервисы не делают несогласованный граф объектов невозможным. Inline Admin и прямые вызовы сервисов расширяют будущую поверхность злоупотребления.
+- **Почему важно:** граница партнёра, держащаяся только на дисциплине вызывающего, недостаточна для денег, данных гостей и прав персонала.
+- **Целевое поведение:** сервисы-владельцы проверяют общего партнёра до изменения; ограничения и уникальные ключи схемы добавляются везде, где их можно выразить; Admin и проверки миграции данных отклоняют некорректные графы.
+- **Риск:** будущий вызывающий, изменение прав Admin, скрипт или ошибка могут создать связи между партнёрами, которые позже приведут к раскрытию данных или расчёту чужого заказа.
+- **Батч:** B1 — защиты и характеризация; B3 — долговечные ограничения и план миграции для финансово критичного.
+- **Проверка:** тесты на PostgreSQL, пытающиеся создать несогласованные связи через сервисы и Admin; запрос аудита данных перед миграцией; ни одна строка между партнёрами не создаётся через поддерживаемые поверхности записи.
 
-### AA-003 — Django Admin bypasses lifecycle and financial invariants
+### AA-003 — Django Admin обходит инварианты жизненного цикла и денег
 
-- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High.
-- **Evidence:** ordinary `OrderAdmin` changes expose status/totals and mutable item inlines (`apps/orders/admin.py:47-55,98-143`); `BillAdmin` exposes bill financial fields and allocation inlines (`apps/billing/admin.py:23-32,107-118,180-198`); `TableSessionAdmin` exposes state/relations (`apps/tables/admin.py:306-313`); `BonusTransaction` is editable without a wallet reconciliation (`apps/bonuses/admin.py:36-48`). `BillingRequestAdmin` bulk actions use `queryset.update()` (`apps/billing/admin.py:72-88`) despite service guards at `apps/billing/services.py:786-803`.
-- **Current behavior:** a scoped, permitted administrator can take direct model writes that do not execute owner services, state transition validation, totals reconciliation, audit history, or post-commit side effects.
-- **Why it matters:** Django Admin is a production write surface, not merely a debugging tool; it can corrupt money, status history, session closure and loyalty ledger consistency.
-- **Target behavior:** lifecycle/ledger/allocation/derived-total fields become readonly or unavailable; explicit admin actions invoke owner services under the same authorization and transaction rules as bot flows.
-- **Risk:** inconsistent bills/orders, invalid billing-request transitions, mismatched wallet balances, and silently missed notifications.
-- **Roadmap batch:** B2 for state/write protection; B3 for financial controls.
-- **Verification:** Admin integration tests for each restricted field/action; unsupported direct changes are rejected and supported actions generate the same state/history/side effects as service calls.
+- **Категория / серьёзность / уверенность:** `BUG / FINANCIAL_INTEGRITY`, High, High.
+- **Доказательство:** обычные изменения `OrderAdmin` открывают статус, итоги и изменяемые inline позиций (`apps/orders/admin.py:47-55,98-143`); `BillAdmin` открывает финансовые поля счёта и inline распределений (`apps/billing/admin.py:23-32,107-118,180-198`); `TableSessionAdmin` открывает состояние и связи (`apps/tables/admin.py:306-313`); `BonusTransaction` редактируется без сверки кошелька (`apps/bonuses/admin.py:36-48`). Массовые действия `BillingRequestAdmin` используют `queryset.update()` (`apps/billing/admin.py:72-88`) вопреки защитам сервиса в `apps/billing/services.py:786-803`.
+- **Текущее поведение:** ограниченный партнёром администратор с правами может делать прямые записи моделей, не выполняющие сервисы-владельцы, проверку переходов, сверку итогов, историю аудита и побочные эффекты после коммита.
+- **Почему важно:** Django Admin — продакшен-поверхность записи, а не только инструмент отладки; он может испортить деньги, историю статусов, закрытие сессий и согласованность бонусного журнала.
+- **Целевое поведение:** поля жизненного цикла, журнала, распределения и производных итогов становятся только для чтения или недоступны; явные действия Admin вызывают сервисы-владельцы с теми же правилами прав и транзакций, что и сценарии бота.
+- **Риск:** несогласованные счета и заказы, недопустимые переходы запросов счёта, расхождение балансов кошельков и тихо пропущенные уведомления.
+- **Батч:** B2 — защита состояний и записи; B3 — финансовые проверки.
+- **Проверка:** интеграционные тесты Admin на каждое ограниченное поле и действие; неподдерживаемые прямые изменения отклоняются, поддерживаемые действия дают то же состояние, историю и побочные эффекты, что вызовы сервиса.
 
-### AA-004 — staff order transitions are not serialized
+### AA-004 — смены статуса заказа персоналом не сериализованы
 
-- **Category / severity / confidence:** `BUG / CONCURRENCY`, High, High.
-- **Evidence:** `transition_order_status()` is transactional but uses its passed `Order` instance rather than reloading with `select_for_update()` (`apps/orders/services.py:185-232`). Staff obtains an order before calling it (`bot/handlers/staff.py:1437-1457`). The guest confirmation flow does use a locked reload (`apps/orders/services.py:235-287`).
-- **Current behavior:** concurrent callbacks can each validate a stale `accepted` state, write different transitions/history rows, and last-write wins on the order row.
-- **Why it matters:** staff status is a state machine with operational and notification consequences; history must describe the actual sequence.
-- **Target behavior:** reload canonical order under lock, validate transition inside that lock, make repeated callback behavior explicit and idempotent.
-- **Risk:** false histories, conflicting assignment/status, duplicate notices.
-- **Roadmap batch:** B2.
-- **Verification:** PostgreSQL concurrent-transition test plus duplicate callback test; exactly one permitted transition/history/notification results.
+- **Категория / серьёзность / уверенность:** `BUG / CONCURRENCY`, High, High.
+- **Доказательство:** `transition_order_status()` транзакционна, но использует переданный экземпляр `Order`, а не перезагружает его через `select_for_update()` (`apps/orders/services.py:185-232`). Персонал получает заказ до вызова (`bot/handlers/staff.py:1437-1457`). Подтверждение гостем перезагружает под блокировкой (`apps/orders/services.py:235-287`).
+- **Текущее поведение:** параллельные callback-и могут каждый проверить устаревшее состояние `accepted`, записать разные переходы и строки истории, и в строке заказа побеждает последняя запись.
+- **Почему важно:** статус у персонала — машина состояний с рабочими последствиями и уведомлениями; история должна описывать реальную последовательность.
+- **Целевое поведение:** перезагружать канонический заказ под блокировкой, проверять переход внутри неё, сделать поведение повторного callback явным и идемпотентным.
+- **Риск:** ложная история, конфликтующие назначение и статус, повторные уведомления.
+- **Батч:** B2.
+- **Проверка:** тест конкурентной смены статуса на PostgreSQL и тест повторного callback; в итоге ровно один разрешённый переход, одна строка истории и одно уведомление.
 
-### AA-005 — active table session invariant races across tables
+### AA-005 — инвариант активной сессии стола гонится между столами
 
-- **Category / severity / confidence:** `BUG / CONCURRENCY`, High, High.
-- **Evidence:** `apps/tables/models.py:43-66` has no partial unique constraint for active `(partner, guest)` sessions. `activate_table_session()` locks the selected `Table`, not the guest or existing guest session (`apps/tables/services.py:43-91`).
-- **Current behavior:** two scans by the same guest at different tables can lock different rows and create two active sessions; lookup later selects the newest one (`apps/tables/services.py:94-104`).
-- **Why it matters:** session is the authority for cart, order, billing and visit bonus context.
-- **Target behavior:** adopt a documented canonical lock (normally guest) and a PostgreSQL durable active-session invariant or an equivalent serialized design.
-- **Risk:** orders/bills/bonus credits attach to an unintended table/session.
-- **Roadmap batch:** B2.
-- **Verification:** PostgreSQL two-worker test on different table rows; one active session remains and the losing request has deterministic behavior.
+- **Категория / серьёзность / уверенность:** `BUG / CONCURRENCY`, High, High.
+- **Доказательство:** в `apps/tables/models.py:43-66` нет частичного уникального ограничения для активных сессий `(partner, guest)`. `activate_table_session()` блокирует выбранный `Table`, а не гостя или его существующую сессию (`apps/tables/services.py:43-91`).
+- **Текущее поведение:** два скана одного гостя за разными столами могут заблокировать разные строки и создать две активные сессии; позже поиск выбирает самую новую (`apps/tables/services.py:94-104`).
+- **Почему важно:** сессия — источник контекста корзины, заказа, счёта и бонуса за визит.
+- **Целевое поведение:** задокументированная каноническая блокировка (обычно гостя) и долговечный инвариант активной сессии в PostgreSQL или равноценный сериализованный дизайн.
+- **Риск:** заказы, счета и бонусы привязываются не к тому столу или сессии.
+- **Батч:** B2.
+- **Проверка:** тест на PostgreSQL с двумя воркерами на разных строках столов; остаётся одна активная сессия, а проигравший запрос ведёт себя детерминированно.
 
-### AA-006 — bill allocation can duplicate an order item
+### AA-006 — распределение по счёту может продублировать позицию заказа
 
-- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High.
-- **Evidence:** `BillItem` lacks a uniqueness constraint for `order_item` (`apps/billing/models.py:147-175`). `attach_orders_to_bill()` performs check-then-create work without a common transaction/lock (`apps/billing/services.py:134-182`); `create_bill_from_orders()` does the same without locking order/item rows (`:252-309`).
-- **Current behavior:** two concurrent bill-building operations can both see a free item and attach it to different bills.
-- **Why it matters:** one ordered item must not be collectible by two bills.
-- **Target behavior:** define allocation ownership, lock the canonical rows, and add an expressible durable uniqueness/integrity rule with a data migration plan.
-- **Risk:** duplicate collection, settlement corruption, misleading reports.
-- **Roadmap batch:** B3 — financial integrity.
-- **Verification:** PostgreSQL concurrency test and a constraint-level test; data audit shows no pre-existing duplicate allocations before rollout.
+- **Категория / серьёзность / уверенность:** `BUG / FINANCIAL_INTEGRITY`, High, High.
+- **Доказательство:** у `BillItem` нет ограничения уникальности по `order_item` (`apps/billing/models.py:147-175`). `attach_orders_to_bill()` делает «проверить, затем создать» без общей транзакции и блокировки (`apps/billing/services.py:134-182`); `create_bill_from_orders()` делает то же без блокировки строк заказов и позиций (`:252-309`).
+- **Текущее поведение:** две параллельные сборки счёта могут обе увидеть свободную позицию и прикрепить её к разным счетам.
+- **Почему важно:** одна заказанная позиция не должна взиматься двумя счетами.
+- **Целевое поведение:** определить владение распределением, блокировать канонические строки и добавить выразимое долговечное правило уникальности и целостности с планом миграции данных.
+- **Риск:** двойное взимание, порча расчёта, вводящие в заблуждение отчёты.
+- **Батч:** B3 — целостность денег.
+- **Проверка:** тест конкурентности на PostgreSQL и тест на уровне ограничения; аудит данных показывает отсутствие существующих дублей распределения до выкатки.
 
-### AA-007 — loyalty wallet mutation lacks serialization and durable source linkage
+### AA-007 — изменение бонусного кошелька не сериализовано и не имеет долговечной привязки к источнику
 
-- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High.
-- **Evidence:** `apply_bonus_programs()` updates an in-memory guest balance without `select_for_update()` (`apps/bonuses/services.py:32-80`). `redeem_bonus_for_bill()` locks a bill but not `primary_guest` (`apps/billing/services.py:583-633`). `BonusTransaction` (`apps/bonuses/models.py:51-88`) has neither a Bill/WalkInSale source FK nor an idempotency key; bill association is merely a comment. Visit strategy checks “already today” without a lock/constraint (`apps/bonuses/strategies.py:50-63`).
-- **Current behavior:** parallel bills/quick sales/credits can overdraw or lose-update the balance and duplicate a source event.
-- **Why it matters:** the wallet and ledger are financial records and must agree.
-- **Target behavior:** one documented guest-wallet lock order, immutable source-linked ledger entries, idempotency semantics per source event, and explicit compensation/refund policy.
-- **Risk:** negative/incorrect balance, duplicated rewards, unreconcilable ledger and analytics.
-- **Roadmap batch:** B3.
-- **Verification:** PostgreSQL parallel redemption/accrual tests; reconciliation query proves ledger-derived balance equals stored balance for fixtures.
+- **Категория / серьёзность / уверенность:** `BUG / FINANCIAL_INTEGRITY`, High, High.
+- **Доказательство:** `apply_bonus_programs()` обновляет баланс гостя в памяти без `select_for_update()` (`apps/bonuses/services.py:32-80`). `redeem_bonus_for_bill()` блокирует счёт, но не `primary_guest` (`apps/billing/services.py:583-633`). У `BonusTransaction` (`apps/bonuses/models.py:51-88`) нет ни FK источника на Bill/WalkInSale, ни ключа идемпотентности; связь со счётом — лишь комментарий. Стратегия визита проверяет «уже сегодня» без блокировки и ограничения (`apps/bonuses/strategies.py:50-63`).
+- **Текущее поведение:** параллельные счета, быстрые продажи и начисления могут уйти в минус или потерять обновление баланса и повторить событие источника.
+- **Почему важно:** кошелёк и журнал — финансовые записи и должны совпадать.
+- **Целевое поведение:** один задокументированный порядок блокировки кошелька гостя, неизменяемые записи журнала с привязкой к источнику, смысл идемпотентности на событие источника и явная политика компенсаций и возвратов.
+- **Риск:** отрицательный или неверный баланс, двойные награды, несверяемые журнал и аналитика.
+- **Батч:** B3.
+- **Проверка:** тесты параллельного списания и начисления на PostgreSQL; запрос сверки доказывает, что баланс из журнала равен сохранённому на фикстурах.
 
-### AA-008 — broadcast delivery mixes transaction with network I/O and has no durable lease
+### AA-008 — доставка рассылки смешивает транзакцию с сетевым вводом-выводом и не имеет долговечной аренды
 
-- **Category / severity / confidence:** `BUG / ASYNC`, High, High.
-- **Evidence:** `send_broadcast_campaign_now()` remains in a transaction while calling Telegram and sleeping on retry (`apps/notifications/services.py:440-547`). `apps/notifications/tasks.py:59-72` fetches the campaign without a lease, cursor, recipient delivery record, or idempotency guard. Telegram failures are converted into failed results, weakening Celery retry semantics.
-- **Current behavior:** workers/retries can perform duplicate sends and update aggregate counters ambiguously while a database transaction remains open around variable-latency external I/O.
-- **Why it matters:** a broadcast is a side effect that cannot be rolled back with the database transaction; long transactions also harm contention.
-- **Target behavior:** commit a durable delivery intent first, claim recipients with a lease/idempotency key, send outside the transaction, then persist the result in a short follow-up transaction.
-- **Risk:** duplicate customer messages, incorrect campaign reporting, locked rows and unreliable recovery after worker crash.
-- **Roadmap batch:** B4 — async delivery reliability.
-- **Verification:** task retry/parallel-worker/crash-recovery tests proving at most one send per recipient/campaign policy and no network call while a source transaction is open.
+- **Категория / серьёзность / уверенность:** `BUG / ASYNC`, High, High.
+- **Доказательство:** `send_broadcast_campaign_now()` остаётся в транзакции во время вызова Telegram и паузы перед повтором (`apps/notifications/services.py:440-547`). `apps/notifications/tasks.py:59-72` берёт кампанию без аренды, курсора, записи доставки получателю и защиты идемпотентности. Ошибки Telegram превращаются в неудачные результаты, что ослабляет смысл повторов Celery.
+- **Текущее поведение:** воркеры и повторы могут повторно отправлять сообщения и неоднозначно обновлять общие счётчики, пока транзакция базы открыта вокруг внешнего ввода-вывода с переменной задержкой.
+- **Почему важно:** рассылка — побочный эффект, который нельзя откатить вместе с транзакцией базы; длинные транзакции к тому же ухудшают конкуренцию.
+- **Целевое поведение:** сначала закоммитить долговечное намерение доставки, захватывать получателей с арендой и ключом идемпотентности, отправлять вне транзакции, затем сохранять результат в короткой следующей транзакции.
+- **Риск:** повторные сообщения клиентам, неверные отчёты по кампании, заблокированные строки и ненадёжное восстановление после падения воркера.
+- **Батч:** B4 — надёжность фоновой доставки.
+- **Проверка:** тесты повтора задачи, параллельных воркеров и восстановления после падения, доказывающие соблюдение политики «не больше одной отправки на получателя и кампанию» и отсутствие сетевого вызова при открытой исходной транзакции.
 
-### AA-009 — runtime suspension and staff capabilities are not consistently live-checked
+### AA-009 — приостановка и права сотрудника не всегда проверяются на лету
 
-- **Category / severity /confidence:** `BUG / PERMISSION`, Medium, High.
-- **Evidence:** startup runtime rejects suspended partners in `bot/services/runtime.py:21-79`, but per-update context in `bot/services/context.py:5-7` loads a partner without a suspension check. Callback routes including `stafforderopen`, `stafforder`, `stafforderrefresh`, `staffnotiforder`, `staffnotifaccept` resolve an employee but do not consistently re-check `_can_view_open_orders` after a staff card is rendered.
-- **Current behavior:** a post-start suspension does not prove that polling stops processing the partner; a stale staff callback can retain a capability that was later removed.
-- **Why it matters:** operator suspension and permission removal are security control points, not merely display preferences.
-- **Target behavior:** define a single live partner/actor/capability guard used before each protected command; product owner chooses whether legacy in-flight cards are denied, refreshed, or converted to a read-only response.
-- **Risk:** users act under revoked tenant or module permission until process restart/card expiry.
-- **Roadmap batch:** B1.
-- **Verification:** test suspend-after-start and capability-remove-after-card scenarios; each protected handler/service is denied with a deterministic user-facing response.
+- **Категория / серьёзность / уверенность:** `BUG / PERMISSION`, Medium, High.
+- **Доказательство:** при старте процесс отклоняет приостановленных партнёров в `bot/services/runtime.py:21-79`, но контекст на каждое обновление в `bot/services/context.py:5-7` загружает партнёра без проверки приостановки. Callback-маршруты, включая `stafforderopen`, `stafforder`, `stafforderrefresh`, `staffnotiforder`, `staffnotifaccept`, определяют сотрудника, но не всегда перепроверяют `_can_view_open_orders` после показа карточки.
+- **Текущее поведение:** приостановка после старта не доказывает, что polling перестаёт обрабатывать партнёра; устаревший callback может сохранить право, снятое позже.
+- **Почему важно:** приостановка оператором и снятие прав — точки контроля безопасности, а не настройки отображения.
+- **Целевое поведение:** одна живая защита партнёра, исполнителя и права перед каждой защищённой командой; владелец продукта выбирает, отклонять ли старые открытые карточки, обновлять их или превращать в ответ только для чтения.
+- **Риск:** пользователи действуют с отозванными правами партнёра или модуля до перезапуска процесса или устаревания карточки.
+- **Батч:** B1.
+- **Проверка:** тесты «приостановка после старта» и «снятие права после показа карточки»; каждый защищённый обработчик и сервис отказывает с детерминированным ответом пользователю.
 
-### AA-010 — configurable reply labels can collide and misroute bot input
+### AA-010 — настраиваемые подписи reply-кнопок могут совпадать и направлять ввод не туда
 
-- **Category / severity / confidence:** `BUG / ROUTING`, Medium, High.
-- **Evidence:** exact text filters in `bot/filters/content.py:10-21` are evaluated under router ordering; `PartnerBotSettings.clean()` at `apps/partners/models.py:251-286` does not prohibit collisions among action labels.
-- **Current behavior:** two configured actions with the same or stale text match the first applicable handler rather than a stable product action.
-- **Why it matters:** tenant configuration can alter the semantics of ordinary guest/staff messages and lead to wrong lifecycle commands.
-- **Target behavior:** model/form validation establishes a collision policy, and handlers use stable callback/action identifiers wherever reply-text ambiguity cannot be eliminated.
-- **Risk:** incorrect routing, unexpected state mutation, difficult support diagnosis.
-- **Roadmap batch:** B1.
-- **Verification:** form/model validation tests and router tests with duplicate, renamed, and stale labels.
+- **Категория / серьёзность / уверенность:** `BUG / ROUTING`, Medium, High.
+- **Доказательство:** фильтры точного текста в `bot/filters/content.py:10-21` проверяются в порядке роутеров; `PartnerBotSettings.clean()` в `apps/partners/models.py:251-286` не запрещает совпадения подписей действий.
+- **Текущее поведение:** два настроенных действия с одинаковым или устаревшим текстом попадают в первый подходящий обработчик, а не в стабильное продуктовое действие.
+- **Почему важно:** настройки партнёра могут изменить смысл обычных сообщений гостей и персонала и привести к неправильным командам жизненного цикла.
+- **Целевое поведение:** проверка модели и формы задаёт политику совпадений, а обработчики используют стабильные идентификаторы callback и действий везде, где неоднозначность текста нельзя устранить.
+- **Риск:** неверная маршрутизация, неожиданное изменение состояния, трудная диагностика в поддержке.
+- **Батч:** B1.
+- **Проверка:** тесты проверки формы и модели и тесты роутера с повторяющимися, переименованными и устаревшими подписями.
 
-### AA-011 — `ORDER_COMPLETED` bonus programs are configured but not executed
+### AA-011 — бонусные программы `ORDER_COMPLETED` настроены, но не выполняются
 
-- **Category / severity / confidence:** `CODE_IS_BEHIND_SPEC`, Medium, High.
-- **Evidence:** `ORDER_COMPLETED` is a default trigger in `apps/bonuses/models.py:9-24` and seeded configurations. Repository-wide call analysis finds production `apply_bonus_programs()` calls for `VISIT` in `apps/tables/services.py:83-90` and `MANUAL_PURCHASE` in `apps/bonuses/services.py:83-98,151-159`, but none from an order lifecycle.
-- **Current behavior:** a configured completion cashback/milestone program does not accrue through normal order flow.
-- **Why it matters:** the legacy specification presents these programs as product functionality, while actual behavior does not deliver it.
-- **Target behavior:** owner decides the business event (`completed`, `paid`, cancelled/refunded treatment); then an idempotent source-linked order bonus is dispatched after that transition.
-- **Risk:** customers do not receive advertised rewards or receive them at a product-undefined time if patched ad hoc.
-- **Roadmap batch:** B3.
-- **Verification:** product decision record, service-level event tests, duplicate transition tests, and ledger/order source reconciliation.
+- **Категория / серьёзность / уверенность:** `CODE_IS_BEHIND_SPEC`, Medium, High.
+- **Доказательство:** `ORDER_COMPLETED` — событие по умолчанию в `apps/bonuses/models.py:9-24` и в демо-конфигурациях. Анализ вызовов по репозиторию находит продакшен-вызовы `apply_bonus_programs()` для `VISIT` в `apps/tables/services.py:83-90` и `MANUAL_PURCHASE` в `apps/bonuses/services.py:83-98,151-159`, но ни одного из жизненного цикла заказа.
+- **Текущее поведение:** настроенная программа кешбэка или порога за завершение не начисляется в обычном потоке заказа.
+- **Почему важно:** старая спецификация представляет эти программы как функциональность продукта, а реальное поведение её не даёт.
+- **Целевое поведение:** владелец выбирает бизнес-событие (`completed`, `paid`, обработка отмен и возвратов); затем после этого перехода запускается идемпотентный бонус за заказ с привязкой к источнику.
+- **Риск:** клиенты не получают обещанных наград или получают их в неопределённый продуктом момент, если исправлять наспех.
+- **Батч:** B3.
+- **Проверка:** запись продуктового решения, тесты событий на уровне сервиса, тесты повторного перехода и сверка журнала с источником заказа.
 
-### AA-012 — quick sale accepts zero or negative amounts
+### AA-012 — быстрая продажа принимает нулевую или отрицательную сумму
 
-- **Category / severity / confidence:** `BUG / DATA_VALIDATION`, Medium, High.
-- **Evidence:** `register_walk_in_sale()` converts to `Decimal` but does not require `amount > 0` (`apps/bonuses/services.py:102-122`); `apps/bonuses/forms.py:35-61` does not add the guard. `WalkInSale.amount` and `MenuItem.price` lack an explicit positive validator/check (`apps/bonuses/models.py:91-129`, `apps/menu/models.py:28-60`).
-- **Current behavior:** an authorized admin flow can create a non-positive sale; it then enters bonus and analytics logic without a refund lifecycle.
-- **Why it matters:** revenue and loyalty calculations assume a sale is positive.
-- **Target behavior:** require a positive monetary amount at form, service, and durable schema levels; model refunds/voids as an explicit separate lifecycle if required.
-- **Risk:** negative revenue, unintended bonus effect, untraceable correction records.
-- **Roadmap batch:** B3.
-- **Verification:** unit/admin tests for zero/negative rejection and database constraint test; product-approved refund flow has separate tests if introduced.
+- **Категория / серьёзность / уверенность:** `BUG / DATA_VALIDATION`, Medium, High.
+- **Доказательство:** `register_walk_in_sale()` переводит в `Decimal`, но не требует `amount > 0` (`apps/bonuses/services.py:102-122`); `apps/bonuses/forms.py:35-61` такой проверки не добавляет. У `WalkInSale.amount` и `MenuItem.price` нет явного валидатора или проверки положительности (`apps/bonuses/models.py:91-129`, `apps/menu/models.py:28-60`).
+- **Текущее поведение:** разрешённый сценарий Admin может создать неположительную продажу; она попадает в логику бонусов и аналитики без жизненного цикла возврата.
+- **Почему важно:** расчёты выручки и лояльности предполагают, что продажа положительна.
+- **Целевое поведение:** требовать положительной денежной суммы на уровне формы, сервиса и долговечной схемы; возвраты и аннулирования, если нужны, — явный отдельный жизненный цикл.
+- **Риск:** отрицательная выручка, нежелательный бонусный эффект, неотслеживаемые исправительные записи.
+- **Батч:** B3.
+- **Проверка:** unit-тесты и тесты Admin на отказ нуля и отрицательных сумм и тест ограничения базы; утверждённый продуктом сценарий возврата, если появится, получает отдельные тесты.
 
-### AA-013 — revenue semantics mix gross quick sales and net paid bills
+### AA-013 — смысл выручки смешивает брутто быстрых продаж и нетто оплаченных счетов
 
-- **Category / severity / confidence:** `AMBIGUOUS_PRODUCT_DECISION`, Medium, High.
-- **Evidence:** `WalkInSale.net_amount` represents amount after bonuses (`apps/bonuses/models.py:120-129`), yet analytics sums `WalkInSale.amount` (gross) alongside actual `Payment.amount` (net) in `apps/analytics/services.py:136-144,179-235`.
-- **Current behavior:** a 180 sale with 90 bonus redemption reports 180, while a bill flow reports its 90 payment; both are shown under revenue.
-- **Why it matters:** reports can be materially misleading even though individual source records are valid.
-- **Target behavior:** product owner chooses and names cash/net revenue, gross sales, bonus-discount, and any combined dashboard metric; implementation exposes them separately if needed.
-- **Risk:** incorrect financial decision making and impossible reconciliation with payment records.
-- **Roadmap batch:** B3 after explicit metric decision.
-- **Verification:** approved metric examples including bonus redemption, reconciliation fixtures, and analytics report tests for each named metric.
+- **Категория / серьёзность / уверенность:** `AMBIGUOUS_PRODUCT_DECISION`, Medium, High.
+- **Доказательство:** `WalkInSale.net_amount` — сумма после бонусов (`apps/bonuses/models.py:120-129`), но аналитика суммирует `WalkInSale.amount` (брутто) рядом с фактическим `Payment.amount` (нетто) в `apps/analytics/services.py:136-144,179-235`.
+- **Текущее поведение:** продажа на 180 со списанием 90 бонусов попадает в отчёт как 180, а сценарий счёта — как оплата 90; оба показываются как выручка.
+- **Почему важно:** отчёты могут существенно вводить в заблуждение, даже если отдельные исходные записи корректны.
+- **Целевое поведение:** владелец продукта выбирает и называет денежную/нетто выручку, брутто продаж, скидку бонусами и любую комбинированную метрику панели; реализация показывает их раздельно, если нужно.
+- **Риск:** неверные финансовые решения и невозможность сверки с записями оплат.
+- **Батч:** B3 после явного решения о метриках.
+- **Проверка:** утверждённые примеры метрик со списанием бонусов, фикстуры сверки и тесты отчёта аналитики на каждую названную метрику.
 
-### AA-014 — full bonus redemption leaves a zero bill without settlement policy
+### AA-014 — полное списание бонусами оставляет нулевой счёт без политики расчёта
 
-- **Category / severity / confidence:** `AMBIGUOUS_PRODUCT_DECISION`, Medium, High.
-- **Evidence:** `BonusProgram.max_redeem_share` has no strict upper bound below 100 (`apps/bonuses/models.py:31-42`); redemption can reduce a bill to `0.00` (`apps/billing/services.py:615-634`), while `record_payment()` rejects non-positive amounts (`:528-530`).
-- **Current behavior:** with a 100% configuration, a zero-total bill can remain issued/open because no payment can close it.
-- **Why it matters:** order/session settlement and financial reporting lose a coherent terminal state.
-- **Target behavior:** owner chooses either a redemption cap below 100% or an explicit zero-payment settlement transition that closes the bill and records the non-cash consideration.
-- **Risk:** stranded bills/orders/sessions and inaccurate payment/bonus reporting.
-- **Roadmap batch:** B3 after owner decision.
-- **Verification:** configuration boundary tests and end-to-end zero-total settlement test for the chosen policy.
+- **Категория / серьёзность / уверенность:** `AMBIGUOUS_PRODUCT_DECISION`, Medium, High.
+- **Доказательство:** у `BonusProgram.max_redeem_share` нет строгой верхней границы ниже 100 (`apps/bonuses/models.py:31-42`); списание может довести счёт до `0.00` (`apps/billing/services.py:615-634`), а `record_payment()` отклоняет неположительные суммы (`:528-530`).
+- **Текущее поведение:** при настройке 100% счёт с нулевым итогом может остаться выставленным и открытым, потому что его не закрыть ни одной оплатой.
+- **Почему важно:** расчёт заказа и сессии и финансовые отчёты теряют согласованное финальное состояние.
+- **Целевое поведение:** владелец выбирает либо предел списания ниже 100%, либо явный переход расчёта с нулевой оплатой, закрывающий счёт и записывающий неденежное возмещение.
+- **Риск:** застрявшие счета, заказы и сессии и неточные отчёты об оплатах и бонусах.
+- **Батч:** B3 после решения владельца.
+- **Проверка:** тесты границ конфигурации и сквозной тест расчёта нулевого итога для выбранной политики.
 
-### AA-015 — secondary admin tenant boundaries and identity ownership are incomplete
+### AA-015 — второстепенные границы партнёра в Admin и владение личностью неполны
 
-- **Category / severity / confidence:** `SECURITY / TENANCY_RISK`, Medium, High.
-- **Evidence:** `ScopedAdminMixin` scopes normal querysets but not the `partner` list filter (`core/admin_mixins.py:79-87`); an audited owner account with one partner saw four global partner filter choices. Standard child inlines are not themselves scoped; `save_formset` sets partner only when empty, preserving an explicitly cross-tenant relation. `EmployeeProfileAdminForm.save()` updates global Telegram identity data (`apps/employees/forms.py:65-83`) from a tenant-admin form.
-- **Current behavior:** ordinary object access remains scoped in tested top-level admins, but partner names/IDs can be disclosed; future child permissions can make inlines a cross-tenant write surface; a venue administrator can change global Telegram identity used by another tenant.
-- **Why it matters:** tenant isolation includes metadata disclosure and authority over globally shared identity.
-- **Target behavior:** scope/remove tenant filter choices, use explicitly scoped inline forms/querysets, and move global identity edits behind a product-approved identity/consent rule.
-- **Risk:** low-grade tenant enumeration now; material cross-tenant writes/identity mutation after permission configuration changes.
-- **Roadmap batch:** B1.
-- **Verification:** admin request tests for list filters, related field choices, inlines and identity conflict cases under two tenants.
+- **Категория / серьёзность / уверенность:** `SECURITY / TENANCY_RISK`, Medium, High.
+- **Доказательство:** `ScopedAdminMixin` ограничивает обычные выборки, но не фильтр списка `partner` (`core/admin_mixins.py:79-87`); проверенный аккаунт владельца с одним партнёром видел четыре глобальных варианта фильтра партнёра. Стандартные дочерние inline сами по себе не ограничены; `save_formset` ставит партнёра, только если он пуст, сохраняя явно чужую связь. `EmployeeProfileAdminForm.save()` обновляет данные глобальной Telegram-личности (`apps/employees/forms.py:65-83`) из формы Admin арендатора.
+- **Текущее поведение:** обычный доступ к объектам в проверенных Admin верхнего уровня ограничен, но названия и идентификаторы партнёров могут раскрываться; будущие права на дочерние объекты могут сделать inline поверхностью записи между партнёрами; администратор заведения может изменить глобальную Telegram-личность, которую использует другой партнёр.
+- **Почему важно:** изоляция партнёров включает раскрытие метаданных и полномочия над общей глобальной личностью.
+- **Целевое поведение:** ограничить или убрать варианты фильтра партнёра, использовать явно ограниченные формы и выборки inline, а правку глобальной личности поставить за утверждённое продуктом правило личности и согласия.
+- **Риск:** сейчас — небольшое перечисление партнёров; после изменения настроек прав — существенные записи между партнёрами и изменение личности.
+- **Батч:** B1.
+- **Проверка:** тесты запросов Admin на фильтры списков, выбор связанных полей, inline и конфликты личности у двух партнёров.
 
-### AA-016 — critical concurrency, permission and admin paths lack characterization tests
+### AA-016 — критические пути конкуренции, прав и Admin без характеризующих тестов
 
-- **Category / severity / confidence:** `TEST_GAP`, Medium, High.
-- **Evidence:** 17 test modules cover ordinary flows, but no inspected tests exercise concurrent TableSession/Order/BillItem/wallet/broadcast execution, inactive staff, live suspension, stale capability, label collision, admin filter/inline isolation, or direct-admin lifecycle writes. Baseline SQLite test success does not model production PostgreSQL locking.
-- **Current behavior:** regressions in the highest-risk paths can pass the existing suite.
-- **Why it matters:** refactoring stateful/financial code without characterization makes behavior changes indistinguishable from fixes.
-- **Target behavior:** each approved batch begins with focused PostgreSQL-capable and admin/bot authorization tests, then makes the smallest supported correction.
-- **Risk:** accidental behavioral breakage and false confidence from SQLite-only test runs.
-- **Roadmap batch:** B1–B4, as a precondition within each batch.
-- **Verification:** test matrix in the roadmap is green against PostgreSQL; tests fail on the audited behavior where a defect is being fixed.
+- **Категория / серьёзность / уверенность:** `TEST_GAP`, Medium, High.
+- **Доказательство:** 17 тестовых модулей покрывают обычные потоки, но ни один просмотренный тест не проверяет конкурентное выполнение TableSession/Order/BillItem/кошелька/рассылки, неактивного сотрудника, приостановку на лету, устаревшее право, совпадение подписей, изоляцию фильтров и inline Admin или прямые записи жизненного цикла через Admin. Успех базовых тестов на SQLite не моделирует блокировки PostgreSQL в продакшене.
+- **Текущее поведение:** регрессии в самых рискованных путях могут проходить существующий набор.
+- **Почему важно:** рефакторинг кода с состоянием и деньгами без характеризации делает изменения поведения неотличимыми от исправлений.
+- **Целевое поведение:** каждый утверждённый батч начинается с точечных тестов, работающих на PostgreSQL, и тестов прав Admin и бота, затем делает минимальное поддерживаемое исправление.
+- **Риск:** случайная поломка поведения и ложная уверенность от прогонов только на SQLite.
+- **Батч:** B1–B4, как условие внутри каждого батча.
+- **Проверка:** матрица тестов из дорожной карты зелёная на PostgreSQL; тесты падают на поведении из аудита там, где дефект исправляется.
 
-### AA-017 — layer labels hide unused abstractions and a task/service cycle
+### AA-017 — названия слоёв скрывают неиспользуемые абстракции и цикл задача/сервис
 
-- **Category / severity / confidence:** `PREMATURE_ABSTRACTION / NAMING_PLACEMENT`, Medium, High.
-- **Evidence:** AST/import analysis found no first-party consumers for `SnapshotBuilder`, `BonusCalculator`, `ShiftTracker`, `CatalogPublisher`, `NotificationGateway`, `OrderNotifier`, `PartnerScopedService`, `SessionResolver`, or `TelegramIdentityProvider`. `apps/employees/services.py` and `apps/menu/services.py` contain only docstrings; most task modules are placeholders. `apps.notifications.services ↔ apps.notifications.tasks` forms the direct static SCC through a function-local task import.
-- **Current behavior:** folders named services/selectors/repositories/interfaces signal architecture but do not consistently correspond to a meaningful responsibility.
-- **Why it matters:** mechanical abstraction makes ownership and dependency direction harder to audit; deleting without dynamic/API proof would be risky.
-- **Target behavior:** retain only evidence-backed ports/repositories, consolidate reads deliberately, and break the notifications scheduling dependency without changing public task names prematurely.
-- **Risk:** future code follows misleading seams; unreviewed cleanup can break dynamic import/registration or external consumers.
-- **Roadmap batch:** B5 — cleanup after behavior is characterized.
-- **Verification:** static and dynamic registration search, public import check, focused tests, then one narrow removal/consolidation per approved change.
+- **Категория / серьёзность / уверенность:** `PREMATURE_ABSTRACTION / NAMING_PLACEMENT`, Medium, High.
+- **Доказательство:** анализ AST и импортов не нашёл собственных потребителей для `SnapshotBuilder`, `BonusCalculator`, `ShiftTracker`, `CatalogPublisher`, `NotificationGateway`, `OrderNotifier`, `PartnerScopedService`, `SessionResolver` и `TelegramIdentityProvider`. `apps/employees/services.py` и `apps/menu/services.py` содержат только строки документации; большинство модулей задач — заготовки. `apps.notifications.services ↔ apps.notifications.tasks` образуют прямую статическую сильно связную компоненту через импорт задачи внутри функции.
+- **Текущее поведение:** папки services/selectors/repositories/interfaces обозначают архитектуру, но не всегда соответствуют значимой ответственности.
+- **Почему важно:** механические абстракции затрудняют аудит владения и направления зависимостей; удалять без доказательства по динамике и API рискованно.
+- **Целевое поведение:** оставить только обоснованные порты и репозитории, сознательно объединить чтение и разорвать зависимость планирования в уведомлениях, не меняя преждевременно публичные имена задач.
+- **Риск:** будущий код следует ложным швам; непроверенная чистка может сломать динамический импорт, регистрацию или внешних потребителей.
+- **Батч:** B5 — чистка после характеризации поведения.
+- **Проверка:** поиск статических и динамических регистраций, проверка публичных импортов, точечные тесты, затем одно узкое удаление или объединение на каждое утверждённое изменение.
 
-### AA-018 — required root documentation is not an accurate operational source
+### AA-018 — обязательная корневая документация — неточный эксплуатационный источник
 
-- **Category / severity / confidence:** `DOCUMENTATION_DRIFT`, Medium, High.
-- **Evidence:** at the audit baseline, `PROJECT_CHEATSHEET.md` said 66 tests pass and Ruff passes, contained absolute local links, and omitted dynamically registered scheduled broadcast processing; the reproducible baseline records 139 passing tests and 21 pre-existing Ruff errors/54 files needing formatting. The documentation-only B0 correction preserves this evidence while adding a status banner, repo-relative links and current counts. Deployment prose still differs from `docker-compose.yml`, which defines web/worker/DB/Redis but no bot/beat process. `TABLEOS_TZ.md` specifies behavior that current source does not always implement, including order-completed loyalty dispatch and live runtime controls.
-- **Current behavior:** multiple root documents compete as apparent truth and can mislead implementation/review.
-- **Why it matters:** stale operational instructions and undocumented code/spec divergence create unsafe changes and unreliable handoff.
-- **Target behavior:** short root onboarding; canonical product/architecture/engineering/audit documents under `docs/`; legacy TZ retained as source material with an explicit migration map.
-- **Risk:** contributors use wrong commands, incorrectly assume a feature exists, or deploy an incomplete process topology.
-- **Roadmap batch:** B0 — documentation governance, completed in this audit artifact set.
-- **Verification:** root links are repo-relative; canonical documents link to the baseline and feature matrix; all listed contradictions appear in this audit rather than being silently overwritten.
+- **Категория / серьёзность / уверенность:** `DOCUMENTATION_DRIFT`, Medium, High.
+- **Доказательство:** на базе аудита `PROJECT_CHEATSHEET.md` утверждал, что проходят 66 тестов и Ruff, содержал абсолютные локальные ссылки и не упоминал динамически зарегистрированную обработку запланированных рассылок; воспроизводимая база фиксирует 139 проходящих тестов и 21 старую ошибку Ruff, 54 файла требуют форматирования. Правка только документации в B0 сохраняет это свидетельство, добавляя баннер статуса, ссылки относительно репозитория и текущие числа. Текст о развёртывании всё ещё расходится с `docker-compose.yml`, где есть web/worker/DB/Redis, но нет процессов бота и beat. `TABLEOS_TZ.md` описывает поведение, которое текущий код реализует не всегда, включая запуск лояльности за завершённый заказ и живые проверки процесса.
+- **Текущее поведение:** несколько корневых документов конкурируют за видимость правды и могут вводить в заблуждение при реализации и ревью.
+- **Почему важно:** устаревшие эксплуатационные инструкции и незадокументированные расхождения кода и спецификации ведут к небезопасным изменениям и ненадёжной передаче дел.
+- **Целевое поведение:** короткое корневое вступление; канонические документы продукта, архитектуры, инженерных практик и аудита в `docs/`; старое ТЗ сохранено как исходный материал с явной картой переноса.
+- **Риск:** участники используют неверные команды, ошибочно считают функцию существующей или разворачивают неполную схему процессов.
+- **Батч:** B0 — правила документации, выполнено в этом наборе материалов аудита.
+- **Проверка:** корневые ссылки относительны репозиторию; канонические документы ссылаются на базу и матрицу возможностей; все перечисленные противоречия есть в этом аудите, а не тихо перезаписаны.
 
-### AA-019 — demo seed is non-atomic around identity/profile work
+### AA-019 — наполнение демо-данными не атомарно вокруг работы с личностью и профилем
 
-- **Category / severity / confidence:** `BUG / RELIABILITY`, Low, High.
-- **Evidence:** the demo seed path performs multiple related user/profile/configuration operations without the atomic boundary used by the baseline seed. A global Telegram username reassignment can occur before a later employee-profile partner conflict fails.
-- **Current behavior:** a failed demo bootstrap can leave a subset of global identity changes committed.
-- **Why it matters:** demo/operations tooling is still a write path and may contaminate subsequent tests or local troubleshooting.
-- **Target behavior:** make seed intent idempotent and atomic, or document compensating recovery with an explicit dry-run/validation stage.
-- **Risk:** partial local/demo data and misleading staff identity ownership.
-- **Roadmap batch:** B5.
-- **Verification:** injected failure test proves rollback/no partial identity mutation; rerun is idempotent.
+- **Категория / серьёзность / уверенность:** `BUG / RELIABILITY`, Low, High.
+- **Доказательство:** путь демо-наполнения выполняет несколько связанных операций с пользователями, профилями и конфигурацией без атомарной границы, используемой базовым наполнением. Переназначение глобального Telegram username может произойти до того, как позже упадёт конфликт партнёра профиля сотрудника.
+- **Текущее поведение:** неудачная начальная настройка демо может оставить закоммиченной часть изменений глобальной личности.
+- **Почему важно:** инструменты демо и эксплуатации — тоже путь записи и могут засорить последующие тесты или локальную диагностику.
+- **Целевое поведение:** сделать намерение наполнения идемпотентным и атомарным или задокументировать компенсирующее восстановление с явной стадией пробного запуска и проверки.
+- **Риск:** частичные локальные или демо-данные и вводящее в заблуждение владение личностью сотрудника.
+- **Батч:** B5.
+- **Проверка:** тест с внедрённым сбоем доказывает откат и отсутствие частичного изменения личности; повторный запуск идемпотентен.
 
-## Additional audit conclusions
+## Дополнительные выводы аудита
 
-### Tenant isolation
+### Изоляция партнёров
 
-Normal bot reads have a good starting pattern: trusted partner comes from bot-token runtime and most selectors scope by it. That positive result does not close AA-002/AA-015 because database relationships, public service arguments, and Admin represent independent enforcement layers. No direct cross-tenant Telegram exploit path was proven in the reviewed standard guest flows; the documented risks are durable/latent write-boundary failures, not an asserted current customer-data breach.
+У обычного чтения в боте хорошая отправная схема: доверенный партнёр берётся из процесса по токену бота, и большинство селекторов ограничивают по нему. Этот положительный результат не закрывает AA-002/AA-015, потому что связи базы, аргументы публичных сервисов и Admin — независимые слои соблюдения. В просмотренных стандартных сценариях гостя прямого пути атаки между партнёрами через Telegram не доказано; задокументированные риски — долговечные и скрытые сбои границы записи, а не утверждённая текущая утечка данных клиентов.
 
-### Transactions, async work, and external I/O
+### Транзакции, фоновая работа и внешний ввод-вывод
 
-The code correctly uses `transaction.on_commit()` for several ordinary order notifications and uses `sync_to_async` around Django ORM calls in the bot. The broadcast path is the material exception. The target must not introduce a generic outbox/event-bus framework merely because it is a familiar pattern; B4 first establishes the narrow recipient lease/idempotency requirement.
+Код правильно использует `transaction.on_commit()` для нескольких обычных уведомлений о заказах и `sync_to_async` вокруг вызовов Django ORM в боте. Существенное исключение — путь рассылки. Цель не должна вводить общий фреймворк outbox или шины событий только потому, что это знакомый шаблон; B4 сначала устанавливает узкое требование аренды получателя и идемпотентности.
 
-### ORM and performance
+### ORM и производительность
 
-The critical defects are integrity rather than a simple N+1 count. Two lower-priority observations remain: up to ten configured `PartnerButtonFilter` checks can cause repeated partner/content lookups for an unmatched message, and analytics report construction materializes data then filters lists per table. Both require representative query/latency measurement before any optimization; no cache or architectural subsystem is justified by this audit alone.
+Критические дефекты касаются целостности, а не простого счёта N+1. Остаются два замечания меньшего приоритета: до десяти настроенных проверок `PartnerButtonFilter` могут давать повторные загрузки партнёра и текстов для несовпавшего сообщения, а построение отчёта аналитики выгружает данные и затем фильтрует списки по столам. Оба требуют замеров запросов и задержек на представительных данных до любой оптимизации; одним этим аудитом не оправдан ни кэш, ни архитектурная подсистема.
 
-### Documents versus code
+### Документы и код
 
-The documents created by this audit preserve legacy claims as evidence and classify their relationship to source. Product decisions are deliberately left open where the code cannot establish the desired rule (notably completed-versus-paid bonus timing, revenue semantics, zero-total settlement, and stale-card behavior). They must receive owner approval before implementation.
+Документы, созданные этим аудитом, сохраняют старые утверждения как свидетельство и классифицируют их отношение к коду. Продуктовые решения намеренно оставлены открытыми там, где код не может установить желаемое правило (особенно момент бонусов «завершён или оплачен», смысл выручки, расчёт нулевого итога и поведение устаревших карточек). До реализации они должны получить утверждение владельца.
 
-## B1 implementation update — 2026-08-03–04
+## Что сделано в B1 — 2026-08-03–04
 
-The findings above preserve the audited baseline. The following table records
-the approved B1 implementation without rewriting that evidence.
+Находки выше сохраняют базу аудита. Таблица ниже записывает утверждённую
+реализацию B1, не переписывая те доказательства.
 
-| Finding | B1 result | Remaining boundary |
+| Находка | Результат B1 | Оставшаяся граница |
 |---|---|---|
-| AA-001 | Staff resolution and staff-notification recipient selection now require active Django user, active employee profile, and partner consistency. | A formal per-role authorization matrix is still PQ-004. |
-| AA-002 | Generic `create_order` now rejects foreign guest, table, table-session, and menu-item input before mutation. | The database cannot yet enforce all cross-table partner relations; other public service graphs require separate review. |
-| AA-009 | Staff order callbacks recheck current orders-module capability before use. B1 runtime middleware/context recheck every update; a suspended partner receives the approved paused-work response and a live-disabled bot instance is dropped. | Polling transport itself still ends on an operational restart. |
-| AA-010 | `PartnerBotSettings.clean()` rejects duplicate/non-empty routed reply labels. | Raw reply-text routing remains; a stable-intent migration was not selected. |
-| AA-015 | Tenant Admin no longer receives a global partner list filter and foreign partner inline instances are rejected. Non-superusers cannot rebind Telegram ID or use direct global identity Admin, but the venue owner/authorised employee editor can change their staff member's `@username`; the owner can edit venue-user username/name. | Operational/money Admin bypasses are B2/B3. |
-| AA-016 | Added focused service, bot, model-validation, notification, and Admin characterization tests. | PostgreSQL locking/constraint coverage is still required for B2–B4. |
+| AA-001 | Определение сотрудника и выбор получателей уведомлений персонала требуют активного пользователя Django, активного профиля сотрудника и согласованного партнёра. | Формальная матрица прав по ролям — по-прежнему PQ-004. |
+| AA-002 | Общий `create_order` отклоняет чужих гостя, стол, сессию и позицию меню до изменения. | База пока не может обеспечить все связи партнёра между таблицами; графы других публичных сервисов требуют отдельной проверки. |
+| AA-009 | Callback-и заказов персонала перепроверяют текущее право на модуль заказов перед использованием. Middleware и контекст B1 перепроверяют каждое обновление; приостановленный партнёр получает утверждённый ответ «работа приостановлена», обновления отключённого на лету экземпляра бота отбрасываются. | Сам транспорт polling завершается только при эксплуатационном перезапуске. |
+| AA-010 | `PartnerBotSettings.clean()` отклоняет повторяющиеся и пустые подписи с маршрутизацией. | Маршрутизация по сырому тексту остаётся; переход на стабильные намерения не выбран. |
+| AA-015 | Admin арендатора больше не получает глобальный фильтр партнёров, а inline-объекты чужого партнёра отклоняются. Не-суперпользователи не могут перепривязать Telegram ID или пользоваться прямым Admin глобальной личности, но владелец заведения или уполномоченный редактор сотрудников может менять `@username` своего сотрудника; владелец может править имя пользователя и имя пользователя заведения. | Обходы рабочих и денежных путей через Admin — B2/B3. |
+| AA-016 | Добавлены точечные тесты сервисов, бота, проверки моделей, уведомлений и характеризующие тесты Admin. | Покрытие блокировок и ограничений PostgreSQL ещё нужно для B2–B4. |
 
-The B1 technical controls are verified by the focused Django test suite in
-local SQLite mode. It is not evidence of a PostgreSQL concurrency invariant;
-the owner approved and B1 implemented the former PQ-013/PQ-019 policies on
-2026-08-04.
+Технические меры B1 проверены точечным набором тестов Django в локальном
+режиме SQLite. Это не доказательство инварианта конкурентности на PostgreSQL;
+владелец утвердил, а B1 реализовал бывшие политики PQ-013/PQ-019 2026-08-04.
 
-## B2 implementation update — 2026-08-06
+## Что сделано в B2 — 2026-08-06
 
-The approved B2 batch keeps the audited findings above as historical evidence
-and records the bounded remediation:
+Утверждённый батч B2 сохраняет находки выше как историческое свидетельство и
+записывает ограниченное исправление:
 
-| Finding | B2 result | Remaining boundary |
+| Находка | Результат B2 | Оставшаяся граница |
 |---|---|---|
-| AA-003 | Order/cart/bill/allocation/session lifecycle and derived fields are read-only in Admin; explicit order, bill, table-session and BillingRequest actions call owner services. BillingRequest actions no longer use queryset `.update()`. | Financial allocation/ledger correction policy remains B3. |
-| AA-004 | `transition_order_status()` reloads the current order under `select_for_update()` before validating and writing history/notifications. | PostgreSQL concurrent execution is included as a gated test and was not runnable locally. |
-| AA-005 | Table activation locks `GuestProfile → Table → active sessions`; the partial unique active-session constraint prevents duplicate scopes and preserves latest-scan-wins behavior. | Production migration requires the same duplicate audit before rollout; PostgreSQL two-table scan execution is environment-gated. |
-| AA-016 | Added B2 stale-state, Admin bypass, service-action and PostgreSQL-only concurrency characterization tests. | Local verification remains SQLite-only because Docker/PostgreSQL was unavailable. |
+| AA-003 | Поля жизненного цикла и производные у заказа, корзины, счёта, распределения и сессии — только для чтения в Admin; явные действия с заказом, счётом, сессией стола и BillingRequest вызывают сервисы-владельцы. Действия BillingRequest больше не используют `.update()` выборки. | Политика исправления финансовых распределений и журнала — B3. |
+| AA-004 | `transition_order_status()` перезагружает текущий заказ под `select_for_update()` до проверки и записи истории и уведомлений. | Конкурентный запуск на PostgreSQL включён как тест только для PostgreSQL и локально не запускался. |
+| AA-005 | Активация стола блокирует `GuestProfile → Table → активные сессии`; частичное уникальное ограничение активной сессии не даёт дублей и сохраняет поведение «побеждает последний скан». | Миграции в продакшене нужен тот же аудит дублей до выкатки; запуск скана двух столов на PostgreSQL зависит от окружения. |
+| AA-016 | Добавлены характеризующие тесты B2 на устаревшее состояние, обход через Admin, действия сервисов и конкурентность только для PostgreSQL. | Локальная проверка осталась только на SQLite, потому что Docker/PostgreSQL был недоступен. |
 
-The local data audit immediately before the migration found 2 active
-`TableSession` rows and no duplicate active `(partner, guest)` scopes. The
-migration does not repair or delete data.
+Локальный аудит данных непосредственно перед миграцией нашёл 2 активные
+строки `TableSession` и ни одного дубля активных пар `(partner, guest)`.
+Миграция не исправляет и не удаляет данные.
 
-## B3 payment-flow update — 2026-08-06
+## Изменения пути оплаты в B3 — 2026-08-06
 
-The owner clarified the bonus-payment UX after the initial B3 shape. The
-canonical command is now `apps/billing/services.py:pay_bill_with_bonuses`:
-it applies the partner-program cap at a 1:1 bonus-to-UAH rate, persists a
-source-linked redemption, and leaves any monetary remainder for ordinary
-cash/terminal payment. Full coverage creates the normal
-`Payment.Method.BONUSES` record for the nominal bonus value in that same
-command; `Bill.paid_amount` counts money payments only. The bot exposes one
-“Оплатить бонусами” intent; the previous separate redeem/zero-settlement Admin
-path is removed (the old callback remains only as a compatibility alias).
+Владелец уточнил интерфейс оплаты бонусами после первой версии B3.
+Каноническая команда теперь `apps/billing/services.py:pay_bill_with_bonuses`:
+она применяет предел программы партнёра по курсу 1 бонус = 1 грн, сохраняет
+списание с привязкой к источнику и оставляет денежный остаток для обычной
+оплаты наличными или терминалом. При полном покрытии та же команда создаёт
+обычную запись `Payment.Method.BONUSES` на номинал бонусов; `Bill.paid_amount`
+учитывает только денежные оплаты. Бот даёт одно намерение «Оплатить
+бонусами»; прежний отдельный путь списания и нулевого расчёта в Admin убран
+(старый callback остался только как псевдоним для совместимости).
 
-The paid-order reward trigger remains a baseline compatibility mapping. The
-partner programme model already carries trigger values, and future batches may
-add partner-specific trigger dispatch; no universal product rule is inferred
-from the current paid baseline. Refund/cancellation and revenue semantics stay
-deferred.
+Событие награды за оплаченный заказ остаётся базовым соответствием для
+совместимости. Модель программ партнёра уже несёт значения событий, и
+будущие батчи могут добавить запуск событий под партнёра; универсального
+продуктового правила из текущей основы «по оплате» не выводится. Смысл
+возвратов, отмен и выручки отложен.
 
-## Post-B3 review — 2026-10-23
+## Проверка после B3 — 2026-10-23
 
-**Scope:** a full re-read of documentation, models, services, Admin, Celery
-tasks and bot handlers at commit `ddb7dce` (branch `clean-project-rules`).
-**Method:** source reading and call-chain tracing. The test suite was not
-executed in this review (no Python environment with project dependencies was
-available); AA-027 was confirmed by executing the isolated function. Every
-finding below must receive a characterization test before its fix, as required
-by `AGENTS.md`.
+**Объём:** полное перечитывание документации, моделей, сервисов, Admin,
+задач Celery и обработчиков бота на коммите `ddb7dce` (ветка
+`clean-project-rules`).
+**Метод:** чтение кода и трассировка цепочек вызовов. Набор тестов в этой
+проверке не запускался (не было окружения Python с зависимостями проекта);
+AA-027 подтверждена запуском изолированной функции. Каждая находка ниже
+должна получить характеризующий тест до исправления, как требует `AGENTS.md`.
 
-### Risk register (post-B3)
+### Реестр рисков (после B3)
 
-| ID | Category | Severity | Confidence | Short conclusion | Roadmap batch |
+| ID | Категория | Серьёзность | Уверенность | Краткий вывод | Батч |
 |---|---|---:|---:|---|---|
-| AA-020 | BUG / FINANCIAL_INTEGRITY | High | High | Billing, bill-request visibility and auto-close are scoped to the table's whole history, not the current visit. | B3.2 part B — resolved |
-| AA-021 | BUG / FINANCIAL_INTEGRITY | High | Medium–High | Post-payment auto-close can raise `TableSessionError` and roll back a payment; adapters do not handle it. | B3.1 — resolved |
-| AA-022 | BUG / FINANCIAL_INTEGRITY | High | High | A cancelled order stays charged in its bill; bills cannot be cancelled and allocations cannot be released. | B3.2 part A — resolved |
-| AA-023 | BUG / ADMIN_BYPASS | Medium | High | `OrderAdmin` leaves `guest`, `table`, `table_session` editable. | B3.1 — resolved |
-| AA-024 | BUG / RELIABILITY | Medium | High | Text is sent with HTML parse mode but never escaped. | B3.1 — resolved |
-| AA-025 | BUG / STATE_MACHINE | Medium | High | Guest receipt confirmation bypasses `ORDER_STATUS_TRANSITIONS`. | B3.1 — resolved |
-| AA-026 | SECURITY / PERMISSION | Medium | High (conditional) | Tenant `UserAdmin` does not exclude superusers that carry the tenant's `partner`. | B3.1 — resolved |
-| AA-027 | BUG / DATA_QUALITY | Low | High (executed) | Checking out via the reply button stores part of the button label as the order comment. | B3.1 — resolved |
-| AA-028 | BUG / PERFORMANCE | Low | High | The Bill changelist recalculates and saves every listed bill on a GET. | B3.1 — resolved |
-| AA-029 | BUG / TIME_BOUNDARY | Low | High | Visit bonus "once per day" uses the UTC day; the daily metric snapshot never revisits the previous day. | B3.1 — resolved |
-| AA-030 | BUG / ASYNC | Low | High | Notification tasks re-send on retry and do not recheck the recipient at delivery time. | B4 — resolved |
-| AA-031 | NAMING_PLACEMENT / LAYERING | Low | High | `core` imports domain apps; unused unscoped selectors and a legacy bonus service remain. | B5 — resolved |
-| AA-032 | DOCUMENTATION_DRIFT | Medium | High | Canonical docs described pre-B1 runtime, cited moved line numbers and claimed PostgreSQL tests that do not exist. | B0.1 (resolved by this review) |
-| AA-033 | BUG / FINANCIAL_INTEGRITY | High | High (executed) | On PostgreSQL every bill creation failed: `FOR UPDATE` on a nullable outer join. | B3.1 (resolved) |
-| AA-034 | OPERATIONS / PORTABILITY | Low | Medium | `Europe/Kiev` is a legacy timezone alias that recent tz databases ship only as an optional package. | B5 — resolved |
+| AA-020 | BUG / FINANCIAL_INTEGRITY | High | High | Счета, видимость запроса счёта и автозакрытие смотрят на всю историю стола, а не на текущий визит. | B3.2 часть B — решено |
+| AA-021 | BUG / FINANCIAL_INTEGRITY | High | Medium–High | Автозакрытие после оплаты может бросить `TableSessionError` и откатить оплату; адаптеры это не обрабатывают. | B3.1 — решено |
+| AA-022 | BUG / FINANCIAL_INTEGRITY | High | High | Отменённый заказ остаётся в счёте; счета нельзя аннулировать, распределения нельзя освободить. | B3.2 часть A — решено |
+| AA-023 | BUG / ADMIN_BYPASS | Medium | High | `OrderAdmin` оставляет `guest`, `table`, `table_session` редактируемыми. | B3.1 — решено |
+| AA-024 | BUG / RELIABILITY | Medium | High | Текст отправляется в режиме HTML, но не экранируется. | B3.1 — решено |
+| AA-025 | BUG / STATE_MACHINE | Medium | High | Подтверждение получения гостем обходит `ORDER_STATUS_TRANSITIONS`. | B3.1 — решено |
+| AA-026 | SECURITY / PERMISSION | Medium | High (условно) | `UserAdmin` арендатора не исключает суперпользователей с `partner` этого арендатора. | B3.1 — решено |
+| AA-027 | BUG / DATA_QUALITY | Low | High (запущено) | Оформление через reply-кнопку сохраняет часть подписи кнопки как комментарий заказа. | B3.1 — решено |
+| AA-028 | BUG / PERFORMANCE | Low | High | Список счетов пересчитывает и сохраняет каждый показанный счёт на GET. | B3.1 — решено |
+| AA-029 | BUG / TIME_BOUNDARY | Low | High | «Раз в день» у бонуса за визит считается по дню UTC; снимок метрик дня никогда не возвращается к предыдущему дню. | B3.1 — решено |
+| AA-030 | BUG / ASYNC | Low | High | Задачи уведомлений повторно отправляют при повторе и не перепроверяют получателя при доставке. | B4 — решено |
+| AA-031 | NAMING_PLACEMENT / LAYERING | Low | High | `core` импортирует доменные приложения; остаются неиспользуемые селекторы без партнёра и старый бонусный сервис. | B5 — решено |
+| AA-032 | DOCUMENTATION_DRIFT | Medium | High | Канонические документы описывали работу до B1, ссылались на сдвинувшиеся строки и заявляли несуществующие тесты PostgreSQL. | B0.1 (решено этой проверкой) |
+| AA-033 | BUG / FINANCIAL_INTEGRITY | High | High (запущено) | На PostgreSQL падало каждое создание счёта: `FOR UPDATE` по nullable outer join. | B3.1 (решено) |
+| AA-034 | OPERATIONS / PORTABILITY | Low | Medium | `Europe/Kiev` — устаревший псевдоним пояса, который свежие базы tz поставляют только необязательным пакетом. | B5 — решено |
 
-### AA-020 — billing and settlement use the table's history instead of the current visit
+### AA-020 — счета и расчёт используют историю стола вместо текущего визита
 
-- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High.
-- **Evidence:** `apps/billing/services.py:get_table_billable_orders` returns every non-cancelled order with `table_id` that is not yet in a bill, with no session or time filter; `get_or_create_personal_bill_for_guest_table` and `get_or_create_shared_bill_for_table` build bills from it. `_close_table_sessions_if_fully_settled` refused to close if any order ever placed at the table was unsettled (replaced in B3.1 by the session-scoped `_close_settled_sessions_of_bill`). `bot/services/navigation.py:resolve_guest_navigation_state` shows "request bill" when any order ever existed at the table. `apps/tables/services.py:activate_table_session` closes a guest's previous session without checking unpaid orders, and there is no session expiry.
-- **Current behavior:** unpaid orders of a guest who left or moved to another table remain attached to the table. The next party's shared bill includes them, a guest re-scanning the same table later gets them in a personal bill, and auto-close after payment never succeeds again for that table.
-- **Why it matters:** guests can be charged for other people's orders, and staff see permanent "unsettled" tables.
-- **Target behavior:** billing eligibility and settlement checks are scoped to an explicit visit (active session or sessions), and orphaned unpaid orders follow an owner-approved policy.
-- **Roadmap batch:** B3.2. PQ-026 is decided (ADR-0007: join-or-new visit on scan, staff closes the old visit); PQ-007 stays open.
-- **Verification:** two consecutive parties at one table with an unpaid order from the first; assert the second party's shared bill, request button and auto-close behaviour.
+- **Категория / серьёзность / уверенность:** `BUG / FINANCIAL_INTEGRITY`, High, High.
+- **Доказательство:** `apps/billing/services.py:get_table_billable_orders` возвращал каждый неотменённый заказ с `table_id`, ещё не попавший в счёт, без фильтра по сессии или времени; `get_or_create_personal_bill_for_guest_table` и `get_or_create_shared_bill_for_table` строили счета из него. `_close_table_sessions_if_fully_settled` отказывался закрывать, если хоть один заказ, когда-либо сделанный за столом, не рассчитан (в B3.1 заменён на `_close_settled_sessions_of_bill` в пределах сессий). `bot/services/navigation.py:resolve_guest_navigation_state` показывал «Запросить счёт», если за столом когда-либо был заказ. `apps/tables/services.py:activate_table_session` закрывает предыдущую сессию гостя без проверки неоплаченных заказов, а истечения сессий нет.
+- **Текущее поведение:** неоплаченные заказы гостя, который ушёл или пересел, остаются привязаны к столу. Общий счёт следующей компании включает их, гость, позже снова отсканировавший тот же стол, получает их в личном счёте, а автозакрытие после оплаты для этого стола больше никогда не срабатывает.
+- **Почему важно:** с гостей могут взять деньги за чужие заказы, а персонал видит вечно «нерассчитанные» столы.
+- **Целевое поведение:** выбор заказов для счёта и проверки расчёта ограничены явным визитом (активной сессией или сессиями), а осиротевшие неоплаченные заказы следуют утверждённой владельцем политике.
+- **Батч:** B3.2. PQ-026 решён (ADR-0007: при скане — подсесть или новый визит, персонал закрывает старый визит); PQ-007 остаётся открытым.
+- **Проверка:** две компании подряд за одним столом с неоплаченным заказом первой; проверить общий счёт второй компании, кнопку запроса и автозакрытие.
 
-### AA-021 — post-payment auto-close can roll back a payment
+### AA-021 — автозакрытие после оплаты может откатить оплату
 
-- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, Medium–High (traced, not executed).
-- **Evidence:** `apps/billing/services.py:_process_post_payment_updates` → `_close_table_sessions_if_fully_settled` checks open bills, carts and order settlement at table level, then calls `apps/tables/services.py:close_table_session_if_settled` for each active session. That function raises `TableSessionError` when `can_close_table_session` finds an `open`/`auto_prepared` billing request for the session — for example a custom-split request — which the table-level pre-check does not consider (pending requests are processed only after the loop). The exception propagates out of `record_payment` / `pay_bill_with_bonuses`. `bot/handlers/staff.py:staff_bill_pay_callback_handler` catches only `OrderFlowError` and `BillingServiceError`; `BillAdmin._record_remaining_payment` catches only `BillingServiceError`; `PaymentAdmin.save_model` catches nothing.
-- **Current behavior:** the payment transaction rolls back; the staff callback raises an unhandled exception without answering; the Admin returns an error page.
-- **Why it matters:** cash that was physically taken cannot be recorded, and the cashier receives no explanation.
-- **Target behavior:** recording a payment never fails because of a secondary session-closing step. Auto-close either skips non-closable sessions or follows an owner-approved rule.
-- **Roadmap batch:** B3.1. PQ-027 decided: auto-close only sessions whose orders are all paid, never failing the payment.
-- **Verification:** table with an open custom-split request; record the final payment through the service, staff callback and Admin; assert the payment persists and the session outcome follows PQ-027.
+- **Категория / серьёзность / уверенность:** `BUG / FINANCIAL_INTEGRITY`, High, Medium–High (прослежено, не запускалось).
+- **Доказательство:** `apps/billing/services.py:_process_post_payment_updates` → `_close_table_sessions_if_fully_settled` проверяет открытые счета, корзины и расчёт заказов на уровне стола, затем вызывает `apps/tables/services.py:close_table_session_if_settled` для каждой активной сессии. Эта функция бросает `TableSessionError`, когда `can_close_table_session` находит запрос счёта сессии в `open`/`auto_prepared` — например запрос особого деления, — чего не учитывает предварительная проверка по столу (ожидающие запросы обрабатываются только после цикла). Исключение выходит из `record_payment` / `pay_bill_with_bonuses`. `bot/handlers/staff.py:staff_bill_pay_callback_handler` ловит только `OrderFlowError` и `BillingServiceError`; `BillAdmin._record_remaining_payment` — только `BillingServiceError`; `PaymentAdmin.save_model` не ловит ничего.
+- **Текущее поведение:** транзакция оплаты откатывается; callback персонала бросает необработанное исключение без ответа; Admin показывает страницу ошибки.
+- **Почему важно:** физически принятые наличные нельзя записать, и кассир не получает объяснения.
+- **Целевое поведение:** запись оплаты никогда не падает из-за второстепенного шага закрытия сессии. Автозакрытие либо пропускает незакрываемые сессии, либо следует утверждённому владельцем правилу.
+- **Батч:** B3.1. PQ-027 решён: автозакрывать только сессии, все заказы которых оплачены, никогда не роняя оплату.
+- **Проверка:** стол с открытым запросом особого деления; записать последнюю оплату через сервис, callback персонала и Admin; проверить, что оплата сохраняется, а судьба сессии соответствует PQ-027.
 
-### AA-022 — cancelled orders remain charged; bills cannot be cancelled
+### AA-022 — отменённые заказы остаются в счёте; счета нельзя аннулировать
 
-- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High.
-- **Evidence:** `apps/orders/services.py:transition_order_status` allows `canceled` from every non-final state and does not look at bill allocation. `apps/billing/services.py:recalculate_bill_totals` sums all `BillItem.line_total` regardless of order status. No service, handler or Admin action sets `Bill.Status.CANCELED`. `BillItem.unique_order_item_bill_allocation` is unconditional, so an allocated `OrderItem` can never be billed elsewhere.
-- **Current behavior:** cancelling an order that is already in a draft/issued bill leaves its lines in the bill total; the guest is asked to pay for it. A wrong bill cannot be voided, and its items cannot be re-billed.
-- **Why it matters:** overcharging customers and no correction path for staff.
-- **Target behavior:** an owner-approved policy for cancelling an allocated order (block, or remove lines and recalculate before payment) and an explicit bill cancel/release command that frees allocations.
-- **Roadmap batch:** B3.2. PQ-028 decided: owner-granted bill change/void with audit history; total never below the paid amount.
-- **Verification:** cancel an order inside a draft bill and inside a partially paid bill; cancel a draft bill and re-bill its orders; PostgreSQL constraint behaviour if the allocation constraint becomes conditional.
+- **Категория / серьёзность / уверенность:** `BUG / FINANCIAL_INTEGRITY`, High, High.
+- **Доказательство:** `apps/orders/services.py:transition_order_status` разрешает `canceled` из любого нефинального состояния и не смотрит на распределение по счёту. `apps/billing/services.py:recalculate_bill_totals` суммирует все `BillItem.line_total` независимо от статуса заказа. Ни сервис, ни обработчик, ни действие Admin не ставит `Bill.Status.CANCELED`. `BillItem.unique_order_item_bill_allocation` безусловно, поэтому распределённую `OrderItem` никогда нельзя выставить в другом счёте.
+- **Текущее поведение:** отмена заказа, уже находящегося в черновике или выставленном счёте, оставляет его строки в итоге счёта; гостя просят за него заплатить. Ошибочный счёт нельзя аннулировать, а его позиции — выставить заново.
+- **Почему важно:** переплата клиентов и отсутствие пути исправления для персонала.
+- **Целевое поведение:** утверждённая владельцем политика отмены распределённого заказа (запрет или удаление строк и пересчёт до оплаты) и явная команда отмены счёта и освобождения распределений.
+- **Батч:** B3.2. PQ-028 решён: изменение и аннулирование счёта по праву от владельца с историей аудита; итог никогда не ниже оплаченного.
+- **Проверка:** отменить заказ внутри черновика и внутри частично оплаченного счёта; аннулировать черновик и выставить его заказы заново; поведение ограничения на PostgreSQL, если ограничение распределения станет условным.
 
-### AA-023 — order relations are editable in Admin
+### AA-023 — связи заказа редактируются в Admin
 
-- **Category / severity / confidence:** `BUG / ADMIN_BYPASS`, Medium, High.
-- **Evidence:** `apps/orders/admin.py:OrderAdmin.readonly_fields` protects status, money and timestamps but not `guest`, `table`, `table_session` (or `comment`). `core/tests_admin.py:test_order_admin_hides_lifecycle_and_derived_fields` checks lifecycle/derived fields only.
-- **Current behavior:** a tenant user with Orders change permission can move an order to another guest, table or session of the same partner, including an order that is already billed or paid.
-- **Why it matters:** bill context, personal-bill eligibility, bonus accrual target and session settlement depend on these relations; B2 intended relation fields to be protected.
-- **Target behavior:** relation fields read-only after creation; any reassignment is an explicit owner-service command.
-- **Roadmap batch:** B3.1.
-- **Verification:** Admin form test asserting the fields are read-only for tenant and platform users.
+- **Категория / серьёзность / уверенность:** `BUG / ADMIN_BYPASS`, Medium, High.
+- **Доказательство:** `apps/orders/admin.py:OrderAdmin.readonly_fields` защищает статус, деньги и метки времени, но не `guest`, `table`, `table_session` (и `comment`). `core/tests_admin.py:test_order_admin_hides_lifecycle_and_derived_fields` проверяет только поля жизненного цикла и производные.
+- **Текущее поведение:** пользователь арендатора с правом изменения заказов может перенести заказ на другого гостя, стол или сессию того же партнёра, включая уже выставленный или оплаченный заказ.
+- **Почему важно:** от этих связей зависят контекст счёта, допуск к личному счёту, получатель бонусов и расчёт сессии; B2 намеревался защитить поля связей.
+- **Целевое поведение:** поля связей только для чтения после создания; любое переназначение — явная команда сервиса-владельца.
+- **Батч:** B3.1.
+- **Проверка:** тест формы Admin, что поля только для чтения для пользователей арендатора и платформы.
 
-### AA-024 — HTML parse mode without escaping
+### AA-024 — режим HTML без экранирования
 
-- **Category / severity / confidence:** `BUG / RELIABILITY`, Medium, High.
-- **Evidence:** `bot/main.py:run_polling` and `apps/notifications/services.py:_send_telegram_messages` set `ParseMode.HTML` by default. No module escapes interpolated values; partner name, menu item names, Telegram usernames, order comments, bill labels and employee names are inserted raw into bot messages and notifications.
-- **Current behavior:** Telegram rejects any message containing a bare `&`, `<` or `>` outside a tag (for example a venue named "Bar & Grill"). Handlers raise `TelegramBadRequest`; notifications are recorded as failed.
-- **Target behavior:** every dynamic value is escaped at the presentation boundary; templates that intentionally contain markup are treated as trusted partner content and documented.
-- **Roadmap batch:** B3.1.
-- **Verification:** rendering tests with `&`, `<`, `>` in each interpolated field.
+- **Категория / серьёзность / уверенность:** `BUG / RELIABILITY`, Medium, High.
+- **Доказательство:** `bot/main.py:run_polling` и `apps/notifications/services.py:_send_telegram_messages` по умолчанию ставят `ParseMode.HTML`. Ни один модуль не экранирует подставляемые значения; название партнёра, названия позиций меню, имена пользователей Telegram, комментарии к заказам, подписи счетов и имена сотрудников вставляются в сообщения и уведомления как есть.
+- **Текущее поведение:** Telegram отклоняет любое сообщение с голым `&`, `<` или `>` вне тега (например заведение «Bar & Grill»). Обработчики бросают `TelegramBadRequest`; уведомления записываются как неудачные.
+- **Целевое поведение:** каждое динамическое значение экранируется на границе представления; шаблоны, намеренно содержащие разметку, считаются доверенным контентом партнёра и документируются.
+- **Батч:** B3.1.
+- **Проверка:** тесты отрисовки с `&`, `<`, `>` в каждом подставляемом поле.
 
-### AA-025 — guest receipt confirmation bypasses the transition table
+### AA-025 — подтверждение получения гостем обходит таблицу переходов
 
-- **Category / severity / confidence:** `BUG / STATE_MACHINE`, Medium, High.
-- **Evidence:** `apps/orders/services.py:confirm_order_received_by_guest` moves any order that is not `new`, `completed` or `canceled` to `completed`. `ORDER_STATUS_TRANSITIONS` does not allow `accepted → completed` or `preparing → completed`.
-- **Current behavior:** two sources of truth for the order state machine; a guest can complete an order the kitchen has not marked ready.
-- **Target behavior:** an explicit guest rule: confirmation from any non-final status, including `new`, recorded as a guest action (PQ-029, decided).
-- **Roadmap batch:** B3.1.
-- **Verification:** state-matrix test covering staff and guest paths.
+- **Категория / серьёзность / уверенность:** `BUG / STATE_MACHINE`, Medium, High.
+- **Доказательство:** `apps/orders/services.py:confirm_order_received_by_guest` переводит в `completed` любой заказ не в `new`, `completed` или `canceled`. `ORDER_STATUS_TRANSITIONS` не разрешает `accepted → completed` и `preparing → completed`.
+- **Текущее поведение:** два источника правды для машины статусов заказа; гость может завершить заказ, который кухня не отметила готовым.
+- **Целевое поведение:** явное правило гостя: подтверждение из любого нефинального статуса, включая `new`, записывается как действие гостя (PQ-029, решено).
+- **Батч:** B3.1.
+- **Проверка:** тест матрицы состояний для путей персонала и гостя.
 
-### AA-026 — tenant user list can contain superusers
+### AA-026 — список пользователей арендатора может содержать суперпользователей
 
-- **Category / severity / confidence:** `SECURITY / PERMISSION`, Medium, High (conditional).
-- **Evidence:** `apps/users/admin.py:UserAdmin` inherits `ScopedAdminMixin.get_queryset`, which filters by `partner_id` only. `ScopedAdminMixin._scoped_related_queryset` excludes superusers from foreign-key choices, but the changelist, change form and password-change view do not. `AdminAccessProfile.save` sets `User.partner` for the linked user.
-- **Current behavior:** if a superuser ever has `partner` set to a venue (manually or through an access profile), that venue's owner can open the superuser's account and reset its password. Seeds do not create this state today.
-- **Target behavior:** tenant user querysets always exclude superusers and platform-only accounts.
-- **Roadmap batch:** B3.1.
-- **Verification:** Admin request test with a partner-linked superuser.
+- **Категория / серьёзность / уверенность:** `SECURITY / PERMISSION`, Medium, High (условно).
+- **Доказательство:** `apps/users/admin.py:UserAdmin` наследует `ScopedAdminMixin.get_queryset`, который фильтрует только по `partner_id`. `ScopedAdminMixin._scoped_related_queryset` исключает суперпользователей из выбора внешних ключей, но список, форма изменения и смена пароля — нет. `AdminAccessProfile.save` ставит `User.partner` связанному пользователю.
+- **Текущее поведение:** если у суперпользователя когда-нибудь окажется `partner` заведения (вручную или через профиль доступа), владелец этого заведения сможет открыть аккаунт суперпользователя и сбросить его пароль. Демо-данные такого состояния сейчас не создают.
+- **Целевое поведение:** выборки пользователей арендатора всегда исключают суперпользователей и аккаунты только платформы.
+- **Батч:** B3.1.
+- **Проверка:** тест запроса Admin с суперпользователем, привязанным к партнёру.
 
-### AA-027 — reply-button checkout writes the label into the order comment
+### AA-027 — оформление через reply-кнопку пишет подпись в комментарий заказа
 
-- **Category / severity / confidence:** `BUG / DATA_QUALITY`, Low, High (function executed).
-- **Evidence:** `bot/handlers/order.py:checkout_handler` passes the message text to `_split_checkout_comment`, which returns everything after the first space. The message is the button label itself; the default label `Оформить заказ` yields the comment `заказ`.
-- **Current behavior:** every order placed through the reply button has a comment equal to the tail of the label. It appears in the staff order card (`Комментарий: заказ`) and in guest status messages.
-- **Target behavior:** the reply button never produces a comment; a comment, if supported, comes from an explicit input step.
-- **Roadmap batch:** B3.1.
-- **Verification:** handler test with default and multi-word custom labels.
+- **Категория / серьёзность / уверенность:** `BUG / DATA_QUALITY`, Low, High (функция запущена).
+- **Доказательство:** `bot/handlers/order.py:checkout_handler` передаёт текст сообщения в `_split_checkout_comment`, которая возвращает всё после первого пробела. Сообщение — это сама подпись кнопки; подпись по умолчанию `Оформить заказ` даёт комментарий `заказ`.
+- **Текущее поведение:** у каждого заказа, оформленного через reply-кнопку, комментарий равен хвосту подписи. Он виден в карточке заказа у персонала (`Комментарий: заказ`) и в сообщениях о статусе гостю.
+- **Целевое поведение:** reply-кнопка никогда не создаёт комментарий; комментарий, если поддерживается, приходит из явного шага ввода.
+- **Батч:** B3.1.
+- **Проверка:** тест обработчика с подписью по умолчанию и с настроенной подписью из нескольких слов.
 
-### AA-028 — Bill changelist writes on read
+### AA-028 — список счетов пишет при чтении
 
-- **Category / severity / confidence:** `BUG / PERFORMANCE`, Low, High.
-- **Evidence:** `apps/billing/admin.py:BillAdmin.remaining_amount` (a `list_display` column) calls `apps/billing/services.py:get_bill_remaining_amount`, which reloads the bill and calls `recalculate_bill_totals`, which saves the bill.
-- **Current behavior:** opening the bill list performs an extra query and an unlocked write per row; a concurrent payment can be overwritten by stale totals in a narrow window.
-- **Target behavior:** read paths compute the remaining amount without saving.
-- **Roadmap batch:** B3.1.
-- **Verification:** query-count test for the changelist; no `save` on GET.
+- **Категория / серьёзность / уверенность:** `BUG / PERFORMANCE`, Low, High.
+- **Доказательство:** `apps/billing/admin.py:BillAdmin.remaining_amount` (колонка `list_display`) вызывает `apps/billing/services.py:get_bill_remaining_amount`, который перезагружает счёт и вызывает `recalculate_bill_totals`, а тот сохраняет счёт.
+- **Текущее поведение:** открытие списка счетов делает лишний запрос и незаблокированную запись на каждую строку; параллельная оплата может быть перезаписана устаревшими итогами в узком окне.
+- **Целевое поведение:** пути чтения вычисляют остаток без сохранения.
+- **Батч:** B3.1.
+- **Проверка:** тест числа запросов списка; никакого `save` на GET.
 
-### AA-029 — time boundaries ignore the venue timezone
+### AA-029 — границы времени не учитывают часовой пояс заведения
 
-- **Category / severity / confidence:** `BUG / TIME_BOUNDARY`, Low, High.
-- **Evidence:** `apps/bonuses/strategies.py:_visit_bonus` computes "today" as `timezone.now().replace(hour=0, …)`, i.e. midnight UTC. `apps/analytics/services.py:refresh_daily_partner_metrics` refreshes only the current local day, every 15 minutes.
-- **Current behavior:** in Kyiv the visit-bonus day starts at 02:00 or 03:00 local time. Payments made after the last run of a day are never included in that day's `PartnerDailyMetric`.
-- **Target behavior:** day boundaries use `Partner.timezone`; the snapshot task also finalises the previous day.
-- **Roadmap batch:** B3.1.
-- **Verification:** tests around local midnight for both paths.
+- **Категория / серьёзность / уверенность:** `BUG / TIME_BOUNDARY`, Low, High.
+- **Доказательство:** `apps/bonuses/strategies.py:_visit_bonus` вычисляет «сегодня» как `timezone.now().replace(hour=0, …)`, то есть полночь UTC. `apps/analytics/services.py:refresh_daily_partner_metrics` обновляет только текущий местный день, каждые 15 минут.
+- **Текущее поведение:** в Киеве день бонуса за визит начинается в 02:00 или 03:00 по местному времени. Оплаты после последнего запуска за день никогда не попадают в `PartnerDailyMetric` этого дня.
+- **Целевое поведение:** границы дня по `Partner.timezone`; задача снимка также закрывает предыдущий день.
+- **Батч:** B3.1.
+- **Проверка:** тесты около местной полуночи для обоих путей.
 
-### AA-030 — notification tasks are not idempotent and do not recheck recipients
+### AA-030 — задачи уведомлений не идемпотентны и не перепроверяют получателей
 
-- **Category / severity / confidence:** `BUG / ASYNC`, Low, High.
-- **Evidence:** `apps/notifications/tasks.py:deliver_staff_notification_task` and `send_guest_order_status_update_task` retry on any exception but do not skip a notification already `sent`; `deliver_staff_notification_now` does not recheck that the employee and user are still active.
-- **Current behavior:** an exception after a successful send repeats the message; a disabled employee still receives notifications queued before the change.
-- **Target behavior:** part of the B4 delivery contract (PQ-015).
-- **Roadmap batch:** B4.
+- **Категория / серьёзность / уверенность:** `BUG / ASYNC`, Low, High.
+- **Доказательство:** `apps/notifications/tasks.py:deliver_staff_notification_task` и `send_guest_order_status_update_task` повторяются при любом исключении, но не пропускают уже `sent` уведомление; `deliver_staff_notification_now` не перепроверяет, активны ли ещё сотрудник и пользователь.
+- **Текущее поведение:** исключение после успешной отправки повторяет сообщение; отключённый сотрудник всё равно получает уведомления, поставленные до изменения.
+- **Целевое поведение:** часть договора доставки B4 (PQ-015).
+- **Батч:** B4.
 
-### AA-031 — layering leftovers
+### AA-031 — остатки нарушений слоёв
 
-- **Category / severity / confidence:** `NAMING_PLACEMENT / LAYERING`, Low, High.
-- **Evidence:** `core/admin_mixins.py` imports `apps.partners.models` and `apps.users.models`; `core/urls.py` imports order, partner and table models for the demo page. `apps/orders/selectors.py:get_order_with_items`, `get_cart_with_items` and `apps/tables/selectors.py:get_table_by_qr_token` are unscoped and have no callers; `get_orders_for_session` is unscoped by partner. `apps/billing/services.py:redeem_bonus_for_bill` is used only by tests since B3. Enum classes in `*/constants.py` duplicate the model `TextChoices` and have drifted (`orders/constants.py:PaymentMethod`, `notifications/constants.py:BroadcastStatus`). `core/logging/handlers.py` is not wired into `LOGGING` and its `partner_id` regex captures a single digit.
-- **Roadmap batch:** B5, under ADR-0005 compatibility rules.
+- **Категория / серьёзность / уверенность:** `NAMING_PLACEMENT / LAYERING`, Low, High.
+- **Доказательство:** `core/admin_mixins.py` импортирует `apps.partners.models` и `apps.users.models`; `core/urls.py` импортирует модели заказов, партнёров и столов для демо-страницы. `apps/orders/selectors.py:get_order_with_items`, `get_cart_with_items` и `apps/tables/selectors.py:get_table_by_qr_token` без ограничения партнёром и без вызывающих; `get_orders_for_session` не ограничен партнёром. `apps/billing/services.py:redeem_bonus_for_bill` с B3 используется только тестами. Классы перечислений в `*/constants.py` дублируют `TextChoices` моделей и разошлись с ними (`orders/constants.py:PaymentMethod`, `notifications/constants.py:BroadcastStatus`). `core/logging/handlers.py` не подключён к `LOGGING`, а его регулярное выражение `partner_id` захватывает одну цифру.
+- **Батч:** B5, по правилам совместимости ADR-0005.
 
-### AA-032 — documentation drift after B1–B3
+### AA-032 — расхождение документации после B1–B3
 
-- **Category / severity / confidence:** `DOCUMENTATION_DRIFT`, Medium, High.
-- **Evidence:** before this review `AS_IS_ARCHITECTURE.md` described the pre-B1 runtime and cited `bot/dispatcher.py`, `config/celery.py`, `config/settings/base.py`; `BOT_RUNTIME.md` cited `bot/dispatcher.py`; most line-numbered citations pointed at moved code. `REFACTOR_ROADMAP.md` and `FEATURE_MATRIX.md` stated that B3 added PostgreSQL tests for allocation, redemption and accrual, but the repository contains only two PostgreSQL-gated tests (order transition, table activation). The payment lock order in `ADR-0003.md` and `TARGET_ARCHITECTURE.md` omitted `GuestProfile`, which the paid-order bonus accrual locks.
-- **Resolution:** corrected in the B0.1 documentation refresh (see `REFACTOR_ROADMAP.md`). Current-state documents now cite `path:symbol`.
+- **Категория / серьёзность / уверенность:** `DOCUMENTATION_DRIFT`, Medium, High.
+- **Доказательство:** до этой проверки `AS_IS_ARCHITECTURE.md` описывал работу до B1 и ссылался на `bot/dispatcher.py`, `config/celery.py`, `config/settings/base.py`; `BOT_RUNTIME.md` ссылался на `bot/dispatcher.py`; большинство ссылок с номерами строк указывали на сдвинувшийся код. `REFACTOR_ROADMAP.md` и `FEATURE_MATRIX.md` утверждали, что B3 добавил тесты PostgreSQL для распределения, списания и начисления, но в репозитории было только два теста только для PostgreSQL (переход заказа, активация стола). Порядок блокировок оплаты в `ADR-0003.md` и `TARGET_ARCHITECTURE.md` пропускал `GuestProfile`, который блокирует начисление бонуса за оплаченный заказ.
+- **Решение:** исправлено в обновлении документации B0.1 (см. `REFACTOR_ROADMAP.md`). Документы текущего состояния ссылаются на `path:symbol`.
 
-### AA-033 — bill creation fails on PostgreSQL
+### AA-033 — создание счёта падает на PostgreSQL
 
-- **Category / severity / confidence:** `BUG / FINANCIAL_INTEGRITY`, High, High (executed).
-- **Evidence:** `apps/billing/services.py:create_bill_from_orders` used `Order.objects.select_for_update().select_related("table", "guest")`. `Order.table` is nullable, so Django emits a `LEFT OUTER JOIN`, and PostgreSQL rejects the query with `FOR UPDATE cannot be applied to the nullable side of an outer join`. Introduced in B3 (`ddb7dce`). SQLite ignores `FOR UPDATE`, so the SQLite suite stayed green; the full suite on PostgreSQL 16 had 29 errors, all from this call.
-- **Current behavior (before fix):** no bill could be created on PostgreSQL — guest bill requests, staff table bills and the Admin action all failed.
-- **Resolution:** `select_for_update(of=("self",))`; the full suite passes on PostgreSQL 16.
-- **Lesson:** run the whole suite on PostgreSQL before closing a batch that adds row locks (`TESTING.md`).
+- **Категория / серьёзность / уверенность:** `BUG / FINANCIAL_INTEGRITY`, High, High (запущено).
+- **Доказательство:** `apps/billing/services.py:create_bill_from_orders` использовал `Order.objects.select_for_update().select_related("table", "guest")`. `Order.table` допускает null, поэтому Django строит `LEFT OUTER JOIN`, и PostgreSQL отклоняет запрос: `FOR UPDATE cannot be applied to the nullable side of an outer join`. Появилось в B3 (`ddb7dce`). SQLite игнорирует `FOR UPDATE`, поэтому набор на SQLite оставался зелёным; полный набор на PostgreSQL 16 давал 29 ошибок, все от этого вызова.
+- **Поведение до исправления:** на PostgreSQL нельзя было создать ни один счёт — запросы счёта гостями, счета стола у персонала и действие Admin падали.
+- **Решение:** `select_for_update(of=("self",))`; полный набор проходит на PostgreSQL 16.
+- **Урок:** прогонять весь набор на PostgreSQL перед закрытием батча, добавляющего блокировки строк (`TESTING.md`).
 
-### AA-034 — legacy `Europe/Kiev` timezone name
+### AA-034 — устаревшее имя пояса `Europe/Kiev`
 
-- **Category / severity / confidence:** `OPERATIONS / PORTABILITY`, Low, Medium.
-- **Evidence:** `.env.example` (`DJANGO_TIMEZONE`), `core/settings/env.py` and `Partner.timezone` default to `Europe/Kiev`. The IANA name is `Europe/Kyiv`; `Europe/Kiev` remains only as a backward-compatible link, which newer Debian/Ubuntu tz packages move to an optional `tzdata-legacy` package. On such a system Django refuses to start (`Incorrect timezone setting: Europe/Kiev`), and `ZoneInfo("Europe/Kiev")` in reports and bonus rules fails. Observed in the review container; macOS still ships the link.
-- **Target behavior:** use `Europe/Kyiv` in defaults and migrate stored partner values, or add the `tzdata` Python package as a dependency; verify inside the production image.
-- **Roadmap batch:** B5.
+- **Категория / серьёзность / уверенность:** `OPERATIONS / PORTABILITY`, Low, Medium.
+- **Доказательство:** `.env.example` (`DJANGO_TIMEZONE`), `core/settings/env.py` и `Partner.timezone` по умолчанию использовали `Europe/Kiev`. Имя IANA — `Europe/Kyiv`; `Europe/Kiev` осталось лишь ссылкой для обратной совместимости, которую новые пакеты tz в Debian/Ubuntu переносят в необязательный `tzdata-legacy`. В такой системе Django не запускается (`Incorrect timezone setting: Europe/Kiev`), а `ZoneInfo("Europe/Kiev")` в отчётах и бонусных правилах падает. Наблюдалось в контейнере проверки; macOS ссылку ещё поставляет.
+- **Целевое поведение:** использовать `Europe/Kyiv` по умолчанию и мигрировать сохранённые значения партнёров или добавить зависимость Python `tzdata`; проверить внутри продакшен-образа.
+- **Батч:** B5.
 
-## B3.1 implementation update — 2026-10-23
+## Что сделано в B3.1 — 2026-10-23
 
-Branch `b3.1-correctness`, verified with the full suite on SQLite and on
-PostgreSQL 16 (199 tests; 5 PostgreSQL-only tests skipped on SQLite).
+Ветка `b3.1-correctness`, проверено полным набором на SQLite и на
+PostgreSQL 16 (199 тестов; 5 тестов только для PostgreSQL на SQLite
+пропущены).
 
-| Finding | Result |
+| Находка | Результат |
 |---|---|
-| AA-033 | Bill creation locks only order rows (`of=("self",)`). |
-| AA-021 | Auto-close (when enabled) closes only sessions whose orders are in the paid bill and fully settled; their pending requests are marked processed; nothing raises into the payment (PQ-027). |
-| AA-025 | `GUEST_RECEIPT_CONFIRMABLE_STATUSES` / `can_guest_confirm_receipt`: guest confirmation from any non-final status including `new`, recorded as a guest action (PQ-029). |
-| AA-023, AA-026 | Order `guest`/`table`/`table_session` read-only in Admin; tenant `UserAdmin` excludes superusers. |
-| AA-027 | Reply-button checkout passes no comment. |
-| AA-028 | `get_bill_remaining_amount` is read-only. |
-| AA-029 | Venue-local day for visit bonus; previous-day metric finalised after local midnight. |
-| AA-024 | Dynamic text escaped in bot messages, partner template values and notifications; broadcast text remains partner markup (B4). |
-| AA-032 (tests) | PostgreSQL concurrency tests for bill allocation, bonus payment and final payment; a mutation check confirms they fail without the locks. |
+| AA-033 | Создание счёта блокирует только строки заказов (`of=("self",)`). |
+| AA-021 | Автозакрытие (если включено) закрывает только сессии, чьи заказы есть в оплаченном счёте и полностью рассчитаны; их ожидающие запросы отмечаются обработанными; в оплату ничего не бросается (PQ-027). |
+| AA-025 | `GUEST_RECEIPT_CONFIRMABLE_STATUSES` / `can_guest_confirm_receipt`: подтверждение гостем из любого нефинального статуса, включая `new`, записывается как действие гостя (PQ-029). |
+| AA-023, AA-026 | `guest`/`table`/`table_session` заказа только для чтения в Admin; `UserAdmin` арендатора исключает суперпользователей. |
+| AA-027 | Оформление через reply-кнопку не передаёт комментарий. |
+| AA-028 | `get_bill_remaining_amount` только читает. |
+| AA-029 | Местный день заведения для бонуса за визит; метрика предыдущего дня закрывается после местной полуночи. |
+| AA-024 | Динамический текст экранируется в сообщениях бота, значениях шаблонов партнёра и уведомлениях; текст рассылки остаётся разметкой партнёра (B4). |
+| AA-032 (тесты) | Тесты конкурентности на PostgreSQL для распределения по счёту, оплаты бонусами и последней оплаты; проверка мутацией подтверждает, что без блокировок они падают. |
 
-All post-B3 review findings are resolved: AA-030 in B4; AA-031 and AA-034 in
-B5.
-AA-020 is resolved in B3.2 part B and AA-022 in B3.2 part A (see below).
+Все находки проверки после B3 решены: AA-030 — в B4; AA-031 и AA-034 — в B5.
+AA-020 решена в B3.2 часть B, AA-022 — в B3.2 часть A (см. ниже).
 
-## B3.2 part A implementation update — 2026-10-23
+## Что сделано в B3.2 часть A — 2026-10-23
 
-AA-022 is resolved on branch `b3.2a-bill-changes`:
+AA-022 решена в ветке `b3.2a-bill-changes`:
 
-- `BillItem.is_active` keeps removed lines for history; the allocation
-  constraint is now `unique_active_order_item_bill_allocation` (active lines
-  only), so released order items can be billed again.
-- `BillAdjustment` is the append-only change log (kind, actor, reason code,
-  optional comment, totals before/after, payload). Only the author can fill
-  an empty comment, within 30 minutes.
-- `remove_bill_lines`, `void_bill` and `cancel_order` in
-  `apps/billing/services.py` enforce the owner decisions: owner-granted
-  permission (`EmployeeProfile.can_adjust_bills`, editable only by the venue
-  owner) or the owner; reason required; no change below the paid amount; no
-  line changes on a bill with applied bonuses (void only, which returns the
-  bonuses as a `reversal` ledger credit); no cancellation of an order in a
-  paid bill.
-- `transition_order_status` refuses to cancel an order that still has active
-  bill lines, checked after the order lock, so no adapter can leave a
-  cancelled order charged.
-- Bot: bill card buttons, edit view, reason buttons and optional comment;
-  Admin: void and remove-line actions with a reason page, order cancel through
-  the bill, adjustment history.
-- Verified: 227 tests green on SQLite and PostgreSQL 16, including PostgreSQL
-  races void-vs-payment and cancel-vs-billing.
+- `BillItem.is_active` сохраняет убранные строки для истории; ограничение
+  распределения теперь `unique_active_order_item_bill_allocation` (только
+  активные строки), поэтому освобождённые позиции можно выставить снова.
+- `BillAdjustment` — журнал изменений только на дописывание (вид,
+  исполнитель, код причины, необязательный комментарий, итоги до и после,
+  данные). Пустой комментарий может дописать только автор, в течение 30 минут.
+- `remove_bill_lines`, `void_bill` и `cancel_order` в
+  `apps/billing/services.py` соблюдают решения владельца: право от владельца
+  (`EmployeeProfile.can_adjust_bills`, меняет только владелец заведения) или
+  сам владелец; причина обязательна; изменение не ниже оплаченного; у счёта с
+  применёнными бонусами строки не меняются (только аннулирование, которое
+  возвращает бонусы записью журнала `reversal`); заказ в оплаченном счёте не
+  отменяется.
+- `transition_order_status` отказывается отменять заказ, у которого ещё есть
+  активные строки счёта, с проверкой после блокировки заказа, поэтому ни один
+  адаптер не может оставить отменённый заказ в счёте.
+- Бот: кнопки карточки счёта, экран правки, кнопки причин и необязательный
+  комментарий; Admin: действия аннулирования и удаления строк со страницей
+  причины, отмена заказа через счёт, история изменений.
+- Проверено: 227 тестов зелёные на SQLite и PostgreSQL 16, включая гонки на
+  PostgreSQL «аннулирование против оплаты» и «отмена против выставления».
 
-## B3.2 part B implementation update — 2026-10-23
+## Что сделано в B3.2 часть B — 2026-10-23
 
-AA-020 is resolved on branch `b3.2b-visits` (ADR-0007, PQ-026):
+AA-020 решена в ветке `b3.2b-visits` (ADR-0007, PQ-026):
 
-- `TableVisit` groups the sessions of one party at a table;
-  `TableSession.visit` and `Bill.visit` link to it. The backfill makes the
-  active sessions of each table one visit (owner decision 2); closed
-  sessions stay without a visit.
-- `activate_table_session(visit_choice=…)`: `ask` (bot) raises
-  `VisitChoiceRequired` when another party with a seated guest is at the
-  table; `auto` (service default) joins the party at the table; `new` and
-  `join:<id>` are explicit. A visit that closed meanwhile cannot be joined.
-  Starting a visit while another is open notifies staff.
-- Billing eligibility, bill creation/attachment, guest bill requests and the
-  "request bill" button are scoped to the visit. Staff/Admin table bills need
-  a visit when several are open.
-- Visits close by themselves when nobody sits in them and they are settled;
-  `close_table_visit` is the staff command (bot button, Admin action).
-- Staff bot: ⚠ on tables with several visits, per-visit bill and close
-  buttons. Admin: read-only `TableVisitAdmin`.
-- Lock order: activation `GuestProfile → Table → guest's sessions →
-  TableVisit`; payment `… → TableSession → TableVisit`.
-- Verified: 250 tests green on SQLite and PostgreSQL 16, including races
-  for two guests scanning an empty table and payment-closes-visit versus
-  join (no deadlock, no session inside a closed visit; six repeated runs);
-  migrations forward/backward/forward on PostgreSQL.
+- `TableVisit` объединяет сессии одной компании за столом;
+  `TableSession.visit` и `Bill.visit` ссылаются на него. Заполнение делает
+  активные сессии каждого стола одним визитом (решение владельца 2);
+  закрытые сессии остаются без визита.
+- `activate_table_session(visit_choice=…)`: `ask` (бот) бросает
+  `VisitChoiceRequired`, когда за столом другая компания с сидящим гостем;
+  `auto` (по умолчанию в сервисе) подсаживает к компании за столом; `new` и
+  `join:<id>` — явные. К визиту, закрывшемуся тем временем, подсесть нельзя.
+  Начало визита, пока открыт другой, уведомляет персонал.
+- Выбор заказов для счёта, создание и прикрепление счёта, запросы счёта
+  гостем и кнопка «Запросить счёт» ограничены визитом. Счетам стола от
+  персонала и Admin нужен визит, когда открыто несколько.
+- Визиты закрываются сами, когда в них никто не сидит и они рассчитаны;
+  `close_table_visit` — команда персонала (кнопка бота, действие Admin).
+- Бот персонала: ⚠ у столов с несколькими визитами, кнопки счёта и закрытия
+  на каждый визит. Admin: `TableVisitAdmin` только для чтения.
+- Порядок блокировок: активация `GuestProfile → Table → сессии гостя →
+  TableVisit`; оплата `… → TableSession → TableVisit`.
+- Проверено: 250 тестов зелёные на SQLite и PostgreSQL 16, включая гонки
+  «два гостя сканируют пустой стол» и «оплата закрывает визит против
+  присоединения» (без взаимоблокировки, без сессии внутри закрытого визита;
+  шесть повторных запусков); миграции вперёд/назад/вперёд на PostgreSQL.
 
-Known limits: PQ-007 (a guest moving tables with unsettled orders) is still
-open — moving closes the old session, and the old visit stays open for staff
-when it has unpaid orders. Join choices show only visits with at least one
-seated guest; an open visit with nobody seated is staff work (⚠), not a
-party to join.
+Известные ограничения: PQ-007 (гость пересаживается с нерассчитанными
+заказами) по-прежнему открыт — пересадка закрывает старую сессию, а старый
+визит остаётся открытым для персонала, если в нём есть неоплаченные заказы.
+Выбор «подсесть» показывает только визиты хотя бы с одним сидящим гостем;
+открытый визит без сидящих — работа персонала (⚠), а не компания, к которой
+можно подсесть.
 
-## B3.2 part C implementation update — 2026-10-23
+## Что сделано в B3.2 часть C — 2026-10-23
 
-PQ-030 is implemented on branch `b3.2c-cashback`: `BonusProgram.accrual_base`
-(`full_total` default, `money_paid`). With `money_paid` a cashback programme
-accrues on the money-paid part: quick sale `amount − bonus_spent_amount`; paid
-order `order total − its share of the bill's bonuses` (proportional to its
-active lines in the bill, rounding remainder on the last order). The minimum
-order total still compares with the full total; visit and milestone
-programmes are unchanged. The staff quick-sale preview projects the accrual
-for the chosen redemption. Verified: 265 tests on SQLite and PostgreSQL 16,
-mutation checks for the order and quick-sale paths, `bonuses.0008`
-backward/forward on PostgreSQL. B3.2 is complete.
+PQ-030 реализован в ветке `b3.2c-cashback`: `BonusProgram.accrual_base`
+(`full_total` по умолчанию, `money_paid`). При `money_paid` программа
+кешбэка начисляет с оплаченной деньгами части: быстрая продажа — `amount −
+bonus_spent_amount`; оплаченный заказ — `итог заказа − его доля бонусов
+счёта` (пропорционально его активным строкам в счёте, остаток округления —
+последнему заказу). Минимальная сумма заказа по-прежнему сравнивается с
+полным итогом; программы за визит и пороги не меняются. Предпросмотр быстрой
+продажи у персонала показывает начисление для выбранного списания.
+Проверено: 265 тестов на SQLite и PostgreSQL 16, проверки мутацией для путей
+заказа и быстрой продажи, `bonuses.0008` назад/вперёд на PostgreSQL. B3.2
+завершён.
 
-## B4 implementation update — 2026-10-23
+## Что сделано в B4 — 2026-10-23
 
-Branch `b4-delivery`; owner decisions PQ-014 (broadcasts at most once) and
-PQ-015 (operational notifications at least once), recorded in ADR-0008.
+Ветка `b4-delivery`; решения владельца PQ-014 (рассылки — не больше одного
+раза) и PQ-015 (рабочие уведомления — хотя бы один раз), записаны в ADR-0008.
 
-| Finding | Result |
+| Находка | Результат |
 |---|---|
-| AA-008 | `BroadcastDelivery` per guest and campaign; claim in a short transaction (skip-locked, `pending` only), Telegram call with no transaction open, one short transaction per outcome; ambiguous failures `unknown`, never resent; eligibility rechecked before sending; counters derived from rows; `recover_stalled_broadcast_campaigns` (beat) for lost workers and tasks. |
-| AA-030 | Sent staff notifications are skipped; inactive/opted-out employees and inactive users get nothing; transient Telegram failures retry (`RetryableDeliveryError`, `acks_late`). |
-| AA-018 (deployment part) | `docker-compose.yml` declares `beat` and `bot`; the worker consumes `default` and `broadcasts`. |
+| AA-008 | `BroadcastDelivery` на гостя и кампанию; захват в короткой транзакции (skip-locked, только `pending`), вызов Telegram без открытой транзакции, одна короткая транзакция на итог; неоднозначные ошибки — `unknown`, повторно не отправляются; допуск перепроверяется перед отправкой; счётчики считаются по строкам; `recover_stalled_broadcast_campaigns` (beat) для потерянных воркеров и задач. |
+| AA-030 | Отправленные уведомления персонала пропускаются; неактивные и отписавшиеся сотрудники и неактивные пользователи ничего не получают; временные ошибки Telegram повторяются (`RetryableDeliveryError`, `acks_late`). |
+| AA-018 (часть о развёртывании) | `docker-compose.yml` объявляет `beat` и `bot`; воркер слушает `default` и `broadcasts`. |
 
-Verified: 286 tests on SQLite and PostgreSQL 16; the PostgreSQL race test of
-three parallel workers repeated 10× with no duplicate; mutation checks (claim
-without the `pending` filter and lock → duplicates; ambiguous result reset to
-`pending` → resend loop; no `sent` guard → staff resend) fail the tests;
-`notifications.0004` backward/forward on PostgreSQL. A first version
-finalized a campaign with stale counters under the race; reading open rows
-before counters fixed it.
+Проверено: 286 тестов на SQLite и PostgreSQL 16; тест гонки трёх параллельных
+воркеров на PostgreSQL повторён 10 раз без дублей; проверки мутацией (захват
+без фильтра `pending` и блокировки → дубли; неоднозначный итог сброшен в
+`pending` → цикл повторной отправки; без защиты `sent` → повтор уведомления
+персоналу) роняют тесты; `notifications.0004` назад/вперёд на PostgreSQL.
+Первая версия завершала кампанию с устаревшими счётчиками при гонке; чтение
+открытых строк до счётчиков это исправило.
 
-Deviation from the roadmap rollback note: instead of an opt-in per campaign
-version, tasks queued by the old sender resume after their cursor, and an
-old campaign mid-way without a cursor is marked failed rather than resent.
-Counters of such a campaign count only messages sent after the upgrade.
+Отклонение от заметки об откате в дорожной карте: вместо включения по версии
+кампании задачи, поставленные старым отправителем, продолжают с курсора, а
+старая кампания на середине без курсора помечается неудачной, а не
+отправляется заново. Счётчики такой кампании учитывают только сообщения,
+отправленные после обновления.
 
-## B5 implementation update — 2026-10-23
+## Что сделано в B5 — 2026-10-23
 
-Committed directly on `clean-project-rules`.
+Закоммичено прямо в `clean-project-rules`.
 
-| Finding | Result |
+| Находка | Результат |
 |---|---|
-| AA-034 | Defaults (`core/settings/env.py`, `.env.example`, `Partner.timezone`) use `Europe/Kyiv`; `partners.0006` renames stored `Europe/Kiev`; an old `DJANGO_TIMEZONE=Europe/Kiev` is read as `Europe/Kyiv`; `Partner.clean` rejects unknown zones; `tzdata` is a dependency. Verified with the system `Europe/Kiev` link removed — which also stopped a local PostgreSQL whose `postgresql.conf` named `Europe/Kiev` (see `TESTING.md`). |
-| AA-019 | `seed_demo` runs in one transaction and refuses to take over another venue's account or promote a venue account to platform admin; idempotent rerun and rollback tests, mutation-checked. |
-| AA-017 | Removed modules with no static or dynamic consumer: all `interfaces.py`, eight placeholder `tasks.py`, docstring-only `services.py` (employees, menu), zero-consumer repositories and selectors, duplicate drifted `constants.py` enums, unwired `core/logging/handlers.py`, `partners/services.py:rotate_bot_token`. Celery registrations compared before/after: identical. The notifications services/tasks cycle is accepted (function-local imports at enqueue time; breaking it would move fan-out control into tasks with no runtime gain). |
-| AA-031 | Unscoped unused selectors removed; `get_orders_for_session` requires `partner_id`. `core → apps` kept in two adapters and documented; the public root page no longer discloses platform-wide counts outside `DEBUG` (new finding while reviewing it). `redeem_bonus_for_bill` stays: it is the service for redeeming an explicit amount, used by tests. |
+| AA-034 | Значения по умолчанию (`core/settings/env.py`, `.env.example`, `Partner.timezone`) используют `Europe/Kyiv`; `partners.0006` переименовывает сохранённые `Europe/Kiev`; старое `DJANGO_TIMEZONE=Europe/Kiev` читается как `Europe/Kyiv`; `Partner.clean` отклоняет неизвестные пояса; `tzdata` — зависимость. Проверено с удалённой системной ссылкой `Europe/Kiev` — что заодно остановило локальный PostgreSQL, у которого в `postgresql.conf` был `Europe/Kiev` (см. `TESTING.md`). |
+| AA-019 | `seed_demo` выполняется в одной транзакции и отказывается забирать аккаунт другого заведения или повышать аккаунт заведения до администратора платформы; тесты идемпотентного повтора и отката, проверены мутацией. |
+| AA-017 | Удалены модули без статических и динамических потребителей: все `interfaces.py`, восемь заготовок `tasks.py`, `services.py` только с документацией (employees, menu), репозитории и селекторы без потребителей, дублирующие разошедшиеся перечисления `constants.py`, неподключённый `core/logging/handlers.py`, `partners/services.py:rotate_bot_token`. Регистрации Celery сравнены до и после: идентичны. Цикл services/tasks в уведомлениях принят (импорты внутри функций в момент постановки; разрыв перенёс бы управление рассылкой в задачи без выигрыша в работе). |
+| AA-031 | Неиспользуемые селекторы без партнёра удалены; `get_orders_for_session` требует `partner_id`. `core → apps` оставлено в двух адаптерах и задокументировано; публичная корневая страница вне `DEBUG` больше не раскрывает счётчики по всей платформе (новая находка при её проверке). `redeem_bonus_for_bill` остаётся: это сервис списания явной суммы, используется тестами. |
 
-Not done: the roadmap's "measure filter/report performance" item — no
-measured problem exists yet; revisit with production data.
+Не сделано: пункт дорожной карты «измерить производительность фильтров и
+отчётов» — измеренной проблемы пока нет; вернуться с продакшен-данными.
+
+## Каналы заказа — 2026-10-23
+
+Не находка аудита, а продуктовая работа, записанная для полноты: самовывоз
+([PICKUP.md](../architecture/PICKUP.md)) и упорядочивание каналов (ADR-0009)
+— одна модель заказа, счёта и оплаты на все каналы, поведение канала в
+модулях `apps/billing/table_bills.py` и `apps/billing/remote_orders.py`, ядро
+счёта не импортирует `apps.tables`. Проверено: 331 тест на SQLite и
+PostgreSQL 16.
