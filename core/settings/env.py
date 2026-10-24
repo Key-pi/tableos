@@ -17,6 +17,9 @@ class AppSettings(BaseSettings):
         default_factory=list,
         validation_alias="DJANGO_CSRF_TRUSTED_ORIGINS",
     )
+    # Production only: how long browsers remember to use HTTPS. Start small;
+    # raise (e.g. to 31536000) once HTTPS is known to work everywhere.
+    secure_hsts_seconds: int = Field(default=3600, validation_alias="DJANGO_SECURE_HSTS_SECONDS")
     timezone: str = Field(default="Europe/Kyiv", validation_alias="DJANGO_TIMEZONE")
     language_code: str = Field(default="ru-ru", validation_alias="DJANGO_LANGUAGE_CODE")
     use_sqlite: bool = Field(default=False, validation_alias="DJANGO_USE_SQLITE")

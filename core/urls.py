@@ -6,6 +6,7 @@ from django.urls import path
 from apps.orders.models import Order
 from apps.partners.models import BotInstance, Partner
 from apps.tables.models import Table
+from core.security.login_throttle import throttle_login
 
 
 def healthcheck(_: HttpRequest) -> HttpResponse:
@@ -77,6 +78,8 @@ def demo_home(_: HttpRequest) -> HttpResponse:
 
 urlpatterns = [
     path("", demo_home, name="demo-home"),
+    # AA-038: failed Admin logins are counted per account (login_throttle).
+    path("admin/login/", throttle_login(admin.site.login), name="admin-login-throttled"),
     path("admin/", admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
 ]

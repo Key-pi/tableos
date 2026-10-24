@@ -14,11 +14,14 @@ dependencies = [
   "celery[redis]>=5.4,<6.0",
   "cryptography>=43.0.0",
   "django-unfold>=0.39.0",
+  # Production web server and static files for Admin (AA-038, DEPLOYMENT.md).
+  "gunicorn>=23.0",
   "psycopg[binary]>=3.2.0",
   "pydantic-settings>=2.6.0",
   # IANA timezone data for zoneinfo where the OS has none or drops legacy
   # names (Windows, slim images); AA-034.
   "tzdata>=2024.1",
+  "whitenoise>=6.7",
 ]
 
 [project.optional-dependencies]

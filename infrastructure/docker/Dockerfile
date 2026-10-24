@@ -8,13 +8,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Dependencies in their own layer: rebuilt only when pyproject.toml changes.
-COPY pyproject.toml ./
-RUN python -c "import tomllib; deps = tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']; open('/tmp/requirements.txt', 'w').write('\n'.join(deps))" \
-    && pip install -r /tmp/requirements.txt
+# Dependencies in their own layer, from the pinned lock file (AA-038): every
+# build installs the same versions. Regenerate it after changing
+# pyproject.toml (docs/engineering/DEPLOYMENT.md).
+COPY requirements.lock ./
+RUN pip install -r requirements.lock
 
-# The code runs from /app (docker-compose also mounts the working copy here,
-# so code changes need no rebuild; restart the service instead).
+# The code runs from /app (the development compose also mounts the working
+# copy here, so code changes need no rebuild; restart the service instead).
 COPY . .
+
+# Production runs as this unprivileged user (docker-compose.prod.yml).
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /app/staticfiles \
+    && chown -R app /app/staticfiles
 
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

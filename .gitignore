@@ -8,6 +8,7 @@ __pycache__/
 htmlcov/
 .DS_Store
 .env
+.env.production
 db.sqlite3
 db.sqlite3.*
 media/

@@ -36,6 +36,8 @@ docker compose logs init   # логины Admin и ссылки на столы 
 
 Подробно, со списком того, что проверить, — в
 [`docs/engineering/DEVELOPMENT.md`](docs/engineering/DEVELOPMENT.md#запуск-в-docker-с-нуля).
+Продакшен (свой сервер, HTTPS, резервные копии) —
+[`docs/engineering/DEPLOYMENT.md`](docs/engineering/DEPLOYMENT.md).
 
 ## С чего начать
 

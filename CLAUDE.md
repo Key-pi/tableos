@@ -141,6 +141,9 @@ python3 manage.py makemigrations --check --dry-run
 ruff check --no-cache <изменённые файлы> --output-format concise
 docker compose config --quiet
 
+# продакшен: docs/engineering/DEPLOYMENT.md (docker-compose.prod.yml,
+# core.settings.production, зависимости — requirements.lock через pip-compile)
+
 # весь стек в Docker (пошагово: docs/engineering/DEVELOPMENT.md)
 cp .env.example .env && docker compose up --build
 docker compose logs init        # логины и ссылки на столы демо-данных

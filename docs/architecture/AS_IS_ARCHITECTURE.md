@@ -51,10 +51,25 @@ flowchart LR
 Наружу открыт только порт web (8000); база и Redis доступны с компьютера
 только с `infrastructure/docker/compose.ports.yml`.
 `beat` и `bot` должны работать ровно в одном экземпляре. Пошаговый запуск —
-`docs/engineering/DEVELOPMENT.md`. Продакшен-веб-сервера,
-CI и манифестов развёртывания в репозитории нет. Все процессы, кроме веба,
-по умолчанию берут `core.settings.local` (`DEBUG=True`), если
-`DJANGO_SETTINGS_MODULE` не задан явно.
+`docs/engineering/DEVELOPMENT.md`. Все процессы, кроме веба, по умолчанию
+берут `core.settings.local` (`DEBUG=True`), если `DJANGO_SETTINGS_MODULE` не
+задан явно.
+
+Продакшен (AA-038, `docs/engineering/DEPLOYMENT.md`): `docker-compose.prod.yml`
+задаёт `core.settings.production` всем процессам. Модуль отказывается
+стартовать со слабыми значениями (`_refuse`) и включает HTTPS-only, HSTS,
+whitenoise и кэш в Redis. Сервисы:
+
+- `init` — `check --deploy` и миграции, без демо;
+- `web` — `collectstatic` и gunicorn на `127.0.0.1`;
+- `worker`, `beat`, `bot`;
+- `redis` с паролем;
+- `backup` — `infrastructure/docker/backup.sh`, суточный `pg_dump`.
+
+Образ ставит зависимости из `requirements.lock` и в продакшене работает от
+пользователя `app`. Вход в Admin ограничен: после 5 неверных паролей
+учётная запись закрыта на 15 минут (`core/security/login_throttle.py`,
+`core/urls.py`). CI в репозитории нет.
 
 Очереди: `default` и `broadcasts`; в `broadcasts` направляется только
 `notifications.send_broadcast_campaign`. Поскольку `CELERY_TASK_QUEUES`
@@ -420,7 +435,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 474 теста после лимита неоплаченных заказов, зелёные на SQLite и на
+- 481 тест после подготовки к запуску, зелёные на SQLite и на
   PostgreSQL 16. Двенадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

@@ -38,6 +38,7 @@ from apps.partners.models import BotInstance, OpeningHours, Partner, PartnerBotS
 from apps.tables.models import Table
 from apps.users.constants import AdminAccessPreset
 from apps.users.models import AdminAccessProfile, GuestProfile, TelegramAccount
+from core.security.environment import is_production
 
 HOOKAH_SLUG = "night-owl-hookah"
 CAFE_SLUG = "riverstone-cafe"
@@ -200,6 +201,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if is_production():
+            # Demo accounts have known passwords (AA-038).
+            raise CommandError("Демо-данные не загружаются в продакшене.")
         tester_id = self._parse_telegram_id(options["telegram_id"])
         try:
             start_bonuses = Decimal(str(options["start_bonuses"] or "0")).quantize(Decimal("0.01"))

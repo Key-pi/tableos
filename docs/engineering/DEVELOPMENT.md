@@ -121,7 +121,7 @@ docker compose logs -f bot worker         # логи бота и доставк�
 docker compose up -d                      # после правки .env: контейнеры пересоздадутся
 docker compose restart bot                # после изменения ботов в Admin
 docker compose restart worker beat bot    # после правки кода (web перезапускается сам)
-docker compose up --build                 # после изменения pyproject.toml
+docker compose up --build                 # после изменения requirements.lock (зависимости)
 docker compose run --rm web python manage.py seed_baseline_demo   # вернуть демо-данные к исходным
 docker compose run --rm web python manage.py test                 # тесты на PostgreSQL в Docker
 docker compose run --rm web python manage.py createsuperuser

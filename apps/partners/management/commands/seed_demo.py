@@ -8,6 +8,7 @@ from apps.menu.models import MenuCategory, MenuItem
 from apps.partners.models import BotInstance, Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.users.models import TelegramAccount
+from core.security.environment import is_production
 
 
 class Command(BaseCommand):
@@ -30,6 +31,9 @@ class Command(BaseCommand):
         parser.add_argument("--manager-telegram-username", default="")
 
     def handle(self, *args, **options):
+        if is_production():
+            # Demo accounts have known passwords (AA-038).
+            raise CommandError("Демо-данные не загружаются в продакшене.")
         # One transaction: a failure part-way (for example a manager account
         # owned by another venue) must not leave half-applied identity
         # changes behind (AA-019). Re-running the command is idempotent.

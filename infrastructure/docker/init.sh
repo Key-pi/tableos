@@ -24,6 +24,16 @@ except Exception:
     )
 PY
 
+if [ "${DJANGO_SETTINGS_MODULE:-}" = "core.settings.production" ]; then
+  # Production (docker-compose.prod.yml): the settings module itself refuses
+  # unsafe values; also run Django's deployment checks. Never demo data.
+  echo "==> Проверка продакшен-настроек"
+  python manage.py check --deploy --fail-level WARNING
+  echo "==> Миграции"
+  python manage.py migrate --noinput
+  exit 0
+fi
+
 echo "==> Миграции"
 python manage.py migrate --noinput
 
