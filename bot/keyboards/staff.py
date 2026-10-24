@@ -1,25 +1,27 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from core.i18n import N_, _
+
 STATUS_LABELS = {
-    "accepted": "Взять в работу",
-    "preparing": "Готовим",
-    "ready": "Готово",
-    "delivering": "Нести",
-    "completed": "Завершить",
-    "canceled": "Отменить",
+    "accepted": N_("Взять в работу"),
+    "preparing": N_("Готовим"),
+    "ready": N_("Готово"),
+    "delivering": N_("Нести"),
+    "completed": N_("Завершить"),
+    "canceled": N_("Отменить"),
 }
 # Delivery (PQ-032): a ready order is handed to the courier, then delivered.
 DELIVERY_STATUS_LABELS = {
     **STATUS_LABELS,
-    "delivering": "🚚 В пути",
-    "completed": "✅ Доставлено",
+    "delivering": N_("🚚 В пути"),
+    "completed": N_("✅ Доставлено"),
 }
 # Shipping by post (PQ-034): packed, sent with a ТТН, received.
 SHIPPING_STATUS_LABELS = {
     **STATUS_LABELS,
-    "ready": "📦 Собран",
-    "delivering": "🚚 Отправлен",
-    "completed": "✅ Получен",
+    "ready": N_("📦 Собран"),
+    "delivering": N_("🚚 Отправлен"),
+    "completed": N_("✅ Получен"),
 }
 
 
@@ -44,7 +46,7 @@ def build_staff_order_actions_keyboard(
             keyboard.append(
                 [
                     InlineKeyboardButton(
-                        text="💵 Наложенный платёж получен",
+                        text=_("💵 Наложенный платёж получен"),
                         callback_data=f"staffrccod:{order_public_id}",
                     )
                 ]
@@ -53,11 +55,11 @@ def build_staff_order_actions_keyboard(
             keyboard.append(
                 [
                     InlineKeyboardButton(
-                        text="💵 Оплачено наличными",
+                        text=_("💵 Оплачено наличными"),
                         callback_data=f"staffrccash:{order_public_id}",
                     ),
                     InlineKeyboardButton(
-                        text="💳 Оплачено картой",
+                        text=_("💳 Оплачено картой"),
                         callback_data=f"staffrccard:{order_public_id}",
                     ),
                 ]
@@ -68,11 +70,11 @@ def build_staff_order_actions_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="✅ Оплата получена",
+                    text=_("✅ Оплата получена"),
                     callback_data=f"stafftxok:{order_public_id}",
                 ),
                 InlineKeyboardButton(
-                    text="❌ Оплаты нет",
+                    text=_("❌ Оплаты нет"),
                     callback_data=f"stafftxno:{order_public_id}",
                 ),
             ]
@@ -80,7 +82,7 @@ def build_staff_order_actions_keyboard(
         available_statuses = []
     status_buttons = [
         InlineKeyboardButton(
-            text=labels.get(status, status),
+            text=_(labels[status]) if status in labels else status,
             # «Отправлен» asks for the ТТН first (PQ-034).
             callback_data=(
                 f"staffship:{order_public_id}"
@@ -93,7 +95,7 @@ def build_staff_order_actions_keyboard(
     if receipt_payment_pending:
         status_buttons.append(
             InlineKeyboardButton(
-                text="❌ Посылку не забрали" if cash_on_delivery else "❌ Гость не забрал",
+                text=_("❌ Посылку не забрали") if cash_on_delivery else _("❌ Гость не забрал"),
                 callback_data=f"staffrcno:{order_public_id}",
             )
         )
@@ -103,12 +105,12 @@ def build_staff_order_actions_keyboard(
     if can_refund:
         # Refund of a paid order (PQ-037); the right is checked on press.
         keyboard.append(
-            [InlineKeyboardButton(text="↩️ Возврат", callback_data=f"strf:{order_public_id}:0")]
+            [InlineKeyboardButton(text=_("↩️ Возврат"), callback_data=f"strf:{order_public_id}:0")]
         )
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Обновить карточку",
+                text=_("Обновить карточку"),
                 callback_data=f"stafforderrefresh:{order_public_id}",
             )
         ]
@@ -121,13 +123,13 @@ def build_staff_transfer_reject_confirm_keyboard(order_public_id: str) -> Inline
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Да, оплаты нет — отменить заказ",
+                    text=_("Да, оплаты нет — отменить заказ"),
                     callback_data=f"stafftxnoy:{order_public_id}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Назад",
+                    text=_("Назад"),
                     callback_data=f"stafforderrefresh:{order_public_id}",
                 )
             ],
@@ -140,13 +142,13 @@ def build_staff_receipt_refusal_confirm_keyboard(order_public_id: str) -> Inline
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Да, отменить заказ",
+                    text=_("Да, отменить заказ"),
                     callback_data=f"staffrcnoy:{order_public_id}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Назад",
+                    text=_("Назад"),
                     callback_data=f"stafforderrefresh:{order_public_id}",
                 )
             ],
@@ -165,11 +167,11 @@ def build_staff_orders_overview_keyboard(
     inline_keyboard = [
         [
             InlineKeyboardButton(
-                text="Обновить список",
+                text=_("Обновить список"),
                 callback_data="stafforders:refresh",
             ),
             InlineKeyboardButton(
-                text="Уведомления",
+                text=_("Уведомления"),
                 callback_data="staffnotif:refresh",
             ),
         ],
@@ -184,7 +186,7 @@ def build_staff_orders_overview_keyboard(
         if can_accept:
             row.append(
                 InlineKeyboardButton(
-                    text="Взять в работу",
+                    text=_("Взять в работу"),
                     callback_data=f"stafforder:{order_public_id}:accepted",
                 )
             )
@@ -193,14 +195,14 @@ def build_staff_orders_overview_keyboard(
     if can_view_tables:
         billing_row.append(
             InlineKeyboardButton(
-                text="Столы",
+                text=_("Столы"),
                 callback_data="stafftables:refresh",
             )
         )
     if can_manage_billing:
         billing_row.append(
             InlineKeyboardButton(
-                text="Счета и оплаты",
+                text=_("Счета и оплаты"),
                 callback_data="staffbill:list",
             )
         )
@@ -210,7 +212,7 @@ def build_staff_orders_overview_keyboard(
         inline_keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Быстрая продажа",
+                    text=_("Быстрая продажа"),
                     callback_data="staffsale:start",
                 )
             ]
@@ -219,7 +221,7 @@ def build_staff_orders_overview_keyboard(
         inline_keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Отчёт дня",
+                    text=_("Отчёт дня"),
                     callback_data="staffreport:today",
                 )
             ]
@@ -232,7 +234,7 @@ def build_staff_sale_code_prompt_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Без кода (Аноним)",
+                    text=_("Без кода (Аноним)"),
                     callback_data="staffsale:anon",
                 )
             ]
@@ -245,13 +247,13 @@ def build_staff_notifications_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Обновить",
+                    text=_("Обновить"),
                     callback_data="staffnotif:refresh",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Отметить всё прочитанным",
+                    text=_("Отметить всё прочитанным"),
                     callback_data="staffnotif:readall",
                 )
             ]
@@ -270,11 +272,11 @@ def build_staff_notification_item_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Взять в работу",
+                    text=_("Взять в работу"),
                     callback_data=f"staffnotifaccept:{notification_id}:{order_public_id}",
                 ),
                 InlineKeyboardButton(
-                    text="Открыть заказ",
+                    text=_("Открыть заказ"),
                     callback_data=f"staffnotiforder:{order_public_id}",
                 ),
             ]
@@ -283,7 +285,7 @@ def build_staff_notification_item_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Открыть заказ",
+                    text=_("Открыть заказ"),
                     callback_data=f"staffnotiforder:{order_public_id}",
                 )
             ]
@@ -292,7 +294,7 @@ def build_staff_notification_item_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Открыть счета",
+                    text=_("Открыть счета"),
                     callback_data="staffbill:list",
                 )
             ]
@@ -300,7 +302,7 @@ def build_staff_notification_item_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Прочитано",
+                text=_("Прочитано"),
                 callback_data=f"staffnotifread:{notification_id}",
             )
         ]
@@ -320,13 +322,13 @@ def build_staff_home_keyboard(
     if can_view_orders:
         first_row.append(
             InlineKeyboardButton(
-                text="Открытые заказы",
+                text=_("Открытые заказы"),
                 callback_data="stafforders:refresh",
             )
         )
     first_row.append(
         InlineKeyboardButton(
-            text="Уведомления",
+            text=_("Уведомления"),
             callback_data="staffnotif:refresh",
         )
     )
@@ -335,14 +337,14 @@ def build_staff_home_keyboard(
     if can_view_tables:
         billing_row.append(
             InlineKeyboardButton(
-                text="Столы",
+                text=_("Столы"),
                 callback_data="stafftables:refresh",
             )
         )
     if can_manage_billing:
         billing_row.append(
             InlineKeyboardButton(
-                text="Счета и оплаты",
+                text=_("Счета и оплаты"),
                 callback_data="staffbill:list",
             )
         )
@@ -352,7 +354,7 @@ def build_staff_home_keyboard(
         inline_keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Быстрая продажа",
+                    text=_("Быстрая продажа"),
                     callback_data="staffsale:start",
                 )
             ]
@@ -361,7 +363,7 @@ def build_staff_home_keyboard(
         inline_keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Отчёт дня",
+                    text=_("Отчёт дня"),
                     callback_data="staffreport:today",
                 )
             ]
@@ -374,27 +376,27 @@ def build_staff_report_summary_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Счета",
+                    text=_("Счета"),
                     callback_data="staffreportsec:bills:1",
                 ),
                 InlineKeyboardButton(
-                    text="Быстрые продажи",
+                    text=_("Быстрые продажи"),
                     callback_data="staffreportsec:walkins:1",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="Столы",
+                    text=_("Столы"),
                     callback_data="staffreportsec:tables:1",
                 ),
                 InlineKeyboardButton(
-                    text="Хвосты",
+                    text=_("Хвосты"),
                     callback_data="staffreportsec:tails:1",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    text="Обновить сводку",
+                    text=_("Обновить сводку"),
                     callback_data="staffreport:today",
                 )
             ],
@@ -424,14 +426,14 @@ def build_staff_report_section_keyboard(
     if page > 1:
         nav_row.append(
             InlineKeyboardButton(
-                text="← Назад",
+                text=_("← Назад"),
                 callback_data=f"staffreportsec:{section}:{page - 1}",
             )
         )
     if page < total_pages:
         nav_row.append(
             InlineKeyboardButton(
-                text="Дальше →",
+                text=_("Дальше →"),
                 callback_data=f"staffreportsec:{section}:{page + 1}",
             )
         )
@@ -441,7 +443,7 @@ def build_staff_report_section_keyboard(
     inline_keyboard.append(
         [
             InlineKeyboardButton(
-                text="К сводке дня",
+                text=_("К сводке дня"),
                 callback_data="staffreport:today",
             )
         ]
@@ -454,13 +456,13 @@ def build_staff_report_walkin_detail_keyboard(*, section: str, page: int) -> Inl
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="К списку продаж",
+                    text=_("К списку продаж"),
                     callback_data=f"staffreportsec:{section}:{page}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="К сводке дня",
+                    text=_("К сводке дня"),
                     callback_data="staffreport:today",
                 )
             ],
@@ -473,13 +475,13 @@ def build_staff_report_table_detail_keyboard(*, page: int) -> InlineKeyboardMark
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="К списку столов",
+                    text=_("К списку столов"),
                     callback_data=f"staffreportsec:tables:{page}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="К сводке дня",
+                    text=_("К сводке дня"),
                     callback_data="staffreport:today",
                 )
             ],
@@ -514,7 +516,7 @@ def build_staff_sale_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text=f"＋ {label} • {price} грн",
+                    text=_("＋ {label} • {price} грн", label=label, price=price),
                     callback_data=f"staffsale:add:{item_id}",
                 )
             ]
@@ -541,11 +543,11 @@ def build_staff_sale_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Изменить код",
+                text=_("Изменить код"),
                 callback_data="staffsale:change_customer",
             ),
             InlineKeyboardButton(
-                text="Комментарий" if not has_comment else "Изменить комментарий",
+                text=_("Комментарий") if not has_comment else _("Изменить комментарий"),
                 callback_data="staffsale:comment",
             ),
         ]
@@ -554,7 +556,7 @@ def build_staff_sale_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Убрать комментарий",
+                    text=_("Убрать комментарий"),
                     callback_data="staffsale:comment_clear",
                 )
             ]
@@ -564,9 +566,9 @@ def build_staff_sale_keyboard(
             [
                 InlineKeyboardButton(
                     text=(
-                        "Отменить списание бонусов"
+                        _("Отменить списание бонусов")
                         if redeem_active
-                        else "Списать бонусы"
+                        else _("Списать бонусы")
                     ),
                     callback_data="staffsale:redeem",
                 )
@@ -575,11 +577,11 @@ def build_staff_sale_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Очистить",
+                text=_("Очистить"),
                 callback_data="staffsale:clear",
             ),
             InlineKeyboardButton(
-                text="Отмена",
+                text=_("Отмена"),
                 callback_data="staffsale:cancel",
             ),
         ]
@@ -587,7 +589,7 @@ def build_staff_sale_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Подтвердить продажу" if can_confirm else "Добавьте позиции",
+                text=_("Подтвердить продажу") if can_confirm else _("Добавьте позиции"),
                 callback_data="staffsale:confirm" if can_confirm else "staffsale:noop",
             )
         ]
@@ -604,11 +606,11 @@ def build_staff_billing_overview_keyboard(
     inline_keyboard = [
         [
             InlineKeyboardButton(
-                text="Обновить",
+                text=_("Обновить"),
                 callback_data="staffbill:list",
             ),
             InlineKeyboardButton(
-                text="Заказы",
+                text=_("Заказы"),
                 callback_data="stafforders:refresh",
             ),
         ],
@@ -623,7 +625,7 @@ def build_staff_billing_overview_keyboard(
         if table_id:
             row.append(
                 InlineKeyboardButton(
-                    text="Стол",
+                    text=_("Стол"),
                     callback_data=f"stafftableopen:{table_id}",
                 )
             )
@@ -632,7 +634,7 @@ def build_staff_billing_overview_keyboard(
         inline_keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Быстрая продажа",
+                    text=_("Быстрая продажа"),
                     callback_data="staffsale:start",
                 )
             ]
@@ -641,7 +643,7 @@ def build_staff_billing_overview_keyboard(
         inline_keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Отчёт дня",
+                    text=_("Отчёт дня"),
                     callback_data="staffreport:today",
                 )
             ]
@@ -663,7 +665,7 @@ def build_staff_bill_actions_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Выдать счёт",
+                    text=_("Выдать счёт"),
                     callback_data=f"staffbillissue:{bill_public_id}",
                 )
             ]
@@ -672,7 +674,7 @@ def build_staff_bill_actions_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Оплатить бонусами",
+                    text=_("Оплатить бонусами"),
                     callback_data=f"staffbillpaybonus:{bill_public_id}",
                 )
             ]
@@ -681,11 +683,11 @@ def build_staff_bill_actions_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Наличные",
+                    text=_("Наличные"),
                     callback_data=f"staffbillpaycash:{bill_public_id}",
                 ),
                 InlineKeyboardButton(
-                    text="Терминал",
+                    text=_("Терминал"),
                     callback_data=f"staffbillpayterminal:{bill_public_id}",
                 ),
             ]
@@ -694,14 +696,14 @@ def build_staff_bill_actions_keyboard(
     if can_edit:
         change_row.append(
             InlineKeyboardButton(
-                text="Изменить счёт",
+                text=_("Изменить счёт"),
                 callback_data=f"staffbilledit:{bill_public_id}",
             )
         )
     if can_void:
         change_row.append(
             InlineKeyboardButton(
-                text="Аннулировать",
+                text=_("Аннулировать"),
                 callback_data=f"staffbillvoid:{bill_public_id}",
             )
         )
@@ -710,7 +712,7 @@ def build_staff_bill_actions_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Обновить счёт",
+                text=_("Обновить счёт"),
                 callback_data=f"staffbillrefresh:{bill_public_id}",
             )
         ]
@@ -720,10 +722,10 @@ def build_staff_bill_actions_keyboard(
 
 # Short codes keep callback data under Telegram's 64-byte limit.
 ADJUSTMENT_REASON_BUTTONS = (
-    ("e", "Ошибка ввода"),
-    ("g", "Отказ гостя"),
-    ("c", "Комплимент заведения"),
-    ("o", "Другое"),
+    ("e", N_("Ошибка ввода")),
+    ("g", N_("Отказ гостя")),
+    ("c", N_("Комплимент заведения")),
+    ("o", N_("Другое")),
 )
 
 
@@ -758,7 +760,7 @@ def build_staff_bill_edit_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Назад к счёту",
+                text=_("Назад к счёту"),
                 callback_data=f"staffbillrefresh:{bill_public_id}",
             )
         ]
@@ -776,7 +778,7 @@ def build_staff_adjustment_reason_keyboard(
     keyboard = [
         [
             InlineKeyboardButton(
-                text=label,
+                text=_(label),
                 callback_data=f"{callback_prefix}:{code}",
             )
         ]
@@ -785,7 +787,7 @@ def build_staff_adjustment_reason_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Отмена",
+                text=_("Отмена"),
                 callback_data=f"staffbillrefresh:{bill_public_id}",
             )
         ]
@@ -802,13 +804,13 @@ def build_staff_adjustment_done_keyboard(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="Добавить комментарий",
+                    text=_("Добавить комментарий"),
                     callback_data=f"staffadjc:{adjustment_id}",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="Открыть счёт",
+                    text=_("Открыть счёт"),
                     callback_data=f"staffbillrefresh:{bill_public_id}",
                 )
             ],
@@ -834,18 +836,18 @@ def build_staff_table_actions_keyboard(
             row.extend(
                 [
                     InlineKeyboardButton(
-                        text=f"{title}: общий счёт",
+                        text=_("{title}: общий счёт", title=title),
                         callback_data=f"stafftvshared:{visit_hex}",
                     ),
                     InlineKeyboardButton(
-                        text="По гостям",
+                        text=_("По гостям"),
                         callback_data=f"stafftvpersonal:{visit_hex}",
                     ),
                 ]
             )
         row.append(
             InlineKeyboardButton(
-                text="Закрыть визит" if can_bill else f"{title}: закрыть",
+                text=_("Закрыть визит") if can_bill else _("{title}: закрыть", title=title),
                 callback_data=f"stafftvclose:{visit_hex}",
             )
         )
@@ -855,14 +857,14 @@ def build_staff_table_actions_keyboard(
         if can_create_shared_bill:
             row.append(
                 InlineKeyboardButton(
-                    text="Общий счёт",
+                    text=_("Общий счёт"),
                     callback_data=f"stafftablebillshared:{table_id}",
                 )
             )
         if can_create_personal_bills:
             row.append(
                 InlineKeyboardButton(
-                    text="По гостям",
+                    text=_("По гостям"),
                     callback_data=f"stafftablebillpersonal:{table_id}",
                 )
             )
@@ -879,11 +881,11 @@ def build_staff_table_actions_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Обновить стол",
+                text=_("Обновить стол"),
                 callback_data=f"stafftableopen:{table_id}",
             ),
             InlineKeyboardButton(
-                text="Счета и оплаты",
+                text=_("Счета и оплаты"),
                 callback_data="staffbill:list",
             ),
         ]
@@ -900,15 +902,15 @@ def build_staff_tables_overview_keyboard(
     inline_keyboard = [
         [
             InlineKeyboardButton(
-                text="Обновить",
+                text=_("Обновить"),
                 callback_data="stafftables:refresh",
             ),
             InlineKeyboardButton(
-                text="Заказы",
+                text=_("Заказы"),
                 callback_data="stafforders:refresh",
             ),
             InlineKeyboardButton(
-                text="Счета",
+                text=_("Счета"),
                 callback_data="staffbill:list",
             ),
         ],
@@ -926,7 +928,7 @@ def build_staff_tables_overview_keyboard(
         inline_keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Быстрая продажа",
+                    text=_("Быстрая продажа"),
                     callback_data="staffsale:start",
                 )
             ]
@@ -935,7 +937,7 @@ def build_staff_tables_overview_keyboard(
         inline_keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Отчёт дня",
+                    text=_("Отчёт дня"),
                     callback_data="staffreport:today",
                 )
             ]
@@ -954,7 +956,7 @@ def build_staff_billing_request_actions_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Открыть счёт",
+                    text=_("Открыть счёт"),
                     callback_data=f"staffbillopen:{bill_public_id}",
                 )
             ]
@@ -963,11 +965,11 @@ def build_staff_billing_request_actions_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text="Обработано",
+                    text=_("Обработано"),
                     callback_data=f"staffbillreqprocess:{request_id}",
                 ),
                 InlineKeyboardButton(
-                    text="Отменить",
+                    text=_("Отменить"),
                     callback_data=f"staffbillreqcancel:{request_id}",
                 ),
             ]
@@ -975,7 +977,7 @@ def build_staff_billing_request_actions_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="Обновить запрос",
+                text=_("Обновить запрос"),
                 callback_data=f"staffbillreqrefresh:{request_id}",
             )
         ]

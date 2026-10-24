@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import html
 import uuid
+from collections.abc import Callable
 from datetime import timedelta
 
 from aiogram import Bot
@@ -28,9 +29,12 @@ from apps.notifications.repositories import (
     BroadcastCampaignRepository,
     NotificationPreferenceRepository,
 )
+from apps.partners.bot_texts import INLINE_BUTTON_TEXTS
+from apps.partners.languages import speaking_to_employee, speaking_to_guest
 from apps.partners.models import BotInstance, Partner
 from apps.tables.services import get_active_table_session
 from apps.users.models import TelegramAccount
+from core.i18n import _
 from core.settings.env import app_settings
 
 DELIVER_STAFF_NOTIFICATION_TASK = "notifications.deliver_staff_notification"
@@ -75,11 +79,11 @@ def _active_partner_bot(partner_id) -> BotInstance:
         .first()
     )
     if bot_instance is None:
-        raise NotificationDeliveryError("У заведения нет включённого бота.")
+        raise NotificationDeliveryError(_("У заведения нет включённого бота."))
     if bot_instance.partner.status != Partner.Status.ACTIVE:
-        raise NotificationDeliveryError("Заведение приостановлено — сообщения не отправляются.")
+        raise NotificationDeliveryError(_("Заведение приостановлено — сообщения не отправляются."))
     if not bot_instance.has_usable_token:
-        raise NotificationDeliveryError("Токен бота заведения не задан или неверный.")
+        raise NotificationDeliveryError(_("Токен бота заведения не задан или неверный."))
     return bot_instance
 
 
@@ -231,12 +235,12 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
         and employee.user.partner_id == notification.partner_id
     ):
         notification.delivery_status = StaffNotification.DeliveryStatus.FAILED
-        notification.delivery_error = "Сотрудник больше не получает уведомления."
+        notification.delivery_error = _("Сотрудник больше не получает уведомления.")
         notification.save(update_fields=["delivery_status", "delivery_error", "updated_at"])
         return notification
     if employee is None or employee.telegram_account_id is None:
         notification.delivery_status = StaffNotification.DeliveryStatus.FAILED
-        notification.delivery_error = "У сотрудника не привязан Telegram."
+        notification.delivery_error = _("У сотрудника не привязан Telegram.")
         notification.save(update_fields=["delivery_status", "delivery_error", "updated_at"])
         return notification
 
@@ -284,6 +288,14 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
     return notification
 
 
+# The staff call names, translated for each employee (PQ-040).
+CALL_TARGET_TEXTS = {
+    "waiter": INLINE_BUTTON_TEXTS["button_call_waiter_label"],
+    "bartender": INLINE_BUTTON_TEXTS["button_call_bartender_label"],
+    "hookah": INLINE_BUTTON_TEXTS["button_call_hookah_label"],
+}
+
+
 def _guest_call_role_targets(call_target: str) -> tuple[str, ...]:
     if call_target == "waiter":
         return ("waiter", "manager", "owner")
@@ -291,7 +303,7 @@ def _guest_call_role_targets(call_target: str) -> tuple[str, ...]:
         return ("cashier", "manager", "owner")
     if call_target == "hookah":
         return ("hookah_master", "manager", "owner")
-    raise GuestCallError("Неизвестный тип вызова персонала.")
+    raise GuestCallError(_("Неизвестный тип вызова персонала."))
 
 
 def _employee_display_name(employee) -> str:
@@ -305,22 +317,28 @@ def _order_delivery_context_label(order) -> str:
     if order.channel == order.Channel.PICKUP:
         from apps.orders.services import requested_time_label
 
-        return f"Самовывоз: {requested_time_label(order)}"
+        return _("Самовывоз: {requested_time}", requested_time=requested_time_label(order))
     if order.channel == order.Channel.DELIVERY:
         from apps.orders.services import requested_time_label
 
         return (
-            f"Доставка: {requested_time_label(order)}, "
-            f"{_escape_html(order.delivery_address)}"
+            _(
+                "Доставка: {requested_time}, {delivery_address}",
+                requested_time=requested_time_label(order),
+                delivery_address=_escape_html(order.delivery_address),
+            )
         )
     if order.channel == order.Channel.SHIPPING:
         return (
-            f"Отправка: {_escape_html(order.get_shipping_carrier_display())}, "
-            f"{_escape_html(order.shipping_destination)}"
+            _(
+                "Отправка: {shipping_carrier}, {shipping_destination}",
+                shipping_carrier=_escape_html(order.get_shipping_carrier_display()),
+                shipping_destination=_escape_html(order.shipping_destination),
+            )
         )
     if order.table_id is not None:
-        return f"Стол: #{order.table.number}"
-    return "Сценарий: заказ без привязки к столу"
+        return _("Стол: #{number}", number=order.table.number)
+    return _("Сценарий: заказ без привязки к столу")
 
 
 def _remote_status_note(order, to_status: str) -> str:
@@ -328,37 +346,46 @@ def _remote_status_note(order, to_status: str) -> str:
         return ""
     prepaid = order.payment_timing == order.PaymentTiming.PREPAID
     if to_status == order.Status.ACCEPTED:
-        return "Оплата подтверждена — готовим ваш заказ." if prepaid else "Заказ принят — готовим."
+        return _(
+            "Оплата подтверждена — готовим ваш заказ.",
+        ) if prepaid else _(
+            "Заказ принят — готовим.",
+        )
     if to_status == order.Status.READY and order.channel == order.Channel.PICKUP:
-        return "Заказ готов — можно забирать."
+        return _("Заказ готов — можно забирать.")
     if order.channel == order.Channel.SHIPPING:
         if to_status == order.Status.READY:
-            return "Заказ собран — скоро отправим."
+            return _("Заказ собран — скоро отправим.")
         if to_status == order.Status.DELIVERING:
             from apps.billing.remote_orders import tracking_link
 
             number = _escape_html(order.tracking_number)
             text = (
-                f"Заказ отправлен: {_escape_html(order.get_shipping_carrier_display())}, "
-                f"ТТН <code>{number}</code>."
+                _(
+                    "Заказ отправлен: {shipping_carrier}, ТТН <code>{number}</code>.",
+                    shipping_carrier=_escape_html(order.get_shipping_carrier_display()),
+                    number=number,
+                )
             )
             link = tracking_link(order.shipping_carrier, order.tracking_number)
             if link:
-                text += f'\n<a href="{_escape_html(link)}">Отследить посылку</a>'
-            return text + "\nКогда заберёте посылку, нажмите «Получил(а)»."
+                text += _("\n<a href=\"{link}\">Отследить посылку</a>", link=_escape_html(link))
+            return text + _("\nКогда заберёте посылку, нажмите «Получил(а)».")
         if to_status == order.Status.COMPLETED:
-            return "Заказ получен. Спасибо!"
+            return _("Заказ получен. Спасибо!")
     if order.channel == order.Channel.DELIVERY:
         if to_status == order.Status.READY:
-            return "Заказ собран — скоро передадим курьеру."
+            return _("Заказ собран — скоро передадим курьеру.")
         if to_status == order.Status.DELIVERING:
-            return "Заказ в пути — курьер уже едет к вам."
+            return _("Заказ в пути — курьер уже едет к вам.")
         if to_status == order.Status.COMPLETED:
-            return "Заказ доставлен. Приятного аппетита!"
+            return _("Заказ доставлен. Приятного аппетита!")
     if to_status == order.Status.CANCELED and prepaid and order.paid_at is None:
         return (
-            "Оплата не поступила, заказ отменён. Если вы переводили деньги, "
-            "свяжитесь с заведением."
+            _(
+                "Оплата не поступила, заказ отменён. Если вы переводили деньги, свяжитесь с "
+                "заведением.",
+            )
         )
     return ""
 
@@ -408,47 +435,61 @@ def send_guest_order_status_update_now(
     except NotificationDeliveryError:
         return False
 
-    lines = [
-        f"<b>Обновление по заказу #{order.public_id}</b>",
-        _order_delivery_context_label(order),
-        f"Новый статус: {order.get_status_display()}",
-        f"Оплата: {'получена' if order.paid_at else 'ещё не зафиксирована'}",
-        f"Получение: {'подтверждено' if order.received_at else 'ещё не подтверждено'}",
-    ]
-    if to_status == order.Status.ACCEPTED and order.assigned_employee_id:
-        lines.append(
-            f"Заказ взял в работу: {_escape_html(_employee_display_name(order.assigned_employee))}"
-        )
-    elif order.assigned_employee_id:
-        lines.append(
-            f"Ответственный: {_escape_html(_employee_display_name(order.assigned_employee))}"
-        )
-
-    if order.comment:
-        lines.append(f"Комментарий: {_escape_html(order.comment)}")
-    remote_note = _remote_status_note(order, to_status)
-    if remote_note:
-        lines.append(remote_note)
-
-    message = (guest_chat_id, "\n".join(lines))
-    if (
-        order.channel == order.Channel.SHIPPING
-        and to_status == order.Status.DELIVERING
-        and order.status == order.Status.DELIVERING
-    ):
-        # The guest confirms the parcel is received (PQ-029, PQ-034).
-        message += (
-            InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text="✅ Получил(а)",
-                            callback_data=f"guestorderconfirm:{order.public_id}",
-                        )
-                    ]
-                ]
+    # The guest reads it in their language, whoever changed the status (PQ-040).
+    with speaking_to_guest(order.guest):
+        lines = [
+            _("<b>Обновление по заказу #{public_id}</b>", public_id=order.public_id),
+            _order_delivery_context_label(order),
+            _("Новый статус: {status}", status=order.get_status_display()),
+            _(
+                "Оплата: {value}",
+                value=_("получена") if order.paid_at else _("ещё не зафиксирована"),
             ),
-        )
+            _(
+                "Получение: {value}",
+                value=_("подтверждено") if order.received_at else _("ещё не подтверждено"),
+            ),
+        ]
+        if to_status == order.Status.ACCEPTED and order.assigned_employee_id:
+            lines.append(
+                _(
+                    "Заказ взял в работу: {employee_display_name}",
+                    employee_display_name=_escape_html(_employee_display_name(order.assigned_employee)),
+                )
+            )
+        elif order.assigned_employee_id:
+            lines.append(
+                _(
+                    "Ответственный: {employee_display_name}",
+                    employee_display_name=_escape_html(_employee_display_name(order.assigned_employee)),
+                )
+            )
+
+        if order.comment:
+            lines.append(_("Комментарий: {comment}", comment=_escape_html(order.comment)))
+        remote_note = _remote_status_note(order, to_status)
+        if remote_note:
+            lines.append(remote_note)
+
+        message = (guest_chat_id, "\n".join(lines))
+        if (
+            order.channel == order.Channel.SHIPPING
+            and to_status == order.Status.DELIVERING
+            and order.status == order.Status.DELIVERING
+        ):
+            # The guest confirms the parcel is received (PQ-029, PQ-034).
+            message += (
+                InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=_("✅ Получил(а)"),
+                                callback_data=f"guestorderconfirm:{order.public_id}",
+                            )
+                        ]
+                    ]
+                ),
+            )
     results = async_to_sync(_send_telegram_messages)(bot_instance.token, [message])
     _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
     if should_mark_blocked:
@@ -470,7 +511,10 @@ def send_guest_refund_notice(refund) -> None:
 
 
 def render_guest_refund_notice(refund) -> str:
-    lines = [f"<b>Возврат по счёту #{_escape_html(refund.bill.public_id)}</b>"]
+    lines = [_(
+        "<b>Возврат по счёту #{public_id}</b>",
+        public_id=_escape_html(refund.bill.public_id),
+    )]
     by_order: dict[str, list[str]] = {}
     for line in refund.lines.select_related("bill_item__order").order_by("created_at"):
         item = line.bill_item
@@ -478,16 +522,27 @@ def render_guest_refund_notice(refund) -> str:
             f"{_escape_html(item.item_name)} × {item.quantity}"
         )
     for public_id, items in by_order.items():
-        lines.append(f"Заказ #{_escape_html(public_id)}: {', '.join(items)}")
+        lines.append(_(
+            "Заказ #{public_id}: {items}",
+            public_id=_escape_html(public_id),
+            items=', '.join(items),
+        ))
     if refund.money_amount > 0 and refund.method != refund.Method.NONE:
         lines.append(
-            f"Деньги: {refund.money_amount} грн — {refund.get_method_display().lower()}."
+            _(
+                "Деньги: {money_amount} грн — {method}.",
+                money_amount=refund.money_amount,
+                method=refund.get_method_display().lower(),
+            )
         )
     if refund.bonus_returned > 0:
-        lines.append(f"Бонусы вернулись: {refund.bonus_returned}.")
+        lines.append(_("Бонусы вернулись: {bonus_returned}.", bonus_returned=refund.bonus_returned))
     if refund.cashback_revoked > 0:
-        lines.append(f"Кешбэк за возвращённое снят: {refund.cashback_revoked}.")
-    lines.append(f"Причина: {refund.get_reason_code_display()}.")
+        lines.append(_(
+            "Кешбэк за возвращённое снят: {cashback_revoked}.",
+            cashback_revoked=refund.cashback_revoked,
+        ))
+    lines.append(_("Причина: {reason_code}.", reason_code=refund.get_reason_code_display()))
     if refund.reason_text:
         lines.append(_escape_html(refund.reason_text))
     return "\n".join(lines)
@@ -513,9 +568,11 @@ def send_guest_refund_notice_now(refund_id: str) -> bool:
         bot_instance = _active_partner_bot(refund.partner_id)
     except NotificationDeliveryError:
         return False
+    with speaking_to_guest(guest):
+        text = render_guest_refund_notice(refund)
     results = async_to_sync(_send_telegram_messages)(
         bot_instance.token,
-        [(guest.telegram_account.telegram_id, render_guest_refund_notice(refund))],
+        [(guest.telegram_account.telegram_id, text)],
     )
     _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
     if should_mark_blocked:
@@ -545,21 +602,22 @@ def request_staff_assistance(
     table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
     if table_session is None:
         raise GuestCallError(
-            "Позвать персонал можно только после сканирования QR-кода стола."
+            _("Позвать персонал можно только после сканирования QR-кода стола.")
         )
 
     table_number = table_session.table.number
     recent_cutoff = timezone.now() - timedelta(seconds=cooldown_seconds)
+    # Language-neutral: staff read the call in their own languages (PQ-040).
+    dedupe_key = f"call:{call_target}:table:{table_number}"
     recent_duplicate_exists = StaffNotification.objects.filter(
         partner_id=partner_id,
         category=StaffNotification.Category.GUEST_CALL,
         created_at__gte=recent_cutoff,
-        title=f"Вызов: {call_target_label}",
-        message__contains=f"Стол: #{table_number}",
+        dedupe_key=dedupe_key,
     ).exists()
     if recent_duplicate_exists:
         raise GuestCallError(
-            "Похожий вызов уже был отправлен совсем недавно. Подождите немного."
+            _("Похожий вызов уже был отправлен совсем недавно. Подождите немного.")
         )
 
     recipient_roles = _guest_call_role_targets(call_target)
@@ -577,29 +635,37 @@ def request_staff_assistance(
     )
     if not recipients:
         raise GuestCallError(
-            "Сейчас нет сотрудников с подключёнными Telegram-уведомлениями для этого вызова."
+            _("Сейчас нет сотрудников с подключёнными Telegram-уведомлениями для этого вызова.")
         )
 
     guest_identity = (
         table_session.guest.telegram_account.username
         or str(table_session.guest.telegram_account.telegram_id)
     )
-    message = (
-        f"Нужен: {call_target_label}\n"
-        f"Заведение: {table_session.partner.name}\n"
-        f"Стол: #{table_number}\n"
-        f"Гость: {guest_identity}\n"
-        f"Код клиента: {table_session.guest.customer_code}"
-    )
+    label_text = CALL_TARGET_TEXTS.get(call_target)
     queued_count = 0
     for employee in recipients:
-        notification = StaffNotification.objects.create(
-            partner_id=partner_id,
-            employee=employee,
-            category=StaffNotification.Category.GUEST_CALL,
-            title=f"Вызов: {call_target_label}",
-            message=message,
-        )
+        with speaking_to_employee(employee):
+            target = _(label_text) if label_text else call_target_label
+            notification = StaffNotification.objects.create(
+                partner_id=partner_id,
+                employee=employee,
+                category=StaffNotification.Category.GUEST_CALL,
+                dedupe_key=dedupe_key,
+                title=_("Вызов: {call_target}", call_target=target),
+                message=_(
+                    "Нужен: {call_target}\n"
+                    "Заведение: {name}\n"
+                    "Стол: #{table_number}\n"
+                    "Гость: {guest_identity}\n"
+                    "Код клиента: {customer_code}",
+                    call_target=target,
+                    name=table_session.partner.name,
+                    table_number=table_number,
+                    guest_identity=guest_identity,
+                    customer_code=table_session.guest.customer_code,
+                ),
+            )
         deliver_staff_notification(notification)
         queued_count += 1
 
@@ -628,27 +694,32 @@ def notify_staff_about_parallel_visit(visit) -> int:
     table_number = visit.table.number
     queued_count = 0
     for employee in recipients:
-        notification = StaffNotification.objects.create(
-            partner_id=visit.partner_id,
-            employee=employee,
-            category=StaffNotification.Category.TABLE_VISIT,
-            title=f"Стол #{table_number}: новый визит",
-            message=(
-                f"За столом #{table_number} начат новый визит, предыдущий не закрыт. "
-                "Рассчитайте и закройте предыдущий визит в разделе «Столы»."
-            ),
-        )
+        with speaking_to_employee(employee):
+            notification = StaffNotification.objects.create(
+                partner_id=visit.partner_id,
+                employee=employee,
+                category=StaffNotification.Category.TABLE_VISIT,
+                title=_("Стол #{table_number}: новый визит", table_number=table_number),
+                message=_(
+                    "За столом #{table_number} начат новый визит, предыдущий не закрыт. "
+                    "Рассчитайте и закройте предыдущий визит в разделе «Столы».",
+                    table_number=table_number,
+                ),
+            )
         deliver_staff_notification(notification)
         queued_count += 1
     return queued_count
 
 
-def notify_partner_owners(*, partner_id, title: str, message: str) -> int:
+def notify_partner_owners(
+    *, partner_id, title: Callable[[], str], message: Callable[[], str]
+) -> int:
     """A security alert to the venue owners linked to the staff bot.
 
     Owners are the users with an active owner admin profile or the owner role.
     The per-topic notification switches do not apply: the owner must know
-    when payment details or rights change (AA-035).
+    when payment details or rights change (AA-035). ``title`` and ``message``
+    are built per owner, in their language (PQ-040).
     """
 
     recipients = EmployeeProfile.objects.filter(
@@ -659,33 +730,40 @@ def notify_partner_owners(*, partner_id, title: str, message: str) -> int:
         telegram_account__isnull=False,
         user__is_active=True,
         user__partner_id=partner_id,
-    ).distinct()
+    ).distinct().select_related("user", "telegram_account")
     queued_count = 0
     for employee in recipients:
-        notification = StaffNotification.objects.create(
-            partner_id=partner_id,
-            employee=employee,
-            category=StaffNotification.Category.SECURITY,
-            title=title,
-            message=message,
-        )
+        with speaking_to_employee(employee):
+            notification = StaffNotification.objects.create(
+                partner_id=partner_id,
+                employee=employee,
+                category=StaffNotification.Category.SECURITY,
+                title=title(),
+                message=message(),
+            )
         deliver_staff_notification(notification)
         queued_count += 1
     return queued_count
 
 
 def notify_owners_about_transfer_details_change(*, settings, actor) -> int:
-    who = getattr(actor, "username", "") or "неизвестно"
-    details = settings.transfer_payment_details or "(пусто)"
+    username = getattr(actor, "username", "")
+    details = settings.transfer_payment_details
+
+    def message() -> str:
+        return _(
+            "Реквизиты для перевода изменил пользователь {who}.\n"
+            "Новые реквизиты: {details}\n"
+            "Если это сделали не вы — сразу верните реквизиты, смените пароль и проверьте "
+            "доступы в Admin.",
+            who=username or _("неизвестно"),
+            details=details or _("(пусто)"),
+        )
+
     return notify_partner_owners(
         partner_id=settings.partner_id,
-        title="Изменены реквизиты для оплаты",
-        message=(
-            f"Реквизиты для перевода изменил пользователь {who}.\n"
-            f"Новые реквизиты: {details}\n"
-            "Если это сделали не вы — сразу верните реквизиты, смените пароль и "
-            "проверьте доступы в Admin."
-        ),
+        title=lambda: _("Изменены реквизиты для оплаты"),
+        message=message,
     )
 
 
@@ -705,31 +783,34 @@ def notify_staff_about_billing_request(billing_request) -> int:
     if not recipients:
         return 0
 
-    request_type_label = billing_request.get_request_type_display()
     guest_identity = (
         billing_request.guest.telegram_account.username
         or str(billing_request.guest.telegram_account.telegram_id)
     )
-    lines = [
-        f"Тип: {request_type_label}",
-        f"Стол: #{billing_request.table.number}",
-        f"Гость: {guest_identity}",
-        f"Код клиента: {billing_request.guest.customer_code}",
-    ]
-    if billing_request.bill_id:
-        lines.append(f"Подготовлен счёт: #{billing_request.bill.public_id}")
-    lines.append(f"Запрос: #{billing_request.id}")
-    message = "\n".join(lines)
-
     queued_count = 0
     for employee in recipients:
-        notification = StaffNotification.objects.create(
-            partner_id=billing_request.partner_id,
-            employee=employee,
-            category=StaffNotification.Category.BILLING_REQUEST,
-            title="Запрос счёта",
-            message=message,
-        )
+        with speaking_to_employee(employee):
+            lines = [
+                _("Тип: {request_type}", request_type=billing_request.get_request_type_display()),
+                _("Стол: #{number}", number=billing_request.table.number),
+                _("Гость: {guest_identity}", guest_identity=guest_identity),
+                _(
+                    "Код клиента: {customer_code}",
+                    customer_code=billing_request.guest.customer_code,
+                ),
+            ]
+            if billing_request.bill_id:
+                lines.append(
+                    _("Подготовлен счёт: #{public_id}", public_id=billing_request.bill.public_id)
+                )
+            lines.append(_("Запрос: #{id}", id=billing_request.id))
+            notification = StaffNotification.objects.create(
+                partner_id=billing_request.partner_id,
+                employee=employee,
+                category=StaffNotification.Category.BILLING_REQUEST,
+                title=_("Запрос счёта"),
+                message="\n".join(lines),
+            )
         deliver_staff_notification(notification)
         queued_count += 1
     return queued_count
@@ -848,7 +929,7 @@ def _start_broadcast(campaign_id, *, legacy_after_guest_id: str = ""):
             _record_broadcast_audience(campaign)
 
     if not campaign.deliveries.exists():
-        _fail_locked_broadcast(campaign, "Нет гостей, которым можно отправить рассылку.")
+        _fail_locked_broadcast(campaign, _("Нет гостей, которым можно отправить рассылку."))
         return None
     return campaign
 
@@ -950,7 +1031,7 @@ def _send_claimed_broadcast_batch(*, campaign, token, claim_token, deliveries) -
                 delivery.id,
                 claim_token,
                 status=BroadcastDelivery.Status.SKIPPED,
-                error="Гость больше не получает рассылки.",
+                error=_("Гость больше не получает рассылки."),
             )
     if not to_send:
         return
@@ -1065,7 +1146,7 @@ def _finalize_locked_broadcast(campaign: BroadcastCampaign) -> None:
     if campaign.delivered_count == 0:
         campaign.status = BroadcastCampaign.Status.FAILED
         if not campaign.last_error:
-            campaign.last_error = "Рассылка не дошла ни до одного гостя."
+            campaign.last_error = _("Рассылка не дошла ни до одного гостя.")
     else:
         campaign.status = BroadcastCampaign.Status.SENT
     campaign.save(

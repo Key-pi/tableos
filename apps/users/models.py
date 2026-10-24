@@ -12,6 +12,7 @@ from apps.users.constants import (
 )
 from core.database.models import PartnerBoundModel, TimeStampedModel
 from core.i18n import LANGUAGE_NAMES, LANGUAGES
+from core.i18n import gettext_lazy as _lazy
 
 LANGUAGE_CHOICES = [(code, LANGUAGE_NAMES[code]) for code in LANGUAGES]
 
@@ -20,12 +21,12 @@ class User(AbstractUser):
     """Back-office or staff user with an optional partner scope and business role."""
 
     class Role(models.TextChoices):
-        OWNER = "owner", "Владелец"
-        MANAGER = "manager", "Менеджер"
-        CASHIER = "cashier", "Кассир"
-        WAITER = "waiter", "Официант"
-        HOOKAH_MASTER = "hookah_master", "Кальянщик"
-        ADMIN = "admin", "Администратор платформы"
+        OWNER = "owner", _lazy("Владелец")
+        MANAGER = "manager", _lazy("Менеджер")
+        CASHIER = "cashier", _lazy("Кассир")
+        WAITER = "waiter", _lazy("Официант")
+        HOOKAH_MASTER = "hookah_master", _lazy("Кальянщик")
+        ADMIN = "admin", _lazy("Администратор платформы")
 
     partner = models.ForeignKey(
         "partners.Partner",
@@ -33,20 +34,22 @@ class User(AbstractUser):
         null=True,
         blank=True,
         related_name="staff_users",
-        verbose_name="Заведение",
+        verbose_name=_lazy("Заведение"),
     )
     role = models.CharField(
         max_length=32,
         choices=Role.choices,
         default=Role.MANAGER,
-        verbose_name="Роль",
+        verbose_name=_lazy("Роль"),
     )
     language = models.CharField(
         max_length=8,
         choices=LANGUAGE_CHOICES,
         blank=True,
-        verbose_name="Язык",
-        help_text="Язык бота персонала и Admin для этого пользователя. Пусто — по умолчанию.",
+        verbose_name=_lazy("Язык"),
+        help_text=_lazy(
+            "Язык бота персонала и Admin для этого пользователя. Пусто — по умолчанию.",
+        ),
     )
 
     def __str__(self) -> str:
@@ -58,14 +61,14 @@ class TelegramAccount(TimeStampedModel):
 
     telegram_id = models.BigIntegerField(unique=True, verbose_name="Telegram ID")
     username = models.CharField(max_length=255, blank=True, verbose_name="@username")
-    first_name = models.CharField(max_length=255, blank=True, verbose_name="Имя")
-    last_name = models.CharField(max_length=255, blank=True, verbose_name="Фамилия")
-    language_code = models.CharField(max_length=16, blank=True, verbose_name="Язык")
-    is_blocked = models.BooleanField(default=False, verbose_name="Заблокировал бота")
+    first_name = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Имя"))
+    last_name = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Фамилия"))
+    language_code = models.CharField(max_length=16, blank=True, verbose_name=_lazy("Язык"))
+    is_blocked = models.BooleanField(default=False, verbose_name=_lazy("Заблокировал бота"))
 
     class Meta:
-        verbose_name = "аккаунт Telegram"
-        verbose_name_plural = "Аккаунты Telegram"
+        verbose_name = _lazy("аккаунт Telegram")
+        verbose_name_plural = _lazy("Аккаунты Telegram")
         ordering = ["-updated_at"]
 
     def __str__(self) -> str:
@@ -81,49 +84,55 @@ class GuestProfile(PartnerBoundModel):
         related_name="guest_profiles",
         verbose_name="Telegram",
     )
-    customer_code = models.CharField(max_length=12, editable=False, verbose_name="Код клиента")
-    first_visit_at = models.DateTimeField(null=True, blank=True, verbose_name="Первый визит")
-    last_visit_at = models.DateTimeField(null=True, blank=True, verbose_name="Последний визит")
+    customer_code = models.CharField(max_length=12, editable=False, verbose_name=_lazy(
+        "Код клиента",
+    ))
+    first_visit_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Первый визит"))
+    last_visit_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy(
+        "Последний визит",
+    ))
     loyalty_balance = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Бонусный баланс",
+        verbose_name=_lazy("Бонусный баланс"),
     )
-    is_subscribed = models.BooleanField(default=True, verbose_name="Подписан на рассылки")
+    is_subscribed = models.BooleanField(default=True, verbose_name=_lazy("Подписан на рассылки"))
     phone = models.CharField(
         max_length=32,
         blank=True,
-        help_text="Гость делится им в Telegram (нужен для самовывоза, доставки и отправки).",
-        verbose_name="Телефон",
+        help_text=_lazy("Гость делится им в Telegram (нужен для самовывоза, доставки и отправки)."),
+        verbose_name=_lazy("Телефон"),
     )
     # The last delivery address (PQ-032), offered again at the next checkout.
-    delivery_address = models.TextField(blank=True, verbose_name="Адрес доставки")
+    delivery_address = models.TextField(blank=True, verbose_name=_lazy("Адрес доставки"))
     delivery_latitude = models.DecimalField(
         max_digits=9,
         decimal_places=6,
         null=True,
         blank=True,
-        verbose_name="Широта",
+        verbose_name=_lazy("Широта"),
     )
     delivery_longitude = models.DecimalField(
         max_digits=9,
         decimal_places=6,
         null=True,
         blank=True,
-        verbose_name="Долгота",
+        verbose_name=_lazy("Долгота"),
     )
     # Shipping by post (PQ-034): the last carrier and destination, offered again.
-    shipping_carrier = models.CharField(max_length=16, blank=True, verbose_name="Служба")
-    shipping_destination = models.TextField(blank=True, verbose_name="Куда отправить")
+    shipping_carrier = models.CharField(max_length=16, blank=True, verbose_name=_lazy("Служба"))
+    shipping_destination = models.TextField(blank=True, verbose_name=_lazy("Куда отправить"))
     # The language the guest chose in the bot (PQ-040); empty = automatic.
     language = models.CharField(
-        max_length=8, choices=LANGUAGE_CHOICES, blank=True, verbose_name="Язык (выбран гостем)"
+        max_length=8, choices=LANGUAGE_CHOICES, blank=True, verbose_name=_lazy(
+            "Язык (выбран гостем)",
+        )
     )
 
     class Meta:
-        verbose_name = "гость"
-        verbose_name_plural = "Гости"
+        verbose_name = _lazy("гость")
+        verbose_name_plural = _lazy("Гости")
         constraints = [
             models.UniqueConstraint(
                 fields=["partner", "telegram_account"],
@@ -165,27 +174,27 @@ class AdminAccessProfile(TimeStampedModel):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="admin_access_profile",
-        verbose_name="Пользователь",
+        verbose_name=_lazy("Пользователь"),
     )
     partner = models.ForeignKey(
         "partners.Partner",
         on_delete=models.CASCADE,
         related_name="admin_access_profiles",
-        verbose_name="Заведение",
+        verbose_name=_lazy("Заведение"),
     )
     preset = models.CharField(
         max_length=32,
         choices=AdminAccessPreset.choices,
         default=AdminAccessPreset.CUSTOM,
-        verbose_name="Набор прав",
+        verbose_name=_lazy("Набор прав"),
     )
-    is_partner_owner = models.BooleanField(default=False, verbose_name="Владелец заведения")
-    can_access_admin = models.BooleanField(default=False, verbose_name="Вход в Admin")
-    is_active = models.BooleanField(default=True, verbose_name="Активен")
+    is_partner_owner = models.BooleanField(default=False, verbose_name=_lazy("Владелец заведения"))
+    can_access_admin = models.BooleanField(default=False, verbose_name=_lazy("Вход в Admin"))
+    is_active = models.BooleanField(default=True, verbose_name=_lazy("Активен"))
 
     class Meta:
-        verbose_name = "доступ к Admin"
-        verbose_name_plural = "Доступы к Admin"
+        verbose_name = _lazy("доступ к Admin")
+        verbose_name_plural = _lazy("Доступы к Admin")
         ordering = ["partner__name", "user__username"]
 
     def __str__(self) -> str:
@@ -246,18 +255,20 @@ class AdminSectionPermission(TimeStampedModel):
         AdminAccessProfile,
         on_delete=models.CASCADE,
         related_name="section_permissions",
-        verbose_name="Профиль доступа",
+        verbose_name=_lazy("Профиль доступа"),
     )
-    section = models.CharField(max_length=32, choices=AdminSection.choices, verbose_name="Раздел")
-    can_view = models.BooleanField(default=False, verbose_name="Просмотр")
-    can_add = models.BooleanField(default=False, verbose_name="Добавление")
-    can_change = models.BooleanField(default=False, verbose_name="Изменение")
-    can_delete = models.BooleanField(default=False, verbose_name="Удаление")
-    can_manage_sensitive = models.BooleanField(default=False, verbose_name="Важные поля")
+    section = models.CharField(max_length=32, choices=AdminSection.choices, verbose_name=_lazy(
+        "Раздел",
+    ))
+    can_view = models.BooleanField(default=False, verbose_name=_lazy("Просмотр"))
+    can_add = models.BooleanField(default=False, verbose_name=_lazy("Добавление"))
+    can_change = models.BooleanField(default=False, verbose_name=_lazy("Изменение"))
+    can_delete = models.BooleanField(default=False, verbose_name=_lazy("Удаление"))
+    can_manage_sensitive = models.BooleanField(default=False, verbose_name=_lazy("Важные поля"))
 
     class Meta:
-        verbose_name = "права на раздел"
-        verbose_name_plural = "Права на разделы"
+        verbose_name = _lazy("права на раздел")
+        verbose_name_plural = _lazy("Права на разделы")
         ordering = ["section"]
         constraints = [
             models.UniqueConstraint(

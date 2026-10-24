@@ -2,6 +2,8 @@ import uuid
 
 from django.db import models
 
+from core.i18n import gettext_lazy as _lazy
+
 
 class UUIDPrimaryKeyModel(models.Model):
     """Abstract base model with UUID primary key for all domain entities."""
@@ -15,8 +17,8 @@ class UUIDPrimaryKeyModel(models.Model):
 class TimeStampedModel(UUIDPrimaryKeyModel):
     """Abstract base model that tracks creation and update timestamps."""
 
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Создано")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Изменено")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name=_lazy("Создано"))
+    updated_at = models.DateTimeField(auto_now=True, verbose_name=_lazy("Изменено"))
 
     class Meta:
         abstract = True
@@ -29,7 +31,7 @@ class PartnerBoundModel(TimeStampedModel):
         "partners.Partner",
         on_delete=models.CASCADE,
         related_name="%(app_label)s_%(class)ss",
-        verbose_name="Заведение",
+        verbose_name=_lazy("Заведение"),
     )
 
     class Meta:

@@ -1,36 +1,38 @@
 from django.db import models
 
+from core.i18n import gettext_lazy as _lazy
+
 
 class UserRole(models.TextChoices):
-    OWNER = "owner", "Владелец"
-    MANAGER = "manager", "Менеджер"
-    CASHIER = "cashier", "Кассир"
-    WAITER = "waiter", "Официант"
-    HOOKAH_MASTER = "hookah_master", "Кальянщик"
-    ADMIN = "admin", "Администратор платформы"
+    OWNER = "owner", _lazy("Владелец")
+    MANAGER = "manager", _lazy("Менеджер")
+    CASHIER = "cashier", _lazy("Кассир")
+    WAITER = "waiter", _lazy("Официант")
+    HOOKAH_MASTER = "hookah_master", _lazy("Кальянщик")
+    ADMIN = "admin", _lazy("Администратор платформы")
 
 
 class AdminSection(models.TextChoices):
-    PARTNER_PROFILE = "partner_profile", "Профиль заведения"
-    BOT_INSTANCES = "bot_instances", "Боты"
-    BOT_CONTENT = "bot_content", "Настройки и тексты бота"
-    TABLES = "tables", "Столы"
-    MENU = "menu", "Меню"
-    ORDERS = "orders", "Заказы"
-    BONUSES = "bonuses", "Бонусы и гости"
-    EMPLOYEES = "employees", "Сотрудники"
-    ADMIN_ACCESS = "admin_access", "Доступ к Admin"
-    NOTIFICATIONS = "notifications", "Уведомления и рассылки"
-    ANALYTICS = "analytics", "Аналитика"
-    BILLING = "billing", "Счета и оплаты"
+    PARTNER_PROFILE = "partner_profile", _lazy("Профиль заведения")
+    BOT_INSTANCES = "bot_instances", _lazy("Боты")
+    BOT_CONTENT = "bot_content", _lazy("Настройки и тексты бота")
+    TABLES = "tables", _lazy("Столы")
+    MENU = "menu", _lazy("Меню")
+    ORDERS = "orders", _lazy("Заказы")
+    BONUSES = "bonuses", _lazy("Бонусы и гости")
+    EMPLOYEES = "employees", _lazy("Сотрудники")
+    ADMIN_ACCESS = "admin_access", _lazy("Доступ к Admin")
+    NOTIFICATIONS = "notifications", _lazy("Уведомления и рассылки")
+    ANALYTICS = "analytics", _lazy("Аналитика")
+    BILLING = "billing", _lazy("Счета и оплаты")
 
 
 class AdminAccessPreset(models.TextChoices):
-    CUSTOM = "custom", "Свой набор"
-    OWNER = "owner", "Владелец"
-    MANAGER = "manager", "Менеджер"
-    CASHIER = "cashier", "Кассир"
-    CONTENT_MANAGER = "content_manager", "Контент-менеджер"
+    CUSTOM = "custom", _lazy("Свой набор")
+    OWNER = "owner", _lazy("Владелец")
+    MANAGER = "manager", _lazy("Менеджер")
+    CASHIER = "cashier", _lazy("Кассир")
+    CONTENT_MANAGER = "content_manager", _lazy("Контент-менеджер")
 
 
 FULL_CRUD = {

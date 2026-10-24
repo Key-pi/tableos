@@ -21,7 +21,7 @@ class AppSettings(BaseSettings):
     # raise (e.g. to 31536000) once HTTPS is known to work everywhere.
     secure_hsts_seconds: int = Field(default=3600, validation_alias="DJANGO_SECURE_HSTS_SECONDS")
     timezone: str = Field(default="Europe/Kyiv", validation_alias="DJANGO_TIMEZONE")
-    language_code: str = Field(default="ru-ru", validation_alias="DJANGO_LANGUAGE_CODE")
+    language_code: str = Field(default="uk", validation_alias="DJANGO_LANGUAGE_CODE")
     use_sqlite: bool = Field(default=False, validation_alias="DJANGO_USE_SQLITE")
     sqlite_path: str = Field(default="db.sqlite3", validation_alias="DJANGO_SQLITE_PATH")
 

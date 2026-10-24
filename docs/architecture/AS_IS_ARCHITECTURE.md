@@ -158,7 +158,11 @@ apps.notifications.tasks` — цикл, разорванный только им
    Затем middleware определяет язык человека и свои тексты заведения
    (`bot/services/language.py:language_context`, PQ-040) и выполняет
    обработчик внутри `core.i18n.texts(...)`; подробно —
-   [LANGUAGES.md](LANGUAGES.md).
+   [LANGUAGES.md](LANGUAGES.md). Уведомления персоналу и гостю собираются
+   на языке получателя (`apps/partners/languages.py:speaking_to_employee`,
+   `speaking_to_guest`); Admin — на языке пользователя
+   (`core/middleware.py:UserLanguageMiddleware`, переключатель в шапке —
+   `apps/users/views.py:set_admin_language`), по умолчанию украинский.
 3. Обработчики снова вызывают `resolve_partner_for_bot_token` и строят
    `bot/services/content.py:BotContent`: модули — из `PartnerBotSettings`,
    кнопки и сообщения — из каталога на языке обновления со своими текстами
@@ -466,7 +470,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 556 тестов после текстов гостя и своих текстов владельца, зелёные на SQLite и на
+- 569 тестов после перевода персонала, уведомлений и Admin, зелёные на SQLite и на
   PostgreSQL 16. Тринадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

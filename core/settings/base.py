@@ -41,6 +41,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # After authentication: the Admin speaks the user's language (PQ-040).
+    "core.middleware.UserLanguageMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -59,7 +61,9 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-            ]
+            ],
+            # {% load botera_i18n %}{% tr "…" %} — catalog texts in templates.
+            "libraries": {"botera_i18n": "core.templatetags.botera_i18n"},
         },
     }
 ]
@@ -100,6 +104,10 @@ UNFOLD = {
     "SITE_TITLE": "Botera Shop",
     "SITE_HEADER": "Botera Shop",
     "SITE_SYMBOL": "storefront",
+    # PQ-040: each user picks their Admin language (saved as User.language).
+    "SHOW_LANGUAGES": True,
+    "LANGUAGE_FLAGS": {"uk": "🇺🇦", "ru": "🇷🇺", "en": "🇬🇧"},
+    "LANGUAGES": {"action": "/admin/language/"},
 }
 
 BOT_TOKEN_ENCRYPTION_KEY = app_settings.bot_token_encryption_key

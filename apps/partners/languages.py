@@ -8,7 +8,7 @@ the venue offers it), the venue's main language.
 from __future__ import annotations
 
 from apps.partners.models import GUEST_LANGUAGE_FIELDS, BotText, PartnerBotSettings
-from core.i18n import LANGUAGES, default_language, normalize_language
+from core.i18n import LANGUAGES, default_language, normalize_language, texts
 
 
 def enabled_languages(settings: PartnerBotSettings | None) -> tuple[str, ...]:
@@ -59,3 +59,43 @@ def text_overrides(partner_id) -> dict[tuple[str, str], str]:
         .exclude(text="")
         .values_list("language", "msgid", "text")
     }
+
+
+def _settings_for(partner_id) -> PartnerBotSettings | None:
+    return PartnerBotSettings.objects.filter(partner_id=partner_id).first()
+
+
+def _telegram_language(account) -> str:
+    return getattr(account, "language_code", "") if account is not None else ""
+
+
+def guest_language(guest) -> str:
+    """The language the venue's bot speaks to this guest outside an update."""
+
+    return choose_language(
+        _settings_for(guest.partner_id),
+        guest_choice=guest.language,
+        telegram=_telegram_language(guest.telegram_account),
+    )
+
+
+def employee_language(employee) -> str:
+    """The language of a staff member's bot messages (their own choice first)."""
+
+    return choose_language(
+        _settings_for(employee.partner_id),
+        staff_choice=employee.user.language,
+        telegram=_telegram_language(employee.telegram_account),
+    )
+
+
+def speaking_to_guest(guest):
+    """Texts for a message to this guest from a task or another person's update."""
+
+    return texts(guest_language(guest), text_overrides(guest.partner_id))
+
+
+def speaking_to_employee(employee):
+    """Texts for a message to this staff member (notifications, PQ-040)."""
+
+    return texts(employee_language(employee), text_overrides(employee.partner_id))

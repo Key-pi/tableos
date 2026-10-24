@@ -1,5 +1,6 @@
 {% extends "admin/change_list.html" %}
+{% load botera_i18n %}
 {% block object-tools-items %}
-  <li><a href="{% url 'admin:partners_bottext_catalog' %}" class="addlink">Каталог текстов</a></li>
+  <li><a href="{% url 'admin:partners_bottext_catalog' %}" class="addlink">{% tr "Каталог текстов" %}</a></li>
   {{ block.super }}
 {% endblock %}

@@ -4,6 +4,2830 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Language: uk\n"
 
+#: apps/analytics/admin.py
+msgid "Период"
+msgstr "Період"
+
+#: apps/analytics/admin.py
+msgid "Сегодня и вчера"
+msgstr "Сьогодні й учора"
+
+#: apps/analytics/admin.py
+msgid "7 дней"
+msgstr "7 днів"
+
+#: apps/analytics/admin.py
+msgid "30 дней"
+msgstr "30 днів"
+
+#: apps/analytics/admin.py
+msgid "90 дней"
+msgstr "90 днів"
+
+#: apps/analytics/admin.py
+msgid "Источник с таким кодом уже есть."
+msgstr "Джерело з таким кодом уже є."
+
+#: apps/analytics/admin.py
+msgid "Ссылка (её же можно превратить в QR-код)"
+msgstr "Посилання (його ж можна перетворити на QR-код)"
+
+#: apps/analytics/admin.py
+msgid "появится после сохранения"
+msgstr "з'явиться після збереження"
+
+#: apps/analytics/admin.py
+msgid "/start {deep_link_payload} (у заведения нет активного бота)"
+msgstr "/start {deep_link_payload} (у закладу немає активного бота)"
+
+#: apps/analytics/admin.py
+msgid "Переходы"
+msgstr "Переходи"
+
+#: apps/analytics/admin.py
+msgid "Новые гости"
+msgstr "Нові гості"
+
+#: apps/analytics/apps.py apps/users/constants.py
+msgid "Аналитика"
+msgstr "Аналітика"
+
+#: apps/analytics/models.py
+msgid "День"
+msgstr "День"
+
+#: apps/analytics/models.py
+msgid "Выручка"
+msgstr "Виручка"
+
+#: apps/analytics/models.py core/urls.py
+msgid "Заказов"
+msgstr "Замовлень"
+
+#: apps/analytics/models.py
+msgid "Средний чек"
+msgstr "Середній чек"
+
+#: apps/analytics/models.py
+msgid "Активных гостей"
+msgstr "Активних гостей"
+
+#: apps/analytics/models.py
+msgid "Повторных визитов"
+msgstr "Повторних візитів"
+
+#: apps/analytics/models.py
+msgid "метрика за день"
+msgstr "метрика за день"
+
+#: apps/analytics/models.py
+msgid "Метрики по дням"
+msgstr "Метрики за днями"
+
+#: apps/analytics/models.py apps/bonuses/models.py apps/menu/models.py apps/tables/models.py
+msgid "Название"
+msgstr "Назва"
+
+#: apps/analytics/models.py
+msgid "Код в ссылке"
+msgstr "Код у посиланні"
+
+#: apps/analytics/models.py
+msgid "Латинские буквы в нижнем регистре, цифры, «-» и «_», от 2 до 40 символов. Оставьте пустым — код придумается сам. После создания не меняется: иначе перестанут работать уже напечатанные ссылки."
+msgstr "Латинські літери в нижньому регістрі, цифри, «-» і «_», від 2 до 40 символів. Залиште порожнім — код придумається сам. Після створення не змінюється: інакше перестануть працювати вже надруковані посилання."
+
+#: apps/analytics/models.py
+msgid "Только латинские буквы в нижнем регистре, цифры, «-» и «_», 2–40 символов."
+msgstr "Лише латинські літери в нижньому регістрі, цифри, «-» і «_», 2–40 символів."
+
+#: apps/analytics/models.py apps/billing/models.py apps/employees/models.py apps/users/models.py
+msgid "Активен"
+msgstr "Активний"
+
+#: apps/analytics/models.py
+msgid "Выключенный источник не считает переходы; гость всё равно попадает в бота."
+msgstr "Вимкнене джерело не рахує переходи; гість однаково потрапляє в бота."
+
+#: apps/analytics/models.py
+msgid "Заметка"
+msgstr "Нотатка"
+
+#: apps/analytics/models.py
+msgid "Источник перехода"
+msgstr "Джерело переходу"
+
+#: apps/analytics/models.py
+msgid "Источники переходов"
+msgstr "Джерела переходів"
+
+#: apps/analytics/models.py apps/billing/models.py
+msgid "Источник"
+msgstr "Джерело"
+
+#: apps/analytics/models.py apps/billing/models.py apps/bonuses/models.py apps/notifications/models.py apps/orders/models.py apps/tables/models.py
+msgid "Гость"
+msgstr "Гість"
+
+#: apps/analytics/models.py
+msgid "Новый гость"
+msgstr "Новий гість"
+
+#: apps/analytics/models.py
+msgid "Переход по источнику"
+msgstr "Перехід за джерелом"
+
+#: apps/analytics/models.py
+msgid "Переходы по источникам"
+msgstr "Переходи за джерелами"
+
+#: apps/analytics/services.py
+msgid "{closed_at} • {bill_context} • {kind} • {total_amount} грн • {bill_payment_method}"
+msgstr "{closed_at} • {bill_context} • {kind} • {total_amount} грн • {bill_payment_method}"
+
+#: apps/analytics/services.py
+msgid "Позиций: {total} • заказов: {count} • гость: {guest}"
+msgstr "Позицій: {total} • замовлень: {count} • гість: {guest}"
+
+#: apps/analytics/services.py
+msgid "{created_at} • {loyalty} • {amount} грн • {staff_user}"
+msgstr "{created_at} • {loyalty} • {amount} грн • {staff_user}"
+
+#: apps/analytics/services.py
+msgid "Позиции: {count} • бонусов: {bonus_awarded_amount} • комментарий: {comment}"
+msgstr "Позиції: {count} • бонусів: {bonus_awarded_amount} • коментар: {comment}"
+
+#: apps/analytics/services.py
+msgid "Стол {number} • сессий {count} • заказов {count2} • счетов {count3}"
+msgstr "Стіл {number} • сесій {count} • замовлень {count2} • рахунків {count3}"
+
+#: apps/analytics/services.py
+msgid "Выручка: {table_paid_bills_total} грн • открытых счетов: {count}"
+msgstr "Виручка: {table_paid_bills_total} грн • відкритих рахунків: {count}"
+
+#: apps/analytics/services.py
+msgid "Счёт #{public_id} • {bill_context} • остаток {value} грн"
+msgstr "Рахунок #{public_id} • {bill_context} • залишок {value} грн"
+
+#: apps/analytics/services.py
+msgid "Статус: {status} • гость: {guest}"
+msgstr "Статус: {status} • гість: {guest}"
+
+#: apps/analytics/services.py
+msgid "Заказ #{public_id} • {order_context} • {status} • {total_amount} грн"
+msgstr "Замовлення #{public_id} • {order_context} • {status} • {total_amount} грн"
+
+#: apps/analytics/services.py
+msgid "Не оплачен • гость: {guest}"
+msgstr "Не оплачено • гість: {guest}"
+
+#: apps/analytics/services.py
+msgid "Оплачен, но не подтверждён • гость: {guest}"
+msgstr "Оплачено, але не підтверджено • гість: {guest}"
+
+#: apps/analytics/services.py
+msgid "Запрос счёта • стол {number} • {request_type}"
+msgstr "Запит рахунку • стіл {number} • {request_type}"
+
+#: apps/analytics/services.py
+msgid "Гость: {guest} • статус: {status}"
+msgstr "Гість: {guest} • статус: {status}"
+
+#: apps/analytics/services.py bot/handlers/staff.py
+msgid "несколько гостей"
+msgstr "кілька гостей"
+
+#: apps/analytics/services.py
+msgid "не указано"
+msgstr "не вказано"
+
+#: apps/analytics/services.py
+msgid "стол {number}"
+msgstr "стіл {number}"
+
+#: apps/analytics/services.py apps/billing/services.py apps/orders/services.py
+msgid "заказ без привязки к столу"
+msgstr "замовлення без прив'язки до столу"
+
+#: apps/billing/admin.py
+msgid "Отметить запросы обработанными"
+msgstr "Позначити запити обробленими"
+
+#: apps/billing/admin.py
+msgid "Обработано запросов счёта: {updated}."
+msgstr "Оброблено запитів рахунку: {updated}."
+
+#: apps/billing/admin.py
+msgid "Отменить запросы"
+msgstr "Скасувати запити"
+
+#: apps/billing/admin.py
+msgid "Отменено запросов счёта: {updated}."
+msgstr "Скасовано запитів рахунку: {updated}."
+
+#: apps/billing/admin.py
+msgid "Аннулировать счета (право от владельца)"
+msgstr "Анулювати рахунки (право від власника)"
+
+#: apps/billing/admin.py
+msgid "Аннулировать счета"
+msgstr "Анулювати рахунки"
+
+#: apps/billing/admin.py
+msgid "Счёт аннулируется, его заказы снова можно выставить в счёт. Списанные бонусы вернутся гостю. Счёт с денежной оплатой аннулировать нельзя."
+msgstr "Рахунок анулюється, його замовлення знову можна виставити в рахунок. Списані бонуси повернуться гостю. Рахунок із грошовою оплатою анулювати не можна."
+
+#: apps/billing/admin.py
+msgid "Аннулировано счетов"
+msgstr "Анульовано рахунків"
+
+#: apps/billing/admin.py
+msgid "Счёт #{public_id}"
+msgstr "Рахунок #{public_id}"
+
+#: apps/billing/admin.py
+msgid "Осталось оплатить"
+msgstr "Залишилося сплатити"
+
+#: apps/billing/admin.py
+msgid "Выставить счета"
+msgstr "Виставити рахунки"
+
+#: apps/billing/admin.py apps/billing/admin_actions.py
+msgid "Счёт #{public_id}: {exc}"
+msgstr "Рахунок #{public_id}: {exc}"
+
+#: apps/billing/admin.py
+msgid "Выдано счетов: {issued_count}."
+msgstr "Виставлено рахунків: {issued_count}."
+
+#: apps/billing/admin.py
+msgid "Принять остаток наличными"
+msgstr "Прийняти залишок готівкою"
+
+#: apps/billing/admin.py
+msgid "Принять остаток картой"
+msgstr "Прийняти залишок карткою"
+
+#: apps/billing/admin.py
+msgid "У счёта нет остатка к оплате."
+msgstr "У рахунку немає залишку до сплати."
+
+#: apps/billing/admin.py
+msgid "Проведено в Admin ({method})."
+msgstr "Проведено в Admin ({method})."
+
+#: apps/billing/admin.py
+msgid "Принято оплат по счетам: {processed_count}."
+msgstr "Прийнято оплат за рахунками: {processed_count}."
+
+#: apps/billing/admin.py
+msgid "Вернуть деньги за строки (право от владельца)"
+msgstr "Повернути гроші за рядки (право від власника)"
+
+#: apps/billing/admin.py
+msgid "Убрать строки из счетов (право от владельца)"
+msgstr "Прибрати рядки з рахунків (право від власника)"
+
+#: apps/billing/admin.py
+msgid "Убрать позиции из счёта"
+msgstr "Прибрати позиції з рахунку"
+
+#: apps/billing/admin.py
+msgid "Позиции остаются в истории счёта, сумма пересчитывается. Нельзя уменьшить счёт ниже уже оплаченной суммы и менять счёт с применёнными бонусами."
+msgstr "Позиції лишаються в історії рахунку, сума перераховується. Не можна зменшити рахунок нижче вже сплаченої суми й змінювати рахунок із застосованими бонусами."
+
+#: apps/billing/admin.py
+msgid "Убрано позиций"
+msgstr "Прибрано позицій"
+
+#: apps/billing/admin_actions.py apps/billing/models.py
+msgid "Причина"
+msgstr "Причина"
+
+#: apps/billing/admin_actions.py
+msgid "Комментарий (необязательно)"
+msgstr "Коментар (необов'язково)"
+
+#: apps/billing/admin_actions.py
+msgid "Как вернули деньги"
+msgstr "Як повернули гроші"
+
+#: apps/billing/admin_actions.py
+msgid "Счёт #{public_id}: возвращено {money_amount} грн, бонусов {bonus_returned}, снято кешбэка {cashback_revoked}."
+msgstr "Рахунок #{public_id}: повернуто {money_amount} грн, бонусів {bonus_returned}, знято кешбеку {cashback_revoked}."
+
+#: apps/billing/admin_actions.py
+msgid "Вернуть деньги за строки"
+msgstr "Повернути гроші за рядки"
+
+#: apps/billing/admin_actions.py
+msgid "Только по оплаченному счёту. Вернётся доля оплаченных денег и списанных бонусов за выбранные строки, кешбэк за них снимется. Деньги гостю передайте сами — бот сообщит ему сумму. Заказ, у которого вернули все строки, отменится (кроме завершённых)."
+msgstr "Лише за оплаченим рахунком. Повернеться частка сплачених грошей і списаних бонусів за вибрані рядки, кешбек за них зніметься. Гроші гостю передайте самі — бот повідомить йому суму. Замовлення, у якого повернули всі рядки, скасується (крім завершених)."
+
+#: apps/billing/admin_actions.py
+msgid "Вернуть"
+msgstr "Повернути"
+
+#: apps/billing/admin_actions.py
+msgid "#{public_id}: {item_name} × {quantity} — {line_total} грн"
+msgstr "#{public_id}: {item_name} × {quantity} — {line_total} грн"
+
+#: apps/billing/apps.py apps/partners/models.py apps/users/constants.py bot/handlers/staff.py bot/keyboards/staff.py
+msgid "Счета и оплаты"
+msgstr "Рахунки й оплати"
+
+#: apps/billing/forms.py
+msgid "Оплату бонусами нужно запускать из карточки счёта, не через Admin."
+msgstr "Оплату бонусами потрібно запускати з картки рахунку, не через Admin."
+
+#: apps/billing/forms.py apps/billing/services.py
+msgid "Сумма оплаты должна быть больше нуля."
+msgstr "Сума оплати має бути більшою за нуль."
+
+#: apps/billing/models.py apps/notifications/models.py apps/partners/models.py
+msgid "Черновик"
+msgstr "Чернетка"
+
+#: apps/billing/models.py
+msgid "Выставлен"
+msgstr "Виставлено"
+
+#: apps/billing/models.py
+msgid "Оплачен частично"
+msgstr "Оплачено частково"
+
+#: apps/billing/models.py apps/orders/models.py bot/handlers/staff.py
+msgid "Оплачен"
+msgstr "Оплачено"
+
+#: apps/billing/models.py
+msgid "Аннулирован"
+msgstr "Анульовано"
+
+#: apps/billing/models.py
+msgid "Личный"
+msgstr "Особистий"
+
+#: apps/billing/models.py
+msgid "Общий"
+msgstr "Спільний"
+
+#: apps/billing/models.py
+msgid "Деление"
+msgstr "Поділ"
+
+#: apps/billing/models.py
+msgid "Касса (POS)"
+msgstr "Каса (POS)"
+
+#: apps/billing/models.py apps/orders/models.py apps/tables/models.py
+msgid "Номер"
+msgstr "Номер"
+
+#: apps/billing/models.py apps/orders/models.py apps/tables/models.py bot/keyboards/staff.py
+msgid "Стол"
+msgstr "Стіл"
+
+#: apps/billing/models.py
+msgid "Гость счёта"
+msgstr "Гість рахунку"
+
+#: apps/billing/models.py apps/bonuses/models.py apps/tables/models.py
+msgid "Визит"
+msgstr "Візит"
+
+#: apps/billing/models.py apps/notifications/models.py apps/orders/models.py apps/partners/models.py apps/tables/models.py apps/users/admin.py
+msgid "Статус"
+msgstr "Статус"
+
+#: apps/billing/models.py
+msgid "Вид счёта"
+msgstr "Вид рахунку"
+
+#: apps/billing/models.py
+msgid "Подпись счёта"
+msgstr "Підпис рахунку"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Сумма позиций"
+msgstr "Сума позицій"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Скидка"
+msgstr "Знижка"
+
+#: apps/billing/models.py apps/bonuses/models.py apps/orders/models.py
+msgid "Оплачено бонусами"
+msgstr "Сплачено бонусами"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Итого"
+msgstr "Разом"
+
+#: apps/billing/models.py
+msgid "Оплачено"
+msgstr "Сплачено"
+
+#: apps/billing/models.py
+msgid "Возвращено"
+msgstr "Повернуто"
+
+#: apps/billing/models.py
+msgid "Внешний номер"
+msgstr "Зовнішній номер"
+
+#: apps/billing/models.py
+msgid "Счёт в кассе (POS)"
+msgstr "Рахунок у касі (POS)"
+
+#: apps/billing/models.py apps/tables/models.py
+msgid "Закрыт"
+msgstr "Закрито"
+
+#: apps/billing/models.py
+msgid "счёт"
+msgstr "рахунок"
+
+#: apps/billing/models.py bot/keyboards/staff.py
+msgid "Счета"
+msgstr "Рахунки"
+
+#: apps/billing/models.py
+msgid "Личный счёт"
+msgstr "Особистий рахунок"
+
+#: apps/billing/models.py bot/keyboards/staff.py
+msgid "Общий счёт"
+msgstr "Спільний рахунок"
+
+#: apps/billing/models.py
+msgid "Особое деление"
+msgstr "Особливий поділ"
+
+#: apps/billing/models.py
+msgid "Открыт"
+msgstr "Відкрито"
+
+#: apps/billing/models.py
+msgid "Счёт подготовлен"
+msgstr "Рахунок підготовлено"
+
+#: apps/billing/models.py
+msgid "Обработан"
+msgstr "Оброблено"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Отменён"
+msgstr "Скасовано"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Сессия стола"
+msgstr "Сесія столу"
+
+#: apps/billing/models.py
+msgid "Что запросили"
+msgstr "Що запросили"
+
+#: apps/billing/models.py apps/bonuses/models.py
+msgid "Счёт"
+msgstr "Рахунок"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Примечание"
+msgstr "Примітка"
+
+#: apps/billing/models.py
+msgid "запрос счёта"
+msgstr "запит рахунку"
+
+#: apps/billing/models.py
+msgid "Запросы счёта"
+msgstr "Запити рахунку"
+
+#: apps/billing/models.py apps/bonuses/models.py apps/notifications/models.py apps/orders/models.py
+msgid "Заказ"
+msgstr "Замовлення"
+
+#: apps/billing/models.py
+msgid "заказ в счёте"
+msgstr "замовлення в рахунку"
+
+#: apps/billing/models.py
+msgid "Заказы в счетах"
+msgstr "Замовлення в рахунках"
+
+#: apps/billing/models.py
+msgid "Строка заказа"
+msgstr "Рядок замовлення"
+
+#: apps/billing/models.py apps/bonuses/models.py apps/orders/models.py
+msgid "Позиция"
+msgstr "Позиція"
+
+#: apps/billing/models.py apps/bonuses/models.py apps/menu/models.py apps/orders/models.py
+msgid "Цена"
+msgstr "Ціна"
+
+#: apps/billing/models.py apps/bonuses/models.py apps/orders/models.py
+msgid "Количество"
+msgstr "Кількість"
+
+#: apps/billing/models.py
+msgid "Сумма строки"
+msgstr "Сума рядка"
+
+#: apps/billing/models.py apps/bonuses/models.py apps/orders/models.py bot/keyboards/staff.py
+msgid "Комментарий"
+msgstr "Коментар"
+
+#: apps/billing/models.py
+msgid "Убрана"
+msgstr "Прибрано"
+
+#: apps/billing/models.py
+msgid "Кто убрал"
+msgstr "Хто прибрав"
+
+#: apps/billing/models.py
+msgid "строка счёта"
+msgstr "рядок рахунку"
+
+#: apps/billing/models.py
+msgid "Строки счетов"
+msgstr "Рядки рахунків"
+
+#: apps/billing/models.py apps/notifications/models.py
+msgid "Ожидает"
+msgstr "Очікує"
+
+#: apps/billing/models.py
+msgid "Авторизована"
+msgstr "Авторизовано"
+
+#: apps/billing/models.py
+msgid "Проведена"
+msgstr "Проведено"
+
+#: apps/billing/models.py apps/notifications/models.py
+msgid "Ошибка"
+msgstr "Помилка"
+
+#: apps/billing/models.py
+msgid "Возвращена"
+msgstr "Повернуто"
+
+#: apps/billing/models.py
+msgid "Отменена"
+msgstr "Скасовано"
+
+#: apps/billing/models.py apps/orders/models.py bot/keyboards/staff.py
+msgid "Наличные"
+msgstr "Готівка"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Карта (терминал)"
+msgstr "Картка (термінал)"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Перевод"
+msgstr "Переказ"
+
+#: apps/billing/models.py
+msgid "Онлайн"
+msgstr "Онлайн"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Смешанная"
+msgstr "Змішана"
+
+#: apps/billing/models.py apps/bonuses/apps.py apps/orders/models.py apps/partners/bot_texts.py
+msgid "Бонусы"
+msgstr "Бонуси"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Наложенный платёж"
+msgstr "Накладений платіж"
+
+#: apps/billing/models.py
+msgid "Способ"
+msgstr "Спосіб"
+
+#: apps/billing/models.py apps/bonuses/models.py
+msgid "Сумма"
+msgstr "Сума"
+
+#: apps/billing/models.py
+msgid "Платёжный провайдер"
+msgstr "Платіжний провайдер"
+
+#: apps/billing/models.py
+msgid "Номер платежа у провайдера"
+msgstr "Номер платежу в провайдера"
+
+#: apps/billing/models.py apps/bonuses/models.py
+msgid "Кто создал"
+msgstr "Хто створив"
+
+#: apps/billing/models.py
+msgid "оплата"
+msgstr "оплата"
+
+#: apps/billing/models.py
+msgid "Оплаты"
+msgstr "Оплати"
+
+#: apps/billing/models.py
+msgid "Строка убрана"
+msgstr "Рядок прибрано"
+
+#: apps/billing/models.py
+msgid "Заказ отменён"
+msgstr "Замовлення скасовано"
+
+#: apps/billing/models.py
+msgid "Счёт аннулирован"
+msgstr "Рахунок анульовано"
+
+#: apps/billing/models.py bot/keyboards/staff.py
+msgid "Ошибка ввода"
+msgstr "Помилка введення"
+
+#: apps/billing/models.py bot/keyboards/staff.py
+msgid "Отказ гостя"
+msgstr "Відмова гостя"
+
+#: apps/billing/models.py bot/keyboards/staff.py
+msgid "Комплимент заведения"
+msgstr "Комплімент закладу"
+
+#: apps/billing/models.py
+msgid "Оплата не поступила"
+msgstr "Оплата не надійшла"
+
+#: apps/billing/models.py bot/keyboards/staff.py
+msgid "Другое"
+msgstr "Інше"
+
+#: apps/billing/models.py
+msgid "Что изменено"
+msgstr "Що змінено"
+
+#: apps/billing/models.py apps/orders/models.py
+msgid "Кто изменил"
+msgstr "Хто змінив"
+
+#: apps/billing/models.py
+msgid "Комментарий к причине"
+msgstr "Коментар до причини"
+
+#: apps/billing/models.py
+msgid "Итог до"
+msgstr "Підсумок до"
+
+#: apps/billing/models.py
+msgid "Итог после"
+msgstr "Підсумок після"
+
+#: apps/billing/models.py
+msgid "Данные изменения"
+msgstr "Дані зміни"
+
+#: apps/billing/models.py
+msgid "изменение счёта"
+msgstr "зміна рахунку"
+
+#: apps/billing/models.py
+msgid "Изменения счетов"
+msgstr "Зміни рахунків"
+
+#: apps/billing/models.py
+msgid "Нет в наличии"
+msgstr "Немає в наявності"
+
+#: apps/billing/models.py
+msgid "Претензия к качеству"
+msgstr "Претензія до якості"
+
+#: apps/billing/models.py
+msgid "Наличными"
+msgstr "Готівкою"
+
+#: apps/billing/models.py
+msgid "Переводом на карту"
+msgstr "Переказом на картку"
+
+#: apps/billing/models.py
+msgid "На карту через терминал"
+msgstr "На картку через термінал"
+
+#: apps/billing/models.py
+msgid "Деньги не возвращались (только бонусы)"
+msgstr "Гроші не поверталися (лише бонуси)"
+
+#: apps/billing/models.py
+msgid "Кто вернул"
+msgstr "Хто повернув"
+
+#: apps/billing/models.py
+msgid "Как вернули"
+msgstr "Як повернули"
+
+#: apps/billing/models.py
+msgid "Полный возврат"
+msgstr "Повне повернення"
+
+#: apps/billing/models.py
+msgid "Возвращено денег"
+msgstr "Повернуто грошей"
+
+#: apps/billing/models.py
+msgid "Возвращено бонусов"
+msgstr "Повернуто бонусів"
+
+#: apps/billing/models.py
+msgid "Снято кешбэка"
+msgstr "Знято кешбеку"
+
+#: apps/billing/models.py
+msgid "Кешбэк не снят (гость уже потратил)"
+msgstr "Кешбек не знято (гість уже витратив)"
+
+#: apps/billing/models.py
+msgid "возврат"
+msgstr "повернення"
+
+#: apps/billing/models.py
+msgid "Возвраты"
+msgstr "Повернення"
+
+#: apps/billing/models.py
+msgid "{public_id} / возврат {money_amount}"
+msgstr "{public_id} / повернення {money_amount}"
+
+#: apps/billing/models.py apps/bonuses/models.py
+msgid "Возврат"
+msgstr "Повернення"
+
+#: apps/billing/models.py
+msgid "Строка счёта"
+msgstr "Рядок рахунку"
+
+#: apps/billing/models.py
+msgid "Деньги"
+msgstr "Гроші"
+
+#: apps/billing/models.py
+msgid "строка возврата"
+msgstr "рядок повернення"
+
+#: apps/billing/models.py
+msgid "Строки возвратов"
+msgstr "Рядки повернень"
+
+#: apps/billing/remote_orders.py bot/handlers/order.py
+msgid "самовывоз"
+msgstr "самовивіз"
+
+#: apps/billing/remote_orders.py bot/handlers/order.py
+msgid "доставка"
+msgstr "доставка"
+
+#: apps/billing/remote_orders.py
+msgid "отправка почтой"
+msgstr "відправлення поштою"
+
+#: apps/billing/remote_orders.py apps/orders/services.py
+msgid "Этот способ заказа пока недоступен."
+msgstr "Цей спосіб замовлення поки недоступний."
+
+#: apps/billing/remote_orders.py
+msgid "Заведение ещё не указало реквизиты для оплаты переводом."
+msgstr "Заклад ще не вказав реквізити для оплати переказом."
+
+#: apps/billing/remote_orders.py
+msgid "Заведение ещё не настроило оплату заказов."
+msgstr "Заклад ще не налаштував оплату замовлень."
+
+#: apps/billing/remote_orders.py apps/orders/services.py
+msgid "Сначала нажмите /start, чтобы бот вас узнал."
+msgstr "Спершу натисніть /start, щоб бот вас упізнав."
+
+#: apps/billing/remote_orders.py
+msgid "Корзина пуста. Добавьте позиции из меню."
+msgstr "Кошик порожній. Додайте позиції з меню."
+
+#: apps/billing/remote_orders.py
+msgid "Корзина собрана для другого способа заказа. Нажмите «{channel}»."
+msgstr "Кошик зібрано для іншого способу замовлення. Натисніть «{channel}»."
+
+#: apps/billing/remote_orders.py
+msgid "Недоступно ({channel}): {not_sold}."
+msgstr "Недоступно ({channel}): {not_sold}."
+
+#: apps/billing/remote_orders.py
+msgid "доставку"
+msgstr "доставку"
+
+#: apps/billing/remote_orders.py
+msgid "отправку"
+msgstr "відправлення"
+
+#: apps/billing/remote_orders.py
+msgid "Минимальная сумма заказа на {word} — {minimum} грн. Сейчас в корзине {items_total} грн."
+msgstr "Мінімальна сума замовлення на {word} — {minimum} грн. Зараз у кошику {items_total} грн."
+
+#: apps/billing/remote_orders.py
+msgid "бесплатно"
+msgstr "безкоштовно"
+
+#: apps/billing/remote_orders.py
+msgid "{fee} грн, бесплатно от {free_from} грн"
+msgstr "{fee} грн, безкоштовно від {free_from} грн"
+
+#: apps/billing/remote_orders.py
+msgid "{fee} грн"
+msgstr "{fee} грн"
+
+#: apps/billing/remote_orders.py
+msgid "по тарифу перевозчика, оплата на почте"
+msgstr "за тарифом перевізника, оплата на пошті"
+
+#: apps/billing/remote_orders.py
+msgid "в заказе — {fixed}"
+msgstr "у замовленні — {fixed}"
+
+#: apps/billing/remote_orders.py
+msgid "Отправляем: {carriers}. Пересылка: {options}."
+msgstr "Відправляємо: {carriers}. Пересилання: {options}."
+
+#: apps/billing/remote_orders.py
+msgid " или "
+msgstr " або "
+
+#: apps/billing/remote_orders.py
+msgid " Минимальный заказ {min_order} грн."
+msgstr " Мінімальне замовлення {min_order} грн."
+
+#: apps/billing/remote_orders.py
+msgid "Доставка бесплатная."
+msgstr "Доставка безкоштовна."
+
+#: apps/billing/remote_orders.py
+msgid "Доставка {fee} грн, бесплатно от {free_from} грн."
+msgstr "Доставка {fee} грн, безкоштовно від {free_from} грн."
+
+#: apps/billing/remote_orders.py
+msgid "Доставка {fee} грн."
+msgstr "Доставка {fee} грн."
+
+#: apps/billing/remote_orders.py
+msgid "Сейчас заказы не принимаем. Часы работы: {hours}."
+msgstr "Зараз замовлення не приймаємо. Години роботи: {hours}."
+
+#: apps/billing/remote_orders.py
+msgid "Сейчас заказы не принимаем."
+msgstr "Зараз замовлення не приймаємо."
+
+#: apps/billing/remote_orders.py
+msgid "Номер телефона пустой."
+msgstr "Номер телефону порожній."
+
+#: apps/billing/remote_orders.py
+msgid "Напишите адрес: улица, дом, квартира."
+msgstr "Напишіть адресу: вулиця, будинок, квартира."
+
+#: apps/billing/remote_orders.py
+msgid "Адрес слишком длинный — сократите, пожалуйста."
+msgstr "Адреса задовга — скоротіть, будь ласка."
+
+#: apps/billing/remote_orders.py
+msgid "Не удалось прочитать геолокацию."
+msgstr "Не вдалося прочитати геолокацію."
+
+#: apps/billing/remote_orders.py
+msgid "Эта служба доставки сейчас недоступна — выберите другую."
+msgstr "Ця служба доставки зараз недоступна — виберіть іншу."
+
+#: apps/billing/remote_orders.py
+msgid "Напишите получателя, город и номер отделения или почтомата."
+msgstr "Напишіть одержувача, місто й номер відділення або поштомата."
+
+#: apps/billing/remote_orders.py
+msgid "Слишком длинно — сократите, пожалуйста."
+msgstr "Задовго — скоротіть, будь ласка."
+
+#: apps/billing/remote_orders.py bot/handlers/remote_checkout.py
+msgid "Этот способ оплаты сейчас недоступен — выберите другой."
+msgstr "Цей спосіб оплати зараз недоступний — оберіть інший."
+
+#: apps/billing/remote_orders.py
+msgid "Выберите время ещё раз."
+msgstr "Виберіть час ще раз."
+
+#: apps/billing/remote_orders.py
+msgid "Этот вариант оплаты пересылки сейчас недоступен — выберите другой."
+msgstr "Цей варіант оплати пересилання зараз недоступний — виберіть інший."
+
+#: apps/billing/remote_orders.py
+msgid "Поделитесь номером телефона, чтобы оформить заказ."
+msgstr "Поділіться номером телефону, щоб оформити замовлення."
+
+#: apps/billing/remote_orders.py
+msgid "У вас уже есть неоплаченные заказы ({limit}). Оплатите или получите их, чтобы оформить новый."
+msgstr "У вас уже є неоплачені замовлення ({limit}). Оплатіть або отримайте їх, щоб оформити нове."
+
+#: apps/billing/remote_orders.py
+msgid "Укажите адрес доставки."
+msgstr "Вкажіть адресу доставки."
+
+#: apps/billing/remote_orders.py
+msgid "Куда отправить? Укажите получателя и отделение."
+msgstr "Куди відправити? Вкажіть одержувача й відділення."
+
+#: apps/billing/remote_orders.py
+msgid "Корзина изменилась — проверьте новую сумму."
+msgstr "Кошик змінився — перевірте нову суму."
+
+#: apps/billing/remote_orders.py
+msgid "Бонусы сейчас списать нельзя — проверьте сумму ещё раз."
+msgstr "Бонуси зараз списати не можна — перевірте суму ще раз."
+
+#: apps/billing/remote_orders.py
+msgid "Сумма к оплате изменилась — проверьте её ещё раз."
+msgstr "Сума до сплати змінилася — перевірте її ще раз."
+
+#: apps/billing/remote_orders.py
+msgid "Телефон: {phone}."
+msgstr "Телефон: {phone}."
+
+#: apps/billing/remote_orders.py
+msgid "Адрес: {delivery_address}."
+msgstr "Адреса: {delivery_address}."
+
+#: apps/billing/remote_orders.py
+msgid "На карте: {map_link}"
+msgstr "На мапі: {map_link}"
+
+#: apps/billing/remote_orders.py
+msgid "{carrier}: {shipping_destination}."
+msgstr "{carrier}: {shipping_destination}."
+
+#: apps/billing/remote_orders.py
+msgid "Пересылка: {shipping_cost}."
+msgstr "Пересилання: {shipping_cost}."
+
+#: apps/billing/remote_orders.py
+msgid "Наложенный платёж: {to_pay} грн. Отметьте оплату в карточке заказа, когда служба перечислит деньги."
+msgstr "Накладений платіж: {to_pay} грн. Позначте оплату в картці замовлення, коли служба перерахує гроші."
+
+#: apps/billing/remote_orders.py
+msgid "Оплата при получении: {to_pay} грн (наличные или карта). Отметьте оплату в карточке заказа, когда гость заплатит."
+msgstr "Оплата при отриманні: {to_pay} грн (готівка або картка). Позначте оплату в картці замовлення, коли гість заплатить."
+
+#: apps/billing/remote_orders.py
+msgid "Гость сообщил о переводе {to_pay} грн. Проверьте поступление и подтвердите оплату в карточке заказа."
+msgstr "Гість повідомив про переказ {to_pay} грн. Перевірте надходження й підтвердьте оплату в картці замовлення."
+
+#: apps/billing/remote_orders.py
+msgid "Оплачен бонусами полностью."
+msgstr "Повністю сплачено бонусами."
+
+#: apps/billing/remote_orders.py
+msgid "по тарифу перевозчика, платит получатель на почте"
+msgstr "за тарифом перевізника, платить одержувач на пошті"
+
+#: apps/billing/remote_orders.py
+msgid "в заказе, {fee} грн"
+msgstr "у замовленні, {fee} грн"
+
+#: apps/billing/remote_orders.py
+msgid "в заказе, бесплатно"
+msgstr "у замовленні, безкоштовно"
+
+#: apps/billing/remote_orders.py
+msgid "У заказа нет действующего счёта."
+msgstr "У замовлення немає чинного рахунку."
+
+#: apps/billing/remote_orders.py
+msgid "Подтверждать оплату может владелец, менеджер или кассир."
+msgstr "Підтверджувати оплату може власник, менеджер або касир."
+
+#: apps/billing/remote_orders.py
+msgid "У этого заказа нет оплаты переводом."
+msgstr "У цього замовлення немає оплати переказом."
+
+#: apps/billing/remote_orders.py
+msgid "Этот заказ оплачивается переводом заранее, а не при получении."
+msgstr "Це замовлення оплачується переказом заздалегідь, а не при отриманні."
+
+#: apps/billing/remote_orders.py bot/handlers/staff.py
+msgid "Оплата по этому заказу уже обработана."
+msgstr "Оплату за цим замовленням уже оброблено."
+
+#: apps/billing/remote_orders.py
+msgid "Перевод за заказ #{public_id} подтверждён."
+msgstr "Переказ за замовлення #{public_id} підтверджено."
+
+#: apps/billing/remote_orders.py
+msgid "Оплата переводом подтверждена."
+msgstr "Оплату переказом підтверджено."
+
+#: apps/billing/remote_orders.py
+msgid "По заказу уже есть оплата — отменить его так нельзя."
+msgstr "За замовленням уже є оплата — скасувати його так не можна."
+
+#: apps/billing/remote_orders.py
+msgid "Оплата переводом не поступила."
+msgstr "Оплата переказом не надійшла."
+
+#: apps/billing/remote_orders.py
+msgid "Отправка оплачивается наложенным платежом."
+msgstr "Відправлення оплачується накладеним платежем."
+
+#: apps/billing/remote_orders.py
+msgid "При получении принимаем наличные или карту — выберите способ."
+msgstr "При отриманні приймаємо готівку або картку — виберіть спосіб."
+
+#: apps/billing/remote_orders.py
+msgid "Заказ уже оплачен."
+msgstr "Замовлення вже оплачено."
+
+#: apps/billing/remote_orders.py
+msgid "Оплата при получении за заказ #{public_id}."
+msgstr "Оплата при отриманні за замовлення #{public_id}."
+
+#: apps/billing/remote_orders.py
+msgid "Заказ уже закрыт."
+msgstr "Замовлення вже закрито."
+
+#: apps/billing/remote_orders.py
+msgid "Гость не забрал заказ."
+msgstr "Гість не забрав замовлення."
+
+#: apps/billing/remote_orders.py
+msgid "Автоотмена: перевод не подтверждён за {minutes} мин."
+msgstr "Автоскасування: переказ не підтверджено за {minutes} хв."
+
+#: apps/billing/remote_orders.py
+msgid "Оплата переводом не подтверждена за {minutes} мин — отменён автоматически."
+msgstr "Оплату переказом не підтверджено за {minutes} хв — скасовано автоматично."
+
+#: apps/billing/remote_orders.py
+msgid "Не похоже на ТТН: нужны только цифры и латинские буквы, от 5 знаков."
+msgstr "Не схоже на ТТН: потрібні лише цифри й латинські літери, від 5 знаків."
+
+#: apps/billing/remote_orders.py
+msgid "Отмечать отправку может только сотрудник этого заведения."
+msgstr "Позначати відправлення може лише працівник цього закладу."
+
+#: apps/billing/remote_orders.py
+msgid "ТТН бывает только у отправки почтой."
+msgstr "ТТН буває лише у відправлення поштою."
+
+#: apps/billing/remote_orders.py
+msgid "Заказ уже отправлен."
+msgstr "Замовлення вже відправлено."
+
+#: apps/billing/remote_orders.py
+msgid "Сначала отметьте, что заказ собран."
+msgstr "Спершу позначте, що замовлення зібрано."
+
+#: apps/billing/remote_orders.py
+msgid "Отправлен, ТТН {number}."
+msgstr "Відправлено, ТТН {number}."
+
+#: apps/billing/services.py apps/orders/services.py bot/handlers/order.py
+msgid "стол #{number}"
+msgstr "стіл #{number}"
+
+#: apps/billing/services.py
+msgid "гость {customer_code}"
+msgstr "гість {customer_code}"
+
+#: apps/billing/services.py
+msgid "Счёт не найден в этом заведении."
+msgstr "Рахунок не знайдено в цьому закладі."
+
+#: apps/billing/services.py
+msgid "Нельзя добавлять заказы в закрытый счёт."
+msgstr "Не можна додавати замовлення в закритий рахунок."
+
+#: apps/billing/services.py
+msgid "Не все выбранные заказы найдены в этом заведении."
+msgstr "Не всі вибрані замовлення знайдено в цьому закладі."
+
+#: apps/billing/services.py
+msgid "В этот счёт можно добавлять только заказы того же стола."
+msgstr "У цей рахунок можна додавати лише замовлення того самого столу."
+
+#: apps/billing/services.py
+msgid "В этот счёт можно добавлять только заказы того же визита."
+msgstr "У цей рахунок можна додавати лише замовлення того самого візиту."
+
+#: apps/billing/services.py
+msgid "В счёт без привязки к столу можно добавлять только такие же заказы."
+msgstr "У рахунок без прив'язки до столу можна додавати лише такі самі замовлення."
+
+#: apps/billing/services.py
+msgid "В персональный счёт без стола можно добавлять только заказы этого гостя."
+msgstr "В особистий рахунок без столу можна додавати лише замовлення цього гостя."
+
+#: apps/billing/services.py
+msgid "Заказы без стола можно объединять только в рамках одного гостя."
+msgstr "Замовлення без столу можна об'єднувати лише в межах одного гостя."
+
+#: apps/billing/services.py
+msgid "Отменённые заказы нельзя включать в счёт."
+msgstr "Скасовані замовлення не можна включати в рахунок."
+
+#: apps/billing/services.py
+msgid "Часть позиций уже включена в другой счёт."
+msgstr "Частину позицій уже включено в інший рахунок."
+
+#: apps/billing/services.py
+msgid "Нужно выбрать хотя бы один заказ для создания счёта."
+msgstr "Потрібно вибрати хоча б одне замовлення, щоб створити рахунок."
+
+#: apps/billing/services.py
+msgid "Отменённые заказы нельзя включать в новый счёт."
+msgstr "Скасовані замовлення не можна включати в новий рахунок."
+
+#: apps/billing/services.py
+msgid "В один счёт можно объединять только заказы одного стола или одного гостя без стола."
+msgstr "В один рахунок можна об'єднувати лише замовлення одного столу або одного гостя без столу."
+
+#: apps/billing/services.py
+msgid "В один счёт можно объединять только заказы одного визита."
+msgstr "В один рахунок можна об'єднувати лише замовлення одного візиту."
+
+#: apps/billing/services.py
+msgid "Один или несколько order items уже включены в другой счёт."
+msgstr "Один або кілька рядків замовлення вже включено в інший рахунок."
+
+#: apps/billing/services.py
+msgid "Выдать можно только draft-счёт."
+msgstr "Виставити можна лише рахунок-чернетку."
+
+#: apps/billing/services.py
+msgid "Неизвестный способ оплаты."
+msgstr "Невідомий спосіб оплати."
+
+#: apps/billing/services.py
+msgid "Оплату бонусами нужно запускать через команду оплаты бонусами."
+msgstr "Оплату бонусами потрібно запускати командою оплати бонусами."
+
+#: apps/billing/services.py
+msgid "Сумма оплаты должна быть корректным денежным значением."
+msgstr "Сума оплати має бути коректним грошовим значенням."
+
+#: apps/billing/services.py
+msgid "Сумма оплаты должна быть конечным денежным значением."
+msgstr "Сума оплати має бути скінченним грошовим значенням."
+
+#: apps/billing/services.py
+msgid "Нельзя принять оплату по отменённому счёту."
+msgstr "Не можна прийняти оплату за скасованим рахунком."
+
+#: apps/billing/services.py
+msgid "Счёт уже полностью оплачен."
+msgstr "Рахунок уже повністю оплачено."
+
+#: apps/billing/services.py
+msgid "Сумма оплаты превышает остаток по счёту."
+msgstr "Сума оплати перевищує залишок за рахунком."
+
+#: apps/billing/services.py
+msgid "Нельзя оплатить бонусами отменённый счёт."
+msgstr "Не можна сплатити бонусами скасований рахунок."
+
+#: apps/billing/services.py
+msgid "Не все заказы счёта принадлежат этому заведению."
+msgstr "Не всі замовлення рахунку належать цьому закладу."
+
+#: apps/billing/services.py
+msgid "Оплата бонусами доступна только для персонального счёта."
+msgstr "Оплата бонусами доступна лише для особистого рахунку."
+
+#: apps/billing/services.py
+msgid "Гость счёта не найден в этом заведении."
+msgstr "Гостя рахунку не знайдено в цьому закладі."
+
+#: apps/billing/services.py
+msgid "Заказы персонального счёта принадлежат разным гостям."
+msgstr "Замовлення особистого рахунку належать різним гостям."
+
+#: apps/billing/services.py
+msgid "Бонусы по этому счёту уже были применены."
+msgstr "Бонуси за цим рахунком уже застосовано."
+
+#: apps/billing/services.py
+msgid "Оплату бонусами нужно выбрать до первой денежной оплаты."
+msgstr "Оплату бонусами потрібно вибрати до першої грошової оплати."
+
+#: apps/billing/services.py
+msgid "В счёте нет положительной суммы для оплаты бонусами."
+msgstr "У рахунку немає додатної суми для оплати бонусами."
+
+#: apps/billing/services.py
+msgid "По этому счёту сейчас нечего оплачивать бонусами."
+msgstr "За цим рахунком зараз нічого сплачувати бонусами."
+
+#: apps/billing/services.py
+msgid "Списание бонусов пока доступно только для персонального счёта."
+msgstr "Списання бонусів поки доступне лише для особистого рахунку."
+
+#: apps/billing/services.py
+msgid "Нельзя списать бонусы по закрытому счёту."
+msgstr "Не можна списати бонуси за закритим рахунком."
+
+#: apps/billing/services.py
+msgid "Бонусы по этому счёту уже были списаны."
+msgstr "Бонуси за цим рахунком уже списано."
+
+#: apps/billing/services.py
+msgid "Списание бонусов нужно делать до первой оплаты по счёту."
+msgstr "Списувати бонуси потрібно до першої оплати за рахунком."
+
+#: apps/billing/services.py
+msgid "По этому счёту сейчас нечего списывать бонусами."
+msgstr "За цим рахунком зараз нічого списувати бонусами."
+
+#: apps/billing/services.py
+msgid "Сумма списания бонусов должна быть больше нуля."
+msgstr "Сума списання бонусів має бути більшою за нуль."
+
+#: apps/billing/services.py
+msgid "Сумма списания превышает доступный лимит по бонусам."
+msgstr "Сума списання перевищує доступний ліміт бонусів."
+
+#: apps/billing/services.py
+msgid "Укажите причину изменения счёта."
+msgstr "Вкажіть причину зміни рахунку."
+
+#: apps/billing/services.py bot/handlers/staff.py
+msgid "Нет права изменять счета. Его выдаёт владелец заведения."
+msgstr "Немає права змінювати рахунки. Його надає власник закладу."
+
+#: apps/billing/services.py
+msgid "Оплаченный счёт изменить нельзя."
+msgstr "Оплачений рахунок змінити не можна."
+
+#: apps/billing/services.py
+msgid "Счёт уже аннулирован."
+msgstr "Рахунок уже анульовано."
+
+#: apps/billing/services.py
+msgid "По счёту применены бонусы: его нельзя менять по позициям, только аннулировать."
+msgstr "До рахунку застосовано бонуси: його не можна змінювати за позиціями, лише анулювати."
+
+#: apps/billing/services.py
+msgid "Выберите позиции, которые нужно убрать из счёта."
+msgstr "Виберіть позиції, які потрібно прибрати з рахунку."
+
+#: apps/billing/services.py
+msgid "Часть позиций не найдена среди активных позиций счёта."
+msgstr "Частину позицій не знайдено серед активних позицій рахунку."
+
+#: apps/billing/services.py
+msgid "Нельзя уменьшить счёт ниже уже оплаченной суммы ({paid_amount} грн)."
+msgstr "Не можна зменшити рахунок нижче вже сплаченої суми ({paid_amount} грн)."
+
+#: apps/billing/services.py
+msgid "По счёту уже есть оплата деньгами — аннулировать его нельзя."
+msgstr "За рахунком уже є оплата грошима — анулювати його не можна."
+
+#: apps/billing/services.py
+msgid "Счёт #{public_id} аннулирован."
+msgstr "Рахунок #{public_id} анульовано."
+
+#: apps/billing/services.py
+msgid "У счёта с бонусами нет гостя — вернуть бонусы некому."
+msgstr "У рахунку з бонусами немає гостя — бонуси повернути нікому."
+
+#: apps/billing/services.py
+msgid "Заказ уже оплачен в счёте #{public_id}, отменить его нельзя."
+msgstr "Замовлення вже оплачено в рахунку #{public_id}, скасувати його не можна."
+
+#: apps/billing/services.py
+msgid "Заказ уже в счёте #{public_id}. Отмените его через карточку счёта с указанием причины."
+msgstr "Замовлення вже в рахунку #{public_id}. Скасуйте його через картку рахунку із зазначенням причини."
+
+#: apps/billing/services.py
+msgid "Укажите причину возврата."
+msgstr "Вкажіть причину повернення."
+
+#: apps/billing/services.py
+msgid "Укажите, как вернули деньги."
+msgstr "Вкажіть, як повернули гроші."
+
+#: apps/billing/services.py
+msgid "Выберите, что вернуть."
+msgstr "Виберіть, що повернути."
+
+#: apps/billing/services.py bot/handlers/staff_refunds.py
+msgid "Нет права на возвраты. Его выдаёт владелец заведения."
+msgstr "Немає права на повернення. Його надає власник закладу."
+
+#: apps/billing/services.py
+msgid "Возврат возможен только по оплаченному счёту."
+msgstr "Повернення можливе лише за оплаченим рахунком."
+
+#: apps/billing/services.py
+msgid "Строка не из этого счёта."
+msgstr "Рядок не з цього рахунку."
+
+#: apps/billing/services.py
+msgid "Строка «{item_name}» уже возвращена."
+msgstr "Рядок «{item_name}» уже повернуто."
+
+#: apps/billing/services.py
+msgid "Возврат по счёту #{public_id}: бонусы вернулись."
+msgstr "Повернення за рахунком #{public_id}: бонуси повернулися."
+
+#: apps/billing/services.py
+msgid "Возврат по заказу #{public_id}: кешбэк снят."
+msgstr "Повернення за замовленням #{public_id}: кешбек знято."
+
+#: apps/billing/services.py
+msgid "Полный возврат по счёту #{public_id}."
+msgstr "Повне повернення за рахунком #{public_id}."
+
+#: apps/billing/services.py
+msgid "Комментарий пустой."
+msgstr "Коментар порожній."
+
+#: apps/billing/services.py
+msgid "Изменение счёта не найдено."
+msgstr "Зміну рахунку не знайдено."
+
+#: apps/billing/services.py
+msgid "Комментарий может добавить только автор изменения."
+msgstr "Коментар може додати лише автор зміни."
+
+#: apps/billing/services.py
+msgid "Комментарий к этому изменению уже добавлен."
+msgstr "Коментар до цієї зміни вже додано."
+
+#: apps/billing/services.py
+msgid "Время на добавление комментария истекло."
+msgstr "Час на додавання коментаря минув."
+
+#: apps/billing/table_bills.py
+msgid "За столом несколько визитов — выставьте счёт из карточки нужного визита."
+msgstr "За столом кілька візитів — виставте рахунок із картки потрібного візиту."
+
+#: apps/billing/table_bills.py
+msgid "На этом столе нет заказов, доступных для нового счёта."
+msgstr "На цьому столі немає замовлень, доступних для нового рахунку."
+
+#: apps/billing/table_bills.py
+msgid "На этом столе нет заказов, доступных для split bill."
+msgstr "На цьому столі немає замовлень, доступних для поділу рахунку."
+
+#: apps/billing/table_bills.py
+msgid "У этого гостя нет новых заказов для персонального счёта."
+msgstr "У цього гостя немає нових замовлень для особистого рахунку."
+
+#: apps/billing/table_bills.py
+msgid "На этом столе нет новых заказов для общего счёта."
+msgstr "На цьому столі немає нових замовлень для спільного рахунку."
+
+#: apps/billing/table_bills.py
+msgid "Запросить счёт можно только после активации стола по QR-коду."
+msgstr "Запросити рахунок можна лише після активації столу за QR-кодом."
+
+#: apps/billing/table_bills.py
+msgid "Похожий запрос счёта уже был отправлен совсем недавно. Подождите немного."
+msgstr "Схожий запит рахунку вже надіслано зовсім нещодавно. Зачекайте трохи."
+
+#: apps/billing/table_bills.py
+msgid "Неизвестный тип запроса счёта."
+msgstr "Невідомий тип запиту рахунку."
+
+#: apps/billing/table_bills.py
+msgid "Запрос счёта не найден в этом заведении."
+msgstr "Запит рахунку не знайдено в цьому закладі."
+
+#: apps/billing/table_bills.py
+msgid "Нельзя обработать уже отменённый запрос счёта."
+msgstr "Не можна обробити вже скасований запит рахунку."
+
+#: apps/billing/table_bills.py
+msgid "Нельзя отменить уже обработанный запрос счёта."
+msgstr "Не можна скасувати вже оброблений запит рахунку."
+
+#: apps/billing/templates/admin/billing/adjustment_reason.html bot/handlers/remote_checkout.py bot/keyboards/billing.py bot/keyboards/guest_call.py bot/keyboards/staff.py
+msgid "Отмена"
+msgstr "Скасувати"
+
+#: apps/bonuses/admin.py
+msgid "Данные гостя"
+msgstr "Дані гостя"
+
+#: apps/bonuses/admin.py apps/bonuses/forms.py apps/users/models.py
+msgid "Код клиента"
+msgstr "Код клієнта"
+
+#: apps/bonuses/forms.py
+msgid "Код клиента из профиля гостя в боте. Быстрая продажа записывается только на известного гостя."
+msgstr "Код клієнта з профілю гостя в боті. Швидкий продаж записується лише на відомого гостя."
+
+#: apps/bonuses/forms.py
+msgid "Сначала выберите заведение."
+msgstr "Спершу виберіть заклад."
+
+#: apps/bonuses/forms.py apps/bonuses/services.py
+msgid "Гость с таким кодом в этом заведении не найден."
+msgstr "Гостя з таким кодом у цьому закладі не знайдено."
+
+#: apps/bonuses/forms.py
+msgid "Неверный код клиента."
+msgstr "Неправильний код клієнта."
+
+#: apps/bonuses/models.py
+msgid "Оплаченный заказ"
+msgstr "Оплачене замовлення"
+
+#: apps/bonuses/models.py
+msgid "Покупка, внесённая вручную"
+msgstr "Покупка, внесена вручну"
+
+#: apps/bonuses/models.py
+msgid "Кешбэк"
+msgstr "Кешбек"
+
+#: apps/bonuses/models.py
+msgid "За визит"
+msgstr "За візит"
+
+#: apps/bonuses/models.py
+msgid "За N-й заказ"
+msgstr "За N-не замовлення"
+
+#: apps/bonuses/models.py
+msgid "Вся сумма покупки"
+msgstr "Уся сума покупки"
+
+#: apps/bonuses/models.py
+msgid "Только оплаченное деньгами (без бонусов)"
+msgstr "Лише сплачене грошима (без бонусів)"
+
+#: apps/bonuses/models.py
+msgid "Событие"
+msgstr "Подія"
+
+#: apps/bonuses/models.py
+msgid "Тип программы"
+msgstr "Тип програми"
+
+#: apps/bonuses/models.py
+msgid "Необязательный ключ особой стратегии начисления."
+msgstr "Необов'язковий ключ особливої стратегії нарахування."
+
+#: apps/bonuses/models.py
+msgid "Код стратегии"
+msgstr "Код стратегії"
+
+#: apps/bonuses/models.py
+msgid "Фиксированная сумма"
+msgstr "Фіксована сума"
+
+#: apps/bonuses/models.py
+msgid "Процент"
+msgstr "Відсоток"
+
+#: apps/bonuses/models.py
+msgid "Минимальная сумма"
+msgstr "Мінімальна сума"
+
+#: apps/bonuses/models.py
+msgid "Только для кешбэка: начислять со всей суммы покупки или только с оплаченного деньгами (PQ-030). Минимальная сумма всегда сравнивается со всей суммой."
+msgstr "Лише для кешбеку: нараховувати з усієї суми покупки або лише зі сплаченого грошима (PQ-030). Мінімальна сума завжди порівнюється з усією сумою."
+
+#: apps/bonuses/models.py
+msgid "База начисления"
+msgstr "База нарахування"
+
+#: apps/bonuses/models.py
+msgid "Каждый N-й заказ"
+msgstr "Кожне N-не замовлення"
+
+#: apps/bonuses/models.py
+msgid "Какую долю счёта можно оплатить бонусами, % (0–100)."
+msgstr "Яку частку рахунку можна сплатити бонусами, % (0–100)."
+
+#: apps/bonuses/models.py
+msgid "Можно оплатить бонусами, % счёта"
+msgstr "Можна сплатити бонусами, % рахунку"
+
+#: apps/bonuses/models.py
+msgid "Сгорают через, дней"
+msgstr "Згоряють через, днів"
+
+#: apps/bonuses/models.py
+msgid "Резерв для настроек особой стратегии."
+msgstr "Резерв для налаштувань особливої стратегії."
+
+#: apps/bonuses/models.py
+msgid "Настройки (JSON)"
+msgstr "Налаштування (JSON)"
+
+#: apps/bonuses/models.py apps/partners/models.py apps/tables/models.py
+msgid "Работает"
+msgstr "Працює"
+
+#: apps/bonuses/models.py
+msgid "бонусная программа"
+msgstr "бонусна програма"
+
+#: apps/bonuses/models.py
+msgid "Бонусные программы"
+msgstr "Бонусні програми"
+
+#: apps/bonuses/models.py
+msgid "Начисление"
+msgstr "Нарахування"
+
+#: apps/bonuses/models.py
+msgid "Списание"
+msgstr "Списання"
+
+#: apps/bonuses/models.py
+msgid "Сгорание"
+msgstr "Згоряння"
+
+#: apps/bonuses/models.py
+msgid "Вручную"
+msgstr "Вручну"
+
+#: apps/bonuses/models.py
+msgid "Программа"
+msgstr "Програма"
+
+#: apps/bonuses/models.py bot/keyboards/staff.py
+msgid "Быстрая продажа"
+msgstr "Швидкий продаж"
+
+#: apps/bonuses/models.py
+msgid "Операция"
+msgstr "Операція"
+
+#: apps/bonuses/models.py
+msgid "Сгорают"
+msgstr "Згоряють"
+
+#: apps/bonuses/models.py
+msgid "Тип источника"
+msgstr "Тип джерела"
+
+#: apps/bonuses/models.py
+msgid "ID источника"
+msgstr "ID джерела"
+
+#: apps/bonuses/models.py
+msgid "Ключ идемпотентности"
+msgstr "Ключ ідемпотентності"
+
+#: apps/bonuses/models.py
+msgid "бонусная операция"
+msgstr "бонусна операція"
+
+#: apps/bonuses/models.py
+msgid "Бонусные операции"
+msgstr "Бонусні операції"
+
+#: apps/bonuses/models.py
+msgid "Код клиента (на момент продажи)"
+msgstr "Код клієнта (на момент продажу)"
+
+#: apps/bonuses/models.py
+msgid "Сумма продажи"
+msgstr "Сума продажу"
+
+#: apps/bonuses/models.py
+msgid "Начислено бонусов"
+msgstr "Нараховано бонусів"
+
+#: apps/bonuses/models.py
+msgid "быстрая продажа"
+msgstr "швидкий продаж"
+
+#: apps/bonuses/models.py apps/partners/models.py bot/handlers/staff.py bot/keyboards/staff.py
+msgid "Быстрые продажи"
+msgstr "Швидкі продажі"
+
+#: apps/bonuses/models.py
+msgid "Аноним"
+msgstr "Анонім"
+
+#: apps/bonuses/models.py
+msgid "Продажа"
+msgstr "Продаж"
+
+#: apps/bonuses/models.py apps/orders/models.py
+msgid "Позиция меню"
+msgstr "Позиція меню"
+
+#: apps/bonuses/models.py
+msgid "позиция быстрой продажи"
+msgstr "позиція швидкого продажу"
+
+#: apps/bonuses/models.py
+msgid "Позиции быстрых продаж"
+msgstr "Позиції швидких продажів"
+
+#: apps/bonuses/services.py
+msgid "Баланс бонусов требует сверки с историей операций перед изменением."
+msgstr "Баланс бонусів потребує звірки з історією операцій перед зміною."
+
+#: apps/bonuses/services.py
+msgid "{label} должна быть корректным денежным значением."
+msgstr "{label} має бути коректним грошовим значенням."
+
+#: apps/bonuses/services.py
+msgid "{label} должна быть больше нуля."
+msgstr "{label} має бути більшою за нуль."
+
+#: apps/bonuses/services.py
+msgid "Гость не из этого заведения."
+msgstr "Гість не з цього закладу."
+
+#: apps/bonuses/services.py
+msgid "Счёт не из этого заведения."
+msgstr "Рахунок не з цього закладу."
+
+#: apps/bonuses/services.py
+msgid "Сумма покупки"
+msgstr "Сума покупки"
+
+#: apps/bonuses/services.py
+msgid "Сумма быстрой продажи"
+msgstr "Сума швидкого продажу"
+
+#: apps/bonuses/services.py
+msgid "Добавьте хотя бы одну позицию в быструю продажу."
+msgstr "Додайте хоча б одну позицію до швидкого продажу."
+
+#: apps/bonuses/services.py
+msgid "Часть позиций быстрой продажи недоступна в этом заведении."
+msgstr "Частина позицій швидкого продажу недоступна в цьому закладі."
+
+#: apps/employees/admin.py
+msgid "Права в счетах"
+msgstr "Права в рахунках"
+
+#: apps/employees/admin.py
+msgid "Изменение и аннулирование счетов. Выдаёт только владелец заведения."
+msgstr "Зміна й анулювання рахунків. Надає лише власник закладу."
+
+#: apps/employees/admin.py
+msgid "Оплата труда"
+msgstr "Оплата праці"
+
+#: apps/employees/admin.py apps/employees/models.py
+msgid "Уведомления в боте"
+msgstr "Сповіщення в боті"
+
+#: apps/employees/admin.py
+msgid "Какие рабочие уведомления сотрудник получает в Telegram-боте."
+msgstr "Які робочі сповіщення працівник отримує в Telegram-боті."
+
+#: apps/employees/admin.py
+msgid "Не привязан"
+msgstr "Не прив'язано"
+
+#: apps/employees/apps.py apps/employees/models.py apps/users/constants.py
+msgid "Сотрудники"
+msgstr "Працівники"
+
+#: apps/employees/forms.py
+msgid "Telegram ID сотрудника для уведомлений в боте."
+msgstr "Telegram ID працівника для сповіщень у боті."
+
+#: apps/employees/forms.py
+msgid "Опционально: username сотрудника без @."
+msgstr "Необов'язково: username працівника без @."
+
+#: apps/employees/forms.py
+msgid "Право выдаёт только владелец заведения."
+msgstr "Право надає лише власник закладу."
+
+#: apps/employees/forms.py
+msgid "Только superuser может менять глобальный Telegram ID."
+msgstr "Лише суперкористувач може змінювати глобальний Telegram ID."
+
+#: apps/employees/forms.py
+msgid "Для уведомлений в боте нужен Telegram ID."
+msgstr "Для сповіщень у боті потрібен Telegram ID."
+
+#: apps/employees/models.py apps/users/models.py
+msgid "Пользователь"
+msgstr "Користувач"
+
+#: apps/employees/models.py
+msgid "Должность"
+msgstr "Посада"
+
+#: apps/employees/models.py
+msgid "Ставка в час"
+msgstr "Ставка за годину"
+
+#: apps/employees/models.py
+msgid "Процент с продаж"
+msgstr "Відсоток із продажів"
+
+#: apps/employees/models.py
+msgid "О новых заказах"
+msgstr "Про нові замовлення"
+
+#: apps/employees/models.py
+msgid "О смене статуса заказа"
+msgstr "Про зміну статусу замовлення"
+
+#: apps/employees/models.py
+msgid "О вызовах персонала"
+msgstr "Про виклики персоналу"
+
+#: apps/employees/models.py
+msgid "О запросах счёта"
+msgstr "Про запити рахунку"
+
+#: apps/employees/models.py
+msgid "Заказы за столом"
+msgstr "Замовлення за столом"
+
+#: apps/employees/models.py apps/menu/models.py apps/orders/models.py apps/partners/bot_texts.py apps/partners/models.py bot/handlers/staff.py
+msgid "Самовывоз"
+msgstr "Самовивіз"
+
+#: apps/employees/models.py apps/menu/models.py apps/notifications/models.py apps/orders/models.py apps/orders/services.py apps/partners/models.py bot/handlers/staff.py
+msgid "Доставка"
+msgstr "Доставка"
+
+#: apps/employees/models.py apps/menu/models.py apps/orders/models.py apps/partners/bot_texts.py apps/partners/models.py
+msgid "Отправка почтой"
+msgstr "Відправлення поштою"
+
+#: apps/employees/models.py
+msgid "Может изменять счета"
+msgstr "Може змінювати рахунки"
+
+#: apps/employees/models.py
+msgid "Убирать позиции, отменять заказы в счёте и аннулировать счета. Выдаёт только владелец заведения."
+msgstr "Прибирати позиції, скасовувати замовлення в рахунку й анулювати рахунки. Надає лише власник закладу."
+
+#: apps/employees/models.py
+msgid "сотрудник"
+msgstr "працівник"
+
+#: apps/menu/apps.py apps/partners/models.py apps/users/constants.py
+msgid "Меню"
+msgstr "Меню"
+
+#: apps/menu/models.py
+msgid "Порядок"
+msgstr "Порядок"
+
+#: apps/menu/models.py
+msgid "Показывать"
+msgstr "Показувати"
+
+#: apps/menu/models.py
+msgid "категория меню"
+msgstr "категорія меню"
+
+#: apps/menu/models.py
+msgid "Категории меню"
+msgstr "Категорії меню"
+
+#: apps/menu/models.py
+msgid "Своя позиция"
+msgstr "Своя позиція"
+
+#: apps/menu/models.py
+msgid "Позиция партнёра"
+msgstr "Позиція партнера"
+
+#: apps/menu/models.py
+msgid "Категория"
+msgstr "Категорія"
+
+#: apps/menu/models.py
+msgid "Код позиции"
+msgstr "Код позиції"
+
+#: apps/menu/models.py
+msgid "Описание"
+msgstr "Опис"
+
+#: apps/menu/models.py
+msgid "Ссылка на фото"
+msgstr "Посилання на фото"
+
+#: apps/menu/models.py
+msgid "Тип"
+msgstr "Тип"
+
+#: apps/menu/models.py
+msgid "В наличии"
+msgstr "У наявності"
+
+#: apps/menu/models.py apps/orders/models.py
+msgid "За столом"
+msgstr "За столом"
+
+#: apps/menu/models.py
+msgid "позиция меню"
+msgstr "позиція меню"
+
+#: apps/menu/models.py
+msgid "Позиции меню"
+msgstr "Позиції меню"
+
+#: apps/notifications/admin.py
+msgid "Отправить выбранные рассылки"
+msgstr "Надіслати вибрані розсилки"
+
+#: apps/notifications/admin.py
+msgid "Поставлено в отправку рассылок: {queued_count}."
+msgstr "Поставлено на надсилання розсилок: {queued_count}."
+
+#: apps/notifications/apps.py apps/users/constants.py
+msgid "Уведомления и рассылки"
+msgstr "Сповіщення й розсилки"
+
+#: apps/notifications/models.py
+msgid "Сообщения о заказах"
+msgstr "Повідомлення про замовлення"
+
+#: apps/notifications/models.py
+msgid "Сообщения о бонусах"
+msgstr "Повідомлення про бонуси"
+
+#: apps/notifications/models.py
+msgid "Рассылки"
+msgstr "Розсилки"
+
+#: apps/notifications/models.py
+msgid "настройки сообщений гостя"
+msgstr "налаштування повідомлень гостя"
+
+#: apps/notifications/models.py
+msgid "Настройки сообщений гостей"
+msgstr "Налаштування повідомлень гостей"
+
+#: apps/notifications/models.py
+msgid "Новый заказ"
+msgstr "Нове замовлення"
+
+#: apps/notifications/models.py
+msgid "Статус заказа"
+msgstr "Статус замовлення"
+
+#: apps/notifications/models.py apps/partners/models.py
+msgid "Вызов персонала"
+msgstr "Виклик персоналу"
+
+#: apps/notifications/models.py apps/notifications/services.py
+msgid "Запрос счёта"
+msgstr "Запит рахунку"
+
+#: apps/notifications/models.py
+msgid "Визит стола"
+msgstr "Візит столу"
+
+#: apps/notifications/models.py
+msgid "Безопасность"
+msgstr "Безпека"
+
+#: apps/notifications/models.py
+msgid "Отправлено"
+msgstr "Надіслано"
+
+#: apps/notifications/models.py
+msgid "Не доставлено"
+msgstr "Не доставлено"
+
+#: apps/notifications/models.py
+msgid "Сотрудник"
+msgstr "Працівник"
+
+#: apps/notifications/models.py
+msgid "Тема"
+msgstr "Тема"
+
+#: apps/notifications/models.py
+msgid "Заголовок"
+msgstr "Заголовок"
+
+#: apps/notifications/models.py
+msgid "Текст"
+msgstr "Текст"
+
+#: apps/notifications/models.py
+msgid "Ключ повтора"
+msgstr "Ключ повтору"
+
+#: apps/notifications/models.py bot/keyboards/staff.py
+msgid "Прочитано"
+msgstr "Прочитано"
+
+#: apps/notifications/models.py
+msgid "Прочитано в"
+msgstr "Прочитано о"
+
+#: apps/notifications/models.py
+msgid "Доставлено"
+msgstr "Доставлено"
+
+#: apps/notifications/models.py
+msgid "Ошибка доставки"
+msgstr "Помилка доставки"
+
+#: apps/notifications/models.py
+msgid "уведомление персоналу"
+msgstr "сповіщення персоналу"
+
+#: apps/notifications/models.py bot/handlers/staff.py
+msgid "Уведомления персоналу"
+msgstr "Сповіщення персоналу"
+
+#: apps/notifications/models.py
+msgid "Запланирована"
+msgstr "Заплановано"
+
+#: apps/notifications/models.py
+msgid "Отправляется"
+msgstr "Надсилається"
+
+#: apps/notifications/models.py
+msgid "Отправлена"
+msgstr "Надіслано"
+
+#: apps/notifications/models.py
+msgid "Название рассылки"
+msgstr "Назва розсилки"
+
+#: apps/notifications/models.py
+msgid "Текст рассылки"
+msgstr "Текст розсилки"
+
+#: apps/notifications/models.py
+msgid "Сообщения, судьба которых неизвестна после сбоя воркера. Повторно не отправляются: гость получает рассылку не больше одного раза (PQ-014)."
+msgstr "Повідомлення, доля яких невідома після збою воркера. Повторно не надсилаються: гість отримує розсилку не більше одного разу (PQ-014)."
+
+#: apps/notifications/models.py
+msgid "Неизвестно"
+msgstr "Невідомо"
+
+#: apps/notifications/models.py
+msgid "Последняя ошибка"
+msgstr "Остання помилка"
+
+#: apps/notifications/models.py
+msgid "Отправка начата"
+msgstr "Надсилання розпочато"
+
+#: apps/notifications/models.py
+msgid "Отправить в"
+msgstr "Надіслати о"
+
+#: apps/notifications/models.py
+msgid "рассылка"
+msgstr "розсилка"
+
+#: apps/notifications/models.py
+msgid "Пропущено (гость больше не подходит)"
+msgstr "Пропущено (гість більше не підходить)"
+
+#: apps/notifications/models.py
+msgid "Неизвестно (воркер остановился)"
+msgstr "Невідомо (воркер зупинився)"
+
+#: apps/notifications/models.py
+msgid "Рассылка"
+msgstr "Розсилка"
+
+#: apps/notifications/models.py
+msgid "Метка захвата"
+msgstr "Мітка захоплення"
+
+#: apps/notifications/models.py
+msgid "Захвачено"
+msgstr "Захоплено"
+
+#: apps/notifications/models.py
+msgid "Завершено"
+msgstr "Завершено"
+
+#: apps/notifications/models.py
+msgid "доставка рассылки"
+msgstr "доставка розсилки"
+
+#: apps/notifications/models.py
+msgid "Доставки рассылок"
+msgstr "Доставки розсилок"
+
+#: apps/notifications/services.py
+msgid "У заведения нет включённого бота."
+msgstr "У закладу немає ввімкненого бота."
+
+#: apps/notifications/services.py
+msgid "Заведение приостановлено — сообщения не отправляются."
+msgstr "Заклад призупинено — повідомлення не надсилаються."
+
+#: apps/notifications/services.py
+msgid "Токен бота заведения не задан или неверный."
+msgstr "Токен бота закладу не задано або він неправильний."
+
+#: apps/notifications/services.py
+msgid "Сотрудник больше не получает уведомления."
+msgstr "Працівник більше не отримує сповіщення."
+
+#: apps/notifications/services.py
+msgid "У сотрудника не привязан Telegram."
+msgstr "У працівника не прив'язано Telegram."
+
+#: apps/notifications/services.py
+msgid "Неизвестный тип вызова персонала."
+msgstr "Невідомий тип виклику персоналу."
+
+#: apps/notifications/services.py
+msgid "Самовывоз: {requested_time}"
+msgstr "Самовивіз: {requested_time}"
+
+#: apps/notifications/services.py
+msgid "Доставка: {requested_time}, {delivery_address}"
+msgstr "Доставка: {requested_time}, {delivery_address}"
+
+#: apps/notifications/services.py
+msgid "Отправка: {shipping_carrier}, {shipping_destination}"
+msgstr "Відправлення: {shipping_carrier}, {shipping_destination}"
+
+#: apps/notifications/services.py bot/handlers/session.py bot/handlers/staff.py
+msgid "Стол: #{number}"
+msgstr "Стіл: #{number}"
+
+#: apps/notifications/services.py bot/handlers/staff.py
+msgid "Сценарий: заказ без привязки к столу"
+msgstr "Сценарій: замовлення без прив'язки до столу"
+
+#: apps/notifications/services.py
+msgid "Оплата подтверждена — готовим ваш заказ."
+msgstr "Оплату підтверджено — готуємо ваше замовлення."
+
+#: apps/notifications/services.py
+msgid "Заказ принят — готовим."
+msgstr "Замовлення прийнято — готуємо."
+
+#: apps/notifications/services.py
+msgid "Заказ готов — можно забирать."
+msgstr "Замовлення готове — можна забирати."
+
+#: apps/notifications/services.py
+msgid "Заказ собран — скоро отправим."
+msgstr "Замовлення зібрано — скоро відправимо."
+
+#: apps/notifications/services.py
+msgid "Заказ отправлен: {shipping_carrier}, ТТН <code>{number}</code>."
+msgstr "Замовлення відправлено: {shipping_carrier}, ТТН <code>{number}</code>."
+
+#: apps/notifications/services.py
+msgid ""
+"\n"
+"<a href=\"{link}\">Отследить посылку</a>"
+msgstr ""
+"\n"
+"<a href=\"{link}\">Відстежити посилку</a>"
+
+#: apps/notifications/services.py
+msgid ""
+"\n"
+"Когда заберёте посылку, нажмите «Получил(а)»."
+msgstr ""
+"\n"
+"Коли заберете посилку, натисніть «Отримав(-ла)»."
+
+#: apps/notifications/services.py
+msgid "Заказ получен. Спасибо!"
+msgstr "Замовлення отримано. Дякуємо!"
+
+#: apps/notifications/services.py
+msgid "Заказ собран — скоро передадим курьеру."
+msgstr "Замовлення зібрано — скоро передамо кур'єру."
+
+#: apps/notifications/services.py
+msgid "Заказ в пути — курьер уже едет к вам."
+msgstr "Замовлення в дорозі — кур'єр уже їде до вас."
+
+#: apps/notifications/services.py
+msgid "Заказ доставлен. Приятного аппетита!"
+msgstr "Замовлення доставлено. Смачного!"
+
+#: apps/notifications/services.py
+msgid "Оплата не поступила, заказ отменён. Если вы переводили деньги, свяжитесь с заведением."
+msgstr "Оплата не надійшла, замовлення скасовано. Якщо ви переказували гроші, зв'яжіться із закладом."
+
+#: apps/notifications/services.py
+msgid "<b>Обновление по заказу #{public_id}</b>"
+msgstr "<b>Оновлення замовлення #{public_id}</b>"
+
+#: apps/notifications/services.py bot/handlers/session.py
+msgid "Новый статус: {status}"
+msgstr "Новий статус: {status}"
+
+#: apps/notifications/services.py
+msgid "Оплата: {value}"
+msgstr "Оплата: {value}"
+
+#: apps/notifications/services.py
+msgid "получена"
+msgstr "отримано"
+
+#: apps/notifications/services.py bot/handlers/session.py
+msgid "ещё не зафиксирована"
+msgstr "ще не зафіксовано"
+
+#: apps/notifications/services.py
+msgid "Получение: {value}"
+msgstr "Отримання: {value}"
+
+#: apps/notifications/services.py
+msgid "подтверждено"
+msgstr "підтверджено"
+
+#: apps/notifications/services.py bot/handlers/session.py
+msgid "ещё не подтверждено"
+msgstr "ще не підтверджено"
+
+#: apps/notifications/services.py
+msgid "Заказ взял в работу: {employee_display_name}"
+msgstr "Замовлення взяв у роботу: {employee_display_name}"
+
+#: apps/notifications/services.py
+msgid "Ответственный: {employee_display_name}"
+msgstr "Відповідальний: {employee_display_name}"
+
+#: apps/notifications/services.py bot/handlers/staff.py
+msgid "Комментарий: {comment}"
+msgstr "Коментар: {comment}"
+
+#: apps/notifications/services.py bot/keyboards/profile.py
+msgid "✅ Получил(а)"
+msgstr "✅ Отримав(ла)"
+
+#: apps/notifications/services.py
+msgid "<b>Возврат по счёту #{public_id}</b>"
+msgstr "<b>Повернення за рахунком #{public_id}</b>"
+
+#: apps/notifications/services.py
+msgid "Заказ #{public_id}: {items}"
+msgstr "Замовлення #{public_id}: {items}"
+
+#: apps/notifications/services.py
+msgid "Деньги: {money_amount} грн — {method}."
+msgstr "Гроші: {money_amount} грн — {method}."
+
+#: apps/notifications/services.py
+msgid "Бонусы вернулись: {bonus_returned}."
+msgstr "Бонуси повернулися: {bonus_returned}."
+
+#: apps/notifications/services.py
+msgid "Кешбэк за возвращённое снят: {cashback_revoked}."
+msgstr "Кешбек за повернене знято: {cashback_revoked}."
+
+#: apps/notifications/services.py
+msgid "Причина: {reason_code}."
+msgstr "Причина: {reason_code}."
+
+#: apps/notifications/services.py
+msgid "Позвать персонал можно только после сканирования QR-кода стола."
+msgstr "Покликати персонал можна лише після сканування QR-коду столу."
+
+#: apps/notifications/services.py
+msgid "Похожий вызов уже был отправлен совсем недавно. Подождите немного."
+msgstr "Схожий виклик уже надіслано зовсім нещодавно. Зачекайте трохи."
+
+#: apps/notifications/services.py
+msgid "Сейчас нет сотрудников с подключёнными Telegram-уведомлениями для этого вызова."
+msgstr "Зараз немає працівників із підключеними Telegram-сповіщеннями для цього виклику."
+
+#: apps/notifications/services.py
+msgid "Вызов: {call_target}"
+msgstr "Виклик: {call_target}"
+
+#: apps/notifications/services.py
+msgid ""
+"Нужен: {call_target}\n"
+"Заведение: {name}\n"
+"Стол: #{table_number}\n"
+"Гость: {guest_identity}\n"
+"Код клиента: {customer_code}"
+msgstr ""
+"Потрібен: {call_target}\n"
+"Заклад: {name}\n"
+"Стіл: #{table_number}\n"
+"Гість: {guest_identity}\n"
+"Код клієнта: {customer_code}"
+
+#: apps/notifications/services.py
+msgid "Стол #{table_number}: новый визит"
+msgstr "Стіл #{table_number}: новий візит"
+
+#: apps/notifications/services.py
+msgid "За столом #{table_number} начат новый визит, предыдущий не закрыт. Рассчитайте и закройте предыдущий визит в разделе «Столы»."
+msgstr "За столом #{table_number} розпочато новий візит, попередній не закрито. Розрахуйте й закрийте попередній візит у розділі «Столи»."
+
+#: apps/notifications/services.py
+msgid ""
+"Реквизиты для перевода изменил пользователь {who}.\n"
+"Новые реквизиты: {details}\n"
+"Если это сделали не вы — сразу верните реквизиты, смените пароль и проверьте доступы в Admin."
+msgstr ""
+"Реквізити для переказу змінив користувач {who}.\n"
+"Нові реквізити: {details}\n"
+"Якщо це зробили не ви — одразу поверніть реквізити, змініть пароль і перевірте доступи в Admin."
+
+#: apps/notifications/services.py
+msgid "неизвестно"
+msgstr "невідомо"
+
+#: apps/notifications/services.py
+msgid "(пусто)"
+msgstr "(порожньо)"
+
+#: apps/notifications/services.py
+msgid "Изменены реквизиты для оплаты"
+msgstr "Змінено реквізити для оплати"
+
+#: apps/notifications/services.py
+msgid "Тип: {request_type}"
+msgstr "Тип: {request_type}"
+
+#: apps/notifications/services.py
+msgid "Гость: {guest_identity}"
+msgstr "Гість: {guest_identity}"
+
+#: apps/notifications/services.py bot/handlers/staff.py
+msgid "Код клиента: {customer_code}"
+msgstr "Код клієнта: {customer_code}"
+
+#: apps/notifications/services.py
+msgid "Подготовлен счёт: #{public_id}"
+msgstr "Підготовлено рахунок: #{public_id}"
+
+#: apps/notifications/services.py
+msgid "Запрос: #{id}"
+msgstr "Запит: #{id}"
+
+#: apps/notifications/services.py
+msgid "Нет гостей, которым можно отправить рассылку."
+msgstr "Немає гостей, яким можна надіслати розсилку."
+
+#: apps/notifications/services.py
+msgid "Гость больше не получает рассылки."
+msgstr "Гість більше не отримує розсилки."
+
+#: apps/notifications/services.py
+msgid "Рассылка не дошла ни до одного гостя."
+msgstr "Розсилка не дійшла до жодного гостя."
+
+#: apps/orders/admin.py
+msgid "Создать черновик счёта из заказов"
+msgstr "Створити чернетку рахунку із замовлень"
+
+#: apps/orders/admin.py
+msgid "Выберите хотя бы один заказ."
+msgstr "Виберіть хоча б одне замовлення."
+
+#: apps/orders/admin.py
+msgid "Выберите заказы только одного заведения."
+msgstr "Виберіть замовлення лише одного закладу."
+
+#: apps/orders/admin.py
+msgid "Создан в Admin из заказов"
+msgstr "Створено в Admin із замовлень"
+
+#: apps/orders/admin.py
+msgid "Создан draft bill #{public_id} на сумму {total_amount}."
+msgstr "Створено рахунок-чернетку #{public_id} на суму {total_amount}."
+
+#: apps/orders/admin.py
+msgid "Статус: принят"
+msgstr "Статус: прийнято"
+
+#: apps/orders/admin.py
+msgid "Статус: готовится"
+msgstr "Статус: готується"
+
+#: apps/orders/admin.py
+msgid "Статус: готов"
+msgstr "Статус: готово"
+
+#: apps/orders/admin.py
+msgid "Статус: в пути"
+msgstr "Статус: у дорозі"
+
+#: apps/orders/admin.py
+msgid "Статус: завершён"
+msgstr "Статус: завершено"
+
+#: apps/orders/admin.py
+msgid "Отменить заказы"
+msgstr "Скасувати замовлення"
+
+#: apps/orders/admin.py
+msgid "Заказ #{public_id}: {exc}"
+msgstr "Замовлення #{public_id}: {exc}"
+
+#: apps/orders/admin.py
+msgid "Часть заказов уже в счёте: их позиции будут убраны из счёта. Нужно право изменять счета; заказ в оплаченном счёте отменить нельзя."
+msgstr "Частина замовлень уже в рахунку: їхні позиції буде прибрано з рахунку. Потрібне право змінювати рахунки; замовлення в оплаченому рахунку скасувати не можна."
+
+#: apps/orders/admin.py
+msgid "Отменено заказов"
+msgstr "Скасовано замовлень"
+
+#: apps/orders/admin.py
+msgid "Заказ #{public_id}"
+msgstr "Замовлення #{public_id}"
+
+#: apps/orders/admin.py
+msgid "Обновлено заказов: {success_count}."
+msgstr "Оновлено замовлень: {success_count}."
+
+#: apps/orders/apps.py apps/orders/models.py apps/partners/models.py apps/users/constants.py bot/keyboards/staff.py
+msgid "Заказы"
+msgstr "Замовлення"
+
+#: apps/orders/models.py bot/handlers/staff.py
+msgid "Новый"
+msgstr "Нове"
+
+#: apps/orders/models.py
+msgid "Принят"
+msgstr "Прийнято"
+
+#: apps/orders/models.py
+msgid "Готовится"
+msgstr "Готується"
+
+#: apps/orders/models.py bot/handlers/staff.py
+msgid "Готов"
+msgstr "Готове"
+
+#: apps/orders/models.py
+msgid "В пути"
+msgstr "У дорозі"
+
+#: apps/orders/models.py
+msgid "Завершён"
+msgstr "Завершено"
+
+#: apps/orders/models.py
+msgid "Нова Пошта"
+msgstr "Нова Пошта"
+
+#: apps/orders/models.py
+msgid "Укрпошта"
+msgstr "Укрпошта"
+
+#: apps/orders/models.py
+msgid "По тарифу перевозчика, платит получатель"
+msgstr "За тарифом перевізника, платить одержувач"
+
+#: apps/orders/models.py
+msgid "В заказе"
+msgstr "У замовленні"
+
+#: apps/orders/models.py
+msgid "Переводом заранее"
+msgstr "Переказом заздалегідь"
+
+#: apps/orders/models.py
+msgid "При получении"
+msgstr "При отриманні"
+
+#: apps/orders/models.py
+msgid "Ответственный"
+msgstr "Відповідальний"
+
+#: apps/orders/models.py
+msgid "Способ заказа"
+msgstr "Спосіб замовлення"
+
+#: apps/orders/models.py
+msgid "Самовывоз и доставка: к какому времени; пусто — как можно скорее."
+msgstr "Самовивіз і доставка: на який час; порожньо — якомога швидше."
+
+#: apps/orders/models.py
+msgid "Ко времени"
+msgstr "На час"
+
+#: apps/orders/models.py apps/users/models.py
+msgid "Адрес доставки"
+msgstr "Адреса доставки"
+
+#: apps/orders/models.py apps/users/models.py
+msgid "Широта"
+msgstr "Широта"
+
+#: apps/orders/models.py apps/users/models.py
+msgid "Долгота"
+msgstr "Довгота"
+
+#: apps/orders/models.py apps/users/models.py
+msgid "Служба"
+msgstr "Служба"
+
+#: apps/orders/models.py apps/users/models.py
+msgid "Куда отправить"
+msgstr "Куди відправити"
+
+#: apps/orders/models.py apps/orders/services.py
+msgid "Пересылка"
+msgstr "Пересилання"
+
+#: apps/orders/models.py
+msgid "ТТН"
+msgstr "ТТН"
+
+#: apps/orders/models.py
+msgid "Когда оплата"
+msgstr "Коли оплата"
+
+#: apps/orders/models.py
+msgid "Способ оплаты"
+msgstr "Спосіб оплати"
+
+#: apps/orders/models.py bot/handlers/staff.py
+msgid "Получен"
+msgstr "Отримано"
+
+#: apps/orders/models.py
+msgid "заказ"
+msgstr "замовлення"
+
+#: apps/orders/models.py
+msgid "Из статуса"
+msgstr "Зі статусу"
+
+#: apps/orders/models.py
+msgid "В статус"
+msgstr "У статус"
+
+#: apps/orders/models.py
+msgid "смена статуса"
+msgstr "зміна статусу"
+
+#: apps/orders/models.py
+msgid "История статусов"
+msgstr "Історія статусів"
+
+#: apps/orders/models.py apps/tables/models.py
+msgid "Активна"
+msgstr "Активний"
+
+#: apps/orders/models.py
+msgid "Оформлена"
+msgstr "Оформлений"
+
+#: apps/orders/models.py
+msgid "Брошена"
+msgstr "Покинутий"
+
+#: apps/orders/models.py
+msgid "корзина"
+msgstr "кошик"
+
+#: apps/orders/models.py
+msgid "Корзины"
+msgstr "Кошики"
+
+#: apps/orders/models.py
+msgid "Вид строки"
+msgstr "Вид рядка"
+
+#: apps/orders/models.py
+msgid "строка заказа"
+msgstr "рядок замовлення"
+
+#: apps/orders/models.py
+msgid "Строки заказов"
+msgstr "Рядки замовлень"
+
+#: apps/orders/models.py apps/partners/bot_texts.py apps/partners/models.py
+msgid "Корзина"
+msgstr "Кошик"
+
+#: apps/orders/models.py
+msgid "строка корзины"
+msgstr "рядок кошика"
+
+#: apps/orders/models.py
+msgid "Строки корзин"
+msgstr "Рядки кошиків"
+
+#: apps/orders/services.py
+msgid "Укажите позиции в формате `code x qty`, например: `a1b2c3d4x2,e5f6a7b8x1`."
+msgstr "Вкажіть позиції у форматі `code x qty`, наприклад: `a1b2c3d4x2,e5f6a7b8x1`."
+
+#: apps/orders/services.py
+msgid "Не удалось распознать позицию `{chunk}`."
+msgstr "Не вдалося розпізнати позицію `{chunk}`."
+
+#: apps/orders/services.py
+msgid "Некорректное количество в `{chunk}`."
+msgstr "Некоректна кількість у `{chunk}`."
+
+#: apps/orders/services.py
+msgid "Количество должно быть больше нуля."
+msgstr "Кількість має бути більшою за нуль."
+
+#: apps/orders/services.py
+msgid "Гость заказа относится к другому заведению."
+msgstr "Гість замовлення належить до іншого закладу."
+
+#: apps/orders/services.py
+msgid "Сессия заказа относится к другому заведению."
+msgstr "Сесія замовлення належить до іншого закладу."
+
+#: apps/orders/services.py
+msgid "Гость заказа не совпадает с гостем активной сессии."
+msgstr "Гість замовлення не збігається з гостем активної сесії."
+
+#: apps/orders/services.py
+msgid "Стол заказа не совпадает со столом активной сессии."
+msgstr "Стіл замовлення не збігається зі столом активної сесії."
+
+#: apps/orders/services.py
+msgid "Стол заказа относится к другому заведению."
+msgstr "Стіл замовлення належить до іншого закладу."
+
+#: apps/orders/services.py
+msgid "Позиция заказа относится к другому заведению."
+msgstr "Позиція замовлення належить до іншого закладу."
+
+#: apps/orders/services.py
+msgid "Нельзя создать заказ без позиций."
+msgstr "Не можна створити замовлення без позицій."
+
+#: apps/orders/services.py
+msgid "Неизвестный способ оплаты заказа."
+msgstr "Невідомий спосіб оплати замовлення."
+
+#: apps/orders/services.py
+msgid "Когда платить, выбирают только в заказах навынос."
+msgstr "Коли платити, вибирають лише в замовленнях на винос."
+
+#: apps/orders/services.py
+msgid "Неизвестный способ получения заказа."
+msgstr "Невідомий спосіб отримання замовлення."
+
+#: apps/orders/services.py
+msgid "Заказ навынос не привязывается к столу."
+msgstr "Замовлення на винос не прив'язується до столу."
+
+#: apps/orders/services.py
+msgid "Время получения указывается только для заказов навынос."
+msgstr "Час отримання вказується лише для замовлень на винос."
+
+#: apps/orders/services.py
+msgid "Для доставки нужен адрес."
+msgstr "Для доставки потрібна адреса."
+
+#: apps/orders/services.py
+msgid "Адрес доставки бывает только у доставки."
+msgstr "Адреса доставки буває лише в доставки."
+
+#: apps/orders/services.py
+msgid "Стоимость доставки бывает только у доставки и отправки."
+msgstr "Вартість доставки буває лише в доставки й відправлення."
+
+#: apps/orders/services.py
+msgid "Для отправки нужны служба, получатель и вариант пересылки."
+msgstr "Для відправлення потрібні служба, одержувач і варіант пересилання."
+
+#: apps/orders/services.py
+msgid "Служба и получатель бывают только у отправки."
+msgstr "Служба й одержувач бувають лише у відправлення."
+
+#: apps/orders/services.py
+msgid "Стоимость доставки не может быть отрицательной."
+msgstr "Вартість доставки не може бути від'ємною."
+
+#: apps/orders/services.py
+msgid "Заказ не найден в этом заведении."
+msgstr "Замовлення не знайдено в цьому закладі."
+
+#: apps/orders/services.py
+msgid "Нельзя перевести заказ из `{status}` в `{to_status}`."
+msgstr "Не можна перевести замовлення з `{status}` у `{to_status}`."
+
+#: apps/orders/services.py
+msgid "Сначала подтвердите оплату переводом."
+msgstr "Спершу підтвердьте оплату переказом."
+
+#: apps/orders/services.py
+msgid "Сначала введите ТТН отправления."
+msgstr "Спершу введіть ТТН відправлення."
+
+#: apps/orders/services.py
+msgid "Заказ уже в счёте. Отменить его можно через карточку счёта (нужно право изменять счета)."
+msgstr "Замовлення вже в рахунку. Скасувати його можна через картку рахунку (потрібне право змінювати рахунки)."
+
+#: apps/orders/services.py
+msgid "Подтвердить получение можно только с активным столом."
+msgstr "Підтвердити отримання можна лише з активним столом."
+
+#: apps/orders/services.py
+msgid "Заказ не найден для этого гостя и стола."
+msgstr "Замовлення не знайдено для цього гостя й столу."
+
+#: apps/orders/services.py
+msgid "Этот заказ уже завершён или отменён."
+msgstr "Це замовлення вже завершено або скасовано."
+
+#: apps/orders/services.py
+msgid "Корзина доступна только после сканирования QR-кода стола. Сначала откройте сессию."
+msgstr "Кошик доступний лише після сканування QR-коду столу. Спершу відкрийте сесію."
+
+#: apps/orders/services.py
+msgid "к столу"
+msgstr "до столу"
+
+#: apps/orders/services.py
+msgid "на самовывоз"
+msgstr "на самовивіз"
+
+#: apps/orders/services.py
+msgid "на доставку"
+msgstr "на доставку"
+
+#: apps/orders/services.py
+msgid "на отправку почтой"
+msgstr "на відправлення поштою"
+
+#: apps/orders/services.py
+msgid "Самовывоз сейчас отключён."
+msgstr "Самовивіз зараз вимкнено."
+
+#: apps/orders/services.py bot/handlers/remote_checkout.py
+msgid "Доставка сейчас отключена."
+msgstr "Доставку зараз вимкнено."
+
+#: apps/orders/services.py bot/handlers/remote_checkout.py
+msgid "Отправка почтой сейчас отключена."
+msgstr "Відправлення поштою зараз вимкнено."
+
+#: apps/orders/services.py
+msgid "Сначала отсканируйте QR-код стола."
+msgstr "Спершу відскануйте QR-код столу."
+
+#: apps/orders/services.py
+msgid "Недоступно для заказа {channel_names}: {not_sold}."
+msgstr "Недоступно для замовлення {channel_names}: {not_sold}."
+
+#: apps/orders/services.py
+msgid "Количество должно изменяться хотя бы на 1."
+msgstr "Кількість має змінюватися хоча б на 1."
+
+#: apps/orders/services.py
+msgid "Эта позиция не найдена в активной корзине."
+msgstr "Цю позицію не знайдено в активному кошику."
+
+#: apps/orders/services.py
+msgid "Эта позиция уже отсутствует в корзине."
+msgstr "Цієї позиції вже немає в кошику."
+
+#: apps/orders/services.py
+msgid "Активная корзина пуста."
+msgstr "Активний кошик порожній."
+
+#: apps/orders/services.py
+msgid "Корзина пуста. Добавьте позиции перед оформлением."
+msgstr "Кошик порожній. Додайте позиції перед оформленням."
+
+#: apps/orders/services.py
+msgid "Корзина собрана не для стола. Оформите самовывоз или отсканируйте QR-код стола."
+msgstr "Кошик зібрано не для столу. Оформіть самовивіз або відскануйте QR-код столу."
+
+#: apps/orders/services.py
+msgid "Недоступно для заказа к столу: {not_sold}."
+msgstr "Недоступно для замовлення до столу: {not_sold}."
+
+#: apps/orders/services.py
+msgid "Некоторые позиции недоступны или не принадлежат этому заведению: {missing_codes}."
+msgstr "Деякі позиції недоступні або не належать цьому закладу: {missing_codes}."
+
+#: apps/orders/services.py
+msgid "самовывоз, {requested_time}"
+msgstr "самовивіз, {requested_time}"
+
+#: apps/orders/services.py
+msgid "доставка, {requested_time}, {delivery_address}"
+msgstr "доставка, {requested_time}, {delivery_address}"
+
+#: apps/orders/services.py
+msgid "отправка, {shipping_carrier}, {shipping_destination}"
+msgstr "відправлення, {shipping_carrier}, {shipping_destination}"
+
+#: apps/orders/services.py
+msgid "как можно скорее"
+msgstr "якомога швидше"
+
+#: apps/orders/services.py
+msgid "к {local:%H:%M}"
+msgstr "на {local:%H:%M}"
+
+#: apps/orders/services.py
+msgid "Новый заказ #{public_id}"
+msgstr "Нове замовлення #{public_id}"
+
+#: apps/orders/services.py
+msgid "Поступил новый заказ: {order_location}, сумма {total_amount} грн."
+msgstr "Надійшло нове замовлення: {order_location}, сума {total_amount} грн."
+
+#: apps/orders/services.py
+msgid "Заказ #{public_id}: {to_status}"
+msgstr "Замовлення #{public_id}: {to_status}"
+
+#: apps/orders/services.py
+msgid "Статус заказа ({order_location}) изменён с {from_status} на {to_status}."
+msgstr "Статус замовлення ({order_location}) змінено з {from_status} на {to_status}."
+
+#: apps/partners/admin.py
+msgid "Интервал работы"
+msgstr "Інтервал роботи"
+
+#: apps/partners/admin.py
+msgid "Часы работы (время заведения; закрытие раньше открытия — после полуночи; пусто — всегда открыто)"
+msgstr "Години роботи (час закладу; закриття раніше за відкриття — після опівночі; порожньо — завжди відчинено)"
+
+#: apps/partners/admin.py
+msgid "Модули · Базовые"
+msgstr "Модулі · Базові"
+
+#: apps/partners/admin.py
+msgid "Профиль гостя и бонусный баланс считаются базовой частью продукта. Меню нужно для заказов, корзины и быстрых продаж."
+msgstr "Профіль гостя й бонусний баланс — базова частина продукту. Меню потрібне для замовлень, кошика й швидких продажів."
+
+#: apps/partners/admin.py
+msgid "Модули · Сценарии заказа"
+msgstr "Модулі · Сценарії замовлення"
+
+#: apps/partners/admin.py
+msgid "Столы, самовывоз, доставка и отправка почтой — независимые сценарии. Можно включить любой набор; для заказов нужен хотя бы один. У каждого удалённого сценария включите способы оплаты: переводом заранее (на реквизиты ниже) и/или при получении; если включены оба, гость выбирает. У отправки так же включаются службы и варианты оплаты пересылки — гость выбирает из включённых. Часы работы (для самовывоза и доставки) — в карточке партнёра."
+msgstr "Столи, самовивіз, доставка й відправлення поштою — незалежні сценарії. Можна ввімкнути будь-який набір; для замовлень потрібен хоча б один. Для кожного віддаленого сценарію ввімкніть способи оплати: переказом заздалегідь (на реквізити нижче) та/або при отриманні; якщо ввімкнено обидва, гість вибирає. У відправлення так само вмикаються служби й варіанти оплати пересилання — гість вибирає з увімкнених. Години роботи (для самовивозу й доставки) — у картці партнера."
+
+#: apps/partners/admin.py
+msgid "Модули · Заказы и оплата"
+msgstr "Модулі · Замовлення й оплата"
+
+#: apps/partners/admin.py
+msgid "Корзина требует меню и заказы. Счета требуют заказы; запрос счёта гостем работает только при включённых столах."
+msgstr "Кошик потребує меню й замовлень. Рахунки потребують замовлень; запит рахунку гостем працює лише з увімкненими столами."
+
+#: apps/partners/admin.py
+msgid "Модули · Операции и отчёты"
+msgstr "Модулі · Операції та звіти"
+
+#: apps/partners/admin.py
+msgid "Вызов персонала требует столы. Быстрые продажи требуют меню."
+msgstr "Виклик персоналу потребує столів. Швидкі продажі потребують меню."
+
+#: apps/partners/admin.py
+msgid "Поведение бота"
+msgstr "Поведінка бота"
+
+#: apps/partners/admin.py
+msgid "Языки"
+msgstr "Мови"
+
+#: apps/partners/admin.py
+msgid "Гость видит язык своего Telegram, если он включён, иначе основной, и может переключить язык в «Мой профиль». Кнопки и сообщения бота на каждом языке меняются в разделе «Тексты бота»."
+msgstr "Гість бачить мову свого Telegram, якщо її ввімкнено, інакше основну, і може змінити мову в «Мій профіль». Кнопки й повідомлення бота кожною мовою змінюються в розділі «Тексти бота»."
+
+#: apps/partners/admin.py
+msgid "Токен"
+msgstr "Токен"
+
+#: apps/partners/admin.py apps/partners/forms.py apps/partners/models.py
+msgid "Текст в каталоге"
+msgstr "Текст у каталозі"
+
+#: apps/partners/admin.py apps/partners/models.py
+msgid "Свой текст"
+msgstr "Свій текст"
+
+#: apps/partners/admin.py
+msgid "Каталог текстов бота"
+msgstr "Каталог текстів бота"
+
+#: apps/partners/apps.py apps/partners/models.py
+msgid "Заведения"
+msgstr "Заклади"
+
 #: apps/partners/bot_texts.py
 msgid "Открыть меню"
 msgstr "Відкрити меню"
@@ -13,24 +2837,12 @@ msgid "Мой стол"
 msgstr "Мій стіл"
 
 #: apps/partners/bot_texts.py
-msgid "Корзина"
-msgstr "Кошик"
-
-#: apps/partners/bot_texts.py
 msgid "Оформить заказ"
 msgstr "Оформити замовлення"
 
 #: apps/partners/bot_texts.py
 msgid "Заказать доставку"
 msgstr "Замовити доставку"
-
-#: apps/partners/bot_texts.py
-msgid "Самовывоз"
-msgstr "Самовивіз"
-
-#: apps/partners/bot_texts.py
-msgid "Отправка почтой"
-msgstr "Відправлення поштою"
 
 #: apps/partners/bot_texts.py
 msgid "Как заказать"
@@ -48,11 +2860,7 @@ msgstr "Покликати персонал"
 msgid "Запросить счёт"
 msgstr "Попросити рахунок"
 
-#: apps/partners/bot_texts.py
-msgid "Бонусы"
-msgstr "Бонуси"
-
-#: apps/partners/bot_texts.py
+#: apps/partners/bot_texts.py apps/users/constants.py apps/users/models.py
 msgid "Официант"
 msgstr "Офіціант"
 
@@ -60,7 +2868,7 @@ msgstr "Офіціант"
 msgid "Бар / касса"
 msgstr "Бар / каса"
 
-#: apps/partners/bot_texts.py
+#: apps/partners/bot_texts.py apps/users/constants.py apps/users/models.py
 msgid "Кальянщик"
 msgstr "Кальянник"
 
@@ -146,7 +2954,7 @@ msgstr "Гостю в боті"
 msgid "Персоналу в боте"
 msgstr "Персоналу в боті"
 
-#: apps/partners/bot_texts.py
+#: apps/partners/bot_texts.py bot/keyboards/staff.py
 msgid "Уведомления"
 msgstr "Сповіщення"
 
@@ -174,6 +2982,482 @@ msgstr "Розмітка: лише теги Telegram (<b>, <i>, <u>, <s>, <a>, <
 msgid "Подпись кнопки — одна строка до 64 знаков."
 msgstr "Підпис кнопки — один рядок до 64 знаків."
 
+#: apps/partners/forms.py
+msgid "Имя бота (без @)"
+msgstr "Ім'я бота (без @)"
+
+#: apps/partners/forms.py
+msgid "Имя бота в Telegram без @, например smoke_lounge_bot. По нему строятся ссылки для QR-кодов столов."
+msgstr "Ім'я бота в Telegram без @, наприклад smoke_lounge_bot. За ним будуються посилання для QR-кодів столів."
+
+#: apps/partners/forms.py
+msgid "Токен бота"
+msgstr "Токен бота"
+
+#: apps/partners/forms.py
+msgid "Вставьте токен от @BotFather. Он хранится зашифрованным."
+msgstr "Вставте токен від @BotFather. Він зберігається зашифрованим."
+
+#: apps/partners/forms.py
+msgid "Укажите имя бота."
+msgstr "Вкажіть ім'я бота."
+
+#: apps/partners/forms.py
+msgid "Имя бота Telegram без @, например smoke_lounge_bot."
+msgstr "Ім'я бота Telegram без @, наприклад smoke_lounge_bot."
+
+#: apps/partners/forms.py
+msgid "Токен не похож на настоящий. Вставьте токен от @BotFather целиком."
+msgstr "Токен не схожий на справжній. Вставте токен від @BotFather повністю."
+
+#: apps/partners/forms.py
+msgid "Режим webhook пока не поддерживается — выберите polling."
+msgstr "Режим webhook поки не підтримується — виберіть polling."
+
+#: apps/partners/forms.py
+msgid "(нет в каталоге) {short}"
+msgstr "(немає в каталозі) {short}"
+
+#: apps/partners/forms.py
+msgid "Подстановки: "
+msgstr "Підстановки: "
+
+#: apps/partners/forms.py
+msgid "Для этого текста и языка уже есть свой вариант — измените его."
+msgstr "Для цього тексту й мови вже є свій варіант — змініть його."
+
+#: apps/partners/models.py
+msgid "Приостановлен"
+msgstr "Призупинено"
+
+#: apps/partners/models.py
+msgid "Название заведения"
+msgstr "Назва закладу"
+
+#: apps/partners/models.py
+msgid "Код (slug)"
+msgstr "Код (slug)"
+
+#: apps/partners/models.py
+msgid "Часовой пояс заведения (IANA), например Europe/Kyiv."
+msgstr "Часовий пояс закладу (IANA), наприклад Europe/Kyiv."
+
+#: apps/partners/models.py
+msgid "Часовой пояс"
+msgstr "Часовий пояс"
+
+#: apps/partners/models.py
+msgid "Контактный телефон"
+msgstr "Контактний телефон"
+
+#: apps/partners/models.py
+msgid "заведение"
+msgstr "заклад"
+
+#: apps/partners/models.py apps/users/admin.py apps/users/models.py core/database/models.py
+msgid "Заведение"
+msgstr "Заклад"
+
+#: apps/partners/models.py
+msgid "Название бота"
+msgstr "Назва бота"
+
+#: apps/partners/models.py
+msgid "Имя бота (@)"
+msgstr "Ім'я бота (@)"
+
+#: apps/partners/models.py
+msgid "Токен (зашифрован)"
+msgstr "Токен (зашифровано)"
+
+#: apps/partners/models.py
+msgid "Режим"
+msgstr "Режим"
+
+#: apps/partners/models.py
+msgid "Адрес webhook"
+msgstr "Адреса webhook"
+
+#: apps/partners/models.py
+msgid "Включён"
+msgstr "Увімкнено"
+
+#: apps/partners/models.py
+msgid "бот"
+msgstr "бот"
+
+#: apps/partners/models.py apps/users/constants.py
+msgid "Боты"
+msgstr "Боти"
+
+#: apps/partners/models.py
+msgid "Категории и позиции. Нужен для заказов и быстрых продаж."
+msgstr "Категорії й позиції. Потрібне для замовлень і швидких продажів."
+
+#: apps/partners/models.py
+msgid "Столы и QR-сессии"
+msgstr "Столи й QR-сесії"
+
+#: apps/partners/models.py
+msgid "Сценарий заказа за столом. Нужен для вызова персонала и запроса счёта."
+msgstr "Сценарій замовлення за столом. Потрібен для виклику персоналу й запиту рахунку."
+
+#: apps/partners/models.py
+msgid "Сценарий заказа на доставку. Включается независимо от столов."
+msgstr "Сценарій замовлення з доставкою. Вмикається незалежно від столів."
+
+#: apps/partners/models.py
+msgid "Сценарий заказа на самовывоз. Включается независимо от столов."
+msgstr "Сценарій замовлення на самовивіз. Вмикається незалежно від столів."
+
+#: apps/partners/models.py
+msgid "Самовывоз: оплата переводом заранее"
+msgstr "Самовивіз: оплата переказом заздалегідь"
+
+#: apps/partners/models.py
+msgid "Гость переводит деньги на реквизиты, персонал подтверждает поступление."
+msgstr "Гість переказує гроші на реквізити, персонал підтверджує надходження."
+
+#: apps/partners/models.py
+msgid "Самовывоз: оплата при получении"
+msgstr "Самовивіз: оплата при отриманні"
+
+#: apps/partners/models.py
+msgid "Гость платит на месте наличными или картой, заказ сразу идёт в работу."
+msgstr "Гість платить на місці готівкою або карткою, замовлення одразу йде в роботу."
+
+#: apps/partners/models.py
+msgid "Доставка: оплата переводом заранее"
+msgstr "Доставка: оплата переказом заздалегідь"
+
+#: apps/partners/models.py
+msgid "Доставка: оплата курьеру при получении"
+msgstr "Доставка: оплата кур'єру при отриманні"
+
+#: apps/partners/models.py
+msgid "Гость платит курьеру наличными или картой, заказ сразу идёт в работу."
+msgstr "Гість платить кур'єру готівкою або карткою, замовлення одразу йде в роботу."
+
+#: apps/partners/models.py
+msgid "Сценарий отправки заказа почтовой службой: гость выбирает службу и отделение, персонал отправляет и вводит ТТН. Без часов работы."
+msgstr "Сценарій відправлення замовлення поштовою службою: гість вибирає службу й відділення, персонал відправляє й вводить ТТН. Без годин роботи."
+
+#: apps/partners/models.py
+msgid "Служба: Нова Пошта"
+msgstr "Служба: Нова Пошта"
+
+#: apps/partners/models.py
+msgid "Служба: Укрпошта"
+msgstr "Служба: Укрпошта"
+
+#: apps/partners/models.py
+msgid "Служба: Meest"
+msgstr "Служба: Meest"
+
+#: apps/partners/models.py
+msgid "Пересылка: по тарифу перевозчика"
+msgstr "Пересилання: за тарифом перевізника"
+
+#: apps/partners/models.py
+msgid "Получатель платит за пересылку на почте; в заказе её нет."
+msgstr "Одержувач платить за пересилання на пошті; у замовленні його немає."
+
+#: apps/partners/models.py
+msgid "Пересылка: фиксированная цена в заказе"
+msgstr "Пересилання: фіксована ціна в замовленні"
+
+#: apps/partners/models.py
+msgid "Цена ниже добавляется к заказу строкой «Пересылка»."
+msgstr "Ціна нижче додається до замовлення рядком «Пересилання»."
+
+#: apps/partners/models.py
+msgid "Цена пересылки, грн"
+msgstr "Ціна пересилання, грн"
+
+#: apps/partners/models.py
+msgid "Для варианта «фиксированная цена в заказе». 0 — бесплатно."
+msgstr "Для варіанта «фіксована ціна в замовленні». 0 — безкоштовно."
+
+#: apps/partners/models.py
+msgid "Бесплатная пересылка от суммы, грн"
+msgstr "Безкоштовне пересилання від суми, грн"
+
+#: apps/partners/models.py
+msgid "Для варианта «фиксированная цена в заказе». Пусто — всегда платная."
+msgstr "Для варіанта «фіксована ціна в замовленні». Порожньо — завжди платне."
+
+#: apps/partners/models.py
+msgid "Минимальная сумма заказа на отправку, грн"
+msgstr "Мінімальна сума замовлення на відправлення, грн"
+
+#: apps/partners/models.py
+msgid "0 — без минимума."
+msgstr "0 — без мінімуму."
+
+#: apps/partners/models.py
+msgid "Отправка: оплата переводом заранее"
+msgstr "Відправлення: оплата переказом заздалегідь"
+
+#: apps/partners/models.py
+msgid "Отправка: наложенный платёж"
+msgstr "Відправлення: накладений платіж"
+
+#: apps/partners/models.py
+msgid "Гость платит на почте при получении; заказ сразу идёт в работу."
+msgstr "Гість платить на пошті при отриманні; замовлення одразу йде в роботу."
+
+#: apps/partners/models.py
+msgid "Реквизиты для оплаты переводом"
+msgstr "Реквізити для оплати переказом"
+
+#: apps/partners/models.py
+msgid "Куда гость переводит деньги за заказы с предоплатой (самовывоз, доставка, отправка): номер карты или IBAN, получатель. Гость видит этот текст перед оплатой. Меняет только владелец."
+msgstr "Куди гість переказує гроші за замовлення з передоплатою (самовивіз, доставка, відправлення): номер картки або IBAN, одержувач. Гість бачить цей текст перед оплатою. Змінює лише власник."
+
+#: apps/partners/models.py
+msgid "Неоплаченных заказов на гостя, не больше"
+msgstr "Неоплачених замовлень на гостя, не більше"
+
+#: apps/partners/models.py
+msgid "Самовывоз, доставка, отправка: сколько открытых неоплаченных заказов может быть у одного гостя. 0 — без лимита."
+msgstr "Самовивіз, доставка, відправлення: скільки відкритих неоплачених замовлень може бути в одного гостя. 0 — без ліміту."
+
+#: apps/partners/models.py
+msgid "Ждать перевод, минут"
+msgstr "Чекати переказ, хвилин"
+
+#: apps/partners/models.py
+msgid "Заказ с оплатой переводом, оплату которого никто не подтвердил за это время, отменяется автоматически, бонусы возвращаются. Не меньше 15; 0 — не отменять."
+msgstr "Замовлення з оплатою переказом, оплату якого ніхто не підтвердив за цей час, скасовується автоматично, бонуси повертаються. Не менше 15; 0 — не скасовувати."
+
+#: apps/partners/models.py
+msgid "Стоимость доставки, грн"
+msgstr "Вартість доставки, грн"
+
+#: apps/partners/models.py
+msgid "Добавляется к заказу отдельной строкой «Доставка». 0 — бесплатно."
+msgstr "Додається до замовлення окремим рядком «Доставка». 0 — безкоштовно."
+
+#: apps/partners/models.py
+msgid "Бесплатная доставка от суммы, грн"
+msgstr "Безкоштовна доставка від суми, грн"
+
+#: apps/partners/models.py
+msgid "Если сумма заказа не меньше этой, доставка бесплатна. Пусто — всегда платная."
+msgstr "Якщо сума замовлення не менша за цю, доставка безкоштовна. Порожньо — завжди платна."
+
+#: apps/partners/models.py
+msgid "Минимальная сумма заказа на доставку, грн"
+msgstr "Мінімальна сума замовлення на доставку, грн"
+
+#: apps/partners/models.py
+msgid "Сбор позиций перед заказом. Требует меню и модуль заказов."
+msgstr "Збирання позицій перед замовленням. Потребує меню й модуля замовлень."
+
+#: apps/partners/models.py
+msgid "Оформление и обработку заказов. Требует меню и хотя бы один сценарий: столы, доставку или самовывоз."
+msgstr "Оформлення й обробка замовлень. Потребує меню й хоча б одного сценарію: столів, доставки або самовивозу."
+
+#: apps/partners/models.py
+msgid "Счета, оплаты и списание бонусов. Требует модуль заказов. Запрос счёта гостем доступен только при включённых столах."
+msgstr "Рахунки, оплати й списання бонусів. Потребує модуля замовлень. Запит рахунку гостем доступний лише з увімкненими столами."
+
+#: apps/partners/models.py
+msgid "Кнопка вызова официанта/бара/кальянщика. Требует столы."
+msgstr "Кнопка виклику офіціанта/бару/кальянника. Потребує столів."
+
+#: apps/partners/models.py
+msgid "Продажа на кассе по коду клиента. Требует меню."
+msgstr "Продаж на касі за кодом клієнта. Потребує меню."
+
+#: apps/partners/models.py bot/keyboards/staff.py
+msgid "Отчёт дня"
+msgstr "Звіт дня"
+
+#: apps/partners/models.py
+msgid "Операционный отчёт в staff-боте."
+msgstr "Операційний звіт у боті персоналу."
+
+#: apps/partners/models.py
+msgid "Закрывать стол после полной оплаты"
+msgstr "Закривати стіл після повної оплати"
+
+#: apps/partners/models.py
+msgid "Позиций меню в одном сообщении"
+msgstr "Позицій меню в одному повідомленні"
+
+#: apps/partners/models.py
+msgid "Пауза между одинаковыми запросами, с"
+msgstr "Пауза між однаковими запитами, с"
+
+#: apps/partners/models.py
+msgid "Меню без сканирования стола"
+msgstr "Меню без сканування столу"
+
+#: apps/partners/models.py
+msgid "Вызов: официант"
+msgstr "Виклик: офіціант"
+
+#: apps/partners/models.py
+msgid "Вызов: бармен"
+msgstr "Виклик: бармен"
+
+#: apps/partners/models.py
+msgid "Вызов: кальянщик"
+msgstr "Виклик: кальянник"
+
+#: apps/partners/models.py
+msgid "Резерв для будущих флагов и особых настроек бота заведения."
+msgstr "Резерв для майбутніх прапорців і особливих налаштувань бота закладу."
+
+#: apps/partners/models.py
+msgid "Доп. настройки (JSON)"
+msgstr "Дод. налаштування (JSON)"
+
+#: apps/partners/models.py
+msgid "Основной язык бота"
+msgstr "Основна мова бота"
+
+#: apps/partners/models.py
+msgid "Для гостей, чей язык Telegram не включён ниже. Должен быть включён."
+msgstr "Для гостей, чия мова Telegram не ввімкнена нижче. Має бути ввімкнена."
+
+#: apps/partners/models.py
+msgid "Язык гостей: украинский"
+msgstr "Мова гостей: українська"
+
+#: apps/partners/models.py
+msgid "Язык гостей: русский"
+msgstr "Мова гостей: російська"
+
+#: apps/partners/models.py
+msgid "Язык гостей: английский"
+msgstr "Мова гостей: англійська"
+
+#: apps/partners/models.py
+msgid "настройки бота"
+msgstr "налаштування бота"
+
+#: apps/partners/models.py
+msgid "Настройки ботов"
+msgstr "Налаштування ботів"
+
+#: apps/partners/models.py
+msgid "самовывоза"
+msgstr "самовивозу"
+
+#: apps/partners/models.py
+msgid "доставки"
+msgstr "доставки"
+
+#: apps/partners/models.py
+msgid "отправки"
+msgstr "відправлення"
+
+#: apps/partners/models.py
+msgid "Для {title} включите хотя бы один способ оплаты."
+msgstr "Для {title} увімкніть хоча б один спосіб оплати."
+
+#: apps/partners/models.py
+msgid "Для {title} с оплатой переводом укажите реквизиты."
+msgstr "Для {title} з оплатою переказом вкажіть реквізити."
+
+#: apps/partners/models.py
+msgid "Для отправки включите хотя бы одну службу."
+msgstr "Для відправлення ввімкніть хоча б одну службу."
+
+#: apps/partners/models.py
+msgid "Для отправки включите хотя бы один вариант оплаты пересылки."
+msgstr "Для відправлення ввімкніть хоча б один варіант оплати пересилання."
+
+#: apps/partners/models.py
+msgid "Не меньше {min_transfer_wait_minutes} минут (или 0 — не отменять): перевод может идти не сразу."
+msgstr "Не менше {min_transfer_wait_minutes} хвилин (або 0 — не скасовувати): переказ може йти не одразу."
+
+#: apps/partners/models.py
+msgid "Сумма не может быть отрицательной."
+msgstr "Сума не може бути від'ємною."
+
+#: apps/partners/models.py
+msgid "Основной язык должен быть среди включённых языков."
+msgstr "Основна мова має бути серед увімкнених мов."
+
+#: apps/partners/models.py
+msgid "Понедельник"
+msgstr "Понеділок"
+
+#: apps/partners/models.py
+msgid "Вторник"
+msgstr "Вівторок"
+
+#: apps/partners/models.py
+msgid "Среда"
+msgstr "Середа"
+
+#: apps/partners/models.py
+msgid "Четверг"
+msgstr "Четвер"
+
+#: apps/partners/models.py
+msgid "Пятница"
+msgstr "П'ятниця"
+
+#: apps/partners/models.py
+msgid "Суббота"
+msgstr "Субота"
+
+#: apps/partners/models.py
+msgid "Воскресенье"
+msgstr "Неділя"
+
+#: apps/partners/models.py
+msgid "Общие (для всех модулей)"
+msgstr "Загальні (для всіх модулів)"
+
+#: apps/partners/models.py
+msgid "Для чего"
+msgstr "Для чого"
+
+#: apps/partners/models.py
+msgid "Свои часы модуля. Если у модуля своих часов нет, действуют общие; если нет и общих — модуль работает всегда."
+msgstr "Власні години модуля. Якщо в модуля своїх годин немає, діють загальні; якщо немає й загальних — модуль працює завжди."
+
+#: apps/partners/models.py
+msgid "День недели"
+msgstr "День тижня"
+
+#: apps/partners/models.py
+msgid "Открытие"
+msgstr "Відкриття"
+
+#: apps/partners/models.py
+msgid "Закрытие"
+msgstr "Закриття"
+
+#: apps/partners/models.py
+msgid "Часы работы"
+msgstr "Години роботи"
+
+#: apps/partners/models.py
+msgid "Время закрытия совпадает со временем открытия."
+msgstr "Час закриття збігається з часом відкриття."
+
+#: apps/partners/models.py apps/users/models.py
+msgid "Язык"
+msgstr "Мова"
+
+#: apps/partners/models.py
+msgid "Ключ"
+msgstr "Ключ"
+
+#: apps/partners/models.py
+msgid "текст бота"
+msgstr "текст бота"
+
+#: apps/partners/models.py
+msgid "Тексты бота"
+msgstr "Тексти бота"
+
 #: apps/partners/models.py
 msgid "Такого текста нет в каталоге бота."
 msgstr "Такого тексту немає в каталозі бота."
@@ -182,9 +3466,529 @@ msgstr "Такого тексту немає в каталозі бота."
 msgid "Такая подпись уже у другой кнопки: бот их спутает."
 msgstr "Такий підпис уже має інша кнопка: бот їх сплутає."
 
+#: apps/partners/opening_hours.py
+msgid "Пн"
+msgstr "Пн"
+
+#: apps/partners/opening_hours.py
+msgid "Вт"
+msgstr "Вт"
+
+#: apps/partners/opening_hours.py
+msgid "Ср"
+msgstr "Ср"
+
+#: apps/partners/opening_hours.py
+msgid "Чт"
+msgstr "Чт"
+
+#: apps/partners/opening_hours.py
+msgid "Пт"
+msgstr "Пт"
+
+#: apps/partners/opening_hours.py
+msgid "Сб"
+msgstr "Сб"
+
+#: apps/partners/opening_hours.py
+msgid "Вс"
+msgstr "Нд"
+
+#: apps/partners/templates/admin/partners/bottext/catalog.html
+msgid "Всё, что бот говорит гостям и персоналу, на каждом включённом языке. Жирным — ваш собственный текст; остальное — готовый перевод. Нажмите на текст, чтобы заменить его своим. Подстановки в фигурных скобках бот заменит сам, например {example}."
+msgstr "Усе, що бот каже гостям і персоналу, кожною ввімкненою мовою. Жирним — ваш власний текст; решта — готовий переклад. Натисніть на текст, щоб замінити його своїм. Підстановки у фігурних дужках бот замінить сам, наприклад {example}."
+
+#: apps/partners/templates/admin/partners/bottext/catalog.html
+msgid "Все тексты"
+msgstr "Усі тексти"
+
+#: apps/partners/templates/admin/partners/bottext/catalog.html
+msgid "Поиск по тексту"
+msgstr "Пошук за текстом"
+
+#: apps/partners/templates/admin/partners/bottext/catalog.html
+msgid "Найти"
+msgstr "Знайти"
+
+#: apps/partners/templates/admin/partners/bottext/catalog.html apps/users/models.py
+msgid "Раздел"
+msgstr "Розділ"
+
+#: apps/partners/templates/admin/partners/bottext/catalog.html
+msgid "Ничего не найдено."
+msgstr "Нічого не знайдено."
+
+#: apps/partners/templates/admin/partners/bottext/catalog.html bot/handlers/staff_refunds.py bot/keyboards/profile.py bot/keyboards/staff.py
+msgid "← Назад"
+msgstr "← Назад"
+
+#: apps/partners/templates/admin/partners/bottext/catalog.html
+msgid "Страница {number} из {pages}"
+msgstr "Сторінка {number} з {pages}"
+
+#: apps/partners/templates/admin/partners/bottext/catalog.html bot/handlers/staff_refunds.py bot/keyboards/profile.py bot/keyboards/staff.py
+msgid "Дальше →"
+msgstr "Далі →"
+
+#: apps/partners/templates/admin/partners/bottext/change_list.html
+msgid "Каталог текстов"
+msgstr "Каталог текстів"
+
+#: apps/tables/admin.py
+msgid "Работа стола"
+msgstr "Робота столу"
+
+#: apps/tables/admin.py
+msgid "Параметр ссылки (start)"
+msgstr "Параметр посилання (start)"
+
+#: apps/tables/admin.py
+msgid "Ссылки"
+msgstr "Посилання"
+
+#: apps/tables/admin.py
+msgid "<a href=\"{}\">Открыть заказы стола</a><br><a href=\"{}\">Открыть счета стола</a>"
+msgstr "<a href=\"{}\">Відкрити замовлення столу</a><br><a href=\"{}\">Відкрити рахунки столу</a>"
+
+#: apps/tables/admin.py
+msgid "Активные сессии"
+msgstr "Активні сесії"
+
+#: apps/tables/admin.py
+msgid "Нет активных сессий."
+msgstr "Немає активних сесій."
+
+#: apps/tables/admin.py
+msgid "Гость: {} • код {} • с {}"
+msgstr "Гість: {} • код {} • з {}"
+
+#: apps/tables/admin.py
+msgid "Заказы стола"
+msgstr "Замовлення столу"
+
+#: apps/tables/admin.py
+msgid "Заказов пока нет."
+msgstr "Замовлень поки немає."
+
+#: apps/tables/admin.py
+msgid "#{} • {} • {} грн • {}"
+msgstr "#{} • {} • {} грн • {}"
+
+#: apps/tables/admin.py
+msgid "Счета стола"
+msgstr "Рахунки столу"
+
+#: apps/tables/admin.py
+msgid "Счетов пока нет."
+msgstr "Рахунків поки немає."
+
+#: apps/tables/admin.py
+msgid "#{} • {} • {} грн • оплачено {} грн"
+msgstr "#{} • {} • {} грн • сплачено {} грн"
+
+#: apps/tables/admin.py
+msgid "Ссылки строятся по боту @{usernames}"
+msgstr "Посилання будуються за ботом @{usernames}"
+
+#: apps/tables/admin.py
+msgid "У бота заведения не указано имя (@username). Откройте Admin → Боты и заполните «Имя бота»."
+msgstr "У бота закладу не вказано ім'я (@username). Відкрийте Admin → Боти й заповніть «Ім'я бота»."
+
+#: apps/tables/admin.py
+msgid "Ссылка для QR"
+msgstr "Посилання для QR"
+
+#: apps/tables/admin.py
+msgid "Ссылки на бота"
+msgstr "Посилання на бота"
+
+#: apps/tables/admin.py
+msgid "Укажите имя бота (Admin → Боты), чтобы появились ссылки для QR."
+msgstr "Вкажіть ім'я бота (Admin → Боти), щоб з'явилися посилання для QR."
+
+#: apps/tables/admin.py
+msgid "Ссылка для QR (скопировать)"
+msgstr "Посилання для QR (скопіювати)"
+
+#: apps/tables/admin.py
+msgid "Создать общий счёт по столам"
+msgstr "Створити спільний рахунок за столами"
+
+#: apps/tables/admin.py
+msgid "Стол #{number}: {exc}"
+msgstr "Стіл #{number}: {exc}"
+
+#: apps/tables/admin.py
+msgid "Стол #{number}: создан общий счёт #{public_id}."
+msgstr "Стіл #{number}: створено спільний рахунок #{public_id}."
+
+#: apps/tables/admin.py
+msgid "Создано общих счетов: {created_count}."
+msgstr "Створено спільних рахунків: {created_count}."
+
+#: apps/tables/admin.py
+msgid "Создать личные счета по гостям"
+msgstr "Створити особисті рахунки за гостями"
+
+#: apps/tables/admin.py
+msgid "Стол #{number}: создано personal split bills: {count}."
+msgstr "Стіл #{number}: створено особистих рахунків: {count}."
+
+#: apps/tables/admin.py
+msgid "Всего создано personal bills: {created_count}."
+msgstr "Усього створено особистих рахунків: {created_count}."
+
+#: apps/tables/admin.py
+msgid "Закрыть рассчитанные сессии"
+msgstr "Закрити розраховані сесії"
+
+#: apps/tables/admin.py
+msgid "Сессия стола #{number}: {exc}"
+msgstr "Сесія столу #{number}: {exc}"
+
+#: apps/tables/admin.py
+msgid "Закрыто сессий стола: {closed_count}."
+msgstr "Закрито сесій столу: {closed_count}."
+
+#: apps/tables/admin.py
+msgid "Закрыть рассчитанные визиты"
+msgstr "Закрити розраховані візити"
+
+#: apps/tables/admin.py
+msgid "Визит стола #{number}: {exc}"
+msgstr "Візит столу #{number}: {exc}"
+
+#: apps/tables/admin.py
+msgid "Закрыто визитов: {closed_count}."
+msgstr "Закрито візитів: {closed_count}."
+
+#: apps/tables/apps.py apps/tables/models.py apps/users/constants.py bot/keyboards/staff.py
+msgid "Столы"
+msgstr "Столи"
+
+#: apps/tables/models.py
+msgid "Код QR"
+msgstr "Код QR"
+
+#: apps/tables/models.py
+msgid "Мест"
+msgstr "Місць"
+
+#: apps/tables/models.py
+msgid "стол"
+msgstr "стіл"
+
+#: apps/tables/models.py
+msgid "Идёт"
+msgstr "Триває"
+
+#: apps/tables/models.py
+msgid "Начат"
+msgstr "Розпочато"
+
+#: apps/tables/models.py
+msgid "Кто закрыл"
+msgstr "Хто закрив"
+
+#: apps/tables/models.py
+msgid "визит стола"
+msgstr "візит столу"
+
+#: apps/tables/models.py
+msgid "Визиты столов"
+msgstr "Візити столів"
+
+#: apps/tables/models.py
+msgid "Закрыта"
+msgstr "Закрито"
+
+#: apps/tables/models.py
+msgid "Истекла"
+msgstr "Минула"
+
+#: apps/tables/models.py
+msgid "Истекает"
+msgstr "Спливає"
+
+#: apps/tables/models.py
+msgid "сессия стола"
+msgstr "сесія столу"
+
+#: apps/tables/models.py
+msgid "Сессии столов"
+msgstr "Сесії столів"
+
+#: apps/tables/services.py
+msgid "Выберите: подсесть к компании за столом или начать новый визит."
+msgstr "Виберіть: приєднатися до компанії за столом або почати новий візит."
+
+#: apps/tables/services.py
+msgid "Некорректная ссылка стола."
+msgstr "Некоректне посилання столу."
+
+#: apps/tables/services.py
+msgid "Некорректный номер стола в QR-ссылке."
+msgstr "Некоректний номер столу в QR-посиланні."
+
+#: apps/tables/services.py
+msgid "В QR-ссылке отсутствует токен стола."
+msgstr "У QR-посиланні немає токена столу."
+
+#: apps/tables/services.py
+msgid "Стол по этому QR-коду не найден или уже недоступен."
+msgstr "Стіл за цим QR-кодом не знайдено або він уже недоступний."
+
+#: apps/tables/services.py
+msgid "Стол по этому QR-коду уже недоступен."
+msgstr "Стіл за цим QR-кодом уже недоступний."
+
+#: apps/tables/services.py
+msgid "Эта компания за столом не найдена. Отсканируйте QR ещё раз."
+msgstr "Цю компанію за столом не знайдено. Відскануйте QR ще раз."
+
+#: apps/tables/services.py
+msgid "Неизвестный выбор визита."
+msgstr "Невідомий вибір візиту."
+
+#: apps/tables/services.py
+msgid "Эта компания уже рассчиталась и ушла. Отсканируйте QR ещё раз."
+msgstr "Ця компанія вже розрахувалася й пішла. Відскануйте QR ще раз."
+
+#: apps/tables/services.py
+msgid "В визите есть неоплаченные заказы."
+msgstr "У візиті є неоплачені замовлення."
+
+#: apps/tables/services.py
+msgid "По визиту есть открытый счёт."
+msgstr "За візитом є відкритий рахунок."
+
+#: apps/tables/services.py
+msgid "Визит не найден в этом заведении."
+msgstr "Візит не знайдено в цьому закладі."
+
+#: apps/tables/services.py
+msgid "Сессия стола не найдена в этом заведении."
+msgstr "Сесію столу не знайдено в цьому закладі."
+
+#: apps/tables/services.py
+msgid "У гостя ещё есть активная корзина."
+msgstr "У гостя ще є активний кошик."
+
+#: apps/tables/services.py
+msgid "У гостя есть заказы без оплаты."
+msgstr "У гостя є замовлення без оплати."
+
+#: apps/tables/services.py
+msgid "У гостя есть заказы, получение которых ещё не подтверждено."
+msgstr "У гостя є замовлення, отримання яких ще не підтверджено."
+
+#: apps/tables/services.py
+msgid "У гостя есть необработанный запрос счёта."
+msgstr "У гостя є необроблений запит рахунку."
+
+#: apps/tables/services.py
+msgid "По гостю есть открытый счёт или неоплаченная сумма."
+msgstr "За гостем є відкритий рахунок або неоплачена сума."
+
+#: apps/users/admin.py
+msgid "Нельзя выдать права больше своих (разделы: {sections}). Это может сделать владелец."
+msgstr "Не можна надати права більші за свої (розділи: {sections}). Це може зробити власник."
+
+#: apps/users/admin.py
+msgid "Личные данные"
+msgstr "Особисті дані"
+
+#: apps/users/admin.py
+msgid "Права платформы"
+msgstr "Права платформи"
+
+#: apps/users/admin.py
+msgid "Даты"
+msgstr "Дати"
+
+#: apps/users/admin.py
+msgid "Этот набор прав может выдать только владелец."
+msgstr "Цей набір прав може надати лише власник."
+
+#: apps/users/admin.py
+msgid "Права по набору"
+msgstr "Права за набором"
+
+#: apps/users/admin.py
+msgid "Сохраните профиль, чтобы увидеть права набора."
+msgstr "Збережіть профіль, щоб побачити права набору."
+
+#: apps/users/admin.py
+msgid "Прав на разделы пока нет."
+msgstr "Прав на розділи поки немає."
+
+#: apps/users/apps.py
+msgid "Пользователи и гости"
+msgstr "Користувачі й гості"
+
+#: apps/users/constants.py apps/users/models.py
+msgid "Владелец"
+msgstr "Власник"
+
+#: apps/users/constants.py apps/users/models.py
+msgid "Менеджер"
+msgstr "Менеджер"
+
+#: apps/users/constants.py apps/users/models.py
+msgid "Кассир"
+msgstr "Касир"
+
+#: apps/users/constants.py apps/users/models.py
+msgid "Администратор платформы"
+msgstr "Адміністратор платформи"
+
+#: apps/users/constants.py
+msgid "Профиль заведения"
+msgstr "Профіль закладу"
+
+#: apps/users/constants.py
+msgid "Настройки и тексты бота"
+msgstr "Налаштування й тексти бота"
+
+#: apps/users/constants.py
+msgid "Бонусы и гости"
+msgstr "Бонуси й гості"
+
+#: apps/users/constants.py
+msgid "Доступ к Admin"
+msgstr "Доступ до Admin"
+
+#: apps/users/constants.py
+msgid "Свой набор"
+msgstr "Свій набір"
+
+#: apps/users/constants.py
+msgid "Контент-менеджер"
+msgstr "Контент-менеджер"
+
+#: apps/users/models.py
+msgid "Роль"
+msgstr "Роль"
+
+#: apps/users/models.py
+msgid "Язык бота персонала и Admin для этого пользователя. Пусто — по умолчанию."
+msgstr "Мова бота персоналу й Admin для цього користувача. Порожньо — за замовчуванням."
+
+#: apps/users/models.py
+msgid "Имя"
+msgstr "Ім'я"
+
+#: apps/users/models.py
+msgid "Фамилия"
+msgstr "Прізвище"
+
+#: apps/users/models.py
+msgid "Заблокировал бота"
+msgstr "Заблокував бота"
+
+#: apps/users/models.py
+msgid "аккаунт Telegram"
+msgstr "акаунт Telegram"
+
+#: apps/users/models.py
+msgid "Аккаунты Telegram"
+msgstr "Акаунти Telegram"
+
+#: apps/users/models.py
+msgid "Первый визит"
+msgstr "Перший візит"
+
+#: apps/users/models.py
+msgid "Последний визит"
+msgstr "Останній візит"
+
+#: apps/users/models.py
+msgid "Бонусный баланс"
+msgstr "Бонусний баланс"
+
+#: apps/users/models.py
+msgid "Подписан на рассылки"
+msgstr "Підписаний на розсилки"
+
+#: apps/users/models.py
+msgid "Гость делится им в Telegram (нужен для самовывоза, доставки и отправки)."
+msgstr "Гість ділиться ним у Telegram (потрібен для самовивозу, доставки й відправлення)."
+
+#: apps/users/models.py
+msgid "Телефон"
+msgstr "Телефон"
+
+#: apps/users/models.py
+msgid "Язык (выбран гостем)"
+msgstr "Мова (вибрана гостем)"
+
+#: apps/users/models.py
+msgid "гость"
+msgstr "гість"
+
+#: apps/users/models.py
+msgid "Гости"
+msgstr "Гості"
+
+#: apps/users/models.py
+msgid "Набор прав"
+msgstr "Набір прав"
+
+#: apps/users/models.py
+msgid "Владелец заведения"
+msgstr "Власник закладу"
+
+#: apps/users/models.py
+msgid "Вход в Admin"
+msgstr "Вхід в Admin"
+
+#: apps/users/models.py
+msgid "доступ к Admin"
+msgstr "доступ до Admin"
+
+#: apps/users/models.py
+msgid "Доступы к Admin"
+msgstr "Доступи до Admin"
+
+#: apps/users/models.py
+msgid "Профиль доступа"
+msgstr "Профіль доступу"
+
+#: apps/users/models.py
+msgid "Просмотр"
+msgstr "Перегляд"
+
+#: apps/users/models.py
+msgid "Добавление"
+msgstr "Додавання"
+
+#: apps/users/models.py
+msgid "Изменение"
+msgstr "Зміна"
+
+#: apps/users/models.py
+msgid "Удаление"
+msgstr "Видалення"
+
+#: apps/users/models.py
+msgid "Важные поля"
+msgstr "Важливі поля"
+
+#: apps/users/models.py
+msgid "права на раздел"
+msgstr "права на розділ"
+
+#: apps/users/models.py
+msgid "Права на разделы"
+msgstr "Права на розділи"
+
 #: apps/users/services.py
 msgid "Этот язык заведение не включило."
 msgstr "Цю мову заклад не увімкнув."
+
+#: bot/apps.py
+msgid "Telegram-бот"
+msgstr "Telegram-бот"
 
 #: bot/handlers/billing.py
 msgid "Запрос счёта сейчас отключён для этого бота."
@@ -282,25 +4086,13 @@ msgstr "Натисніть кнопку з позицією нижче, щоб �
 msgid "Меню сейчас отключено для этого бота."
 msgstr "Меню зараз вимкнено для цього бота."
 
-#: bot/handlers/menu.py bot/handlers/order.py bot/handlers/profile.py bot/handlers/session.py
+#: bot/handlers/menu.py bot/handlers/order.py bot/handlers/profile.py bot/handlers/session.py bot/handlers/staff.py
 msgid "Без изменений"
 msgstr "Без змін"
 
 #: bot/handlers/menu.py
 msgid "Позиция добавлена в корзину."
 msgstr "Позицію додано до кошика."
-
-#: bot/handlers/order.py
-msgid "самовывоз"
-msgstr "самовивіз"
-
-#: bot/handlers/order.py
-msgid "доставка"
-msgstr "доставка"
-
-#: bot/handlers/order.py
-msgid "стол #{number}"
-msgstr "стіл #{number}"
 
 #: bot/handlers/order.py
 msgid "за столом"
@@ -326,7 +4118,7 @@ msgstr "{item_name} • {quantity} x {unit_price} = {line_total} грн"
 msgid "И ещё позиций: {hidden_items_count}"
 msgstr "І ще позицій: {hidden_items_count}"
 
-#: bot/handlers/order.py
+#: bot/handlers/order.py bot/handlers/staff.py
 msgid "Итого: {total_amount} грн"
 msgstr "Разом: {total_amount} грн"
 
@@ -406,7 +4198,7 @@ msgstr "Позицію видалено."
 msgid "<b>Мой профиль</b>"
 msgstr "<b>Мій профіль</b>"
 
-#: bot/handlers/profile.py bot/services/content.py
+#: bot/handlers/profile.py bot/handlers/staff.py bot/services/content.py
 msgid "Заведение: {partner_name}"
 msgstr "Заклад: {partner_name}"
 
@@ -442,7 +4234,7 @@ msgstr "Код клієнта можна назвати на барі чи ка�
 msgid "<b>Бонусы</b>"
 msgstr "<b>Бонуси</b>"
 
-#: bot/handlers/profile.py
+#: bot/handlers/profile.py bot/handlers/staff.py
 msgid "Текущий баланс: {loyalty_balance} бонусов"
 msgstr "Поточний баланс: {loyalty_balance} бонусів"
 
@@ -526,7 +4318,7 @@ msgstr "Сторінка {page}/{total_pages}"
 msgid "<b>Заказ #{public_id}</b>"
 msgstr "<b>Замовлення #{public_id}</b>"
 
-#: bot/handlers/profile.py
+#: bot/handlers/profile.py bot/handlers/staff.py
 msgid "Статус: {status}"
 msgstr "Статус: {status}"
 
@@ -538,7 +4330,7 @@ msgstr "Стіл #{number}"
 msgid "Время: {requested_time_label}"
 msgstr "Час: {requested_time_label}"
 
-#: bot/handlers/profile.py bot/handlers/remote_checkout.py
+#: bot/handlers/profile.py bot/handlers/remote_checkout.py bot/handlers/staff.py
 msgid "Адрес: {delivery_address}"
 msgstr "Адреса: {delivery_address}"
 
@@ -566,7 +4358,7 @@ msgstr "Оплата: {payment}"
 msgid "Возвращено: {refunded} грн"
 msgstr "Повернуто: {refunded} грн"
 
-#: bot/handlers/profile.py
+#: bot/handlers/profile.py bot/handlers/staff.py bot/handlers/staff_refunds.py
 msgid "Заказ не найден."
 msgstr "Замовлення не знайдено."
 
@@ -633,10 +4425,6 @@ msgstr "Коли заберете замовлення?"
 #: bot/handlers/remote_checkout.py
 msgid "Когда доставить?"
 msgstr "Коли доставити?"
-
-#: bot/handlers/remote_checkout.py bot/keyboards/billing.py bot/keyboards/guest_call.py
-msgid "Отмена"
-msgstr "Скасувати"
 
 #: bot/handlers/remote_checkout.py
 msgid "Этот способ заказа сейчас отключён."
@@ -750,7 +4538,7 @@ msgstr "✏️ Інша адреса"
 msgid "Служба: {carrier_title}"
 msgstr "Служба: {carrier_title}"
 
-#: bot/handlers/remote_checkout.py
+#: bot/handlers/remote_checkout.py bot/handlers/staff.py
 msgid "Получатель: {shipping_destination}"
 msgstr "Одержувач: {shipping_destination}"
 
@@ -831,10 +4619,6 @@ msgid "✅ Оформить"
 msgstr "✅ Оформити"
 
 #: bot/handlers/remote_checkout.py
-msgid "Этот способ оплаты сейчас недоступен — выберите другой."
-msgstr "Цей спосіб оплати зараз недоступний — оберіть інший."
-
-#: bot/handlers/remote_checkout.py
 msgid ""
 "<b>{title}</b>\n"
 "К оплате {to_pay} грн. Как оплатите?"
@@ -859,16 +4643,8 @@ msgid "Спасибо, номер сохранён."
 msgstr "Дякуємо, номер збережено."
 
 #: bot/handlers/remote_checkout.py
-msgid "Доставка сейчас отключена."
-msgstr "Доставку зараз вимкнено."
-
-#: bot/handlers/remote_checkout.py
 msgid "Адрес сохранён. Курьеру поможет точка на карте — отправьте геолокацию кнопкой ниже (по желанию)."
 msgstr "Адресу збережено. Кур'єру допоможе точка на мапі — надішліть геолокацію кнопкою нижче (за бажанням)."
-
-#: bot/handlers/remote_checkout.py
-msgid "Отправка почтой сейчас отключена."
-msgstr "Відправлення поштою зараз вимкнено."
 
 #: bot/handlers/remote_checkout.py
 msgid "Геолокация нужна только для доставки."
@@ -934,11 +4710,11 @@ msgstr "Замовлення #{public_id} ({title}) оформлено й опл
 msgid "Заказ #{public_id} ({title}) оформлен ({time_label}). Как только заведение подтвердит оплату, начнём {work} — пришлём сообщение."
 msgstr "Замовлення #{public_id} ({title}) оформлено ({time_label}). Щойно заклад підтвердить оплату, почнемо {work} — надішлемо повідомлення."
 
-#: bot/handlers/session.py
+#: bot/handlers/session.py bot/handlers/staff.py
 msgid "получен"
 msgstr "отримано"
 
-#: bot/handlers/session.py
+#: bot/handlers/session.py bot/handlers/staff.py
 msgid "не получен"
 msgstr "не отримано"
 
@@ -946,11 +4722,11 @@ msgstr "не отримано"
 msgid "• #{public_id} — {status} — {total_amount} грн — {payment_label} — {received_label}"
 msgstr "• #{public_id} — {status} — {total_amount} грн — {payment_label} — {received_label}"
 
-#: bot/handlers/session.py
+#: bot/handlers/session.py bot/handlers/staff.py
 msgid "не опл."
 msgstr "не опл."
 
-#: bot/handlers/session.py
+#: bot/handlers/session.py bot/handlers/staff.py
 msgid "опл."
 msgstr "опл."
 
@@ -970,11 +4746,11 @@ msgstr "За вашим столом зараз немає незавершен�
 msgid "Незавершённых заказов: {visible_orders_count}"
 msgstr "Незавершених замовлень: {visible_orders_count}"
 
-#: bot/handlers/session.py
+#: bot/handlers/session.py bot/handlers/staff.py
 msgid "Не оплачено: {unpaid_count}"
 msgstr "Не оплачено: {unpaid_count}"
 
-#: bot/handlers/session.py
+#: bot/handlers/session.py bot/handlers/staff.py
 msgid "Не получено: {unreceived_count}"
 msgstr "Не отримано: {unreceived_count}"
 
@@ -995,28 +4771,12 @@ msgid "ещё не назначен"
 msgstr "ще не призначено"
 
 #: bot/handlers/session.py
-msgid "ещё не зафиксирована"
-msgstr "ще не зафіксовано"
-
-#: bot/handlers/session.py
 msgid "уже зафиксирована"
 msgstr "вже зафіксовано"
 
 #: bot/handlers/session.py
-msgid "ещё не подтверждено"
-msgstr "ще не підтверджено"
-
-#: bot/handlers/session.py
 msgid "уже подтверждено"
 msgstr "вже підтверджено"
-
-#: bot/handlers/session.py
-msgid "Стол: #{number}"
-msgstr "Стіл: #{number}"
-
-#: bot/handlers/session.py
-msgid "Новый статус: {status}"
-msgstr "Новий статус: {status}"
 
 #: bot/handlers/session.py
 msgid "Оплата: {payment_label}"
@@ -1061,6 +4821,1230 @@ msgstr "Отримання підтверджено."
 #: bot/handlers/session.py
 msgid "Заказ #{public_id} отмечен как полученный."
 msgstr "Замовлення #{public_id} позначено як отримане."
+
+#: bot/handlers/staff.py
+msgid "Открытых заказов сейчас нет."
+msgstr "Відкритих замовлень зараз немає."
+
+#: bot/handlers/staff.py
+msgid "<b>Открытые заказы</b>"
+msgstr "<b>Відкриті замовлення</b>"
+
+#: bot/handlers/staff.py
+msgid "Всего заказов: {count}"
+msgstr "Усього замовлень: {count}"
+
+#: bot/handlers/staff.py
+msgid "Сумма в работе: {total_amount} грн"
+msgstr "Сума в роботі: {total_amount} грн"
+
+#: bot/handlers/staff.py
+msgid "Новых: {new_orders_count}"
+msgstr "Нових: {new_orders_count}"
+
+#: bot/handlers/staff.py
+msgid "В работе: {in_progress_count}"
+msgstr "У роботі: {in_progress_count}"
+
+#: bot/handlers/staff.py
+msgid "Выберите заказ кнопками ниже."
+msgstr "Виберіть замовлення кнопками нижче."
+
+#: bot/handlers/staff.py
+msgid "не указан"
+msgstr "не вказано"
+
+#: bot/handlers/staff.py
+msgid ""
+"Самовывоз: {requested_time}\n"
+"Телефон: {phone}"
+msgstr ""
+"Самовивіз: {requested_time}\n"
+"Телефон: {phone}"
+
+#: bot/handlers/staff.py
+msgid "Доставка: {requested_time}"
+msgstr "Доставка: {requested_time}"
+
+#: bot/handlers/staff.py
+msgid "<a href=\"{link}\">Открыть на карте</a>"
+msgstr "<a href=\"{link}\">Відкрити на мапі</a>"
+
+#: bot/handlers/staff.py
+msgid "Телефон: {phone}"
+msgstr "Телефон: {phone}"
+
+#: bot/handlers/staff.py
+msgid "Отправка: {shipping_carrier}"
+msgstr "Відправлення: {shipping_carrier}"
+
+#: bot/handlers/staff.py
+msgid "Пересылка: {shipping_cost}"
+msgstr "Пересилання: {shipping_cost}"
+
+#: bot/handlers/staff.py
+msgid "ТТН: <a href=\"{link}\">{number}</a>"
+msgstr "ТТН: <a href=\"{link}\">{number}</a>"
+
+#: bot/handlers/staff.py
+msgid "ТТН: {number}"
+msgstr "ТТН: {number}"
+
+#: bot/handlers/staff.py
+msgid " (ещё {bonus_spent} бонусами)"
+msgstr " (ще {bonus_spent} бонусами)"
+
+#: bot/handlers/staff.py
+msgid "ждёт подтверждения перевода {to_transfer} грн{bonus_note}"
+msgstr "чекає підтвердження переказу {to_transfer} грн{bonus_note}"
+
+#: bot/handlers/staff.py
+msgid "при получении, {to_pay} грн{bonus_note}"
+msgstr "при отриманні, {to_pay} грн{bonus_note}"
+
+#: bot/handlers/staff.py
+msgid "Не оплачен"
+msgstr "Не оплачено"
+
+#: bot/handlers/staff.py
+msgid "Почта"
+msgstr "Пошта"
+
+#: bot/handlers/staff.py
+msgid "Вне стола"
+msgstr "Поза столом"
+
+#: bot/handlers/staff.py
+msgid "Без комментария"
+msgstr "Без коментаря"
+
+#: bot/handlers/staff.py
+msgid "Пока не назначен"
+msgstr "Поки не призначено"
+
+#: bot/handlers/staff.py
+msgid "Не получен"
+msgstr "Не отримано"
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Заказ #{public_id}</b>\n"
+"{order_context}\n"
+"Гость: {guest}\n"
+"Ответственный: {assignee}\n"
+"Статус: {status}\n"
+"Оплата: {payment}\n"
+"Получение: {received}\n"
+"Сумма: {total_amount} грн\n"
+"Позиции: {items_text}\n"
+"Комментарий: {comment_text}"
+msgstr ""
+"<b>Замовлення #{public_id}</b>\n"
+"{order_context}\n"
+"Гість: {guest}\n"
+"Відповідальний: {assignee}\n"
+"Статус: {status}\n"
+"Оплата: {payment}\n"
+"Отримання: {received}\n"
+"Сума: {total_amount} грн\n"
+"Позиції: {items_text}\n"
+"Коментар: {comment_text}"
+
+#: bot/handlers/staff.py
+msgid "В работе"
+msgstr "У роботі"
+
+#: bot/handlers/staff.py bot/keyboards/staff.py
+msgid "Готовим"
+msgstr "Готуємо"
+
+#: bot/handlers/staff.py
+msgid "Несут"
+msgstr "Несуть"
+
+#: bot/handlers/staff.py
+msgid "Новых внутренних уведомлений нет."
+msgstr "Нових внутрішніх сповіщень немає."
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Уведомления персоналу</b>\n"
+"Новых уведомлений: {count}\n"
+"Карточки уведомлений отправлены ниже."
+msgstr ""
+"<b>Сповіщення персоналу</b>\n"
+"Нових сповіщень: {count}\n"
+"Картки сповіщень надіслано нижче."
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>{title}</b>\n"
+"{message}\n"
+"Заказ: {order}"
+msgstr ""
+"<b>{title}</b>\n"
+"{message}\n"
+"Замовлення: {order}"
+
+#: bot/handlers/staff.py
+msgid "📦 ТТН для заказа"
+msgstr "📦 ТТН для замовлення"
+
+#: bot/handlers/staff.py
+msgid "Быстрая продажа сейчас доступна только владельцу, менеджеру или кассиру."
+msgstr "Швидкий продаж зараз доступний лише власнику, менеджеру або касиру."
+
+#: bot/handlers/staff.py
+msgid "Модуль быстрых продаж отключён для этого заведения."
+msgstr "Модуль швидких продажів вимкнено для цього закладу."
+
+#: bot/handlers/staff.py
+msgid "Модуль заказов отключён для этого заведения."
+msgstr "Модуль замовлень вимкнено для цього закладу."
+
+#: bot/handlers/staff.py
+msgid "<b>Отчёт дня</b>"
+msgstr "<b>Звіт дня</b>"
+
+#: bot/handlers/staff.py
+msgid "Дата: {local_date}"
+msgstr "Дата: {local_date}"
+
+#: bot/handlers/staff.py
+msgid "<b>Деньги</b>"
+msgstr "<b>Гроші</b>"
+
+#: bot/handlers/staff.py
+msgid "Всего выручка: {total_revenue} грн"
+msgstr "Усього виручка: {total_revenue} грн"
+
+#: bot/handlers/staff.py
+msgid "По счетам: {bill_revenue} грн"
+msgstr "За рахунками: {bill_revenue} грн"
+
+#: bot/handlers/staff.py
+msgid "Быстрые продажи: {walk_in_revenue} грн"
+msgstr "Швидкі продажі: {walk_in_revenue} грн"
+
+#: bot/handlers/staff.py
+msgid "Возвраты: −{refunds_total} грн"
+msgstr "Повернення: −{refunds_total} грн"
+
+#: bot/handlers/staff.py
+msgid "<b>Операции</b>"
+msgstr "<b>Операції</b>"
+
+#: bot/handlers/staff.py
+msgid "Оплаченных счетов: {paid_bills_count}"
+msgstr "Оплачених рахунків: {paid_bills_count}"
+
+#: bot/handlers/staff.py
+msgid "Быстрых продаж: {walk_in_sales_count}"
+msgstr "Швидких продажів: {walk_in_sales_count}"
+
+#: bot/handlers/staff.py
+msgid "Создано заказов: {created_orders_count}"
+msgstr "Створено замовлень: {created_orders_count}"
+
+#: bot/handlers/staff.py
+msgid "Открытых заказов: {open_orders_count}"
+msgstr "Відкритих замовлень: {open_orders_count}"
+
+#: bot/handlers/staff.py
+msgid "Открытых счетов: {open_bills_count}"
+msgstr "Відкритих рахунків: {open_bills_count}"
+
+#: bot/handlers/staff.py
+msgid "<b>По способам заказа</b>"
+msgstr "<b>За способами замовлення</b>"
+
+#: bot/handlers/staff.py
+msgid "• {label}: заказов {orders_count}, оплачено {revenue} грн"
+msgstr "• {label}: замовлень {orders_count}, сплачено {revenue} грн"
+
+#: bot/handlers/staff.py
+msgid "<b>Методы оплаты</b>"
+msgstr "<b>Методи оплати</b>"
+
+#: bot/handlers/staff.py
+msgid "• {method}: {amount} грн ({count})"
+msgstr "• {method}: {amount} грн ({count})"
+
+#: bot/handlers/staff.py
+msgid "<b>По сотрудникам</b>"
+msgstr "<b>За працівниками</b>"
+
+#: bot/handlers/staff.py
+msgid "• {label}: {total_amount} грн (платежей {payments_count}, быстрых продаж {walk_in_sales_count})"
+msgstr "• {label}: {total_amount} грн (платежів {payments_count}, швидких продажів {walk_in_sales_count})"
+
+#: bot/handlers/staff.py
+msgid "Счета дня"
+msgstr "Рахунки дня"
+
+#: bot/handlers/staff.py
+msgid "Столы за день"
+msgstr "Столи за день"
+
+#: bot/handlers/staff.py bot/keyboards/staff.py
+msgid "Хвосты"
+msgstr "Хвости"
+
+#: bot/handlers/staff.py
+msgid "Журнал дня"
+msgstr "Журнал дня"
+
+#: bot/handlers/staff.py
+msgid "Записей: {total_count}"
+msgstr "Записів: {total_count}"
+
+#: bot/handlers/staff.py
+msgid "Страница: {page}/{total_pages}"
+msgstr "Сторінка: {page}/{total_pages}"
+
+#: bot/handlers/staff.py
+msgid "Записей для этого раздела сейчас нет."
+msgstr "Записів для цього розділу зараз немає."
+
+#: bot/handlers/staff.py
+msgid "Открыть {label}"
+msgstr "Відкрити {label}"
+
+#: bot/handlers/staff.py
+msgid "<b>Быстрая продажа</b>"
+msgstr "<b>Швидкий продаж</b>"
+
+#: bot/handlers/staff.py
+msgid "Время: {created_at}"
+msgstr "Час: {created_at}"
+
+#: bot/handlers/staff.py
+msgid "Код клиента: {loyalty}"
+msgstr "Код клієнта: {loyalty}"
+
+#: bot/handlers/staff.py
+msgid "Сумма: {amount} грн"
+msgstr "Сума: {amount} грн"
+
+#: bot/handlers/staff.py
+msgid "Бонусов начислено: {bonus_awarded_amount}"
+msgstr "Бонусів нараховано: {bonus_awarded_amount}"
+
+#: bot/handlers/staff.py
+msgid "Сотрудник: {staff}"
+msgstr "Працівник: {staff}"
+
+#: bot/handlers/staff.py
+msgid "Позиции:"
+msgstr "Позиції:"
+
+#: bot/handlers/staff.py
+msgid "• {item_name} x{quantity} • {unit_price} грн"
+msgstr "• {item_name} x{quantity} • {unit_price} грн"
+
+#: bot/handlers/staff.py
+msgid "<b>Стол #{table_number} за день</b>"
+msgstr "<b>Стіл #{table_number} за день</b>"
+
+#: bot/handlers/staff.py
+msgid "Сессий: {session_count}"
+msgstr "Сесій: {session_count}"
+
+#: bot/handlers/staff.py
+msgid "Активных сессий: {active_session_count}"
+msgstr "Активних сесій: {active_session_count}"
+
+#: bot/handlers/staff.py
+msgid "Заказов: {order_count}"
+msgstr "Замовлень: {order_count}"
+
+#: bot/handlers/staff.py
+msgid "Оплаченных счетов: {paid_bill_count}"
+msgstr "Оплачених рахунків: {paid_bill_count}"
+
+#: bot/handlers/staff.py
+msgid "Открытых счетов: {open_bill_count}"
+msgstr "Відкритих рахунків: {open_bill_count}"
+
+#: bot/handlers/staff.py
+msgid "Оплачено: {paid_total} грн"
+msgstr "Сплачено: {paid_total} грн"
+
+#: bot/handlers/staff.py
+msgid "В остатке по счетам: {open_total} грн"
+msgstr "У залишку за рахунками: {open_total} грн"
+
+#: bot/handlers/staff.py
+msgid "Сессии:"
+msgstr "Сесії:"
+
+#: bot/handlers/staff.py
+msgid "Заказы:"
+msgstr "Замовлення:"
+
+#: bot/handlers/staff.py
+msgid "• #{public_id} • {guest} • {status} • {total_amount} грн • {payment} • {receive}"
+msgstr "• #{public_id} • {guest} • {status} • {total_amount} грн • {payment} • {receive}"
+
+#: bot/handlers/staff.py
+msgid "  Позиции: {positions}"
+msgstr "  Позиції: {positions}"
+
+#: bot/handlers/staff.py
+msgid "Оплаченные счета:"
+msgstr "Оплачені рахунки:"
+
+#: bot/handlers/staff.py
+msgid "• #{public_id} • {kind} • {guest} • {total_amount} грн • {payment_method} • {paid_at}"
+msgstr "• #{public_id} • {kind} • {guest} • {total_amount} грн • {payment_method} • {paid_at}"
+
+#: bot/handlers/staff.py
+msgid "Открытые счета:"
+msgstr "Відкриті рахунки:"
+
+#: bot/handlers/staff.py
+msgid "• #{public_id} • {kind} • {guest} • остаток {remaining_amount} грн • {status}"
+msgstr "• #{public_id} • {kind} • {guest} • залишок {remaining_amount} грн • {status}"
+
+#: bot/handlers/staff.py
+msgid "<b>Счета и оплаты</b>"
+msgstr "<b>Рахунки й оплати</b>"
+
+#: bot/handlers/staff.py
+msgid "Открытых запросов счёта: {count}"
+msgstr "Відкритих запитів рахунку: {count}"
+
+#: bot/handlers/staff.py
+msgid "Открытых счетов: {count}"
+msgstr "Відкритих рахунків: {count}"
+
+#: bot/handlers/staff.py
+msgid "Неоплаченных заказов без счёта: {count}"
+msgstr "Неоплачених замовлень без рахунку: {count}"
+
+#: bot/handlers/staff.py
+msgid "Из них без привязки к столу: {off_table_unbilled_count}"
+msgstr "З них без прив'язки до столу: {off_table_unbilled_count}"
+
+#: bot/handlers/staff.py
+msgid "Ниже заказы без счёта и карточки для работы."
+msgstr "Нижче замовлення без рахунку й картки для роботи."
+
+#: bot/handlers/staff.py
+msgid "{value}Стол {table_number} • гостей {count} • без счёта {unbilled_orders}"
+msgstr "{value}Стіл {table_number} • гостей {count} • без рахунку {unbilled_orders}"
+
+#: bot/handlers/staff.py
+msgid "К оплате #{public_id} • {order_short_context} • {short_status} • {total_amount} грн"
+msgstr "До сплати #{public_id} • {order_short_context} • {short_status} • {total_amount} грн"
+
+#: bot/handlers/staff.py
+msgid "<b>Стол #{number}</b>"
+msgstr "<b>Стіл #{number}</b>"
+
+#: bot/handlers/staff.py
+msgid "Активных гостей: {count}"
+msgstr "Активних гостей: {count}"
+
+#: bot/handlers/staff.py
+msgid "Открытых заказов: {count}"
+msgstr "Відкритих замовлень: {count}"
+
+#: bot/handlers/staff.py
+msgid "Заказов без счёта: {count}"
+msgstr "Замовлень без рахунку: {count}"
+
+#: bot/handlers/staff.py
+msgid "Гости:"
+msgstr "Гості:"
+
+#: bot/handlers/staff.py
+msgid "⚠ За столом несколько визитов — рассчитайте и закройте предыдущий."
+msgstr "⚠ За столом кілька візитів — розрахуйте й закрийте попередній."
+
+#: bot/handlers/staff.py
+msgid "Визиты:"
+msgstr "Візити:"
+
+#: bot/handlers/staff.py
+msgid "• {title}: гостей {guests}, без счёта {unbilled}, открытых счетов {open_bills}"
+msgstr "• {title}: гостей {guests}, без рахунку {unbilled}, відкритих рахунків {open_bills}"
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Активные столы</b>\n"
+"Столов в работе: {count}\n"
+"Активных гостей: {count2}\n"
+"Выберите стол кнопками ниже."
+msgstr ""
+"<b>Активні столи</b>\n"
+"Столів у роботі: {count}\n"
+"Активних гостей: {count2}\n"
+"Виберіть стіл кнопками нижче."
+
+#: bot/handlers/staff.py
+msgid "Закрыть {guest}"
+msgstr "Закрити {guest}"
+
+#: bot/handlers/staff.py
+msgid "Проверить {guest}"
+msgstr "Перевірити {guest}"
+
+#: bot/handlers/staff.py
+msgid "Счёт на гостя"
+msgstr "Рахунок на гостя"
+
+#: bot/handlers/staff.py
+msgid "Счёт на весь стол"
+msgstr "Рахунок на весь стіл"
+
+#: bot/handlers/staff.py
+msgid "Нестандартное разделение"
+msgstr "Нестандартний поділ"
+
+#: bot/handlers/staff.py
+msgid "ещё не подготовлен"
+msgstr "ще не підготовлено"
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Запрос счёта</b>\n"
+"Стол: #{number}\n"
+"Гость: {guest}\n"
+"Тип: {request_type}\n"
+"Статус: {status}\n"
+"Счёт: {linked_bill}\n"
+"Комментарий: {note}"
+msgstr ""
+"<b>Запит рахунку</b>\n"
+"Стіл: #{number}\n"
+"Гість: {guest}\n"
+"Тип: {request_type}\n"
+"Статус: {status}\n"
+"Рахунок: {linked_bill}\n"
+"Коментар: {note}"
+
+#: bot/handlers/staff.py
+msgid "без комментария"
+msgstr "без коментаря"
+
+#: bot/handlers/staff.py
+msgid "• {item_name} x{quantity} = {line_total} грн"
+msgstr "• {item_name} x{quantity} = {line_total} грн"
+
+#: bot/handlers/staff.py
+msgid "Убрано позиций: {removed_count} (см. историю счёта)"
+msgstr "Прибрано позицій: {removed_count} (див. історію рахунку)"
+
+#: bot/handlers/staff.py
+msgid ""
+"\n"
+"Оплачено бонусами: {bonus_spent_amount} грн"
+msgstr ""
+"\n"
+"Сплачено бонусами: {bonus_spent_amount} грн"
+
+#: bot/handlers/staff.py
+msgid ""
+"\n"
+"Можно оплатить бонусами: {redeemable_amount} грн"
+msgstr ""
+"\n"
+"Можна сплатити бонусами: {redeemable_amount} грн"
+
+#: bot/handlers/staff.py
+msgid ""
+"\n"
+"Баланс гостя: {loyalty_balance} бонусов (1 бонус = 1 грн)"
+msgstr ""
+"\n"
+"Баланс гостя: {loyalty_balance} бонусів (1 бонус = 1 грн)"
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Счёт #{public_id}</b>\n"
+"Контекст: {bill_context}\n"
+"Гость: {guest}\n"
+"Тип: {kind}\n"
+"Статус: {status}\n"
+"Заказов в счёте: {count}\n"
+"Сумма: {total_amount} грн\n"
+"Оплачено: {paid_amount} грн\n"
+"Остаток: {remaining_amount} грн\n"
+"Комментарий: {label}\n"
+"Позиции:\n"
+"{item_lines}{bonus_hint}"
+msgstr ""
+"<b>Рахунок #{public_id}</b>\n"
+"Контекст: {bill_context}\n"
+"Гість: {guest}\n"
+"Тип: {kind}\n"
+"Статус: {status}\n"
+"Замовлень у рахунку: {count}\n"
+"Сума: {total_amount} грн\n"
+"Сплачено: {paid_amount} грн\n"
+"Залишок: {remaining_amount} грн\n"
+"Коментар: {label}\n"
+"Позиції:\n"
+"{item_lines}{bonus_hint}"
+
+#: bot/handlers/staff.py
+msgid "Этот счёт уже закрыт, изменить его нельзя."
+msgstr "Цей рахунок уже закрито, змінити його не можна."
+
+#: bot/handlers/staff.py
+msgid "По счёту применены бонусы: его можно только аннулировать целиком."
+msgstr "До рахунку застосовано бонуси: його можна лише анулювати повністю."
+
+#: bot/handlers/staff.py
+msgid "<b>Изменение счёта #{public_id}</b>"
+msgstr "<b>Зміна рахунку #{public_id}</b>"
+
+#: bot/handlers/staff.py
+msgid "Сумма: {total_amount} грн, оплачено: {paid_amount} грн"
+msgstr "Сума: {total_amount} грн, сплачено: {paid_amount} грн"
+
+#: bot/handlers/staff.py
+msgid "Уберите позицию (останется в истории счёта) или отмените заказ целиком."
+msgstr "Приберіть позицію (лишиться в історії рахунку) або скасуйте замовлення повністю."
+
+#: bot/handlers/staff.py
+msgid "Убрать: {item_name} x{quantity} ({line_total} грн)"
+msgstr "Прибрати: {item_name} x{quantity} ({line_total} грн)"
+
+#: bot/handlers/staff.py
+msgid "Отменить заказ #{public_id}"
+msgstr "Скасувати замовлення #{public_id}"
+
+#: bot/handlers/staff.py
+msgid "Черновик быстрой продажи устарел. Начните заново."
+msgstr "Чернетка швидкого продажу застаріла. Почніть заново."
+
+#: bot/handlers/staff.py
+msgid "Для быстрой продажи сначала добавьте активные категории меню."
+msgstr "Для швидкого продажу спершу додайте активні категорії меню."
+
+#: bot/handlers/staff.py
+msgid "Покупатель: Аноним (без кода клиента)"
+msgstr "Покупець: Анонім (без коду клієнта)"
+
+#: bot/handlers/staff.py
+msgid "Бонусы за эту продажу не начисляются."
+msgstr "Бонуси за цей продаж не нараховуються."
+
+#: bot/handlers/staff.py
+msgid "пока нет"
+msgstr "поки немає"
+
+#: bot/handlers/staff.py
+msgid "ещё не заходил за стол"
+msgstr "ще не заходив за стіл"
+
+#: bot/handlers/staff.py
+msgid "Первый визит: {first_visit}"
+msgstr "Перший візит: {first_visit}"
+
+#: bot/handlers/staff.py
+msgid "Последний визит: {last_visit}"
+msgstr "Останній візит: {last_visit}"
+
+#: bot/handlers/staff.py
+msgid "Ожидаемое начисление: +{projected_bonus_amount} бонусов"
+msgstr "Очікуване нарахування: +{projected_bonus_amount} бонусів"
+
+#: bot/handlers/staff.py
+msgid "Доступно списать: {redeemable_bonus_amount} бонусов"
+msgstr "Доступно списати: {redeemable_bonus_amount} бонусів"
+
+#: bot/handlers/staff.py
+msgid "Списываем бонусами: {redeemable_bonus_amount} • к оплате: {net_amount} грн"
+msgstr "Списуємо бонусами: {redeemable_bonus_amount} • до сплати: {net_amount} грн"
+
+#: bot/handlers/staff.py
+msgid "Добавьте позиции из меню кнопками ниже."
+msgstr "Додайте позиції з меню кнопками нижче."
+
+#: bot/handlers/staff.py
+msgid "Сотрудник не привязан к этому боту. Укажите Telegram account в профиле сотрудника."
+msgstr "Працівника не прив'язано до цього бота. Вкажіть Telegram-акаунт у профілі працівника."
+
+#: bot/handlers/staff.py
+msgid "Визит {index} (с {started})"
+msgstr "Візит {index} (з {started})"
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Режим персонала активирован</b>\n"
+"Выберите действие кнопками ниже.\n"
+"Команды можно использовать как резервный вариант, но основной режим уже кнопочный."
+msgstr ""
+"<b>Режим персоналу активовано</b>\n"
+"Виберіть дію кнопками нижче.\n"
+"Команди можна використовувати як резервний варіант, але основний режим уже кнопковий."
+
+#: bot/handlers/staff.py
+msgid "Список обновлён"
+msgstr "Список оновлено"
+
+#: bot/handlers/staff.py
+msgid "Открываю заказ"
+msgstr "Відкриваю замовлення"
+
+#: bot/handlers/staff.py
+msgid "Работа со счетами доступна только владельцу, менеджеру или кассиру."
+msgstr "Робота з рахунками доступна лише власнику, менеджеру або касиру."
+
+#: bot/handlers/staff.py
+msgid "Счета обновлены"
+msgstr "Рахунки оновлено"
+
+#: bot/handlers/staff.py
+msgid "Работа со столами доступна только владельцу, менеджеру или кассиру при включённом модуле столов."
+msgstr "Робота зі столами доступна лише власнику, менеджеру або касиру з увімкненим модулем столів."
+
+#: bot/handlers/staff.py
+msgid "Столы обновлены"
+msgstr "Столи оновлено"
+
+#: bot/handlers/staff.py
+msgid "Стол не найден."
+msgstr "Стіл не знайдено."
+
+#: bot/handlers/staff.py
+msgid "Открываю стол"
+msgstr "Відкриваю стіл"
+
+#: bot/handlers/staff.py
+msgid "Закрытие сессий доступно только владельцу, менеджеру или кассиру при включённом модуле столов."
+msgstr "Закриття сесій доступне лише власнику, менеджеру або касиру з увімкненим модулем столів."
+
+#: bot/handlers/staff.py
+msgid "Сессия уже закрыта или не найдена."
+msgstr "Сесію вже закрито або не знайдено."
+
+#: bot/handlers/staff.py
+msgid "Сессия закрыта"
+msgstr "Сесію закрито"
+
+#: bot/handlers/staff.py
+msgid "Работа со столами и счетами доступна только владельцу, менеджеру или кассиру."
+msgstr "Робота зі столами й рахунками доступна лише власнику, менеджеру або касиру."
+
+#: bot/handlers/staff.py
+msgid "Общий счёт подготовлен"
+msgstr "Спільний рахунок підготовлено"
+
+#: bot/handlers/staff.py
+msgid "Персональные счета подготовлены"
+msgstr "Особисті рахунки підготовлено"
+
+#: bot/handlers/staff.py
+msgid "Этот визит уже закрыт."
+msgstr "Цей візит уже закрито."
+
+#: bot/handlers/staff.py
+msgid "Визит не найден."
+msgstr "Візит не знайдено."
+
+#: bot/handlers/staff.py
+msgid "Счёт визита подготовлен"
+msgstr "Рахунок візиту підготовлено"
+
+#: bot/handlers/staff.py
+msgid "Закрытие визитов доступно только владельцу, менеджеру или кассиру при включённом модуле столов."
+msgstr "Закриття візитів доступне лише власнику, менеджеру або касиру з увімкненим модулем столів."
+
+#: bot/handlers/staff.py
+msgid "Визит закрыт"
+msgstr "Візит закрито"
+
+#: bot/handlers/staff.py
+msgid "Отчёт дня сейчас доступен только владельцу, менеджеру или кассиру."
+msgstr "Звіт дня зараз доступний лише власнику, менеджеру або касиру."
+
+#: bot/handlers/staff.py
+msgid "Отчёт обновлён"
+msgstr "Звіт оновлено"
+
+#: bot/handlers/staff.py
+msgid "Неизвестный раздел журнала дня."
+msgstr "Невідомий розділ журналу дня."
+
+#: bot/handlers/staff.py
+msgid "Некорректная страница журнала."
+msgstr "Некоректна сторінка журналу."
+
+#: bot/handlers/staff.py
+msgid "Раздел журнала открыт"
+msgstr "Розділ журналу відкрито"
+
+#: bot/handlers/staff.py
+msgid "Продажа не найдена."
+msgstr "Продаж не знайдено."
+
+#: bot/handlers/staff.py
+msgid "Некорректная ссылка на продажу."
+msgstr "Некоректне посилання на продаж."
+
+#: bot/handlers/staff.py
+msgid "Карточка продажи открыта"
+msgstr "Картку продажу відкрито"
+
+#: bot/handlers/staff.py
+msgid "Некорректная ссылка на стол."
+msgstr "Некоректне посилання на стіл."
+
+#: bot/handlers/staff.py
+msgid "Карточка стола открыта"
+msgstr "Картку столу відкрито"
+
+#: bot/handlers/staff.py
+msgid "Заказ уже обновлён, показываю актуальный статус"
+msgstr "Замовлення вже оновлено, показую актуальний статус"
+
+#: bot/handlers/staff.py
+msgid "Это действие для заказа больше недоступно"
+msgstr "Ця дія для замовлення більше недоступна"
+
+#: bot/handlers/staff.py
+msgid "Карточка обновлена"
+msgstr "Картку оновлено"
+
+#: bot/handlers/staff.py bot/handlers/staff_refunds.py
+msgid "Неизвестное действие."
+msgstr "Невідома дія."
+
+#: bot/handlers/staff.py
+msgid ""
+"\n"
+"\n"
+"<b>Отменить заказ, потому что оплата не поступила?</b> Списанные бонусы вернутся гостю, гость получит сообщение."
+msgstr ""
+"\n"
+"\n"
+"<b>Скасувати замовлення, бо оплата не надійшла?</b> Списані бонуси повернуться гостю, гість отримає повідомлення."
+
+#: bot/handlers/staff.py
+msgid "Оплата подтверждена, заказ в работе."
+msgstr "Оплату підтверджено, замовлення в роботі."
+
+#: bot/handlers/staff.py
+msgid "Заказ отменён: оплата не поступила."
+msgstr "Замовлення скасовано: оплата не надійшла."
+
+#: bot/handlers/staff.py
+msgid ""
+"\n"
+"\n"
+"<b>Посылку не забрали и деньги не пришли — отменить заказ?</b> "
+msgstr ""
+"\n"
+"\n"
+"<b>Посилку не забрали й гроші не прийшли — скасувати замовлення?</b> "
+
+#: bot/handlers/staff.py
+msgid ""
+"\n"
+"\n"
+"<b>Гость не забрал заказ и не заплатил — отменить заказ?</b> "
+msgstr ""
+"\n"
+"\n"
+"<b>Гість не забрав замовлення й не заплатив — скасувати замовлення?</b> "
+
+#: bot/handlers/staff.py
+msgid "Списанные бонусы вернутся гостю."
+msgstr "Списані бонуси повернуться гостю."
+
+#: bot/handlers/staff.py
+msgid "Оплата при получении отмечена."
+msgstr "Оплату при отриманні позначено."
+
+#: bot/handlers/staff.py
+msgid "Заказ отменён."
+msgstr "Замовлення скасовано."
+
+#: bot/handlers/staff.py
+msgid "Это действие для заказа больше недоступно."
+msgstr "Ця дія для замовлення більше недоступна."
+
+#: bot/handlers/staff.py
+msgid ""
+"{tracking_prompt} #{public_id}\n"
+"{shipping_carrier}: {shipping_destination}\n"
+"Напишите номер ТТН в ответ на это сообщение."
+msgstr ""
+"{tracking_prompt} #{public_id}\n"
+"{shipping_carrier}: {shipping_destination}\n"
+"Напишіть номер ТТН у відповідь на це повідомлення."
+
+#: bot/handlers/staff.py
+msgid "Номер ТТН"
+msgstr "Номер ТТН"
+
+#: bot/handlers/staff.py
+msgid "Не нашёл номер заказа — нажмите «Отправлен» в карточке ещё раз."
+msgstr "Не знайшов номера замовлення — натисніть «Відправлено» в картці ще раз."
+
+#: bot/handlers/staff.py
+msgid "Уведомления обновлены"
+msgstr "Сповіщення оновлено"
+
+#: bot/handlers/staff.py
+msgid "Отмечено как прочитанные: {updated_count}"
+msgstr "Позначено як прочитані: {updated_count}"
+
+#: bot/handlers/staff.py
+msgid ""
+"{html_text}\n"
+"\n"
+"<i>Помечено как прочитанное.</i>"
+msgstr ""
+"{html_text}\n"
+"\n"
+"<i>Позначено як прочитане.</i>"
+
+#: bot/handlers/staff.py
+msgid "Уведомление отмечено"
+msgstr "Сповіщення позначено"
+
+#: bot/handlers/staff.py
+msgid "Уведомление уже было отмечено"
+msgstr "Сповіщення вже було позначено"
+
+#: bot/handlers/staff.py
+msgid "Заказ уже в работе, показываю актуальную карточку"
+msgstr "Замовлення вже в роботі, показую актуальну картку"
+
+#: bot/handlers/staff.py
+msgid "Заказ уже изменился, показываю актуальную карточку"
+msgstr "Замовлення вже змінилося, показую актуальну картку"
+
+#: bot/handlers/staff.py
+msgid ""
+"{html_text}\n"
+"\n"
+"<i>Заказ взят в работу.</i>"
+msgstr ""
+"{html_text}\n"
+"\n"
+"<i>Замовлення взято в роботу.</i>"
+
+#: bot/handlers/staff.py
+msgid "Заказ взят в работу"
+msgstr "Замовлення взято в роботу"
+
+#: bot/handlers/staff.py
+msgid "Счёт не найден."
+msgstr "Рахунок не знайдено."
+
+#: bot/handlers/staff.py
+msgid "Карточка счёта обновлена"
+msgstr "Картку рахунку оновлено"
+
+#: bot/handlers/staff.py
+msgid "Счёт выдан"
+msgstr "Рахунок виставлено"
+
+#: bot/handlers/staff.py
+msgid "Оплата зафиксирована"
+msgstr "Оплату зафіксовано"
+
+#: bot/handlers/staff.py
+msgid "Списано бонусами: {bonus_spent_amount} грн. Остаток к оплате: {remaining_amount} грн."
+msgstr "Списано бонусами: {bonus_spent_amount} грн. Залишок до сплати: {remaining_amount} грн."
+
+#: bot/handlers/staff.py
+msgid "Счёт полностью оплачен бонусами"
+msgstr "Рахунок повністю сплачено бонусами"
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Счёт #{bill_public_id}</b>\n"
+"Полностью оплачен и выведен из списка открытых счетов."
+msgstr ""
+"<b>Рахунок #{bill_public_id}</b>\n"
+"Повністю сплачено й прибрано зі списку відкритих рахунків."
+
+#: bot/handlers/staff.py
+msgid "Запрос счёта не найден."
+msgstr "Запит рахунку не знайдено."
+
+#: bot/handlers/staff.py
+msgid "Запрос обновлён"
+msgstr "Запит оновлено"
+
+#: bot/handlers/staff.py
+msgid ""
+"Введите код клиента для быстрой продажи (например FE231A).\n"
+"Если клиент без кода — нажмите «Без кода (Аноним)» или отправьте «-»."
+msgstr ""
+"Введіть код клієнта для швидкого продажу (наприклад FE231A).\n"
+"Якщо клієнт без коду — натисніть «Без коду (Анонім)» або надішліть «-»."
+
+#: bot/handlers/staff.py
+msgid "Списываем бонусы"
+msgstr "Списуємо бонуси"
+
+#: bot/handlers/staff.py
+msgid "Списание отменено"
+msgstr "Списання скасовано"
+
+#: bot/handlers/staff.py
+msgid "Анонимная продажа"
+msgstr "Анонімний продаж"
+
+#: bot/handlers/staff.py
+msgid ""
+"Введите новый код клиента для быстрой продажи.\n"
+"Если клиент без кода — нажмите «Без кода (Аноним)» или отправьте «-»."
+msgstr ""
+"Введіть новий код клієнта для швидкого продажу.\n"
+"Якщо клієнт без коду — натисніть «Без коду (Анонім)» або надішліть «-»."
+
+#: bot/handlers/staff.py
+msgid "Можно ввести другой код"
+msgstr "Можна ввести інший код"
+
+#: bot/handlers/staff.py
+msgid "Отправьте комментарий к продаже одним сообщением. Чтобы очистить комментарий, отправьте символ `-`."
+msgstr "Надішліть коментар до продажу одним повідомленням. Щоб очистити коментар, надішліть символ `-`."
+
+#: bot/handlers/staff.py
+msgid "Комментарий убран"
+msgstr "Коментар прибрано"
+
+#: bot/handlers/staff.py
+msgid "Черновик быстрой продажи отменён."
+msgstr "Чернетку швидкого продажу скасовано."
+
+#: bot/handlers/staff.py
+msgid "Отменено"
+msgstr "Скасовано"
+
+#: bot/handlers/staff.py
+msgid "Позиции очищены"
+msgstr "Позиції очищено"
+
+#: bot/handlers/staff.py
+msgid "Черновик обновлён"
+msgstr "Чернетку оновлено"
+
+#: bot/handlers/staff.py
+msgid "Комментарий сохранён."
+msgstr "Коментар збережено."
+
+#: bot/handlers/staff.py
+msgid "Комментарий очищен."
+msgstr "Коментар очищено."
+
+#: bot/handlers/staff.py
+msgid "Сначала добавьте позиции."
+msgstr "Спершу додайте позиції."
+
+#: bot/handlers/staff.py
+msgid "<b>Быстрая продажа оформлена</b>"
+msgstr "<b>Швидкий продаж оформлено</b>"
+
+#: bot/handlers/staff.py
+msgid "Клиент: {loyalty}"
+msgstr "Клієнт: {loyalty}"
+
+#: bot/handlers/staff.py
+msgid "Списано бонусами: {bonus_spent_amount}"
+msgstr "Списано бонусами: {bonus_spent_amount}"
+
+#: bot/handlers/staff.py
+msgid "К оплате: {net_amount} грн"
+msgstr "До сплати: {net_amount} грн"
+
+#: bot/handlers/staff.py
+msgid "Начислено бонусов: +{bonus_awarded_amount}"
+msgstr "Нараховано бонусів: +{bonus_awarded_amount}"
+
+#: bot/handlers/staff.py
+msgid "Позиций: {items_count}"
+msgstr "Позицій: {items_count}"
+
+#: bot/handlers/staff.py
+msgid "Продажа сохранена"
+msgstr "Продаж збережено"
+
+#: bot/handlers/staff.py
+msgid "Позиция уже убрана из счёта."
+msgstr "Позицію вже прибрано з рахунку."
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Счёт #{public_id}</b>\n"
+"Убрать «{item_name} x{quantity}» ({line_total} грн)?\n"
+"Выберите причину."
+msgstr ""
+"<b>Рахунок #{public_id}</b>\n"
+"Прибрати «{item_name} x{quantity}» ({line_total} грн)?\n"
+"Виберіть причину."
+
+#: bot/handlers/staff.py
+msgid "Позиция убрана из счёта"
+msgstr "Позицію прибрано з рахунку"
+
+#: bot/handlers/staff.py
+msgid "Заказа уже нет в открытом счёте."
+msgstr "Замовлення вже немає у відкритому рахунку."
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Счёт #{public_id}</b>\n"
+"Отменить заказ #{order_public_id} и убрать его позиции из счёта?\n"
+"Выберите причину."
+msgstr ""
+"<b>Рахунок #{public_id}</b>\n"
+"Скасувати замовлення #{order_public_id} і прибрати його позиції з рахунку?\n"
+"Виберіть причину."
+
+#: bot/handlers/staff.py
+msgid "Заказ #{order_public_id} отменён"
+msgstr "Замовлення #{order_public_id} скасовано"
+
+#: bot/handlers/staff.py
+msgid "Этот счёт аннулировать нельзя: нет права, он закрыт или по нему есть оплата."
+msgstr "Цей рахунок анулювати не можна: немає права, його закрито або за ним є оплата."
+
+#: bot/handlers/staff.py
+msgid ""
+"\n"
+"Списанные бонусы ({bonus_spent_amount}) вернутся гостю."
+msgstr ""
+"\n"
+"Списані бонуси ({bonus_spent_amount}) повернуться гостю."
+
+#: bot/handlers/staff.py
+msgid ""
+"<b>Аннулировать счёт #{public_id}?</b>\n"
+"Сумма: {total_amount} грн. Заказы снова можно будет выставить в счёт.{bonus_hint}\n"
+"Выберите причину."
+msgstr ""
+"<b>Анулювати рахунок #{public_id}?</b>\n"
+"Сума: {total_amount} грн. Замовлення знову можна буде виставити в рахунок.{bonus_hint}\n"
+"Виберіть причину."
+
+#: bot/handlers/staff.py
+msgid "Счёт #{bill_public_id} аннулирован"
+msgstr "Рахунок #{bill_public_id} анульовано"
+
+#: bot/handlers/staff.py
+msgid "Изменение не найдено."
+msgstr "Зміну не знайдено."
+
+#: bot/handlers/staff.py
+msgid "Комментарий уже добавлен или изменение не ваше."
+msgstr "Коментар уже додано або зміна не ваша."
+
+#: bot/handlers/staff.py
+msgid "Напишите комментарий к изменению счёта одним сообщением."
+msgstr "Напишіть коментар до зміни рахунку одним повідомленням."
+
+#: bot/handlers/staff.py
+msgid "Комментарий сохранён в истории счёта."
+msgstr "Коментар збережено в історії рахунку."
+
+#: bot/handlers/staff_refunds.py
+msgid "<b>Возврат по заказу #{public_id}</b>"
+msgstr "<b>Повернення за замовленням #{public_id}</b>"
+
+#: bot/handlers/staff_refunds.py
+msgid "Отметьте, что вернуть:"
+msgstr "Позначте, що повернути:"
+
+#: bot/handlers/staff_refunds.py
+msgid "{item_name} × {quantity} — {line_total} грн"
+msgstr "{item_name} × {quantity} — {line_total} грн"
+
+#: bot/handlers/staff_refunds.py
+msgid "↩️ {label} — уже возвращено"
+msgstr "↩️ {label} — уже повернуто"
+
+#: bot/handlers/staff_refunds.py
+msgid "Отметить всё"
+msgstr "Позначити все"
+
+#: bot/handlers/staff_refunds.py
+msgid "← К заказу"
+msgstr "← До замовлення"
+
+#: bot/handlers/staff_refunds.py
+msgid ""
+"{header}\n"
+"Причина возврата?"
+msgstr ""
+"{header}\n"
+"Причина повернення?"
+
+#: bot/handlers/staff_refunds.py
+msgid ""
+"{header}\n"
+"Как вернёте деньги гостю?"
+msgstr ""
+"{header}\n"
+"Як повернете гроші гостю?"
+
+#: bot/handlers/staff_refunds.py
+msgid "Деньги гостю: <b>{money} грн</b> — {how}"
+msgstr "Гроші гостю: <b>{money} грн</b> — {how}"
+
+#: bot/handlers/staff_refunds.py
+msgid "Бонусы вернутся: {bonus}"
+msgstr "Бонуси повернуться: {bonus}"
+
+#: bot/handlers/staff_refunds.py
+msgid "Причина: {label}"
+msgstr "Причина: {label}"
+
+#: bot/handlers/staff_refunds.py
+msgid "Кешбэк за возвращённое снимется. Гость получит сообщение."
+msgstr "Кешбек за повернене зніметься. Гість отримає повідомлення."
+
+#: bot/handlers/staff_refunds.py
+msgid "✅ Вернуть"
+msgstr "✅ Повернути"
+
+#: bot/handlers/staff_refunds.py
+msgid "По этому заказу нечего возвращать."
+msgstr "За цим замовленням нічого повертати."
+
+#: bot/handlers/staff_refunds.py
+msgid "Строк слишком много для бота — сделайте возврат в Admin."
+msgstr "Рядків забагато для бота — зробіть повернення в Admin."
+
+#: bot/handlers/staff_refunds.py
+msgid ""
+"\n"
+"\n"
+"<b>Возврат оформлен:</b> {money_amount} грн ({method})."
+msgstr ""
+"\n"
+"\n"
+"<b>Повернення оформлено:</b> {money_amount} грн ({method})."
+
+#: bot/handlers/staff_refunds.py
+msgid "Бонусов вернулось: {bonus_returned}."
+msgstr "Бонусів повернулося: {bonus_returned}."
+
+#: bot/handlers/staff_refunds.py
+msgid "Кешбэка снято: {cashback_revoked}."
+msgstr "Кешбеку знято: {cashback_revoked}."
+
+#: bot/handlers/staff_refunds.py
+msgid "Не снято {cashback_not_revoked} кешбэка — гость уже потратил бонусы."
+msgstr "Не знято {cashback_not_revoked} кешбеку — гість уже витратив бонуси."
+
+#: bot/handlers/staff_refunds.py
+msgid "Передайте деньги гостю — он получил сообщение с суммой."
+msgstr "Передайте гроші гостю — він отримав повідомлення із сумою."
+
+#: bot/handlers/staff_refunds.py
+msgid "Возврат оформлен."
+msgstr "Повернення оформлено."
 
 #: bot/handlers/start.py
 msgid "Вы зарегистрированы в программе лояльности {name}."
@@ -1122,7 +6106,7 @@ msgstr "Оновити меню"
 msgid "Оформить"
 msgstr "Оформити"
 
-#: bot/keyboards/menu.py
+#: bot/keyboards/menu.py bot/keyboards/staff.py
 msgid "Очистить"
 msgstr "Очистити"
 
@@ -1147,18 +6131,6 @@ msgid "К профилю"
 msgstr "До профілю"
 
 #: bot/keyboards/profile.py
-msgid "← Назад"
-msgstr "← Назад"
-
-#: bot/keyboards/profile.py
-msgid "Дальше →"
-msgstr "Далі →"
-
-#: bot/keyboards/profile.py
-msgid "✅ Получил(а)"
-msgstr "✅ Отримав(ла)"
-
-#: bot/keyboards/profile.py
 msgid "← К заказам"
 msgstr "← До замовлень"
 
@@ -1177,6 +6149,234 @@ msgstr "До мого столу"
 #: bot/keyboards/session.py
 msgid "Начать новый визит"
 msgstr "Почати новий візит"
+
+#: bot/keyboards/staff.py
+msgid "Взять в работу"
+msgstr "Взяти в роботу"
+
+#: bot/keyboards/staff.py
+msgid "Готово"
+msgstr "Готово"
+
+#: bot/keyboards/staff.py
+msgid "Нести"
+msgstr "Нести"
+
+#: bot/keyboards/staff.py
+msgid "Завершить"
+msgstr "Завершити"
+
+#: bot/keyboards/staff.py
+msgid "Отменить"
+msgstr "Скасувати"
+
+#: bot/keyboards/staff.py
+msgid "🚚 В пути"
+msgstr "🚚 У дорозі"
+
+#: bot/keyboards/staff.py
+msgid "✅ Доставлено"
+msgstr "✅ Доставлено"
+
+#: bot/keyboards/staff.py
+msgid "📦 Собран"
+msgstr "📦 Зібрано"
+
+#: bot/keyboards/staff.py
+msgid "🚚 Отправлен"
+msgstr "🚚 Відправлено"
+
+#: bot/keyboards/staff.py
+msgid "✅ Получен"
+msgstr "✅ Отримано"
+
+#: bot/keyboards/staff.py
+msgid "💵 Наложенный платёж получен"
+msgstr "💵 Накладений платіж отримано"
+
+#: bot/keyboards/staff.py
+msgid "💵 Оплачено наличными"
+msgstr "💵 Сплачено готівкою"
+
+#: bot/keyboards/staff.py
+msgid "💳 Оплачено картой"
+msgstr "💳 Сплачено карткою"
+
+#: bot/keyboards/staff.py
+msgid "✅ Оплата получена"
+msgstr "✅ Оплату отримано"
+
+#: bot/keyboards/staff.py
+msgid "❌ Оплаты нет"
+msgstr "❌ Оплати немає"
+
+#: bot/keyboards/staff.py
+msgid "❌ Посылку не забрали"
+msgstr "❌ Посилку не забрали"
+
+#: bot/keyboards/staff.py
+msgid "❌ Гость не забрал"
+msgstr "❌ Гість не забрав"
+
+#: bot/keyboards/staff.py
+msgid "↩️ Возврат"
+msgstr "↩️ Повернення"
+
+#: bot/keyboards/staff.py
+msgid "Обновить карточку"
+msgstr "Оновити картку"
+
+#: bot/keyboards/staff.py
+msgid "Да, оплаты нет — отменить заказ"
+msgstr "Так, оплати немає — скасувати замовлення"
+
+#: bot/keyboards/staff.py
+msgid "Назад"
+msgstr "Назад"
+
+#: bot/keyboards/staff.py
+msgid "Да, отменить заказ"
+msgstr "Так, скасувати замовлення"
+
+#: bot/keyboards/staff.py
+msgid "Обновить список"
+msgstr "Оновити список"
+
+#: bot/keyboards/staff.py
+msgid "Без кода (Аноним)"
+msgstr "Без коду (Анонім)"
+
+#: bot/keyboards/staff.py
+msgid "Обновить"
+msgstr "Оновити"
+
+#: bot/keyboards/staff.py
+msgid "Отметить всё прочитанным"
+msgstr "Позначити все прочитаним"
+
+#: bot/keyboards/staff.py
+msgid "Открыть заказ"
+msgstr "Відкрити замовлення"
+
+#: bot/keyboards/staff.py
+msgid "Открыть счета"
+msgstr "Відкрити рахунки"
+
+#: bot/keyboards/staff.py
+msgid "Открытые заказы"
+msgstr "Відкриті замовлення"
+
+#: bot/keyboards/staff.py
+msgid "Обновить сводку"
+msgstr "Оновити зведення"
+
+#: bot/keyboards/staff.py
+msgid "К сводке дня"
+msgstr "До зведення дня"
+
+#: bot/keyboards/staff.py
+msgid "К списку продаж"
+msgstr "До списку продажів"
+
+#: bot/keyboards/staff.py
+msgid "К списку столов"
+msgstr "До списку столів"
+
+#: bot/keyboards/staff.py
+msgid "＋ {label} • {price} грн"
+msgstr "＋ {label} • {price} грн"
+
+#: bot/keyboards/staff.py
+msgid "Изменить код"
+msgstr "Змінити код"
+
+#: bot/keyboards/staff.py
+msgid "Изменить комментарий"
+msgstr "Змінити коментар"
+
+#: bot/keyboards/staff.py
+msgid "Убрать комментарий"
+msgstr "Прибрати коментар"
+
+#: bot/keyboards/staff.py
+msgid "Отменить списание бонусов"
+msgstr "Скасувати списання бонусів"
+
+#: bot/keyboards/staff.py
+msgid "Списать бонусы"
+msgstr "Списати бонуси"
+
+#: bot/keyboards/staff.py
+msgid "Подтвердить продажу"
+msgstr "Підтвердити продаж"
+
+#: bot/keyboards/staff.py
+msgid "Добавьте позиции"
+msgstr "Додайте позиції"
+
+#: bot/keyboards/staff.py
+msgid "Выдать счёт"
+msgstr "Виставити рахунок"
+
+#: bot/keyboards/staff.py
+msgid "Оплатить бонусами"
+msgstr "Сплатити бонусами"
+
+#: bot/keyboards/staff.py
+msgid "Терминал"
+msgstr "Термінал"
+
+#: bot/keyboards/staff.py
+msgid "Изменить счёт"
+msgstr "Змінити рахунок"
+
+#: bot/keyboards/staff.py
+msgid "Аннулировать"
+msgstr "Анулювати"
+
+#: bot/keyboards/staff.py
+msgid "Обновить счёт"
+msgstr "Оновити рахунок"
+
+#: bot/keyboards/staff.py
+msgid "Назад к счёту"
+msgstr "Назад до рахунку"
+
+#: bot/keyboards/staff.py
+msgid "Добавить комментарий"
+msgstr "Додати коментар"
+
+#: bot/keyboards/staff.py
+msgid "Открыть счёт"
+msgstr "Відкрити рахунок"
+
+#: bot/keyboards/staff.py
+msgid "{title}: общий счёт"
+msgstr "{title}: спільний рахунок"
+
+#: bot/keyboards/staff.py
+msgid "По гостям"
+msgstr "За гостями"
+
+#: bot/keyboards/staff.py
+msgid "Закрыть визит"
+msgstr "Закрити візит"
+
+#: bot/keyboards/staff.py
+msgid "{title}: закрыть"
+msgstr "{title}: закрити"
+
+#: bot/keyboards/staff.py
+msgid "Обновить стол"
+msgstr "Оновити стіл"
+
+#: bot/keyboards/staff.py
+msgid "Обработано"
+msgstr "Оброблено"
+
+#: bot/keyboards/staff.py
+msgid "Обновить запрос"
+msgstr "Оновити запит"
 
 #: bot/middlewares/partner_runtime.py
 msgid "Работа бота приостановлена, ожидайте обновлений."
@@ -1261,3 +6461,55 @@ msgstr "Стіл активовано. Тепер можна відкрити м
 #: bot/services/content.py
 msgid "Стол активирован."
 msgstr "Стіл активовано."
+
+#: core/admin_mixins.py
+msgid "Запись принадлежит другому заведению."
+msgstr "Запис належить іншому закладу."
+
+#: core/database/models.py
+msgid "Создано"
+msgstr "Створено"
+
+#: core/database/models.py
+msgid "Изменено"
+msgstr "Змінено"
+
+#: core/security/login_throttle.py
+msgid "Слишком много неудачных попыток входа. Попробуйте через 15 минут или попросите администратора проверить учётную запись."
+msgstr "Забагато невдалих спроб входу. Спробуйте за 15 хвилин або попросіть адміністратора перевірити обліковий запис."
+
+#: core/urls.py
+msgid "Botera Shop — демо"
+msgstr "Botera Shop — демо"
+
+#: core/urls.py
+msgid "Botera Shop работает"
+msgstr "Botera Shop працює"
+
+#: core/urls.py
+msgid "Демо-окружение: Telegram-боты заказов и лояльности для заведений и магазинов."
+msgstr "Демо-середовище: Telegram-боти замовлень і лояльності для закладів і магазинів."
+
+#: core/urls.py
+msgid "Заведений"
+msgstr "Закладів"
+
+#: core/urls.py
+msgid "Активных ботов"
+msgstr "Активних ботів"
+
+#: core/urls.py
+msgid "Столов"
+msgstr "Столів"
+
+#: core/urls.py
+msgid "Открыть Admin"
+msgstr "Відкрити Admin"
+
+#: core/urls.py
+msgid "Проверка работы"
+msgstr "Перевірка роботи"
+
+#: core/urls.py
+msgid "Демо-данные (логины, ссылки на столы):"
+msgstr "Демо-дані (логіни, посилання на столи):"

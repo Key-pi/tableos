@@ -10,15 +10,17 @@ from django.contrib import messages
 from django.template.response import TemplateResponse
 
 from apps.billing.models import BillAdjustment, Refund
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 class AdjustmentReasonForm(forms.Form):
     reason_code = forms.ChoiceField(
-        label="Причина",
+        label=_lazy("Причина"),
         choices=BillAdjustment.ReasonCode.choices,
     )
     reason_text = forms.CharField(
-        label="Комментарий (необязательно)",
+        label=_lazy("Комментарий (необязательно)"),
         required=False,
         max_length=255,
     )
@@ -81,10 +83,10 @@ def run_with_reason(
 
 
 class RefundForm(forms.Form):
-    reason_code = forms.ChoiceField(label="Причина", choices=Refund.ReasonCode.choices)
-    method = forms.ChoiceField(label="Как вернули деньги", choices=Refund.Method.choices)
+    reason_code = forms.ChoiceField(label=_lazy("Причина"), choices=Refund.ReasonCode.choices)
+    method = forms.ChoiceField(label=_lazy("Как вернули деньги"), choices=Refund.Method.choices)
     reason_text = forms.CharField(
-        label="Комментарий (необязательно)", required=False, max_length=255
+        label=_lazy("Комментарий (необязательно)"), required=False, max_length=255
     )
 
 
@@ -114,14 +116,24 @@ def run_refund(modeladmin, request, queryset, *, action_name: str, perform):
                     )
                 except Exception as exc:  # noqa: BLE001 - shown to the admin user
                     modeladmin.message_user(
-                        request, f"Счёт #{bill.public_id}: {exc}", level=messages.WARNING
+                        request, _(
+                            "Счёт #{public_id}: {exc}",
+                            public_id=bill.public_id,
+                            exc=exc,
+                        ), level=messages.WARNING
                     )
                     continue
                 done += 1
                 modeladmin.message_user(
                     request,
-                    f"Счёт #{bill.public_id}: возвращено {refund.money_amount} грн, "
-                    f"бонусов {refund.bonus_returned}, снято кешбэка {refund.cashback_revoked}.",
+                    _(
+                        "Счёт #{public_id}: возвращено {money_amount} грн, бонусов "
+                        "{bonus_returned}, снято кешбэка {cashback_revoked}.",
+                        public_id=bill.public_id,
+                        money_amount=refund.money_amount,
+                        bonus_returned=refund.bonus_returned,
+                        cashback_revoked=refund.cashback_revoked,
+                    ),
                 )
             return None
     else:
@@ -131,18 +143,25 @@ def run_refund(modeladmin, request, queryset, *, action_name: str, perform):
         "admin/billing/adjustment_reason.html",
         {
             **modeladmin.admin_site.each_context(request),
-            "title": "Вернуть деньги за строки",
+            "title": _("Вернуть деньги за строки"),
             "description": (
-                "Только по оплаченному счёту. Вернётся доля оплаченных денег и "
-                "списанных бонусов за выбранные строки, кешбэк за них снимется. "
-                "Деньги гостю передайте сами — бот сообщит ему сумму. Заказ, у "
-                "которого вернули все строки, отменится (кроме завершённых)."
+                _(
+                    "Только по оплаченному счёту. Вернётся доля оплаченных денег и списанных "
+                    "бонусов за выбранные строки, кешбэк за них снимется. Деньги гостю передайте "
+                    "сами — бот сообщит ему сумму. Заказ, у которого вернули все строки, "
+                    "отменится (кроме завершённых).",
+                )
             ),
-            "submit_label": "Вернуть",
+            "submit_label": _("Вернуть"),
             "form": form,
             "object_labels": [
-                f"#{item.bill.public_id}: {item.item_name} × {item.quantity} — "
-                f"{item.line_total} грн"
+                _(
+                    "#{public_id}: {item_name} × {quantity} — {line_total} грн",
+                    public_id=item.bill.public_id,
+                    item_name=item.item_name,
+                    quantity=item.quantity,
+                    line_total=item.line_total,
+                )
                 for item in items
             ],
             "selected_ids": [str(item.pk) for item in items],

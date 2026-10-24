@@ -7,6 +7,8 @@ from apps.orders.models import Cart, CartItem, Order, OrderItem, OrderStatusHist
 from apps.orders.services import OrderFlowError, transition_order_status
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 class CartItemInline(admin.TabularInline):
@@ -121,18 +123,18 @@ class OrderAdmin(ScopedAdminMixin):
         "mark_as_canceled",
     )
 
-    @admin.action(description="Создать черновик счёта из заказов")
+    @admin.action(description=_lazy("Создать черновик счёта из заказов"))
     def create_draft_bill(self, request, queryset):
         order_ids = [str(order.id) for order in queryset]
         if not order_ids:
-            self.message_user(request, "Выберите хотя бы один заказ.", level=messages.WARNING)
+            self.message_user(request, _("Выберите хотя бы один заказ."), level=messages.WARNING)
             return
 
         partner_ids = set(queryset.values_list("partner_id", flat=True))
         if len(partner_ids) != 1:
             self.message_user(
                 request,
-                "Выберите заказы только одного заведения.",
+                _("Выберите заказы только одного заведения."),
                 level=messages.WARNING,
             )
             return
@@ -142,7 +144,7 @@ class OrderAdmin(ScopedAdminMixin):
                 partner_id=queryset[0].partner_id,
                 order_ids=order_ids,
                 kind=Bill.Kind.SHARED,
-                label="Создан в Admin из заказов",
+                label=_("Создан в Admin из заказов"),
             )
         except BillingServiceError as exc:
             self.message_user(request, str(exc), level=messages.WARNING)
@@ -150,30 +152,34 @@ class OrderAdmin(ScopedAdminMixin):
 
         self.message_user(
             request,
-            f"Создан draft bill #{bill.public_id} на сумму {bill.total_amount}.",
+            _(
+                "Создан draft bill #{public_id} на сумму {total_amount}.",
+                public_id=bill.public_id,
+                total_amount=bill.total_amount,
+            ),
         )
 
-    @admin.action(description="Статус: принят")
+    @admin.action(description=_lazy("Статус: принят"))
     def mark_as_accepted(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.ACCEPTED)
 
-    @admin.action(description="Статус: готовится")
+    @admin.action(description=_lazy("Статус: готовится"))
     def mark_as_preparing(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.PREPARING)
 
-    @admin.action(description="Статус: готов")
+    @admin.action(description=_lazy("Статус: готов"))
     def mark_as_ready(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.READY)
 
-    @admin.action(description="Статус: в пути")
+    @admin.action(description=_lazy("Статус: в пути"))
     def mark_as_delivering(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.DELIVERING)
 
-    @admin.action(description="Статус: завершён")
+    @admin.action(description=_lazy("Статус: завершён"))
     def mark_as_completed(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.COMPLETED)
 
-    @admin.action(description="Отменить заказы")
+    @admin.action(description=_lazy("Отменить заказы"))
     def mark_as_canceled(self, request, queryset):
         billed = BillItem.objects.filter(order__in=queryset, is_active=True).exists()
         if not billed:
@@ -183,7 +189,7 @@ class OrderAdmin(ScopedAdminMixin):
                 except (OrderFlowError, BillingServiceError) as exc:
                     self.message_user(
                         request,
-                        f"Заказ #{order.public_id}: {exc}",
+                        _("Заказ #{public_id}: {exc}", public_id=order.public_id, exc=exc),
                         level=messages.WARNING,
                     )
             return None
@@ -193,13 +199,15 @@ class OrderAdmin(ScopedAdminMixin):
             request,
             queryset,
             action_name="mark_as_canceled",
-            title="Отменить заказы",
+            title=_("Отменить заказы"),
             description=(
-                "Часть заказов уже в счёте: их позиции будут убраны из счёта. "
-                "Нужно право изменять счета; заказ в оплаченном счёте отменить нельзя."
+                _(
+                    "Часть заказов уже в счёте: их позиции будут убраны из счёта. Нужно право "
+                    "изменять счета; заказ в оплаченном счёте отменить нельзя.",
+                )
             ),
-            submit_label="Отменено заказов",
-            object_label=lambda order: f"Заказ #{order.public_id}",
+            submit_label=_("Отменено заказов"),
+            object_label=lambda order: _("Заказ #{public_id}", public_id=order.public_id),
             perform=lambda order, code, text: cancel_order(
                 order=order,
                 actor=request.user,
@@ -220,7 +228,7 @@ class OrderAdmin(ScopedAdminMixin):
             except OrderFlowError as exc:
                 self.message_user(
                     request,
-                    f"Заказ #{order.public_id}: {exc}",
+                    _("Заказ #{public_id}: {exc}", public_id=order.public_id, exc=exc),
                     level=messages.WARNING,
                 )
                 continue
@@ -229,7 +237,7 @@ class OrderAdmin(ScopedAdminMixin):
         if success_count:
             self.message_user(
                 request,
-                f"Обновлено заказов: {success_count}.",
+                _("Обновлено заказов: {success_count}.", success_count=success_count),
             )
 
 

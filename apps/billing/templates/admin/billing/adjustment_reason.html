@@ -1,4 +1,5 @@
 {% extends "admin/base_site.html" %}
+{% load botera_i18n %}
 {% block content %}
 <div class="px-4">
   <h2 style="margin-bottom: 12px;">{{ title }}</h2>
@@ -15,7 +16,7 @@
     <input type="hidden" name="action" value="{{ action_name }}">
     <input type="hidden" name="apply" value="1">
     <button type="submit" style="margin-top: 12px;">{{ submit_label }}</button>
-    <a href="" style="margin-left: 12px;">Отмена</a>
+    <a href="" style="margin-left: 12px;">{% tr "Отмена" %}</a>
   </form>
 </div>
 {% endblock %}

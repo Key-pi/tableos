@@ -1,6 +1,7 @@
 from django import forms
 
 from apps.billing.models import Payment
+from core.i18n import _
 
 
 class PaymentAdminForm(forms.ModelForm):
@@ -28,8 +29,8 @@ class PaymentAdminForm(forms.ModelForm):
         method = self.cleaned_data.get("method")
         if method == Payment.Method.BONUSES:
             raise forms.ValidationError(
-                "Оплату бонусами нужно запускать из карточки счёта, не через Admin."
+                _("Оплату бонусами нужно запускать из карточки счёта, не через Admin.")
             )
         if amount <= 0:
-            raise forms.ValidationError("Сумма оплаты должна быть больше нуля.")
+            raise forms.ValidationError(_("Сумма оплаты должна быть больше нуля."))
         return amount

@@ -1,11 +1,10 @@
 {% extends "admin/base_site.html" %}
+{% load botera_i18n %}
 {% block content %}
 <div class="px-4">
   <h2 style="margin-bottom: 8px;">{{ title }}</h2>
   <p style="margin-bottom: 12px;">
-    Всё, что бот говорит гостям и персоналу, на каждом включённом языке. Жирным — ваш
-    собственный текст; остальное — готовый перевод. Нажмите на текст, чтобы заменить его
-    своим. Подстановки в фигурных скобках (<code>{partner_name}</code>) бот заменит сам.
+    {% tr "Всё, что бот говорит гостям и персоналу, на каждом включённом языке. Жирным — ваш собственный текст; остальное — готовый перевод. Нажмите на текст, чтобы заменить его своим. Подстановки в фигурных скобках бот заменит сам, например {example}." example="{partner_name}" %}
   </p>
   <form method="get" style="margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
     {% if partners %}
@@ -16,18 +15,18 @@
       </select>
     {% endif %}
     <select name="group">
-      <option value="">Все тексты</option>
+      <option value="">{% tr "Все тексты" %}</option>
       {% for key, label in groups %}
         <option value="{{ key }}"{% if group == key %} selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
-    <input type="search" name="q" value="{{ query }}" placeholder="Поиск по тексту">
-    <button type="submit">Найти</button>
+    <input type="search" name="q" value="{{ query }}" placeholder="{% tr "Поиск по тексту" %}">
+    <button type="submit">{% tr "Найти" %}</button>
   </form>
   <table style="width: 100%;">
     <thead>
       <tr>
-        <th style="text-align: left;">Раздел</th>
+        <th style="text-align: left;">{% tr "Раздел" %}</th>
         {% for language in languages %}<th style="text-align: left;">{{ language }}</th>{% endfor %}
       </tr>
     </thead>
@@ -42,15 +41,15 @@
           {% endfor %}
         </tr>
       {% empty %}
-        <tr><td colspan="4">Ничего не найдено.</td></tr>
+        <tr><td colspan="4">{% tr "Ничего не найдено." %}</td></tr>
       {% endfor %}
     </tbody>
   </table>
   {% if page.has_other_pages %}
     <p style="margin-top: 12px;">
-      {% if page.has_previous %}<a href="?{% if partner_id %}partner={{ partner_id }}&amp;{% endif %}group={{ group }}&amp;q={{ query|urlencode }}&amp;page={{ page.previous_page_number }}">← Назад</a>{% endif %}
-      Страница {{ page.number }} из {{ page.paginator.num_pages }}
-      {% if page.has_next %}<a href="?{% if partner_id %}partner={{ partner_id }}&amp;{% endif %}group={{ group }}&amp;q={{ query|urlencode }}&amp;page={{ page.next_page_number }}">Дальше →</a>{% endif %}
+      {% if page.has_previous %}<a href="?{% if partner_id %}partner={{ partner_id }}&amp;{% endif %}group={{ group }}&amp;q={{ query|urlencode }}&amp;page={{ page.previous_page_number }}">{% tr "← Назад" %}</a>{% endif %}
+      {% tr "Страница {number} из {pages}" number=page.number pages=page.paginator.num_pages %}
+      {% if page.has_next %}<a href="?{% if partner_id %}partner={{ partner_id }}&amp;{% endif %}group={{ group }}&amp;q={{ query|urlencode }}&amp;page={{ page.next_page_number }}">{% tr "Дальше →" %}</a>{% endif %}
     </p>
   {% endif %}
 </div>

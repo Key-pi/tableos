@@ -5,6 +5,8 @@ from apps.employees.models import EmployeeProfile
 from apps.users.admin import is_owner_user
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin, is_partner_owner_or_superuser
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 @admin.register(EmployeeProfile)
@@ -50,16 +52,16 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Права в счетах",
+            _lazy("Права в счетах"),
             {
                 "fields": ("can_adjust_bills",),
                 "description": (
-                    "Изменение и аннулирование счетов. Выдаёт только владелец заведения."
+                    _lazy("Изменение и аннулирование счетов. Выдаёт только владелец заведения.")
                 ),
             },
         ),
         (
-            "Оплата труда",
+            _lazy("Оплата труда"),
             {
                 "fields": (
                     "hourly_rate",
@@ -68,7 +70,7 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Уведомления в боте",
+            _lazy("Уведомления в боте"),
             {
                 "fields": (
                     "bot_notifications_enabled",
@@ -84,7 +86,7 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
                     ),
                 ),
                 "description": (
-                    "Какие рабочие уведомления сотрудник получает в Telegram-боте."
+                    _lazy("Какие рабочие уведомления сотрудник получает в Telegram-боте.")
                 ),
             },
         ),
@@ -119,6 +121,6 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
     @admin.display(description="Telegram")
     def telegram_binding(self, obj: EmployeeProfile) -> str:
         if obj.telegram_account_id is None:
-            return "Не привязан"
+            return _("Не привязан")
         username = f"@{obj.telegram_account.username}" if obj.telegram_account.username else "-"
         return f"{obj.telegram_account.telegram_id} / {username}"

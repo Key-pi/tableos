@@ -15,8 +15,9 @@ from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from apps.partners.models import OpeningHours, Partner
+from core.i18n import N_, _
 
-_SHORT_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+_SHORT_DAYS = (N_("Пн"), N_("Вт"), N_("Ср"), N_("Чт"), N_("Пт"), N_("Сб"), N_("Вс"))
 
 
 def intervals_for(partner: Partner, scope: str = "") -> list[OpeningHours]:
@@ -65,7 +66,7 @@ def describe_opening_hours(partner: Partner, scope: str = "") -> str:
         by_day.setdefault(interval.weekday, []).append(
             f"{interval.opens_at:%H:%M}–{interval.closes_at:%H:%M}"
         )
-    parts = [f"{_SHORT_DAYS[day]} {', '.join(spans)}" for day, spans in sorted(by_day.items())]
+    parts = [f"{_(_SHORT_DAYS[day])} {', '.join(spans)}" for day, spans in sorted(by_day.items())]
     return "; ".join(parts)
 
 

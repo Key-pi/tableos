@@ -5,6 +5,7 @@ from apps.bonuses.models import BonusProgram, BonusTransaction, WalkInSale, Walk
 from apps.bonuses.services import register_walk_in_sale_by_customer_code
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
+from core.i18n import gettext_lazy as _lazy
 
 
 class WalkInSaleItemInline(admin.TabularInline):
@@ -122,7 +123,7 @@ class WalkInSaleAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Данные гостя",
+            _lazy("Данные гостя"),
             {
                 "fields": (
                     "guest",
@@ -146,7 +147,7 @@ class WalkInSaleAdmin(ScopedAdminMixin):
 
         return RequestBoundForm
 
-    @admin.display(description="Код клиента")
+    @admin.display(description=_lazy("Код клиента"))
     def loyalty_customer(self, obj: WalkInSale) -> str:
         return obj.customer_code_snapshot or "anonymous"
 

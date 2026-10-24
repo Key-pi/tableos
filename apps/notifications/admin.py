@@ -9,6 +9,8 @@ from apps.notifications.models import (
 from apps.notifications.services import send_broadcast_campaign
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 @admin.register(NotificationPreference)
@@ -50,14 +52,17 @@ class BroadcastCampaignAdmin(ScopedAdminMixin):
     )
     actions = ("send_now",)
 
-    @admin.action(description="Отправить выбранные рассылки")
+    @admin.action(description=_lazy("Отправить выбранные рассылки"))
     def send_now(self, request, queryset):
         queued_count = 0
         for campaign in queryset:
             send_broadcast_campaign(campaign)
             queued_count += 1
         self.message_user(
-            request, f"Поставлено в отправку рассылок: {queued_count}.", level=messages.INFO
+            request, _(
+                "Поставлено в отправку рассылок: {queued_count}.",
+                queued_count=queued_count,
+            ), level=messages.INFO
         )
 
 

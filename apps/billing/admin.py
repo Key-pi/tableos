@@ -27,6 +27,8 @@ from apps.billing.table_bills import (
 )
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 class BillOrderInline(admin.TabularInline):
@@ -162,7 +164,7 @@ class BillingRequestAdmin(ScopedAdminMixin):
     )
     actions = ("mark_processed", "mark_canceled")
 
-    @admin.action(description="Отметить запросы обработанными")
+    @admin.action(description=_lazy("Отметить запросы обработанными"))
     def mark_processed(self, request, queryset):
         updated = 0
         for billing_request in queryset:
@@ -175,9 +177,9 @@ class BillingRequestAdmin(ScopedAdminMixin):
             if not was_processed and processed_request.status == BillingRequest.Status.PROCESSED:
                 updated += 1
         if updated:
-            self.message_user(request, f"Обработано запросов счёта: {updated}.")
+            self.message_user(request, _("Обработано запросов счёта: {updated}.", updated=updated))
 
-    @admin.action(description="Отменить запросы")
+    @admin.action(description=_lazy("Отменить запросы"))
     def mark_canceled(self, request, queryset):
         updated = 0
         for billing_request in queryset:
@@ -190,7 +192,7 @@ class BillingRequestAdmin(ScopedAdminMixin):
             if not was_canceled and canceled_request.status == BillingRequest.Status.CANCELED:
                 updated += 1
         if updated:
-            self.message_user(request, f"Отменено запросов счёта: {updated}.")
+            self.message_user(request, _("Отменено запросов счёта: {updated}.", updated=updated))
 
 
 @admin.register(Bill)
@@ -243,21 +245,22 @@ class BillAdmin(ScopedAdminMixin):
         "void_selected_bills",
     )
 
-    @admin.action(description="Аннулировать счета (право от владельца)")
+    @admin.action(description=_lazy("Аннулировать счета (право от владельца)"))
     def void_selected_bills(self, request, queryset):
         return run_with_reason(
             self,
             request,
             queryset,
             action_name="void_selected_bills",
-            title="Аннулировать счета",
+            title=_("Аннулировать счета"),
             description=(
-                "Счёт аннулируется, его заказы снова можно выставить в счёт. "
-                "Списанные бонусы вернутся гостю. Счёт с денежной оплатой "
-                "аннулировать нельзя."
+                _(
+                    "Счёт аннулируется, его заказы снова можно выставить в счёт. Списанные "
+                    "бонусы вернутся гостю. Счёт с денежной оплатой аннулировать нельзя.",
+                )
             ),
-            submit_label="Аннулировано счетов",
-            object_label=lambda bill: f"Счёт #{bill.public_id}",
+            submit_label=_("Аннулировано счетов"),
+            object_label=lambda bill: _("Счёт #{public_id}", public_id=bill.public_id),
             perform=lambda bill, code, text: void_bill(
                 bill=bill,
                 actor=request.user,
@@ -266,11 +269,11 @@ class BillAdmin(ScopedAdminMixin):
             ),
         )
 
-    @admin.display(description="Осталось оплатить")
+    @admin.display(description=_lazy("Осталось оплатить"))
     def remaining_amount(self, obj: Bill):
         return get_bill_remaining_amount(obj)
 
-    @admin.action(description="Выставить счета")
+    @admin.action(description=_lazy("Выставить счета"))
     def mark_as_issued(self, request, queryset):
         issued_count = 0
         for bill in queryset:
@@ -279,19 +282,22 @@ class BillAdmin(ScopedAdminMixin):
             except BillingServiceError as exc:
                 self.message_user(
                     request,
-                    f"Счёт #{bill.public_id}: {exc}",
+                    _("Счёт #{public_id}: {exc}", public_id=bill.public_id, exc=exc),
                     level=messages.WARNING,
                 )
                 continue
             issued_count += 1
         if issued_count:
-            self.message_user(request, f"Выдано счетов: {issued_count}.")
+            self.message_user(request, _(
+                "Выдано счетов: {issued_count}.",
+                issued_count=issued_count,
+            ))
 
-    @admin.action(description="Принять остаток наличными")
+    @admin.action(description=_lazy("Принять остаток наличными"))
     def record_remaining_cash_payment(self, request, queryset):
         self._record_remaining_payment(request, queryset, Payment.Method.CASH)
 
-    @admin.action(description="Принять остаток картой")
+    @admin.action(description=_lazy("Принять остаток картой"))
     def record_remaining_terminal_payment(self, request, queryset):
         self._record_remaining_payment(request, queryset, Payment.Method.TERMINAL)
 
@@ -301,24 +307,27 @@ class BillAdmin(ScopedAdminMixin):
             try:
                 remaining_amount = get_bill_remaining_amount(bill)
                 if remaining_amount <= 0:
-                    raise BillingServiceError("У счёта нет остатка к оплате.")
+                    raise BillingServiceError(_("У счёта нет остатка к оплате."))
                 record_payment(
                     bill=bill,
                     amount=remaining_amount,
                     method=method,
                     created_by=request.user,
-                    comment=f"Проведено в Admin ({method}).",
+                    comment=_("Проведено в Admin ({method}).", method=method),
                 )
             except BillingServiceError as exc:
                 self.message_user(
                     request,
-                    f"Счёт #{bill.public_id}: {exc}",
+                    _("Счёт #{public_id}: {exc}", public_id=bill.public_id, exc=exc),
                     level=messages.WARNING,
                 )
                 continue
             processed_count += 1
         if processed_count:
-            self.message_user(request, f"Принято оплат по счетам: {processed_count}.")
+            self.message_user(request, _(
+                "Принято оплат по счетам: {processed_count}.",
+                processed_count=processed_count,
+            ))
 
 
 @admin.register(BillOrder)
@@ -349,7 +358,7 @@ class BillItemAdmin(ScopedAdminMixin):
     list_filter = ("partner", "is_active")
     actions = ("remove_selected_lines", "refund_selected_lines")
 
-    @admin.action(description="Вернуть деньги за строки (право от владельца)")
+    @admin.action(description=_lazy("Вернуть деньги за строки (право от владельца)"))
     def refund_selected_lines(self, request, queryset):
         return run_refund(
             self,
@@ -366,20 +375,21 @@ class BillItemAdmin(ScopedAdminMixin):
             ),
         )
 
-    @admin.action(description="Убрать строки из счетов (право от владельца)")
+    @admin.action(description=_lazy("Убрать строки из счетов (право от владельца)"))
     def remove_selected_lines(self, request, queryset):
         return run_with_reason(
             self,
             request,
             queryset.filter(is_active=True).select_related("bill"),
             action_name="remove_selected_lines",
-            title="Убрать позиции из счёта",
+            title=_("Убрать позиции из счёта"),
             description=(
-                "Позиции остаются в истории счёта, сумма пересчитывается. Нельзя "
-                "уменьшить счёт ниже уже оплаченной суммы и менять счёт с "
-                "применёнными бонусами."
+                _(
+                    "Позиции остаются в истории счёта, сумма пересчитывается. Нельзя уменьшить "
+                    "счёт ниже уже оплаченной суммы и менять счёт с применёнными бонусами.",
+                )
             ),
-            submit_label="Убрано позиций",
+            submit_label=_("Убрано позиций"),
             object_label=lambda item: f"#{item.bill.public_id}: {item.item_name} x{item.quantity}",
             perform=lambda item, code, text: remove_bill_lines(
                 bill=item.bill,

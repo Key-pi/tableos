@@ -3,15 +3,19 @@ from django import forms
 from apps.bonuses.models import WalkInSale
 from apps.users.models import GuestProfile
 from apps.users.selectors import get_guest_profile_by_customer_code
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 class WalkInSaleAdminForm(forms.ModelForm):
     customer_code_input = forms.CharField(
-        label="Код клиента",
+        label=_lazy("Код клиента"),
         required=True,
         help_text=(
-            "Код клиента из профиля гостя в боте. Быстрая продажа записывается "
-            "только на известного гостя."
+            _lazy(
+                "Код клиента из профиля гостя в боте. Быстрая продажа записывается только на "
+                "известного гостя.",
+            )
         ),
     )
 
@@ -43,7 +47,7 @@ class WalkInSaleAdminForm(forms.ModelForm):
         guest = None
 
         if partner is None:
-            raise forms.ValidationError("Сначала выберите заведение.")
+            raise forms.ValidationError(_("Сначала выберите заведение."))
 
         if customer_code:
             try:
@@ -51,9 +55,9 @@ class WalkInSaleAdminForm(forms.ModelForm):
             except GuestProfile.DoesNotExist as exc:
                 self.add_error(
                     "customer_code_input",
-                    "Гость с таким кодом в этом заведении не найден.",
+                    _("Гость с таким кодом в этом заведении не найден."),
                 )
-                raise forms.ValidationError("Неверный код клиента.") from exc
+                raise forms.ValidationError(_("Неверный код клиента.")) from exc
 
         cleaned_data["partner"] = partner
         cleaned_data["resolved_guest"] = guest

@@ -91,7 +91,8 @@ OWNER_TEXTS = {**BUTTON_TEXTS, **INLINE_BUTTON_TEXTS, **TEMPLATE_TEXTS, **WHOLE_
 
 # Files whose texts only the Admin shows: the owner does not replace those.
 _ADMIN_ONLY = re.compile(
-    r"^(core/|apps/\w+/(models|admin|admin_actions|forms|apps|constants)\.py$)"
+    r"^(core/|apps/\w+/(models|admin|admin_actions|forms|apps|constants|views)\.py$"
+    r"|apps/\w+/templates/)"
 )
 _GROUPS = (
     ("staff", re.compile(r"^bot/(handlers|keyboards)/staff")),

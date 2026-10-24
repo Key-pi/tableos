@@ -1,6 +1,7 @@
 from django.db import models
 
 from core.database.models import PartnerBoundModel
+from core.i18n import gettext_lazy as _lazy
 
 
 class NotificationPreference(PartnerBoundModel):
@@ -10,15 +11,19 @@ class NotificationPreference(PartnerBoundModel):
         "users.GuestProfile",
         on_delete=models.CASCADE,
         related_name="notification_preferences",
-        verbose_name="Гость",
+        verbose_name=_lazy("Гость"),
     )
-    order_updates_enabled = models.BooleanField(default=True, verbose_name="Сообщения о заказах")
-    bonus_updates_enabled = models.BooleanField(default=True, verbose_name="Сообщения о бонусах")
-    marketing_enabled = models.BooleanField(default=True, verbose_name="Рассылки")
+    order_updates_enabled = models.BooleanField(default=True, verbose_name=_lazy(
+        "Сообщения о заказах",
+    ))
+    bonus_updates_enabled = models.BooleanField(default=True, verbose_name=_lazy(
+        "Сообщения о бонусах",
+    ))
+    marketing_enabled = models.BooleanField(default=True, verbose_name=_lazy("Рассылки"))
 
     class Meta:
-        verbose_name = "настройки сообщений гостя"
-        verbose_name_plural = "Настройки сообщений гостей"
+        verbose_name = _lazy("настройки сообщений гостя")
+        verbose_name_plural = _lazy("Настройки сообщений гостей")
         ordering = ["partner__name", "guest_id"]
 
     def __str__(self) -> str:
@@ -29,18 +34,18 @@ class StaffNotification(PartnerBoundModel):
     """Internal notification delivered to partner staff about operational events."""
 
     class Category(models.TextChoices):
-        ORDER_CREATED = "order_created", "Новый заказ"
-        ORDER_STATUS_CHANGED = "order_status_changed", "Статус заказа"
-        GUEST_CALL = "guest_call", "Вызов персонала"
-        BILLING_REQUEST = "billing_request", "Запрос счёта"
-        TABLE_VISIT = "table_visit", "Визит стола"
+        ORDER_CREATED = "order_created", _lazy("Новый заказ")
+        ORDER_STATUS_CHANGED = "order_status_changed", _lazy("Статус заказа")
+        GUEST_CALL = "guest_call", _lazy("Вызов персонала")
+        BILLING_REQUEST = "billing_request", _lazy("Запрос счёта")
+        TABLE_VISIT = "table_visit", _lazy("Визит стола")
         # Changes that move money or rights, sent to the owner (AA-035).
-        SECURITY = "security", "Безопасность"
+        SECURITY = "security", _lazy("Безопасность")
 
     class DeliveryStatus(models.TextChoices):
-        PENDING = "pending", "Ожидает"
-        SENT = "sent", "Отправлено"
-        FAILED = "failed", "Не доставлено"
+        PENDING = "pending", _lazy("Ожидает")
+        SENT = "sent", _lazy("Отправлено")
+        FAILED = "failed", _lazy("Не доставлено")
 
     employee = models.ForeignKey(
         "employees.EmployeeProfile",
@@ -48,7 +53,7 @@ class StaffNotification(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="staff_notifications",
-        verbose_name="Сотрудник",
+        verbose_name=_lazy("Сотрудник"),
     )
     order = models.ForeignKey(
         "orders.Order",
@@ -56,25 +61,29 @@ class StaffNotification(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="staff_notifications",
-        verbose_name="Заказ",
+        verbose_name=_lazy("Заказ"),
     )
-    category = models.CharField(max_length=32, choices=Category.choices, verbose_name="Тема")
-    title = models.CharField(max_length=255, verbose_name="Заголовок")
-    message = models.TextField(verbose_name="Текст")
-    is_read = models.BooleanField(default=False, verbose_name="Прочитано")
-    read_at = models.DateTimeField(null=True, blank=True, verbose_name="Прочитано в")
+    category = models.CharField(max_length=32, choices=Category.choices, verbose_name=_lazy("Тема"))
+    title = models.CharField(max_length=255, verbose_name=_lazy("Заголовок"))
+    message = models.TextField(verbose_name=_lazy("Текст"))
+    # The same event in any language (e.g. a repeated staff call), PQ-040.
+    dedupe_key = models.CharField(
+        max_length=120, blank=True, db_index=True, verbose_name=_lazy("Ключ повтора")
+    )
+    is_read = models.BooleanField(default=False, verbose_name=_lazy("Прочитано"))
+    read_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Прочитано в"))
     delivery_status = models.CharField(
         max_length=16,
         choices=DeliveryStatus.choices,
         default=DeliveryStatus.PENDING,
-        verbose_name="Доставка",
+        verbose_name=_lazy("Доставка"),
     )
-    delivered_at = models.DateTimeField(null=True, blank=True, verbose_name="Доставлено")
-    delivery_error = models.TextField(blank=True, verbose_name="Ошибка доставки")
+    delivered_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Доставлено"))
+    delivery_error = models.TextField(blank=True, verbose_name=_lazy("Ошибка доставки"))
 
     class Meta:
-        verbose_name = "уведомление персоналу"
-        verbose_name_plural = "Уведомления персоналу"
+        verbose_name = _lazy("уведомление персоналу")
+        verbose_name_plural = _lazy("Уведомления персоналу")
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -85,42 +94,44 @@ class BroadcastCampaign(PartnerBoundModel):
     """Partner marketing or announcement message scheduled for mass delivery."""
 
     class Status(models.TextChoices):
-        DRAFT = "draft", "Черновик"
-        SCHEDULED = "scheduled", "Запланирована"
-        SENDING = "sending", "Отправляется"
-        SENT = "sent", "Отправлена"
-        FAILED = "failed", "Ошибка"
+        DRAFT = "draft", _lazy("Черновик")
+        SCHEDULED = "scheduled", _lazy("Запланирована")
+        SENDING = "sending", _lazy("Отправляется")
+        SENT = "sent", _lazy("Отправлена")
+        FAILED = "failed", _lazy("Ошибка")
 
-    name = models.CharField(max_length=255, verbose_name="Название рассылки")
-    message = models.TextField(verbose_name="Текст рассылки")
+    name = models.CharField(max_length=255, verbose_name=_lazy("Название рассылки"))
+    message = models.TextField(verbose_name=_lazy("Текст рассылки"))
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
         default=Status.DRAFT,
-        verbose_name="Статус",
+        verbose_name=_lazy("Статус"),
     )
-    delivered_count = models.PositiveIntegerField(default=0, verbose_name="Доставлено")
-    failed_count = models.PositiveIntegerField(default=0, verbose_name="Не доставлено")
+    delivered_count = models.PositiveIntegerField(default=0, verbose_name=_lazy("Доставлено"))
+    failed_count = models.PositiveIntegerField(default=0, verbose_name=_lazy("Не доставлено"))
     unknown_count = models.PositiveIntegerField(
         default=0,
         help_text=(
-            "Сообщения, судьба которых неизвестна после сбоя воркера. Повторно не "
-            "отправляются: гость получает рассылку не больше одного раза (PQ-014)."
+            _lazy(
+                "Сообщения, судьба которых неизвестна после сбоя воркера. Повторно не "
+                "отправляются: гость получает рассылку не больше одного раза (PQ-014).",
+            )
         ),
-        verbose_name="Неизвестно",
+        verbose_name=_lazy("Неизвестно"),
     )
-    last_error = models.TextField(blank=True, verbose_name="Последняя ошибка")
+    last_error = models.TextField(blank=True, verbose_name=_lazy("Последняя ошибка"))
     delivery_started_at = models.DateTimeField(
         null=True,
         blank=True,
-        verbose_name="Отправка начата",
+        verbose_name=_lazy("Отправка начата"),
     )
-    scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name="Отправить в")
-    sent_at = models.DateTimeField(null=True, blank=True, verbose_name="Отправлена")
+    scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Отправить в"))
+    sent_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Отправлена"))
 
     class Meta:
-        verbose_name = "рассылка"
-        verbose_name_plural = "Рассылки"
+        verbose_name = _lazy("рассылка")
+        verbose_name_plural = _lazy("Рассылки")
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -136,39 +147,39 @@ class BroadcastDelivery(PartnerBoundModel):
     """
 
     class Status(models.TextChoices):
-        PENDING = "pending", "Ожидает"
-        SENDING = "sending", "Отправляется"
-        SENT = "sent", "Отправлено"
-        FAILED = "failed", "Не доставлено"
-        SKIPPED = "skipped", "Пропущено (гость больше не подходит)"
-        UNKNOWN = "unknown", "Неизвестно (воркер остановился)"
+        PENDING = "pending", _lazy("Ожидает")
+        SENDING = "sending", _lazy("Отправляется")
+        SENT = "sent", _lazy("Отправлено")
+        FAILED = "failed", _lazy("Не доставлено")
+        SKIPPED = "skipped", _lazy("Пропущено (гость больше не подходит)")
+        UNKNOWN = "unknown", _lazy("Неизвестно (воркер остановился)")
 
     campaign = models.ForeignKey(
         BroadcastCampaign,
         on_delete=models.CASCADE,
         related_name="deliveries",
-        verbose_name="Рассылка",
+        verbose_name=_lazy("Рассылка"),
     )
     guest = models.ForeignKey(
         "users.GuestProfile",
         on_delete=models.CASCADE,
         related_name="broadcast_deliveries",
-        verbose_name="Гость",
+        verbose_name=_lazy("Гость"),
     )
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
         default=Status.PENDING,
-        verbose_name="Статус",
+        verbose_name=_lazy("Статус"),
     )
-    claim_token = models.UUIDField(null=True, blank=True, verbose_name="Метка захвата")
-    claimed_at = models.DateTimeField(null=True, blank=True, verbose_name="Захвачено")
-    finished_at = models.DateTimeField(null=True, blank=True, verbose_name="Завершено")
-    error = models.TextField(blank=True, verbose_name="Ошибка")
+    claim_token = models.UUIDField(null=True, blank=True, verbose_name=_lazy("Метка захвата"))
+    claimed_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Захвачено"))
+    finished_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Завершено"))
+    error = models.TextField(blank=True, verbose_name=_lazy("Ошибка"))
 
     class Meta:
-        verbose_name = "доставка рассылки"
-        verbose_name_plural = "Доставки рассылок"
+        verbose_name = _lazy("доставка рассылки")
+        verbose_name_plural = _lazy("Доставки рассылок")
         ordering = ["campaign_id", "guest_id"]
         constraints = [
             models.UniqueConstraint(

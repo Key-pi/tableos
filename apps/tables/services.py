@@ -12,6 +12,7 @@ from apps.orders.models import Cart, Order
 from apps.tables.models import Table, TableSession, TableVisit
 from apps.users.models import GuestProfile
 from apps.users.services import get_or_create_guest_profile, mark_guest_visit
+from core.i18n import _
 
 
 class TableSessionError(Exception):
@@ -36,7 +37,7 @@ class VisitChoiceRequired(TableSessionError):
     """Raised in ``ask`` mode when the guest must choose join or new visit."""
 
     def __init__(self, *, table: Table, options: list[VisitOption]):
-        super().__init__("Выберите: подсесть к компании за столом или начать новый визит.")
+        super().__init__(_("Выберите: подсесть к компании за столом или начать новый визит."))
         self.table = table
         self.options = options
 
@@ -58,16 +59,16 @@ class ParsedTablePayload:
 def parse_table_deep_link_payload(payload: str) -> ParsedTablePayload:
     parts = payload.split("_", 2)
     if len(parts) != 3 or parts[0] != "table":
-        raise TableSessionError("Некорректная ссылка стола.")
+        raise TableSessionError(_("Некорректная ссылка стола."))
 
     try:
         table_number = int(parts[1])
     except ValueError as exc:
-        raise TableSessionError("Некорректный номер стола в QR-ссылке.") from exc
+        raise TableSessionError(_("Некорректный номер стола в QR-ссылке.")) from exc
 
     qr_token = parts[2].strip()
     if not qr_token:
-        raise TableSessionError("В QR-ссылке отсутствует токен стола.")
+        raise TableSessionError(_("В QR-ссылке отсутствует токен стола."))
 
     return ParsedTablePayload(table_number=table_number, qr_token=qr_token)
 
@@ -104,7 +105,7 @@ def activate_table_session(
             )
         )
     except Table.DoesNotExist as exc:
-        raise TableSessionError("Стол по этому QR-коду не найден или уже недоступен.") from exc
+        raise TableSessionError(_("Стол по этому QR-коду не найден или уже недоступен.")) from exc
     guest_profile = get_or_create_guest_profile(
         partner_id=partner_id,
         telegram_id=telegram_id,
@@ -128,7 +129,7 @@ def activate_table_session(
             )
         )
     except Table.DoesNotExist as exc:
-        raise TableSessionError("Стол по этому QR-коду уже недоступен.") from exc
+        raise TableSessionError(_("Стол по этому QR-коду уже недоступен.")) from exc
     # Lock order: GuestProfile -> Table -> guest's own TableSessions -> TableVisit.
     # The Table lock serialises visit creation and joining for this table.
     plan = _plan_visit(
@@ -224,7 +225,9 @@ def _plan_visit(*, partner_id, table: Table, guest_profile: GuestProfile, visit_
             id=visit_id,
         ).first()
         if visit is None:
-            raise TableSessionError("Эта компания за столом не найдена. Отсканируйте QR ещё раз.")
+            raise TableSessionError(_(
+                "Эта компания за столом не найдена. Отсканируйте QR ещё раз.",
+            ))
         plan.visit = visit
         plan.explicit_join = True
         return plan
@@ -232,7 +235,7 @@ def _plan_visit(*, partner_id, table: Table, guest_profile: GuestProfile, visit_
         plan.create_new = True
         return plan
     if visit_choice not in {VISIT_CHOICE_AUTO, VISIT_CHOICE_ASK}:
-        raise TableSessionError("Неизвестный выбор визита.")
+        raise TableSessionError(_("Неизвестный выбор визита."))
 
     member_session = (
         TableSession.objects.filter(
@@ -271,7 +274,7 @@ def _lock_target_visit(*, partner_id, table: Table, plan: _VisitPlan) -> TableVi
             return visit
         if plan.explicit_join:
             raise TableSessionError(
-                "Эта компания уже рассчиталась и ушла. Отсканируйте QR ещё раз."
+                _("Эта компания уже рассчиталась и ушла. Отсканируйте QR ещё раз.")
             )
         # auto/member target closed meanwhile: start a fresh visit instead.
     visit = TableVisit.objects.create(partner_id=partner_id, table=table)
@@ -313,14 +316,14 @@ def visit_unsettled_reason(visit: TableVisit) -> str | None:
         table_session__visit_id=visit.id,
     ).exclude(status=Order.Status.CANCELED)
     if visit_orders.filter(paid_at__isnull=True).exists():
-        return "В визите есть неоплаченные заказы."
+        return _("В визите есть неоплаченные заказы.")
     has_open_bills = Bill.objects.filter(
         partner_id=visit.partner_id,
         visit_id=visit.id,
         status__in=[Bill.Status.DRAFT, Bill.Status.ISSUED, Bill.Status.PARTIALLY_PAID],
     ).exists()
     if has_open_bills:
-        return "По визиту есть открытый счёт."
+        return _("По визиту есть открытый счёт.")
     return None
 
 
@@ -372,7 +375,7 @@ def close_table_visit(visit: TableVisit, *, actor=None) -> TableVisit:
             partner_id=visit.partner_id,
         )
     except TableVisit.DoesNotExist as exc:
-        raise TableSessionError("Визит не найден в этом заведении.") from exc
+        raise TableSessionError(_("Визит не найден в этом заведении.")) from exc
     if visit.status != TableVisit.Status.ACTIVE:
         return visit
     reason = visit_unsettled_reason(visit)
@@ -399,7 +402,7 @@ def close_table_session(session: TableSession) -> TableSession:
             partner_id=session.partner_id,
         )
     except TableSession.DoesNotExist as exc:
-        raise TableSessionError("Сессия стола не найдена в этом заведении.") from exc
+        raise TableSessionError(_("Сессия стола не найдена в этом заведении.")) from exc
     return _close_locked_table_session(locked_session)
 
 
@@ -420,7 +423,7 @@ def can_close_table_session(
         status=Cart.Status.ACTIVE,
     ).exists()
     if has_active_cart:
-        return False, "У гостя ещё есть активная корзина."
+        return False, _("У гостя ещё есть активная корзина.")
 
     has_unpaid_orders = Order.objects.filter(
         partner_id=session.partner_id,
@@ -430,7 +433,7 @@ def can_close_table_session(
         status=Order.Status.CANCELED,
     ).exists()
     if has_unpaid_orders:
-        return False, "У гостя есть заказы без оплаты."
+        return False, _("У гостя есть заказы без оплаты.")
 
     has_unreceived_orders = Order.objects.filter(
         partner_id=session.partner_id,
@@ -440,7 +443,7 @@ def can_close_table_session(
         status=Order.Status.CANCELED,
     ).exists()
     if has_unreceived_orders:
-        return False, "У гостя есть заказы, получение которых ещё не подтверждено."
+        return False, _("У гостя есть заказы, получение которых ещё не подтверждено.")
 
     has_open_billing_requests = include_billing_requests and BillingRequest.objects.filter(
         partner_id=session.partner_id,
@@ -451,7 +454,7 @@ def can_close_table_session(
         ],
     ).exists()
     if has_open_billing_requests:
-        return False, "У гостя есть необработанный запрос счёта."
+        return False, _("У гостя есть необработанный запрос счёта.")
 
     has_open_bills = Bill.objects.filter(
         partner_id=session.partner_id,
@@ -466,7 +469,7 @@ def can_close_table_session(
         ).values("order_id"),
     ).exists()
     if has_open_bills:
-        return False, "По гостю есть открытый счёт или неоплаченная сумма."
+        return False, _("По гостю есть открытый счёт или неоплаченная сумма.")
 
     return True, ""
 
@@ -479,7 +482,7 @@ def close_table_session_if_settled(session: TableSession) -> TableSession:
             partner_id=session.partner_id,
         )
     except TableSession.DoesNotExist as exc:
-        raise TableSessionError("Сессия стола не найдена в этом заведении.") from exc
+        raise TableSessionError(_("Сессия стола не найдена в этом заведении.")) from exc
     if locked_session.status != TableSession.Status.ACTIVE:
         return locked_session
     can_close, reason = can_close_table_session(locked_session)

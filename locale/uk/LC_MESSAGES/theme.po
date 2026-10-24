@@ -1,0 +1,344 @@
+# Ukrainian for the Admin theme (django-unfold has no Ukrainian catalog).
+# Compile: python infrastructure/scripts/messages.py compile
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "Add new item"
+msgstr "Додати"
+
+msgid "Add row"
+msgstr "Додати рядок"
+
+msgid "After you've created a user, you’ll be able to edit more user options."
+msgstr "Після створення користувача можна буде змінити інші його налаштування."
+
+msgid "All applications"
+msgstr "Усі розділи"
+
+msgid "Apply Filters"
+msgstr "Застосувати фільтри"
+
+msgid "Available shortcuts"
+msgstr "Поєднання клавіш"
+
+msgid "Bold"
+msgstr "Жирний"
+
+msgid "Cancel"
+msgstr "Скасувати"
+
+msgid "Change History"
+msgstr "Історія змін"
+
+msgid "Change reason"
+msgstr "Причина зміни"
+
+msgid "Changed by"
+msgstr "Хто змінив"
+
+msgid "Changelist shortcuts"
+msgstr "Клавіші в списку"
+
+msgid "Changes"
+msgstr "Зміни"
+
+msgid "Choose file to upload"
+msgstr "Виберіть файл"
+
+msgid "Click to cancel"
+msgstr "Натисніть, щоб скасувати"
+
+msgid "Click to download"
+msgstr "Натисніть, щоб завантажити"
+
+msgid "Code"
+msgstr "Код"
+
+msgid "Collapse"
+msgstr "Згорнути"
+
+msgid "Command tool shortcuts"
+msgstr "Клавіші командного рядка"
+
+msgid "Comment"
+msgstr "Коментар"
+
+msgid "Create new record"
+msgstr "Новий запис"
+
+msgid "Current file"
+msgstr "Поточний файл"
+
+msgid "Dark"
+msgstr "Темна"
+
+msgid "Date"
+msgstr "Дата"
+
+msgid "Date from"
+msgstr "Дата з"
+
+msgid "Date to"
+msgstr "Дата по"
+
+msgid "Default"
+msgstr "За замовчуванням"
+
+msgid "Edit"
+msgstr "Змінити"
+
+msgid "Edit comment:"
+msgstr "Змінити коментар:"
+
+msgid "Enter an URL"
+msgstr "Введіть адресу"
+
+msgid "Export"
+msgstr "Експорт"
+
+msgid "False"
+msgstr "Ні"
+
+msgid "Field"
+msgstr "Поле"
+
+msgid "Filters"
+msgstr "Фільтри"
+
+msgid "Forgotten your password or username?"
+msgstr "Забули пароль або ім'я користувача?"
+
+msgid "From"
+msgstr "З"
+
+msgid "General"
+msgstr "Основне"
+
+msgid "Global shortcuts"
+msgstr "Загальні клавіші"
+
+msgid "Go back"
+msgstr "Назад"
+
+msgid "Group"
+msgstr "Група"
+
+msgid "Group permissions"
+msgstr "Права групи"
+
+msgid "Heading"
+msgstr "Заголовок"
+
+msgid "Image preview"
+msgstr "Попередній перегляд"
+
+msgid "Import"
+msgstr "Імпорт"
+
+msgid "Indent decrease"
+msgstr "Зменшити відступ"
+
+msgid "Indent increase"
+msgstr "Збільшити відступ"
+
+msgid "Italic"
+msgstr "Курсив"
+
+msgid "Light"
+msgstr "Світла"
+
+msgid "Line number"
+msgstr "Номер рядка"
+
+msgid "Link"
+msgstr "Посилання"
+
+msgid "Manage group"
+msgstr "Група"
+
+msgid "Manage user"
+msgstr "Користувач"
+
+msgid "Name"
+msgstr "Назва"
+
+msgid "Navigate"
+msgstr "Перейти"
+
+msgid "New"
+msgstr "Нове"
+
+msgid "New value"
+msgstr "Нове значення"
+
+msgid "Next"
+msgstr "Далі"
+
+msgid "No data"
+msgstr "Немає даних"
+
+msgid "No results found"
+msgstr "Нічого не знайдено"
+
+msgid "Not enough data."
+msgstr "Недостатньо даних."
+
+msgid "Nothing matched your search"
+msgstr "За запитом нічого не знайдено"
+
+msgid "Object"
+msgstr "Об'єкт"
+
+msgid "Object permissions"
+msgstr "Права на об'єкт"
+
+msgid "Old value"
+msgstr "Старе значення"
+
+msgid "Open command tool"
+msgstr "Відкрити командний рядок"
+
+msgid "Open selection"
+msgstr "Відкрити вибране"
+
+msgid "Open selection in new tab"
+msgstr "Відкрити вибране в новій вкладці"
+
+msgid "Open shortcuts list"
+msgstr "Показати поєднання клавіш"
+
+msgid "Ordered list"
+msgstr "Нумерований список"
+
+msgid "Paragraph"
+msgstr "Абзац"
+
+msgid "Previous"
+msgstr "Назад"
+
+msgid "Quote"
+msgstr "Цитата"
+
+msgid "Recent searches"
+msgstr "Нещодавні запити"
+
+msgid "Record picture"
+msgstr "Фото запису"
+
+msgid "Redo"
+msgstr "Повторити"
+
+msgid "Reset filters"
+msgstr "Скинути фільтри"
+
+msgid "Reset to default"
+msgstr "Скинути"
+
+msgid "Return to site"
+msgstr "На сайт"
+
+msgid "Revert"
+msgstr "Повернути"
+
+msgid "Row"
+msgstr "Рядок"
+
+msgid "Run"
+msgstr "Виконати"
+
+msgid "Search apps and models..."
+msgstr "Пошук розділами…"
+
+msgid "Select"
+msgstr "Вибрати"
+
+msgid "Select action"
+msgstr "Виберіть дію"
+
+msgid "Select action to run"
+msgstr "Виберіть дію"
+
+msgid "Select currency"
+msgstr "Валюта"
+
+msgid "Select format"
+msgstr "Формат"
+
+msgid "Select record"
+msgstr "Виберіть запис"
+
+msgid "Select value"
+msgstr "Виберіть значення"
+
+msgid "Skipped"
+msgstr "Пропущено"
+
+msgid "Strike"
+msgstr "Закреслений"
+
+msgid "Submit"
+msgstr "Надіслати"
+
+msgid "System"
+msgstr "Як у системі"
+
+msgid "This item will be deleted."
+msgstr "Цей запис буде видалено."
+
+msgid "This object doesn't have a change history."
+msgstr "У цього запису немає історії змін."
+
+msgid "This page yielded into no results."
+msgstr "Тут поки нічого немає."
+
+msgid "To"
+msgstr "По"
+
+msgid "Toggle dark/light mode"
+msgstr "Світла або темна тема"
+
+msgid "Toggle filter"
+msgstr "Показати фільтри"
+
+msgid "Toggle password visibility"
+msgstr "Показати пароль"
+
+msgid "Toggle sidebar"
+msgstr "Згорнути меню"
+
+msgid "True"
+msgstr "Так"
+
+msgid "Type to search"
+msgstr "Почніть вводити"
+
+msgid "Underlined"
+msgstr "Підкреслений"
+
+msgid "Undo"
+msgstr "Скасувати"
+
+msgid "Unlink"
+msgstr "Прибрати посилання"
+
+msgid "Unordered list"
+msgstr "Список"
+
+msgid "Update"
+msgstr "Оновити"
+
+msgid "User permissions"
+msgstr "Права користувача"
+
+msgid "Value"
+msgstr "Значення"
+
+msgid "You have been successfully logged out from the administration"
+msgstr "Ви вийшли з Admin"
+
+msgid "next"
+msgstr "далі"
+
+msgid "previous"
+msgstr "назад"

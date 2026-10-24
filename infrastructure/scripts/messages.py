@@ -1,7 +1,8 @@
 """Каталог текстов: сбор из кода, проверка и компиляция без GNU gettext.
 
 Тексты в коде — по-русски, в ``_()`` / ``gettext_lazy()`` / ``N_()`` / ``variants()``
-(``core/i18n.py``). Переводы лежат в ``locale/<язык>/LC_MESSAGES/``:
+(``core/i18n.py``), в шаблонах — ``{% tr "…" %}`` (``core/templatetags/botera_i18n.py``).
+Переводы лежат в ``locale/<язык>/LC_MESSAGES/``:
 
 - ``django.po`` — тексты кода (украинский и английский; русский — сам текст);
 - ``theme.po`` — строки темы Admin (django-unfold), их msgid английские.
@@ -51,6 +52,8 @@ PLURAL_FORMS = {
     "en": "nplurals=2; plural=(n != 1);",
 }
 TAG = re.compile(r"</?([a-zA-Z][a-zA-Z0-9-]*)[^>]*>")
+# {% tr "…" %} in templates (core/templatetags/botera_i18n.py).
+TEMPLATE_TR = re.compile(r'\{%\s*tr\s+"([^"]+)"')
 
 
 @dataclass
@@ -99,6 +102,13 @@ def extract(root: pathlib.Path = ROOT) -> dict[str, list[str]]:
                 if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and arg.value:
                     place = f"{path.relative_to(root)}:{node.lineno}"
                     found.setdefault(arg.value, []).append(place)
+        for path in sorted((root / directory).rglob("*.html")):
+            text = path.read_text(encoding="utf-8")
+            for match in TEMPLATE_TR.finditer(text):
+                line = text.count("\n", 0, match.start()) + 1
+                found.setdefault(match.group(1), []).append(
+                    f"{path.relative_to(root)}:{line}"
+                )
     for places in found.values():
         places.sort(key=_place_key)
     return dict(sorted(found.items(), key=lambda item: _place_key(item[1][0])))

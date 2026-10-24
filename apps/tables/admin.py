@@ -19,6 +19,8 @@ from apps.tables.services import (
 )
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 @admin.register(Table)
@@ -74,7 +76,7 @@ class TableAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Работа стола",
+            _lazy("Работа стола"),
             {
                 "fields": (
                     "operations_links",
@@ -121,19 +123,19 @@ class TableAdmin(ScopedAdminMixin):
             urlencode({"table__id__exact": str(obj.id)}),
         )
 
-    @admin.display(description="Параметр ссылки (start)")
+    @admin.display(description=_lazy("Параметр ссылки (start)"))
     def start_parameter(self, obj):
         return obj.deep_link_payload
 
-    @admin.display(description="Ссылки")
+    @admin.display(description=_lazy("Ссылки"))
     def operations_links(self, obj: Table) -> str:
         return format_html(
-            '<a href="{}">Открыть заказы стола</a><br><a href="{}">Открыть счета стола</a>',
+            _("<a href=\"{}\">Открыть заказы стола</a><br><a href=\"{}\">Открыть счета стола</a>"),
             self._orders_changelist_url(obj),
             self._bills_changelist_url(obj),
         )
 
-    @admin.display(description="Активные сессии")
+    @admin.display(description=_lazy("Активные сессии"))
     def active_sessions_summary(self, obj: Table) -> str:
         sessions = list(
             obj.sessions.select_related("guest__telegram_account")
@@ -141,10 +143,10 @@ class TableAdmin(ScopedAdminMixin):
             .order_by("-started_at")[:10]
         )
         if not sessions:
-            return "Нет активных сессий."
+            return _("Нет активных сессий.")
         return format_html_join(
             "<br>",
-            "Гость: {} • код {} • с {}",
+            _("Гость: {} • код {} • с {}"),
             (
                 (
                     session.guest.telegram_account.username
@@ -156,7 +158,7 @@ class TableAdmin(ScopedAdminMixin):
             ),
         )
 
-    @admin.display(description="Заказы стола")
+    @admin.display(description=_lazy("Заказы стола"))
     def orders_summary(self, obj: Table) -> str:
         orders = list(
             obj.orders.select_related("guest__telegram_account")
@@ -164,10 +166,10 @@ class TableAdmin(ScopedAdminMixin):
             .order_by("-created_at")[:15]
         )
         if not orders:
-            return "Заказов пока нет."
+            return _("Заказов пока нет.")
         return format_html_join(
             "<br>",
-            "#{} • {} • {} грн • {}",
+            _("#{} • {} • {} грн • {}"),
             (
                 (
                     order.public_id,
@@ -179,17 +181,17 @@ class TableAdmin(ScopedAdminMixin):
             ),
         )
 
-    @admin.display(description="Счета стола")
+    @admin.display(description=_lazy("Счета стола"))
     def bills_summary(self, obj: Table) -> str:
         bills = list(
             obj.bills.select_related("primary_guest__telegram_account")
             .order_by("-created_at")[:15]
         )
         if not bills:
-            return "Счетов пока нет."
+            return _("Счетов пока нет.")
         return format_html_join(
             "<br>",
-            "#{} • {} • {} грн • оплачено {} грн",
+            _("#{} • {} • {} грн • оплачено {} грн"),
             (
                 (
                     bill.public_id,
@@ -205,10 +207,12 @@ class TableAdmin(ScopedAdminMixin):
     def qr_source_status(self, obj: Table) -> str:
         usernames = self._bot_usernames(obj)
         if usernames:
-            return f"Ссылки строятся по боту @{usernames[0]}"
+            return _("Ссылки строятся по боту @{usernames}", usernames=usernames[0])
         return (
-            "У бота заведения не указано имя (@username). "
-            "Откройте Admin → Боты и заполните «Имя бота»."
+            _(
+                "У бота заведения не указано имя (@username). Откройте Admin → Боты и заполните "
+                "«Имя бота».",
+            )
         )
 
     @admin.display(description="QR source URL")
@@ -218,7 +222,7 @@ class TableAdmin(ScopedAdminMixin):
             return urls[0]
         return f"https://t.me/<bot_username>?start={obj.deep_link_payload}"
 
-    @admin.display(description="Ссылка для QR")
+    @admin.display(description=_lazy("Ссылка для QR"))
     def telegram_start_url_primary(self, obj: Table) -> str:
         urls = self._telegram_start_urls(obj)
         value = urls[0] if urls else f"https://t.me/<bot_username>?start={obj.deep_link_payload}"
@@ -227,11 +231,11 @@ class TableAdmin(ScopedAdminMixin):
             value,
         )
 
-    @admin.display(description="Ссылки на бота")
+    @admin.display(description=_lazy("Ссылки на бота"))
     def telegram_start_links(self, obj: Table) -> str:
         urls = self._telegram_start_urls(obj)
         if not urls:
-            return "Укажите имя бота (Admin → Боты), чтобы появились ссылки для QR."
+            return _("Укажите имя бота (Admin → Боты), чтобы появились ссылки для QR.")
 
         return format_html_join(
             "<br>",
@@ -239,7 +243,7 @@ class TableAdmin(ScopedAdminMixin):
             ((url, url) for url in urls),
         )
 
-    @admin.display(description="Ссылка для QR (скопировать)")
+    @admin.display(description=_lazy("Ссылка для QR (скопировать)"))
     def telegram_start_urls_text(self, obj: Table) -> str:
         urls = self._telegram_start_urls(obj)
         if not urls:
@@ -255,7 +259,7 @@ class TableAdmin(ScopedAdminMixin):
             text_value,
         )
 
-    @admin.action(description="Создать общий счёт по столам")
+    @admin.action(description=_lazy("Создать общий счёт по столам"))
     def create_shared_bill_action(self, request, queryset):
         created_count = 0
         for table in queryset:
@@ -267,24 +271,28 @@ class TableAdmin(ScopedAdminMixin):
             except BillingServiceError as exc:
                 self.message_user(
                     request,
-                    f"Стол #{table.number}: {exc}",
+                    _("Стол #{number}: {exc}", number=table.number, exc=exc),
                     level=messages.WARNING,
                 )
                 continue
             created_count += 1
             self.message_user(
                 request,
-                f"Стол #{table.number}: создан общий счёт #{bill.public_id}.",
+                _(
+                    "Стол #{number}: создан общий счёт #{public_id}.",
+                    number=table.number,
+                    public_id=bill.public_id,
+                ),
                 level=messages.INFO,
             )
         if created_count:
             self.message_user(
                 request,
-                f"Создано общих счетов: {created_count}.",
+                _("Создано общих счетов: {created_count}.", created_count=created_count),
                 level=messages.SUCCESS,
             )
 
-    @admin.action(description="Создать личные счета по гостям")
+    @admin.action(description=_lazy("Создать личные счета по гостям"))
     def create_personal_bills_action(self, request, queryset):
         created_count = 0
         for table in queryset:
@@ -296,20 +304,24 @@ class TableAdmin(ScopedAdminMixin):
             except BillingServiceError as exc:
                 self.message_user(
                     request,
-                    f"Стол #{table.number}: {exc}",
+                    _("Стол #{number}: {exc}", number=table.number, exc=exc),
                     level=messages.WARNING,
                 )
                 continue
             created_count += len(bills)
             self.message_user(
                 request,
-                f"Стол #{table.number}: создано personal split bills: {len(bills)}.",
+                _(
+                    "Стол #{number}: создано personal split bills: {count}.",
+                    number=table.number,
+                    count=len(bills),
+                ),
                 level=messages.INFO,
             )
         if created_count:
             self.message_user(
                 request,
-                f"Всего создано personal bills: {created_count}.",
+                _("Всего создано personal bills: {created_count}.", created_count=created_count),
                 level=messages.SUCCESS,
             )
 
@@ -336,7 +348,7 @@ class TableSessionAdmin(ScopedAdminMixin):
     )
     actions = ("close_settled_sessions",)
 
-    @admin.action(description="Закрыть рассчитанные сессии")
+    @admin.action(description=_lazy("Закрыть рассчитанные сессии"))
     def close_settled_sessions(self, request, queryset):
         closed_count = 0
         for session in queryset:
@@ -346,14 +358,17 @@ class TableSessionAdmin(ScopedAdminMixin):
             except TableSessionError as exc:
                 self.message_user(
                     request,
-                    f"Сессия стола #{session.table.number}: {exc}",
+                    _("Сессия стола #{number}: {exc}", number=session.table.number, exc=exc),
                     level=messages.WARNING,
                 )
                 continue
             if was_active and closed_session.status == TableSession.Status.CLOSED:
                 closed_count += 1
         if closed_count:
-            self.message_user(request, f"Закрыто сессий стола: {closed_count}.")
+            self.message_user(request, _(
+                "Закрыто сессий стола: {closed_count}.",
+                closed_count=closed_count,
+            ))
 
 
 @admin.register(TableVisit)
@@ -378,7 +393,7 @@ class TableVisitAdmin(ScopedAdminMixin):
     )
     actions = ("close_settled_visits",)
 
-    @admin.action(description="Закрыть рассчитанные визиты")
+    @admin.action(description=_lazy("Закрыть рассчитанные визиты"))
     def close_settled_visits(self, request, queryset):
         closed_count = 0
         for visit in queryset.select_related("table"):
@@ -388,11 +403,14 @@ class TableVisitAdmin(ScopedAdminMixin):
             except TableSessionError as exc:
                 self.message_user(
                     request,
-                    f"Визит стола #{visit.table.number}: {exc}",
+                    _("Визит стола #{number}: {exc}", number=visit.table.number, exc=exc),
                     level=messages.WARNING,
                 )
                 continue
             if was_active and closed_visit.status == TableVisit.Status.CLOSED:
                 closed_count += 1
         if closed_count:
-            self.message_user(request, f"Закрыто визитов: {closed_count}.")
+            self.message_user(request, _(
+                "Закрыто визитов: {closed_count}.",
+                closed_count=closed_count,
+            ))

@@ -6,6 +6,8 @@ from django.urls import path
 from apps.orders.models import Order
 from apps.partners.models import BotInstance, Partner
 from apps.tables.models import Table
+from apps.users.views import set_admin_language
+from core.i18n import _
 from core.security.login_throttle import throttle_login
 
 
@@ -13,7 +15,7 @@ def healthcheck(_: HttpRequest) -> HttpResponse:
     return HttpResponse("ok")
 
 
-def demo_home(_: HttpRequest) -> HttpResponse:
+def demo_home(request: HttpRequest) -> HttpResponse:
     if not settings.DEBUG:
         # The demo page is public: in production it must not disclose
         # platform-wide counts of partners, bots, tables or orders.
@@ -24,11 +26,25 @@ def demo_home(_: HttpRequest) -> HttpResponse:
     orders_count = Order.objects.count()
     # Keep the landing page template-free so the backend is demoable even
     # before we introduce a separate frontend or Telegram WebApp shell.
+    texts = {
+        "title": _("Botera Shop — демо"),
+        "heading": _("Botera Shop работает"),
+        "intro": _(
+            "Демо-окружение: Telegram-боты заказов и лояльности для заведений и магазинов."
+        ),
+        "partners": _("Заведений"),
+        "bots": _("Активных ботов"),
+        "tables": _("Столов"),
+        "orders": _("Заказов"),
+        "admin": _("Открыть Admin"),
+        "health": _("Проверка работы"),
+        "demo": _("Демо-данные (логины, ссылки на столы):"),
+    }
     html = f"""
-    <html lang="ru">
+    <html lang="{request.LANGUAGE_CODE}">
       <head>
         <meta charset="utf-8">
-        <title>Botera Shop — демо</title>
+        <title>{texts["title"]}</title>
         <style>
           body {{
             font-family: Georgia, serif;
@@ -57,16 +73,16 @@ def demo_home(_: HttpRequest) -> HttpResponse:
       </head>
       <body>
         <div class="card">
-          <h1>Botera Shop работает</h1>
-          <p>Демо-окружение: Telegram-боты заказов и лояльности для заведений и магазинов.</p>
+          <h1>{texts["heading"]}</h1>
+          <p>{texts["intro"]}</p>
           <div class="stats">
-            <div class="stat"><strong>Заведений</strong><br>{partners_count}</div>
-            <div class="stat"><strong>Активных ботов</strong><br>{bots_count}</div>
-            <div class="stat"><strong>Столов</strong><br>{tables_count}</div>
-            <div class="stat"><strong>Заказов</strong><br>{orders_count}</div>
+            <div class="stat"><strong>{texts["partners"]}</strong><br>{partners_count}</div>
+            <div class="stat"><strong>{texts["bots"]}</strong><br>{bots_count}</div>
+            <div class="stat"><strong>{texts["tables"]}</strong><br>{tables_count}</div>
+            <div class="stat"><strong>{texts["orders"]}</strong><br>{orders_count}</div>
           </div>
-          <p><a href="/admin/">Открыть Admin</a> · <a href="/health/">Проверка работы</a></p>
-          <p>Демо-данные (логины, ссылки на столы):
+          <p><a href="/admin/">{texts["admin"]}</a> · <a href="/health/">{texts["health"]}</a></p>
+          <p>{texts["demo"]}
             <code>docker compose run --rm web python manage.py seed_baseline_demo
             --keep-existing</code></p>
         </div>
@@ -80,6 +96,8 @@ urlpatterns = [
     path("", demo_home, name="demo-home"),
     # AA-038: failed Admin logins are counted per account (login_throttle).
     path("admin/login/", throttle_login(admin.site.login), name="admin-login-throttled"),
+    # PQ-040: the language switch in the Admin header saves the user's language.
+    path("admin/language/", set_admin_language, name="admin-language"),
     path("admin/", admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
 ]

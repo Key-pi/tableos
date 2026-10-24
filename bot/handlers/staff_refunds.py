@@ -38,6 +38,7 @@ from bot.handlers.staff import (
     _safe_edit_message_text,
 )
 from bot.utils.html import escape_html
+from core.i18n import _
 
 router = Router()
 
@@ -67,16 +68,21 @@ def _selected(lines, mask: int):
 
 
 def _header(order: Order) -> str:
-    return f"<b>Возврат по заказу #{escape_html(order.public_id)}</b>"
+    return _("<b>Возврат по заказу #{public_id}</b>", public_id=escape_html(order.public_id))
 
 
 def _lines_screen(order: Order, lines, mask: int):
-    text = [_header(order), "Отметьте, что вернуть:"]
+    text = [_header(order), _("Отметьте, что вернуть:")]
     rows = []
     for index, line in enumerate(lines):
-        label = f"{line.item_name} × {line.quantity} — {line.line_total} грн"
+        label = _(
+            "{item_name} × {quantity} — {line_total} грн",
+            item_name=line.item_name,
+            quantity=line.quantity,
+            line_total=line.line_total,
+        )
         if line.refunded:
-            text.append(f"↩️ {escape_html(label)} — уже возвращено")
+            text.append(_("↩️ {label} — уже возвращено", label=escape_html(label)))
             continue
         mark = "☑️" if mask >> index & 1 else "⬜"
         toggled = mask ^ 1 << index
@@ -84,30 +90,34 @@ def _lines_screen(order: Order, lines, mask: int):
     open_indexes = [i for i, line in enumerate(lines) if not line.refunded]
     all_mask = sum(1 << i for i in open_indexes)
     if open_indexes and mask != all_mask:
-        rows.append(_button("Отметить всё", f"strf:{order.public_id}:{all_mask:x}"))
+        rows.append(_button(_("Отметить всё"), f"strf:{order.public_id}:{all_mask:x}"))
     if mask:
-        rows.append(_button("Дальше →", f"strr:{order.public_id}:{mask:x}"))
-    rows.append(_button("← К заказу", f"stafforderrefresh:{order.public_id}"))
+        rows.append(_button(_("Дальше →"), f"strr:{order.public_id}:{mask:x}"))
+    rows.append(_button(_("← К заказу"), f"stafforderrefresh:{order.public_id}"))
     return "\n".join(text), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _reason_screen(order: Order, mask: int):
     rows = [
-        _button(Refund.ReasonCode(code).label, f"strm:{order.public_id}:{mask:x}:{short}")
+        _button(str(Refund.ReasonCode(code).label), f"strm:{order.public_id}:{mask:x}:{short}")
         for short, code in REASONS.items()
     ]
-    rows.append(_button("← Назад", f"strf:{order.public_id}:{mask:x}"))
-    return f"{_header(order)}\nПричина возврата?", InlineKeyboardMarkup(inline_keyboard=rows)
+    rows.append(_button(_("← Назад"), f"strf:{order.public_id}:{mask:x}"))
+    return _(
+        "{header}\n"
+        "Причина возврата?",
+        header=_header(order),
+    ), InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _method_screen(order: Order, mask: int, reason: str):
     rows = [
-        _button(Refund.Method(code).label, f"strc:{order.public_id}:{mask:x}:{reason}:{short}")
+        _button(str(Refund.Method(code).label), f"strc:{order.public_id}:{mask:x}:{reason}:{short}")
         for short, code in METHODS.items()
     ]
-    rows.append(_button("← Назад", f"strr:{order.public_id}:{mask:x}"))
+    rows.append(_button(_("← Назад"), f"strr:{order.public_id}:{mask:x}"))
     return (
-        f"{_header(order)}\nКак вернёте деньги гостю?",
+        _("{header}\nКак вернёте деньги гостю?", header=_header(order)),
         InlineKeyboardMarkup(inline_keyboard=rows),
     )
 
@@ -117,15 +127,15 @@ def _confirm_screen(order: Order, lines, mask: int, reason: str, method: str, am
     chosen = _selected(lines, mask)
     text = [_header(order)]
     text += [f"• {escape_html(line.item_name)} × {line.quantity}" for line in chosen]
-    how = Refund.Method(METHODS[method]).label.lower()
-    text.append(f"Деньги гостю: <b>{money} грн</b> — {how}")
+    how = str(Refund.Method(METHODS[method]).label).lower()
+    text.append(_("Деньги гостю: <b>{money} грн</b> — {how}", money=money, how=how))
     if bonus:
-        text.append(f"Бонусы вернутся: {bonus}")
-    text.append(f"Причина: {Refund.ReasonCode(REASONS[reason]).label}")
-    text.append("Кешбэк за возвращённое снимется. Гость получит сообщение.")
+        text.append(_("Бонусы вернутся: {bonus}", bonus=bonus))
+    text.append(_("Причина: {label}", label=str(Refund.ReasonCode(REASONS[reason]).label)))
+    text.append(_("Кешбэк за возвращённое снимется. Гость получит сообщение."))
     rows = [
-        _button("✅ Вернуть", f"strk:{order.public_id}:{mask:x}:{reason}:{method}"),
-        _button("← Назад", f"strm:{order.public_id}:{mask:x}:{reason}"),
+        _button(_("✅ Вернуть"), f"strk:{order.public_id}:{mask:x}:{reason}:{method}"),
+        _button(_("← Назад"), f"strm:{order.public_id}:{mask:x}:{reason}"),
     ]
     return "\n".join(text), InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -157,7 +167,7 @@ def _load(partner_id, public_id: str):
 async def staff_refund_callback(callback: CallbackQuery, bot: Bot) -> None:
     parsed = _parse(callback.data)
     if parsed is None:
-        await callback.answer("Неизвестное действие.", show_alert=True)
+        await callback.answer(_("Неизвестное действие."), show_alert=True)
         return
     step, public_id, mask, reason, method = parsed
     try:
@@ -168,20 +178,20 @@ async def staff_refund_callback(callback: CallbackQuery, bot: Bot) -> None:
     allowed = await sync_to_async(user_can_adjust_bills)(employee.user, partner.id)
     if not allowed:
         await callback.answer(
-            "Нет права на возвраты. Его выдаёт владелец заведения.", show_alert=True
+            _("Нет права на возвраты. Его выдаёт владелец заведения."), show_alert=True
         )
         return
     try:
         order, bill, lines = await sync_to_async(_load)(partner.id, public_id)
     except Order.DoesNotExist:
-        await callback.answer("Заказ не найден.", show_alert=True)
+        await callback.answer(_("Заказ не найден."), show_alert=True)
         return
     if bill is None or all(line.refunded for line in lines):
-        await callback.answer("По этому заказу нечего возвращать.", show_alert=True)
+        await callback.answer(_("По этому заказу нечего возвращать."), show_alert=True)
         return
     if len(lines) > MAX_LINES:
         await callback.answer(
-            "Строк слишком много для бота — сделайте возврат в Admin.", show_alert=True
+            _("Строк слишком много для бота — сделайте возврат в Admin."), show_alert=True
         )
         return
     if step != "strf" and not _selected(lines, mask):
@@ -214,25 +224,39 @@ async def staff_refund_callback(callback: CallbackQuery, bot: Bot) -> None:
             partner.id, public_id
         )
         summary = [
-            f"\n\n<b>Возврат оформлен:</b> {refund.money_amount} грн "
-            f"({refund.get_method_display().lower()})."
+            _(
+                "\n"
+                "\n"
+                "<b>Возврат оформлен:</b> {money_amount} грн ({method}).",
+                money_amount=refund.money_amount,
+                method=refund.get_method_display().lower(),
+            )
         ]
         if refund.bonus_returned:
-            summary.append(f"Бонусов вернулось: {refund.bonus_returned}.")
+            summary.append(_(
+                "Бонусов вернулось: {bonus_returned}.",
+                bonus_returned=refund.bonus_returned,
+            ))
         if refund.cashback_revoked:
-            summary.append(f"Кешбэка снято: {refund.cashback_revoked}.")
+            summary.append(_(
+                "Кешбэка снято: {cashback_revoked}.",
+                cashback_revoked=refund.cashback_revoked,
+            ))
         if refund.cashback_not_revoked:
             summary.append(
-                f"Не снято {refund.cashback_not_revoked} кешбэка — гость уже потратил бонусы."
+                _(
+                    "Не снято {cashback_not_revoked} кешбэка — гость уже потратил бонусы.",
+                    cashback_not_revoked=refund.cashback_not_revoked,
+                )
             )
         if refund.money_amount and refund.method != Refund.Method.NONE:
-            summary.append("Передайте деньги гостю — он получил сообщение с суммой.")
+            summary.append(_("Передайте деньги гостю — он получил сообщение с суммой."))
         await _safe_edit_message_text(
             callback.message,
             _render_order_card(order) + "\n".join(summary),
             reply_markup=_order_actions_keyboard(order),
         )
-        await callback.answer("Возврат оформлен.")
+        await callback.answer(_("Возврат оформлен."))
         return
     await _safe_edit_message_text(callback.message, text, reply_markup=markup)
     await callback.answer()

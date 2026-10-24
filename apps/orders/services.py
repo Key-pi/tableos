@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -11,10 +12,12 @@ from apps.menu.models import MenuItem
 from apps.notifications.models import StaffNotification
 from apps.notifications.services import deliver_staff_notification, send_guest_order_status_update
 from apps.orders.models import Cart, CartItem, Order, OrderItem, OrderStatusHistory
+from apps.partners.languages import speaking_to_employee
 from apps.partners.models import PartnerBotSettings
 from apps.tables.models import TableSession
 from apps.tables.services import get_active_table_session
 from apps.users.models import GuestProfile, User
+from core.i18n import N_, _
 
 
 class OrderFlowError(Exception):
@@ -117,7 +120,7 @@ def parse_order_input(raw_value: str) -> list[tuple[str, int]]:
     chunks = [chunk.strip() for chunk in raw_value.split(",") if chunk.strip()]
     if not chunks:
         raise OrderFlowError(
-            "Укажите позиции в формате `code x qty`, например: `a1b2c3d4x2,e5f6a7b8x1`."
+            _("Укажите позиции в формате `code x qty`, например: `a1b2c3d4x2,e5f6a7b8x1`.")
         )
 
     for chunk in chunks:
@@ -125,17 +128,20 @@ def parse_order_input(raw_value: str) -> list[tuple[str, int]]:
         parts = normalized.split("x", 1)
         item_code = parts[0].strip()
         if not item_code:
-            raise OrderFlowError(f"Не удалось распознать позицию `{chunk}`.")
+            raise OrderFlowError(_("Не удалось распознать позицию `{chunk}`.", chunk=chunk))
 
         quantity = 1
         if len(parts) == 2 and parts[1]:
             try:
                 quantity = int(parts[1])
             except ValueError as exc:
-                raise OrderFlowError(f"Некорректное количество в `{chunk}`.") from exc
+                raise OrderFlowError(_(
+                    "Некорректное количество в `{chunk}`.",
+                    chunk=chunk,
+                )) from exc
 
         if quantity <= 0:
-            raise OrderFlowError("Количество должно быть больше нуля.")
+            raise OrderFlowError(_("Количество должно быть больше нуля."))
 
         entries.append((item_code, quantity))
 
@@ -169,24 +175,24 @@ def _validate_order_tenant_context(
 ) -> None:
     partner_scope_id = str(partner_id)
     if str(guest.partner_id) != partner_scope_id:
-        raise OrderFlowError("Гость заказа относится к другому заведению.")
+        raise OrderFlowError(_("Гость заказа относится к другому заведению."))
 
     if table_session is not None:
         if str(table_session.partner_id) != partner_scope_id:
-            raise OrderFlowError("Сессия заказа относится к другому заведению.")
+            raise OrderFlowError(_("Сессия заказа относится к другому заведению."))
         if table_session.guest_id != guest.id:
-            raise OrderFlowError("Гость заказа не совпадает с гостем активной сессии.")
+            raise OrderFlowError(_("Гость заказа не совпадает с гостем активной сессии."))
         if table is not None and table_session.table_id != table.id:
-            raise OrderFlowError("Стол заказа не совпадает со столом активной сессии.")
+            raise OrderFlowError(_("Стол заказа не совпадает со столом активной сессии."))
 
     if table is not None and str(table.partner_id) != partner_scope_id:
-        raise OrderFlowError("Стол заказа относится к другому заведению.")
+        raise OrderFlowError(_("Стол заказа относится к другому заведению."))
 
     menu_item_ids = {item_payload["menu_item_id"] for item_payload in items}
     if MenuItem.objects.filter(partner_id=partner_id, id__in=menu_item_ids).count() != len(
         menu_item_ids
     ):
-        raise OrderFlowError("Позиция заказа относится к другому заведению.")
+        raise OrderFlowError(_("Позиция заказа относится к другому заведению."))
 
 
 @transaction.atomic
@@ -211,33 +217,33 @@ def create_order(
     shipping_cost: str = "",
 ) -> Order:
     if not items:
-        raise OrderFlowError("Нельзя создать заказ без позиций.")
+        raise OrderFlowError(_("Нельзя создать заказ без позиций."))
     if payment_timing and payment_timing not in Order.PaymentTiming.values:
-        raise OrderFlowError("Неизвестный способ оплаты заказа.")
+        raise OrderFlowError(_("Неизвестный способ оплаты заказа."))
     if bool(payment_timing) != (channel in Order.REMOTE_CHANNELS):
-        raise OrderFlowError("Когда платить, выбирают только в заказах навынос.")
+        raise OrderFlowError(_("Когда платить, выбирают только в заказах навынос."))
     if channel not in Order.Channel.values:
-        raise OrderFlowError("Неизвестный способ получения заказа.")
+        raise OrderFlowError(_("Неизвестный способ получения заказа."))
     if channel != Order.Channel.TABLE and (table is not None or table_session is not None):
-        raise OrderFlowError("Заказ навынос не привязывается к столу.")
+        raise OrderFlowError(_("Заказ навынос не привязывается к столу."))
     if channel == Order.Channel.TABLE and requested_for is not None:
-        raise OrderFlowError("Время получения указывается только для заказов навынос.")
+        raise OrderFlowError(_("Время получения указывается только для заказов навынос."))
     is_delivery = channel == Order.Channel.DELIVERY
     is_shipping = channel == Order.Channel.SHIPPING
     if is_delivery and not delivery_address.strip():
-        raise OrderFlowError("Для доставки нужен адрес.")
+        raise OrderFlowError(_("Для доставки нужен адрес."))
     if not is_delivery and (delivery_address or delivery_latitude is not None):
-        raise OrderFlowError("Адрес доставки бывает только у доставки.")
+        raise OrderFlowError(_("Адрес доставки бывает только у доставки."))
     if delivery_fee is not None and not (is_delivery or is_shipping):
-        raise OrderFlowError("Стоимость доставки бывает только у доставки и отправки.")
+        raise OrderFlowError(_("Стоимость доставки бывает только у доставки и отправки."))
     if is_shipping and not (
         shipping_carrier in Order.Carrier.values
         and shipping_destination.strip()
         and shipping_cost in Order.ShippingCost.values
     ):
-        raise OrderFlowError("Для отправки нужны служба, получатель и вариант пересылки.")
+        raise OrderFlowError(_("Для отправки нужны служба, получатель и вариант пересылки."))
     if not is_shipping and (shipping_carrier or shipping_destination or shipping_cost):
-        raise OrderFlowError("Служба и получатель бывают только у отправки.")
+        raise OrderFlowError(_("Служба и получатель бывают только у отправки."))
     if table_session is not None:
         if table is None:
             table = table_session.table
@@ -282,7 +288,7 @@ def create_order(
         )
     fee = Decimal(delivery_fee or 0).quantize(Decimal("0.01"))
     if fee < 0:
-        raise OrderFlowError("Стоимость доставки не может быть отрицательной.")
+        raise OrderFlowError(_("Стоимость доставки не может быть отрицательной."))
     if fee > 0:
         # The fee is an ordinary order line (PQ-032; postage by post, PQ-034),
         # so bills, bonuses and reports treat it like any other line.
@@ -292,7 +298,7 @@ def create_order(
             order=order,
             kind=OrderItem.Kind.DELIVERY_FEE,
             menu_item=None,
-            item_name="Пересылка" if is_shipping else "Доставка",
+            item_name=_("Пересылка") if is_shipping else _("Доставка"),
             unit_price=fee,
             quantity=1,
         )
@@ -313,9 +319,13 @@ def create_order(
     return order
 
 
-def notify_staff_about_new_order(order: Order, *, note: str = "") -> None:
+def notify_staff_about_new_order(order: Order, *, note: Callable[[], str] | None = None) -> None:
     """Notify staff about a created order; callers that build the order in
-    several steps (pickup) call this once the order is complete."""
+    several steps (pickup) call this once the order is complete.
+
+    ``note`` builds the extra lines; it is called once per employee in their
+    language (PQ-040), so it must translate its texts itself.
+    """
 
     _create_staff_notifications_for_order_created(order, note=note)
 
@@ -334,11 +344,15 @@ def transition_order_status(
             partner_id=order.partner_id,
         )
     except Order.DoesNotExist as exc:
-        raise OrderFlowError("Заказ не найден в этом заведении.") from exc
+        raise OrderFlowError(_("Заказ не найден в этом заведении.")) from exc
 
     allowed_statuses = ORDER_STATUS_TRANSITIONS[order.status]
     if to_status not in allowed_statuses:
-        raise OrderFlowError(f"Нельзя перевести заказ из `{order.status}` в `{to_status}`.")
+        raise OrderFlowError(_(
+            "Нельзя перевести заказ из `{status}` в `{to_status}`.",
+            status=order.status,
+            to_status=to_status,
+        ))
     if (
         order.payment_timing == Order.PaymentTiming.PREPAID
         and to_status == Order.Status.ACCEPTED
@@ -348,7 +362,7 @@ def transition_order_status(
         # work only after the transfer is confirmed
         # (apps/billing/remote_orders.py:confirm_transfer). One paid on
         # receipt is accepted as usual (PQ-033).
-        raise OrderFlowError("Сначала подтвердите оплату переводом.")
+        raise OrderFlowError(_("Сначала подтвердите оплату переводом."))
     if (
         order.channel == Order.Channel.SHIPPING
         and to_status == Order.Status.DELIVERING
@@ -356,7 +370,7 @@ def transition_order_status(
     ):
         # Shipped means the parcel has a ТТН the guest can track
         # (apps/billing/remote_orders.py:mark_order_shipped).
-        raise OrderFlowError("Сначала введите ТТН отправления.")
+        raise OrderFlowError(_("Сначала введите ТТН отправления."))
     if to_status == Order.Status.CANCELED and BillItem.objects.filter(
         partner_id=order.partner_id,
         order_id=order.id,
@@ -366,8 +380,10 @@ def transition_order_status(
     ).exists():
         # Checked after the order lock, so a concurrently created bill is seen.
         raise OrderFlowError(
-            "Заказ уже в счёте. Отменить его можно через карточку счёта "
-            "(нужно право изменять счета)."
+            _(
+                "Заказ уже в счёте. Отменить его можно через карточку счёта (нужно право "
+                "изменять счета).",
+            )
         )
 
     from_status = order.status
@@ -434,11 +450,13 @@ def confirm_order_received_by_guest(
         )
     except Order.DoesNotExist as exc:
         if table_session is None:
-            raise OrderFlowError("Подтвердить получение можно только с активным столом.") from exc
-        raise OrderFlowError("Заказ не найден для этого гостя и стола.") from exc
+            raise OrderFlowError(_(
+                "Подтвердить получение можно только с активным столом.",
+            )) from exc
+        raise OrderFlowError(_("Заказ не найден для этого гостя и стола.")) from exc
 
     if not can_guest_confirm_receipt(order):
-        raise OrderFlowError("Этот заказ уже завершён или отменён.")
+        raise OrderFlowError(_("Этот заказ уже завершён или отменён."))
 
     from_status = order.status
     order.status = Order.Status.COMPLETED
@@ -523,7 +541,7 @@ def _resolve_cart_guest(*, partner_id, telegram_id: int):
         return table_session.guest, table_session
     if not _enabled_remote_channels(partner_id):
         raise OrderFlowError(
-            "Корзина доступна только после сканирования QR-кода стола. Сначала откройте сессию."
+            _("Корзина доступна только после сканирования QR-кода стола. Сначала откройте сессию.")
         )
     guest = (
         GuestProfile.objects.select_related("telegram_account")
@@ -531,20 +549,20 @@ def _resolve_cart_guest(*, partner_id, telegram_id: int):
         .first()
     )
     if guest is None:
-        raise OrderFlowError("Сначала нажмите /start, чтобы бот вас узнал.")
+        raise OrderFlowError(_("Сначала нажмите /start, чтобы бот вас узнал."))
     return guest, None
 
 
 CHANNEL_NAMES = {
-    Order.Channel.TABLE: "к столу",
-    Order.Channel.PICKUP: "на самовывоз",
-    Order.Channel.DELIVERY: "на доставку",
-    Order.Channel.SHIPPING: "на отправку почтой",
+    Order.Channel.TABLE: N_("к столу"),
+    Order.Channel.PICKUP: N_("на самовывоз"),
+    Order.Channel.DELIVERY: N_("на доставку"),
+    Order.Channel.SHIPPING: N_("на отправку почтой"),
 }
 CHANNEL_OFF_MESSAGES = {
-    Order.Channel.PICKUP: "Самовывоз сейчас отключён.",
-    Order.Channel.DELIVERY: "Доставка сейчас отключена.",
-    Order.Channel.SHIPPING: "Отправка почтой сейчас отключена.",
+    Order.Channel.PICKUP: N_("Самовывоз сейчас отключён."),
+    Order.Channel.DELIVERY: N_("Доставка сейчас отключена."),
+    Order.Channel.SHIPPING: N_("Отправка почтой сейчас отключена."),
 }
 
 
@@ -657,12 +675,12 @@ def switch_cart_channel_for_telegram_user(
     and the names of items removed because they are not sold in that channel."""
 
     if channel in REMOTE_CART_CHANNELS and channel not in _enabled_remote_channels(partner_id):
-        raise OrderFlowError(CHANNEL_OFF_MESSAGES[channel])
+        raise OrderFlowError(_(CHANNEL_OFF_MESSAGES[channel]))
     table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
     if channel == Order.Channel.TABLE and table_session is None:
-        raise OrderFlowError("Сначала отсканируйте QR-код стола.")
+        raise OrderFlowError(_("Сначала отсканируйте QR-код стола."))
     if channel not in CHANNEL_NAMES:
-        raise OrderFlowError("Этот способ заказа пока недоступен.")
+        raise OrderFlowError(_("Этот способ заказа пока недоступен."))
     cart = get_or_create_active_cart_for_telegram_user(
         partner_id=partner_id,
         telegram_id=telegram_id,
@@ -703,7 +721,11 @@ def add_items_to_cart_for_telegram_user(
     ]
     if not_sold:
         raise OrderFlowError(
-            f"Недоступно для заказа {CHANNEL_NAMES[cart.channel]}: {', '.join(not_sold)}."
+            _(
+                "Недоступно для заказа {channel_names}: {not_sold}.",
+                channel_names=_(CHANNEL_NAMES[cart.channel]),
+                not_sold=', '.join(not_sold),
+            )
         )
 
     for item_payload in items_payload:
@@ -772,7 +794,7 @@ def change_cart_item_quantity_for_telegram_user(
     delta: int,
 ) -> Cart:
     if delta == 0:
-        raise OrderFlowError("Количество должно изменяться хотя бы на 1.")
+        raise OrderFlowError(_("Количество должно изменяться хотя бы на 1."))
 
     cart = get_or_create_active_cart_for_telegram_user(
         partner_id=partner_id,
@@ -784,7 +806,7 @@ def change_cart_item_quantity_for_telegram_user(
             menu_item__public_id=item_public_id,
         )
     except CartItem.DoesNotExist as exc:
-        raise OrderFlowError("Эта позиция не найдена в активной корзине.") from exc
+        raise OrderFlowError(_("Эта позиция не найдена в активной корзине.")) from exc
 
     new_quantity = cart_item.quantity + delta
     if new_quantity <= 0:
@@ -816,7 +838,7 @@ def remove_cart_item_for_telegram_user(
         menu_item__public_id=item_public_id,
     ).delete()
     if deleted_count == 0:
-        raise OrderFlowError("Эта позиция уже отсутствует в корзине.")
+        raise OrderFlowError(_("Эта позиция уже отсутствует в корзине."))
 
     _refresh_cart_totals(cart)
     return Cart.objects.select_related("table_session__table").prefetch_related(
@@ -833,7 +855,7 @@ def clear_active_cart_for_telegram_user(
 ) -> None:
     cart = get_active_cart_for_telegram_user(partner_id=partner_id, telegram_id=telegram_id)
     if cart is None:
-        raise OrderFlowError("Активная корзина пуста.")
+        raise OrderFlowError(_("Активная корзина пуста."))
     cart.items.all().delete()
     _refresh_cart_totals(cart)
 
@@ -851,16 +873,19 @@ def checkout_active_cart_for_telegram_user(
     )
     cart_items = list(cart.items.select_related("menu_item"))
     if not cart_items:
-        raise OrderFlowError("Корзина пуста. Добавьте позиции перед оформлением.")
+        raise OrderFlowError(_("Корзина пуста. Добавьте позиции перед оформлением."))
     if cart.channel != Order.Channel.TABLE or cart.table_session_id is None:
         raise OrderFlowError(
-            "Корзина собрана не для стола. Оформите самовывоз или отсканируйте QR-код стола."
+            _("Корзина собрана не для стола. Оформите самовывоз или отсканируйте QR-код стола.")
         )
     not_sold = [
         item.item_name for item in cart_items if not item.menu_item.is_sold_in(Order.Channel.TABLE)
     ]
     if not_sold:
-        raise OrderFlowError(f"Недоступно для заказа к столу: {', '.join(not_sold)}.")
+        raise OrderFlowError(_(
+            "Недоступно для заказа к столу: {not_sold}.",
+            not_sold=', '.join(not_sold),
+        ))
 
     order = create_order(
         partner_id=partner_id,
@@ -891,7 +916,7 @@ def _build_items_payload(
     partner_id: UUID | str,
     parsed_entries: list[tuple[str, int]],
 ) -> list[dict]:
-    menu_item_codes = [item_code for item_code, _ in parsed_entries]
+    menu_item_codes = [item_code for item_code, _unused in parsed_entries]
     lookup_codes = {
         variant
         for item_code in menu_item_codes
@@ -911,8 +936,11 @@ def _build_items_payload(
     ]
     if missing_codes:
         raise OrderFlowError(
-            "Некоторые позиции недоступны или не принадлежат этому заведению: "
-            f"{', '.join(missing_codes)}."
+            _(
+                "Некоторые позиции недоступны или не принадлежат этому заведению: "
+                "{missing_codes}.",
+                missing_codes=', '.join(missing_codes),
+            )
         )
 
     items_payload = []
@@ -939,25 +967,40 @@ def _refresh_cart_totals(cart: Cart) -> Cart:
     return cart
 
 
+def _status_label(status: str) -> str:
+    try:
+        return str(Order.Status(status).label)
+    except ValueError:
+        return status
+
+
 def _order_location_label(order: Order) -> str:
     if order.channel == Order.Channel.PICKUP:
-        return f"самовывоз, {requested_time_label(order)}"
+        return _("самовывоз, {requested_time}", requested_time=requested_time_label(order))
     if order.channel == Order.Channel.DELIVERY:
-        return f"доставка, {requested_time_label(order)}, {order.delivery_address}"
+        return _(
+            "доставка, {requested_time}, {delivery_address}",
+            requested_time=requested_time_label(order),
+            delivery_address=order.delivery_address,
+        )
     if order.channel == Order.Channel.SHIPPING:
         return (
-            f"отправка, {order.get_shipping_carrier_display()}, {order.shipping_destination}"
+            _(
+                "отправка, {shipping_carrier}, {shipping_destination}",
+                shipping_carrier=order.get_shipping_carrier_display(),
+                shipping_destination=order.shipping_destination,
+            )
         )
     if order.table_id is not None:
-        return f"стол #{order.table.number}"
-    return "заказ без привязки к столу"
+        return _("стол #{number}", number=order.table.number)
+    return _("заказ без привязки к столу")
 
 
 def requested_time_label(order: Order) -> str:
     if order.requested_for is None:
-        return "как можно скорее"
+        return _("как можно скорее")
     local = order.requested_for.astimezone(ZoneInfo(order.partner.timezone))
-    return f"к {local:%H:%M}"
+    return _("к {local:%H:%M}", local=local)
 
 
 def _staff_notification_recipients(order: Order):
@@ -978,25 +1021,33 @@ def _staff_notification_recipients(order: Order):
     return recipients
 
 
-def _create_staff_notifications_for_order_created(order: Order, *, note: str = "") -> None:
+def _create_staff_notifications_for_order_created(
+    order: Order, *, note: Callable[[], str] | None = None
+) -> None:
     notifications = []
     for employee in _staff_notification_recipients(order).filter(
         notify_on_order_created=True,
-    ):
-        notifications.append(
-            StaffNotification(
-                partner_id=order.partner_id,
-                employee=employee,
-                order=order,
-                category=StaffNotification.Category.ORDER_CREATED,
-                title=f"Новый заказ #{order.public_id}",
-                message=(
-                    f"Поступил новый заказ: {_order_location_label(order)}, "
-                    f"сумма {order.total_amount} грн."
-                    + (f"\n{note}" if note else "")
-                ),
+    ).select_related("user", "telegram_account"):
+        # Each employee reads the notification in their own language (PQ-040).
+        with speaking_to_employee(employee):
+            extra = note() if note is not None else ""
+            notifications.append(
+                StaffNotification(
+                    partner_id=order.partner_id,
+                    employee=employee,
+                    order=order,
+                    category=StaffNotification.Category.ORDER_CREATED,
+                    title=_("Новый заказ #{public_id}", public_id=order.public_id),
+                    message=(
+                        _(
+                            "Поступил новый заказ: {order_location}, сумма {total_amount} грн.",
+                            order_location=_order_location_label(order),
+                            total_amount=order.total_amount,
+                        )
+                        + (f"\n{extra}" if extra else "")
+                    ),
+                )
             )
-        )
     for notification in notifications:
         notification.save()
         deliver_staff_notification(notification)
@@ -1011,20 +1062,32 @@ def _create_staff_notifications_for_status_change(
     notifications = []
     for employee in _staff_notification_recipients(order).filter(
         notify_on_order_status_changed=True,
-    ):
-        notifications.append(
-            StaffNotification(
-                partner_id=order.partner_id,
-                employee=employee,
-                order=order,
-                category=StaffNotification.Category.ORDER_STATUS_CHANGED,
-                title=f"Заказ #{order.public_id}: {to_status}",
-                message=(
-                    f"Статус заказа ({_order_location_label(order)}) "
-                    f"изменён с {from_status or '-'} на {to_status}."
-                ),
+    ).select_related("user", "telegram_account"):
+        with speaking_to_employee(employee):
+            from_label = _status_label(from_status) if from_status else "-"
+            to_label = _status_label(to_status)
+            notifications.append(
+                StaffNotification(
+                    partner_id=order.partner_id,
+                    employee=employee,
+                    order=order,
+                    category=StaffNotification.Category.ORDER_STATUS_CHANGED,
+                    title=_(
+                        "Заказ #{public_id}: {to_status}",
+                        public_id=order.public_id,
+                        to_status=to_label,
+                    ),
+                    message=(
+                        _(
+                            "Статус заказа ({order_location}) изменён с {from_status} на "
+                            "{to_status}.",
+                            order_location=_order_location_label(order),
+                            from_status=from_label,
+                            to_status=to_label,
+                        )
+                    ),
+                )
             )
-        )
     for notification in notifications:
         notification.save()
         deliver_staff_notification(notification)

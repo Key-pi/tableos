@@ -19,6 +19,7 @@ from apps.orders.models import Order
 from apps.partners.models import Partner
 from apps.tables.models import Table, TableSession
 from apps.users.models import GuestProfile
+from core.i18n import _
 
 
 @dataclass(frozen=True, slots=True)
@@ -386,14 +387,23 @@ def build_daily_paid_bills_page(*, partner_id, page: int = 1) -> ReportPage:
             "kind": "bill",
             "public_id": bill.public_id,
             "label": (
-                f"{_format_dt(bill.closed_at)} • {get_bill_context_label(bill)} • "
-                f"{bill.get_kind_display()} • {bill.total_amount} грн • "
-                f"{_bill_payment_method_label(bill)}"
+                _(
+                    "{closed_at} • {bill_context} • {kind} • {total_amount} грн • "
+                    "{bill_payment_method}",
+                    closed_at=_format_dt(bill.closed_at),
+                    bill_context=get_bill_context_label(bill),
+                    kind=bill.get_kind_display(),
+                    total_amount=bill.total_amount,
+                    bill_payment_method=_bill_payment_method_label(bill),
+                )
             ),
             "subtitle": (
-                f"Позиций: {sum(1 for item in bill.items.all() if item.is_active)} • "
-                f"заказов: {bill.bill_orders.count()} • "
-                f"гость: {_guest_label(bill.primary_guest)}"
+                _(
+                    "Позиций: {total} • заказов: {count} • гость: {guest}",
+                    total=sum(1 for item in bill.items.all() if item.is_active),
+                    count=bill.bill_orders.count(),
+                    guest=_guest_label(bill.primary_guest),
+                )
             ),
         }
         for bill in bills
@@ -420,12 +430,21 @@ def build_daily_walk_in_sales_page(*, partner_id, page: int = 1) -> ReportPage:
             "kind": "walkin",
             "id": str(sale.id),
             "label": (
-                f"{_format_dt(sale.created_at)} • {sale.loyalty_label} • "
-                f"{sale.amount} грн • {_staff_user_label(sale.created_by)}"
+                _(
+                    "{created_at} • {loyalty} • {amount} грн • {staff_user}",
+                    created_at=_format_dt(sale.created_at),
+                    loyalty=sale.loyalty_label,
+                    amount=sale.amount,
+                    staff_user=_staff_user_label(sale.created_by),
+                )
             ),
             "subtitle": (
-                f"Позиции: {sale.items.count()} • бонусов: {sale.bonus_awarded_amount} • "
-                f"комментарий: {sale.comment or '—'}"
+                _(
+                    "Позиции: {count} • бонусов: {bonus_awarded_amount} • комментарий: {comment}",
+                    count=sale.items.count(),
+                    bonus_awarded_amount=sale.bonus_awarded_amount,
+                    comment=sale.comment or '—',
+                )
             ),
         }
         for sale in sales
@@ -483,12 +502,20 @@ def build_daily_tables_page(*, partner_id, page: int = 1) -> ReportPage:
                 "kind": "table",
                 "id": str(table.id),
                 "label": (
-                    f"Стол {table.number} • сессий {len(table_sessions)} • "
-                    f"заказов {len(table_orders)} • счетов {len(table_paid_bills)}"
+                    _(
+                        "Стол {number} • сессий {count} • заказов {count2} • счетов {count3}",
+                        number=table.number,
+                        count=len(table_sessions),
+                        count2=len(table_orders),
+                        count3=len(table_paid_bills),
+                    )
                 ),
                 "subtitle": (
-                    f"Выручка: {table_paid_bills_total} грн • "
-                    f"открытых счетов: {len(table_open_bills)}"
+                    _(
+                        "Выручка: {table_paid_bills_total} грн • открытых счетов: {count}",
+                        table_paid_bills_total=table_paid_bills_total,
+                        count=len(table_open_bills),
+                    )
                 ),
             }
         )
@@ -670,13 +697,19 @@ def build_daily_tails_page(*, partner_id, page: int = 1) -> ReportPage:
                 "kind": "bill",
                 "public_id": bill.public_id,
                 "label": (
-                    f"Счёт #{bill.public_id} • {get_bill_context_label(bill)} • "
-                    f"остаток "
-                    f"{(bill.total_amount - bill.paid_amount).quantize(Decimal('0.01'))} грн"
+                    _(
+                        "Счёт #{public_id} • {bill_context} • остаток {value} грн",
+                        public_id=bill.public_id,
+                        bill_context=get_bill_context_label(bill),
+                        value=(bill.total_amount - bill.paid_amount).quantize(Decimal('0.01')),
+                    )
                 ),
                 "subtitle": (
-                    f"Статус: {bill.get_status_display()} • "
-                    f"гость: {_guest_label(bill.primary_guest)}"
+                    _(
+                        "Статус: {status} • гость: {guest}",
+                        status=bill.get_status_display(),
+                        guest=_guest_label(bill.primary_guest),
+                    )
                 ),
             }
         )
@@ -686,10 +719,15 @@ def build_daily_tails_page(*, partner_id, page: int = 1) -> ReportPage:
                 "kind": "order",
                 "public_id": order.public_id,
                 "label": (
-                    f"Заказ #{order.public_id} • {_order_context_label(order)} • "
-                    f"{order.get_status_display()} • {order.total_amount} грн"
+                    _(
+                        "Заказ #{public_id} • {order_context} • {status} • {total_amount} грн",
+                        public_id=order.public_id,
+                        order_context=_order_context_label(order),
+                        status=order.get_status_display(),
+                        total_amount=order.total_amount,
+                    )
                 ),
-                "subtitle": f"Не оплачен • гость: {_guest_label(order.guest)}",
+                "subtitle": _("Не оплачен • гость: {guest}", guest=_guest_label(order.guest)),
             }
         )
     for order in paid_unreceived_orders:
@@ -698,10 +736,18 @@ def build_daily_tails_page(*, partner_id, page: int = 1) -> ReportPage:
                 "kind": "order",
                 "public_id": order.public_id,
                 "label": (
-                    f"Заказ #{order.public_id} • {_order_context_label(order)} • "
-                    f"{order.get_status_display()} • {order.total_amount} грн"
+                    _(
+                        "Заказ #{public_id} • {order_context} • {status} • {total_amount} грн",
+                        public_id=order.public_id,
+                        order_context=_order_context_label(order),
+                        status=order.get_status_display(),
+                        total_amount=order.total_amount,
+                    )
                 ),
-                "subtitle": f"Оплачен, но не подтверждён • гость: {_guest_label(order.guest)}",
+                "subtitle": _(
+                    "Оплачен, но не подтверждён • гость: {guest}",
+                    guest=_guest_label(order.guest),
+                ),
             }
         )
     for billing_request in latest_open_requests.values():
@@ -710,12 +756,18 @@ def build_daily_tails_page(*, partner_id, page: int = 1) -> ReportPage:
                 "kind": "request",
                 "id": str(billing_request.id),
                 "label": (
-                    f"Запрос счёта • стол {billing_request.table.number} • "
-                    f"{billing_request.get_request_type_display()}"
+                    _(
+                        "Запрос счёта • стол {number} • {request_type}",
+                        number=billing_request.table.number,
+                        request_type=billing_request.get_request_type_display(),
+                    )
                 ),
                 "subtitle": (
-                    f"Гость: {_guest_label(billing_request.guest)} • "
-                    f"статус: {billing_request.get_status_display()}"
+                    _(
+                        "Гость: {guest} • статус: {status}",
+                        guest=_guest_label(billing_request.guest),
+                        status=billing_request.get_status_display(),
+                    )
                 ),
             }
         )
@@ -742,7 +794,7 @@ def _staff_user_label(user) -> str:
 
 def _guest_label(guest) -> str:
     if guest is None:
-        return "несколько гостей"
+        return _("несколько гостей")
     telegram_account = getattr(guest, "telegram_account", None)
     if telegram_account and telegram_account.username:
         return f"@{telegram_account.username}"
@@ -759,7 +811,7 @@ def _bill_payment_method_label(bill: Bill) -> str:
     ]
     unique_methods = list(dict.fromkeys(methods))
     if not unique_methods:
-        return "не указано"
+        return _("не указано")
     if len(unique_methods) == 1:
         return unique_methods[0]
     return " / ".join(unique_methods)
@@ -769,8 +821,8 @@ def _order_context_label(order: Order) -> str:
     if order.channel != Order.Channel.TABLE:
         return order.get_channel_display().lower()
     if order.table_id is not None:
-        return f"стол {order.table.number}"
-    return "заказ без привязки к столу"
+        return _("стол {number}", number=order.table.number)
+    return _("заказ без привязки к столу")
 
 
 def _format_dt(value) -> str:

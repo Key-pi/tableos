@@ -22,6 +22,8 @@ from core.admin_mixins import (
     get_admin_access_profile,
     is_partner_owner_or_superuser,
 )
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 # AA-036 (PQ-035): owner records and rights are changed only by the owner or
 # a superuser; anyone else with "Admin access" grants at most their own rights.
@@ -65,9 +67,12 @@ def rights_above(actor, rights: dict) -> list[tuple[str, str]]:
 
 
 def _rights_error(excess: list[tuple[str, str]]) -> ValidationError:
-    sections = ", ".join(sorted({AdminSection(section).label for section, _flag in excess}))
+    sections = ", ".join(sorted({str(AdminSection(section).label) for section, _flag in excess}))
     return ValidationError(
-        f"Нельзя выдать права больше своих (разделы: {sections}). Это может сделать владелец."
+        _(
+            "Нельзя выдать права больше своих (разделы: {sections}). Это может сделать владелец.",
+            sections=sections,
+        )
     )
 
 
@@ -138,10 +143,10 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
 
     fieldsets = (
         (None, {"fields": ("username", "password")}),
-        ("Личные данные", {"fields": ("first_name", "last_name", "email")}),
-        ("Заведение", {"fields": ("partner", "role")}),
+        (_lazy("Личные данные"), {"fields": ("first_name", "last_name", "email")}),
+        (_lazy("Заведение"), {"fields": ("partner", "role")}),
         (
-            "Права платформы",
+            _lazy("Права платформы"),
             {
                 "fields": (
                     "is_active",
@@ -152,7 +157,7 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
                 )
             },
         ),
-        ("Даты", {"fields": ("last_login", "date_joined")}),
+        (_lazy("Даты"), {"fields": ("last_login", "date_joined")}),
     )
     add_fieldsets = (
         (
@@ -222,8 +227,8 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
             return self.fieldsets
         return (
             (None, {"fields": ("username", "password")}),
-            ("Личные данные", {"fields": ("first_name", "last_name", "email", "role")}),
-            ("Статус", {"fields": ("is_active",)}),
+            (_("Личные данные"), {"fields": ("first_name", "last_name", "email", "role")}),
+            (_("Статус"), {"fields": ("is_active",)}),
         )
 
     def get_readonly_fields(self, request, obj=None):
@@ -404,18 +409,18 @@ class AdminAccessProfileAdmin(ScopedAdminMixin):
                 if preset == AdminAccessPreset.OWNER or (
                     preset and preset not in allowed_presets
                 ):
-                    raise ValidationError("Этот набор прав может выдать только владелец.")
+                    raise ValidationError(_("Этот набор прав может выдать только владелец."))
                 return cleaned
 
         return LimitedAccessProfileForm
 
-    @admin.display(description="Права по набору")
+    @admin.display(description=_lazy("Права по набору"))
     def permission_summary(self, obj):
         if not obj.pk:
-            return "Сохраните профиль, чтобы увидеть права набора."
+            return _("Сохраните профиль, чтобы увидеть права набора.")
         permissions = obj.section_permissions.order_by("section")
         if not permissions:
-            return "Прав на разделы пока нет."
+            return _("Прав на разделы пока нет.")
         return "\n".join(
             (
                 f"{permission.get_section_display()}: "

@@ -29,6 +29,7 @@ from apps.employees.models import EmployeeProfile
 from apps.orders.models import Order, OrderItem
 from apps.orders.services import transition_order_status
 from apps.users.models import AdminAccessProfile, GuestProfile, User
+from core.i18n import _
 
 
 class BillingServiceError(Exception):
@@ -58,10 +59,10 @@ def get_bill_remaining_amount(bill: Bill) -> Decimal:
 
 def get_bill_context_label(bill: Bill) -> str:
     if bill.table_id is not None:
-        return f"стол #{bill.table.number}"
+        return _("стол #{number}", number=bill.table.number)
     if bill.primary_guest_id is not None:
-        return f"гость {bill.primary_guest.customer_code}"
-    return "заказ без привязки к столу"
+        return _("гость {customer_code}", customer_code=bill.primary_guest.customer_code)
+    return _("заказ без привязки к столу")
 
 
 @transaction.atomic
@@ -76,9 +77,9 @@ def attach_orders_to_bill(
             partner_id=bill.partner_id,
         )
     except Bill.DoesNotExist as exc:
-        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
+        raise BillingServiceError(_("Счёт не найден в этом заведении.")) from exc
     if bill.status in {Bill.Status.CANCELED, Bill.Status.PAID}:
-        raise BillingServiceError("Нельзя добавлять заказы в закрытый счёт.")
+        raise BillingServiceError(_("Нельзя добавлять заказы в закрытый счёт."))
     if not order_ids:
         return bill
 
@@ -93,18 +94,20 @@ def attach_orders_to_bill(
         )
     )
     if len(requested_orders) != len(requested_order_ids):
-        raise BillingServiceError("Не все выбранные заказы найдены в этом заведении.")
+        raise BillingServiceError(_("Не все выбранные заказы найдены в этом заведении."))
 
     if bill.table_id is not None:
         invalid_context = [order for order in requested_orders if order.table_id != bill.table_id]
         if invalid_context:
-            raise BillingServiceError("В этот счёт можно добавлять только заказы того же стола.")
+            raise BillingServiceError(_("В этот счёт можно добавлять только заказы того же стола."))
         if any(_order_visit_id(order) != bill.visit_id for order in requested_orders):
-            raise BillingServiceError("В этот счёт можно добавлять только заказы того же визита.")
+            raise BillingServiceError(_(
+                "В этот счёт можно добавлять только заказы того же визита.",
+            ))
     else:
         if any(order.table_id is not None for order in requested_orders):
             raise BillingServiceError(
-                "В счёт без привязки к столу можно добавлять только такие же заказы."
+                _("В счёт без привязки к столу можно добавлять только такие же заказы.")
             )
         if bill.primary_guest_id is not None:
             invalid_guest_orders = [
@@ -112,11 +115,11 @@ def attach_orders_to_bill(
             ]
             if invalid_guest_orders:
                 raise BillingServiceError(
-                    "В персональный счёт без стола можно добавлять только заказы этого гостя."
+                    _("В персональный счёт без стола можно добавлять только заказы этого гостя.")
                 )
         elif len({order.guest_id for order in requested_orders}) != 1:
             raise BillingServiceError(
-                "Заказы без стола можно объединять только в рамках одного гостя."
+                _("Заказы без стола можно объединять только в рамках одного гостя.")
             )
 
     orders = [order for order in requested_orders if order.id not in existing_order_ids]
@@ -130,7 +133,7 @@ def attach_orders_to_bill(
     )
 
     if any(order.status == Order.Status.CANCELED for order in orders):
-        raise BillingServiceError("Отменённые заказы нельзя включать в счёт.")
+        raise BillingServiceError(_("Отменённые заказы нельзя включать в счёт."))
 
     target_order_item_ids = [order_item.id for order_item in order_items]
     allocated_order_item_ids = set(
@@ -149,7 +152,7 @@ def attach_orders_to_bill(
         .values_list("order_item_id", flat=True)
     )
     if allocated_order_item_ids:
-        raise BillingServiceError("Часть позиций уже включена в другой счёт.")
+        raise BillingServiceError(_("Часть позиций уже включена в другой счёт."))
 
     BillOrder.objects.bulk_create(
         [
@@ -239,7 +242,7 @@ def create_bill_from_orders(
     created_source: str = Bill.Source.INTERNAL,
 ) -> Bill:
     if not order_ids:
-        raise BillingServiceError("Нужно выбрать хотя бы один заказ для создания счёта.")
+        raise BillingServiceError(_("Нужно выбрать хотя бы один заказ для создания счёта."))
 
     requested_order_ids = {str(order_id) for order_id in order_ids}
     # PostgreSQL rejects FOR UPDATE on the nullable side of an outer join
@@ -254,24 +257,24 @@ def create_bill_from_orders(
         )
     )
     if len(orders) != len(requested_order_ids):
-        raise BillingServiceError("Не все выбранные заказы найдены в этом заведении.")
+        raise BillingServiceError(_("Не все выбранные заказы найдены в этом заведении."))
 
     if any(order.status == Order.Status.CANCELED for order in orders):
-        raise BillingServiceError("Отменённые заказы нельзя включать в новый счёт.")
+        raise BillingServiceError(_("Отменённые заказы нельзя включать в новый счёт."))
 
     table_ids = {order.table_id for order in orders}
     if len(table_ids) != 1:
         raise BillingServiceError(
-            "В один счёт можно объединять только заказы одного стола или одного гостя без стола."
+            _("В один счёт можно объединять только заказы одного стола или одного гостя без стола.")
         )
     if next(iter(table_ids)) is None and len({order.guest_id for order in orders}) != 1:
         raise BillingServiceError(
-            "Заказы без стола можно объединять только в рамках одного гостя."
+            _("Заказы без стола можно объединять только в рамках одного гостя.")
         )
     visit_ids = {_order_visit_id(order) for order in orders}
     if len(visit_ids) != 1:
         # ADR-0007: orders of one table visit never enter another visit's bill.
-        raise BillingServiceError("В один счёт можно объединять только заказы одного визита.")
+        raise BillingServiceError(_("В один счёт можно объединять только заказы одного визита."))
     (bill_visit_id,) = visit_ids
 
     order_items = list(
@@ -295,7 +298,7 @@ def create_bill_from_orders(
     )
     if allocated_order_item_ids:
         raise BillingServiceError(
-            "Один или несколько order items уже включены в другой счёт."
+            _("Один или несколько order items уже включены в другой счёт.")
         )
 
     primary_guest = orders[0].guest if len({order.guest_id for order in orders}) == 1 else None
@@ -352,9 +355,9 @@ def issue_bill(bill: Bill) -> Bill:
             partner_id=bill.partner_id,
         )
     except Bill.DoesNotExist as exc:
-        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
+        raise BillingServiceError(_("Счёт не найден в этом заведении.")) from exc
     if bill.status != Bill.Status.DRAFT:
-        raise BillingServiceError("Выдать можно только draft-счёт.")
+        raise BillingServiceError(_("Выдать можно только draft-счёт."))
     bill.status = Bill.Status.ISSUED
     bill.issued_at = timezone.now()
     bill.save(update_fields=["status", "issued_at", "updated_at"])
@@ -374,32 +377,34 @@ def record_payment(
     mark_bill_issued: bool = True,
 ) -> Payment:
     if method not in Payment.Method.values:
-        raise BillingServiceError("Неизвестный способ оплаты.")
+        raise BillingServiceError(_("Неизвестный способ оплаты."))
     if method == Payment.Method.BONUSES:
         raise BillingServiceError(
-            "Оплату бонусами нужно запускать через команду оплаты бонусами."
+            _("Оплату бонусами нужно запускать через команду оплаты бонусами.")
         )
     try:
         amount_value = Decimal(amount).quantize(Decimal("0.01"))
     except (InvalidOperation, TypeError, ValueError) as exc:
-        raise BillingServiceError("Сумма оплаты должна быть корректным денежным значением.") from exc
+        raise BillingServiceError(_(
+            "Сумма оплаты должна быть корректным денежным значением.",
+        )) from exc
     if not amount_value.is_finite():
-        raise BillingServiceError("Сумма оплаты должна быть конечным денежным значением.")
+        raise BillingServiceError(_("Сумма оплаты должна быть конечным денежным значением."))
     if amount_value <= 0:
-        raise BillingServiceError("Сумма оплаты должна быть больше нуля.")
+        raise BillingServiceError(_("Сумма оплаты должна быть больше нуля."))
 
     bill = Bill.objects.select_for_update().prefetch_related("items", "payments").get(
         id=bill.id,
         partner_id=bill.partner_id,
     )
     if bill.status == Bill.Status.CANCELED:
-        raise BillingServiceError("Нельзя принять оплату по отменённому счёту.")
+        raise BillingServiceError(_("Нельзя принять оплату по отменённому счёту."))
     if bill.status == Bill.Status.PAID:
-        raise BillingServiceError("Счёт уже полностью оплачен.")
+        raise BillingServiceError(_("Счёт уже полностью оплачен."))
     recalculate_bill_totals(bill)
     remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
     if amount_value > remaining_amount:
-        raise BillingServiceError("Сумма оплаты превышает остаток по счёту.")
+        raise BillingServiceError(_("Сумма оплаты превышает остаток по счёту."))
 
     payment = Payment.objects.create(
         partner_id=bill.partner_id,
@@ -456,12 +461,12 @@ def pay_bill_with_bonuses(
             partner_id=bill.partner_id,
         )
     except Bill.DoesNotExist as exc:
-        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
+        raise BillingServiceError(_("Счёт не найден в этом заведении.")) from exc
 
     if bill.status == Bill.Status.CANCELED:
-        raise BillingServiceError("Нельзя оплатить бонусами отменённый счёт.")
+        raise BillingServiceError(_("Нельзя оплатить бонусами отменённый счёт."))
     if bill.status == Bill.Status.PAID:
-        raise BillingServiceError("Счёт уже полностью оплачен.")
+        raise BillingServiceError(_("Счёт уже полностью оплачен."))
 
     order_ids = list(
         BillOrder.objects.filter(
@@ -477,20 +482,20 @@ def pay_bill_with_bonuses(
         .order_by("id")
     )
     if len(locked_orders) != len(order_ids):
-        raise BillingServiceError("Не все заказы счёта принадлежат этому заведению.")
+        raise BillingServiceError(_("Не все заказы счёта принадлежат этому заведению."))
 
     if bill.primary_guest_id is None:
-        raise BillingServiceError("Оплата бонусами доступна только для персонального счёта.")
+        raise BillingServiceError(_("Оплата бонусами доступна только для персонального счёта."))
     try:
         primary_guest = GuestProfile.objects.select_for_update().get(
             id=bill.primary_guest_id,
             partner_id=bill.partner_id,
         )
     except GuestProfile.DoesNotExist as exc:
-        raise BillingServiceError("Гость счёта не найден в этом заведении.") from exc
+        raise BillingServiceError(_("Гость счёта не найден в этом заведении.")) from exc
     bill.primary_guest = primary_guest
     if any(order.guest_id != primary_guest.id for order in locked_orders):
-        raise BillingServiceError("Заказы персонального счёта принадлежат разным гостям.")
+        raise BillingServiceError(_("Заказы персонального счёта принадлежат разным гостям."))
     try:
         assert_bonus_balance_reconciled(primary_guest)
     except BonusServiceError as exc:
@@ -498,11 +503,11 @@ def pay_bill_with_bonuses(
 
     recalculate_bill_totals(bill)
     if bill.bonus_spent_amount > 0:
-        raise BillingServiceError("Бонусы по этому счёту уже были применены.")
+        raise BillingServiceError(_("Бонусы по этому счёту уже были применены."))
     if bill.paid_amount > 0:
-        raise BillingServiceError("Оплату бонусами нужно выбрать до первой денежной оплаты.")
+        raise BillingServiceError(_("Оплату бонусами нужно выбрать до первой денежной оплаты."))
     if bill.total_amount <= 0:
-        raise BillingServiceError("В счёте нет положительной суммы для оплаты бонусами.")
+        raise BillingServiceError(_("В счёте нет положительной суммы для оплаты бонусами."))
 
     max_redeemable = get_redeemable_bonus_amount(
         partner_id=bill.partner_id,
@@ -510,7 +515,7 @@ def pay_bill_with_bonuses(
         purchase_total=bill.total_amount,
     )
     if max_redeemable <= 0:
-        raise BillingServiceError("По этому счёту сейчас нечего оплачивать бонусами.")
+        raise BillingServiceError(_("По этому счёту сейчас нечего оплачивать бонусами."))
 
     bill.bonus_spent_amount = max_redeemable
     recalculate_bill_totals(bill)
@@ -588,14 +593,16 @@ def redeem_bonus_for_bill(
         partner_id=bill.partner_id,
     )
     if bill.primary_guest_id is None:
-        raise BillingServiceError("Списание бонусов пока доступно только для персонального счёта.")
+        raise BillingServiceError(_(
+            "Списание бонусов пока доступно только для персонального счёта.",
+        ))
     try:
         primary_guest = GuestProfile.objects.select_for_update().get(
             id=bill.primary_guest_id,
             partner_id=bill.partner_id,
         )
     except GuestProfile.DoesNotExist as exc:
-        raise BillingServiceError("Гость счёта не найден в этом заведении.") from exc
+        raise BillingServiceError(_("Гость счёта не найден в этом заведении.")) from exc
     bill.primary_guest = primary_guest
     try:
         assert_bonus_balance_reconciled(primary_guest)
@@ -604,11 +611,11 @@ def redeem_bonus_for_bill(
     recalculate_bill_totals(bill)
 
     if bill.status in {Bill.Status.CANCELED, Bill.Status.PAID}:
-        raise BillingServiceError("Нельзя списать бонусы по закрытому счёту.")
+        raise BillingServiceError(_("Нельзя списать бонусы по закрытому счёту."))
     if bill.bonus_spent_amount > 0:
-        raise BillingServiceError("Бонусы по этому счёту уже были списаны.")
+        raise BillingServiceError(_("Бонусы по этому счёту уже были списаны."))
     if bill.paid_amount > 0:
-        raise BillingServiceError("Списание бонусов нужно делать до первой оплаты по счёту.")
+        raise BillingServiceError(_("Списание бонусов нужно делать до первой оплаты по счёту."))
 
     max_redeemable = get_redeemable_bonus_amount(
         partner_id=bill.partner_id,
@@ -616,15 +623,15 @@ def redeem_bonus_for_bill(
         purchase_total=bill.total_amount,
     )
     if max_redeemable <= 0:
-        raise BillingServiceError("По этому счёту сейчас нечего списывать бонусами.")
+        raise BillingServiceError(_("По этому счёту сейчас нечего списывать бонусами."))
 
     redeem_amount = max_redeemable
     if amount is not None:
         redeem_amount = Decimal(amount).quantize(Decimal("0.01"))
         if redeem_amount <= 0:
-            raise BillingServiceError("Сумма списания бонусов должна быть больше нуля.")
+            raise BillingServiceError(_("Сумма списания бонусов должна быть больше нуля."))
         if redeem_amount > max_redeemable:
-            raise BillingServiceError("Сумма списания превышает доступный лимит по бонусам.")
+            raise BillingServiceError(_("Сумма списания превышает доступный лимит по бонусам."))
 
     bill.bonus_spent_amount = redeem_amount
     recalculate_bill_totals(bill)
@@ -817,7 +824,7 @@ def user_can_adjust_bills(user, partner_id) -> bool:
 
 def _validate_adjustment_reason(reason_code: str) -> None:
     if reason_code not in BillAdjustment.ReasonCode.values:
-        raise BillingServiceError("Укажите причину изменения счёта.")
+        raise BillingServiceError(_("Укажите причину изменения счёта."))
 
 
 def _lock_bill_for_change(bill: Bill, actor) -> Bill:
@@ -827,13 +834,13 @@ def _lock_bill_for_change(bill: Bill, actor) -> Bill:
             partner_id=bill.partner_id,
         )
     except Bill.DoesNotExist as exc:
-        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
+        raise BillingServiceError(_("Счёт не найден в этом заведении.")) from exc
     if not user_can_adjust_bills(actor, locked_bill.partner_id):
-        raise BillingServiceError("Нет права изменять счета. Его выдаёт владелец заведения.")
+        raise BillingServiceError(_("Нет права изменять счета. Его выдаёт владелец заведения."))
     if locked_bill.status == Bill.Status.PAID:
-        raise BillingServiceError("Оплаченный счёт изменить нельзя.")
+        raise BillingServiceError(_("Оплаченный счёт изменить нельзя."))
     if locked_bill.status == Bill.Status.CANCELED:
-        raise BillingServiceError("Счёт уже аннулирован.")
+        raise BillingServiceError(_("Счёт уже аннулирован."))
     return locked_bill
 
 
@@ -875,12 +882,12 @@ def remove_bill_lines(
     bill = _lock_bill_for_change(bill, actor)
     if bill.bonus_spent_amount > 0:
         raise BillingServiceError(
-            "По счёту применены бонусы: его нельзя менять по позициям, только аннулировать."
+            _("По счёту применены бонусы: его нельзя менять по позициям, только аннулировать.")
         )
 
     requested_ids = list(dict.fromkeys(str(item_id) for item_id in order_item_ids))
     if not requested_ids:
-        raise BillingServiceError("Выберите позиции, которые нужно убрать из счёта.")
+        raise BillingServiceError(_("Выберите позиции, которые нужно убрать из счёта."))
     items = list(
         BillItem.objects.select_for_update()
         .filter(
@@ -892,7 +899,7 @@ def remove_bill_lines(
         .order_by("id")
     )
     if len(items) != len(requested_ids):
-        raise BillingServiceError("Часть позиций не найдена среди активных позиций счёта.")
+        raise BillingServiceError(_("Часть позиций не найдена среди активных позиций счёта."))
 
     bill = Bill.objects.prefetch_related("items", "payments").get(id=bill.id)
     _subtotal, total_before, paid_amount = _compute_bill_totals(bill)
@@ -900,7 +907,10 @@ def remove_bill_lines(
     total_after = max(Decimal("0.00"), total_before - removed_total).quantize(Decimal("0.01"))
     if total_after < paid_amount:
         raise BillingServiceError(
-            f"Нельзя уменьшить счёт ниже уже оплаченной суммы ({paid_amount} грн)."
+            _(
+                "Нельзя уменьшить счёт ниже уже оплаченной суммы ({paid_amount} грн).",
+                paid_amount=paid_amount,
+            )
         )
 
     _release_bill_lines(bill=bill, items=items, actor=actor)
@@ -950,7 +960,7 @@ def _void_locked_bill(*, bill: Bill, actor, reason_code: str, reason_text: str) 
     bill = Bill.objects.prefetch_related("items", "payments").get(id=bill.id)
     _subtotal, total_before, paid_amount = _compute_bill_totals(bill)
     if paid_amount > 0:
-        raise BillingServiceError("По счёту уже есть оплата деньгами — аннулировать его нельзя.")
+        raise BillingServiceError(_("По счёту уже есть оплата деньгами — аннулировать его нельзя."))
 
     items = list(
         BillItem.objects.select_for_update()
@@ -978,7 +988,7 @@ def _void_locked_bill(*, bill: Bill, actor, reason_code: str, reason_text: str) 
     for billing_request in reopened_requests:
         billing_request.status = BillingRequest.Status.OPEN
         billing_request.bill = None
-        billing_request.note = f"Счёт #{bill.public_id} аннулирован."
+        billing_request.note = _("Счёт #{public_id} аннулирован.", public_id=bill.public_id)
         billing_request.save(update_fields=["status", "bill", "note", "updated_at"])
 
     return BillAdjustment.objects.create(
@@ -1001,7 +1011,7 @@ def _void_locked_bill(*, bill: Bill, actor, reason_code: str, reason_text: str) 
 
 def _return_bill_bonuses(*, bill: Bill, amount: Decimal, actor) -> None:
     if bill.primary_guest_id is None:
-        raise BillingServiceError("У счёта с бонусами нет гостя — вернуть бонусы некому.")
+        raise BillingServiceError(_("У счёта с бонусами нет гостя — вернуть бонусы некому."))
     guest = GuestProfile.objects.select_for_update().get(
         id=bill.primary_guest_id,
         partner_id=bill.partner_id,
@@ -1054,12 +1064,18 @@ def cancel_order(
     for bill in sorted(bills.values(), key=lambda value: str(value.id)):
         if bill.status == Bill.Status.PAID:
             raise BillingServiceError(
-                f"Заказ уже оплачен в счёте #{bill.public_id}, отменить его нельзя."
+                _(
+                    "Заказ уже оплачен в счёте #{public_id}, отменить его нельзя.",
+                    public_id=bill.public_id,
+                )
             )
         if not reason_code:
             raise BillingServiceError(
-                f"Заказ уже в счёте #{bill.public_id}. Отмените его через карточку счёта "
-                "с указанием причины."
+                _(
+                    "Заказ уже в счёте #{public_id}. Отмените его через карточку счёта с "
+                    "указанием причины.",
+                    public_id=bill.public_id,
+                )
             )
         remove_bill_lines(
             bill=bill,
@@ -1085,7 +1101,7 @@ def _split(total: Decimal, weights: list[Decimal]) -> list[Decimal]:
 
     weight_sum = sum(weights, Decimal("0.00"))
     if total <= 0 or weight_sum <= 0:
-        return [Decimal("0.00") for _ in weights]
+        return [Decimal("0.00") for _unused in weights]
     parts = [(total * weight / weight_sum).quantize(CENT) for weight in weights[:-1]]
     return [*parts, total - sum(parts, Decimal("0.00"))]
 
@@ -1210,20 +1226,20 @@ def refund_bill_lines(
     """
 
     if reason_code not in Refund.ReasonCode.values:
-        raise BillingServiceError("Укажите причину возврата.")
+        raise BillingServiceError(_("Укажите причину возврата."))
     if method not in Refund.Method.values:
-        raise BillingServiceError("Укажите, как вернули деньги.")
+        raise BillingServiceError(_("Укажите, как вернули деньги."))
     item_ids = {str(item_id) for item_id in bill_item_ids}
     if not item_ids:
-        raise BillingServiceError("Выберите, что вернуть.")
+        raise BillingServiceError(_("Выберите, что вернуть."))
     try:
         bill = Bill.objects.select_for_update().get(id=bill.id, partner_id=bill.partner_id)
     except Bill.DoesNotExist as exc:
-        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
+        raise BillingServiceError(_("Счёт не найден в этом заведении.")) from exc
     if not user_can_adjust_bills(actor, bill.partner_id):
-        raise BillingServiceError("Нет права на возвраты. Его выдаёт владелец заведения.")
+        raise BillingServiceError(_("Нет права на возвраты. Его выдаёт владелец заведения."))
     if bill.status != Bill.Status.PAID:
-        raise BillingServiceError("Возврат возможен только по оплаченному счёту.")
+        raise BillingServiceError(_("Возврат возможен только по оплаченному счёту."))
 
     lines = list(
         BillItem.objects.select_for_update()
@@ -1232,14 +1248,17 @@ def refund_bill_lines(
     )
     by_id = {str(line.id): line for line in lines}
     if not item_ids <= set(by_id):
-        raise BillingServiceError("Строка не из этого счёта.")
+        raise BillingServiceError(_("Строка не из этого счёта."))
     refunded_ids = set(
         RefundLine.objects.filter(bill_item__in=lines).values_list("bill_item_id", flat=True)
     )
     selected = [line for line in lines if str(line.id) in item_ids]
     for line in selected:
         if line.id in refunded_ids:
-            raise BillingServiceError(f"Строка «{line.item_name}» уже возвращена.")
+            raise BillingServiceError(_(
+                "Строка «{item_name}» уже возвращена.",
+                item_name=line.item_name,
+            ))
     money, bonus, is_last = _refund_amounts(bill, lines, refunded_ids, selected)
     money_already = Decimal(bill.refunded_amount).quantize(CENT)
 
@@ -1287,7 +1306,7 @@ def refund_bill_lines(
     if bonus > 0:
         guest = guests.get(bill.primary_guest_id)
         if guest is None:
-            raise BillingServiceError("У счёта с бонусами нет гостя — вернуть бонусы некому.")
+            raise BillingServiceError(_("У счёта с бонусами нет гостя — вернуть бонусы некому."))
         BonusTransaction.objects.create(
             partner_id=bill.partner_id,
             guest=guest,
@@ -1297,7 +1316,7 @@ def refund_bill_lines(
             source_type="bill_refund",
             source_id=str(refund.id),
             idempotency_key=f"refund:{refund.id}:redemption_reversal",
-            comment=f"Возврат по счёту #{bill.public_id}: бонусы вернулись.",
+            comment=_("Возврат по счёту #{public_id}: бонусы вернулись.", public_id=bill.public_id),
         )
         sync_bonus_balance_from_ledger(guest)
 
@@ -1356,7 +1375,10 @@ def refund_bill_lines(
                     source_type="refund_cashback",
                     source_id=str(refund.id),
                     idempotency_key=f"refund:{refund.id}:cashback:{order.id}",
-                    comment=f"Возврат по заказу #{order.public_id}: кешбэк снят.",
+                    comment=_(
+                        "Возврат по заказу #{public_id}: кешбэк снят.",
+                        public_id=order.public_id,
+                    ),
                 )
                 sync_bonus_balance_from_ledger(guest)
             revoked += take
@@ -1369,7 +1391,7 @@ def refund_bill_lines(
                 order=order,
                 to_status=Order.Status.CANCELED,
                 actor_user=actor,
-                note=f"Полный возврат по счёту #{bill.public_id}.",
+                note=_("Полный возврат по счёту #{public_id}.", public_id=bill.public_id),
             )
 
     refund.cashback_revoked = revoked
@@ -1397,20 +1419,20 @@ def annotate_bill_adjustment(*, adjustment_id, partner_id, actor, text: str) -> 
 
     comment = (text or "").strip()
     if not comment:
-        raise BillingServiceError("Комментарий пустой.")
+        raise BillingServiceError(_("Комментарий пустой."))
     try:
         adjustment = BillAdjustment.objects.select_for_update().get(
             id=adjustment_id,
             partner_id=partner_id,
         )
     except BillAdjustment.DoesNotExist as exc:
-        raise BillingServiceError("Изменение счёта не найдено.") from exc
+        raise BillingServiceError(_("Изменение счёта не найдено.")) from exc
     if actor is None or adjustment.actor_id != actor.id:
-        raise BillingServiceError("Комментарий может добавить только автор изменения.")
+        raise BillingServiceError(_("Комментарий может добавить только автор изменения."))
     if adjustment.reason_text:
-        raise BillingServiceError("Комментарий к этому изменению уже добавлен.")
+        raise BillingServiceError(_("Комментарий к этому изменению уже добавлен."))
     if timezone.now() - adjustment.created_at > ADJUSTMENT_COMMENT_WINDOW:
-        raise BillingServiceError("Время на добавление комментария истекло.")
+        raise BillingServiceError(_("Время на добавление комментария истекло."))
     adjustment.reason_text = comment[:255]
     adjustment.save(update_fields=["reason_text", "updated_at"])
     return adjustment

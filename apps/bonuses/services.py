@@ -18,6 +18,7 @@ from apps.menu.models import MenuItem
 from apps.orders.models import Order
 from apps.users.models import GuestProfile
 from apps.users.selectors import get_guest_profile_by_customer_code
+from core.i18n import _
 
 
 @dataclass(slots=True)
@@ -58,7 +59,7 @@ def assert_bonus_balance_reconciled(guest: GuestProfile) -> None:
     )
     if stored_balance != ledger_balance:
         raise BonusServiceError(
-            "Баланс бонусов требует сверки с историей операций перед изменением."
+            _("Баланс бонусов требует сверки с историей операций перед изменением.")
         )
 
 
@@ -77,9 +78,12 @@ def _parse_positive_money(value: Decimal | str, *, label: str) -> Decimal:
     try:
         amount = Decimal(value).quantize(Decimal("0.01"))
     except (InvalidOperation, TypeError, ValueError) as exc:
-        raise BonusServiceError(f"{label} должна быть корректным денежным значением.") from exc
+        raise BonusServiceError(_(
+            "{label} должна быть корректным денежным значением.",
+            label=label,
+        )) from exc
     if not amount.is_finite() or amount <= 0:
-        raise BonusServiceError(f"{label} должна быть больше нуля.")
+        raise BonusServiceError(_("{label} должна быть больше нуля.", label=label))
     return amount
 
 
@@ -99,7 +103,7 @@ def apply_bonus_programs(
     comment: str = "",
 ) -> list[BonusTransaction]:
     if guest.partner_id != partner_id:
-        raise BonusServiceError("Гость не из этого заведения.")
+        raise BonusServiceError(_("Гость не из этого заведения."))
     bonus_paid_amount = Decimal(bonus_paid_amount).quantize(Decimal("0.01"))
     if not bonus_paid_amount.is_finite() or bonus_paid_amount < 0:
         raise BonusServiceError("Bonus-paid amount cannot be negative.")
@@ -115,7 +119,7 @@ def apply_bonus_programs(
             guest_id=guest.id,
         )
     if bill is not None and bill.partner_id != partner_id:
-        raise BonusServiceError("Счёт не из этого заведения.")
+        raise BonusServiceError(_("Счёт не из этого заведения."))
     if walk_in_sale is not None and walk_in_sale.partner_id != partner_id:
         raise BonusServiceError("Walk-in sale does not belong to the selected venue.")
 
@@ -182,7 +186,7 @@ def apply_manual_purchase_bonus(
     comment: str = "",
 ) -> list[BonusTransaction]:
     guest = get_guest_profile_by_customer_code(partner_id, customer_code)
-    total = _parse_positive_money(purchase_total, label="Сумма покупки")
+    total = _parse_positive_money(purchase_total, label=_("Сумма покупки"))
     return apply_bonus_programs(
         partner_id=partner_id,
         event=BonusProgram.TriggerEvent.MANUAL_PURCHASE,
@@ -203,9 +207,9 @@ def register_walk_in_sale(
     created_by=None,
     redeem_bonus: bool = False,
 ) -> WalkInSale:
-    total = _parse_positive_money(amount, label="Сумма быстрой продажи")
+    total = _parse_positive_money(amount, label=_("Сумма быстрой продажи"))
     if guest is not None and guest.partner_id != partner_id:
-        raise BonusServiceError("Гость не из этого заведения.")
+        raise BonusServiceError(_("Гость не из этого заведения."))
     if guest is not None:
         guest = GuestProfile.objects.select_for_update().get(
             id=guest.id,
@@ -287,7 +291,7 @@ def register_walk_in_sale_by_customer_code(
         try:
             guest = get_guest_profile_by_customer_code(partner_id, normalized_customer_code)
         except GuestProfile.DoesNotExist as exc:
-            raise BonusServiceError("Гость с таким кодом в этом заведении не найден.") from exc
+            raise BonusServiceError(_("Гость с таким кодом в этом заведении не найден.")) from exc
     return register_walk_in_sale(
         partner_id=partner_id,
         guest=guest,
@@ -312,7 +316,7 @@ def preview_walk_in_sale_by_customer_code(
         try:
             guest = get_guest_profile_by_customer_code(partner_id, normalized_customer_code)
         except GuestProfile.DoesNotExist as exc:
-            raise BonusServiceError("Гость с таким кодом в этом заведении не найден.") from exc
+            raise BonusServiceError(_("Гость с таким кодом в этом заведении не найден.")) from exc
     normalized_items: list[dict] = []
     total_amount = Decimal("0.00")
     projected_bonus_amount = Decimal("0.00")
@@ -419,7 +423,7 @@ def get_redeemable_bonus_amount(
     guest: GuestProfile,
     purchase_total: Decimal | str,
 ) -> Decimal:
-    total = _parse_positive_money(purchase_total, label="Сумма покупки")
+    total = _parse_positive_money(purchase_total, label=_("Сумма покупки"))
     if total <= 0:
         return Decimal("0.00")
 
@@ -442,7 +446,7 @@ def get_redeemable_bonus_amount(
 
 def _normalize_walk_in_sale_items(*, partner_id, items: list[dict]) -> list[dict]:
     if not items:
-        raise BonusServiceError("Добавьте хотя бы одну позицию в быструю продажу.")
+        raise BonusServiceError(_("Добавьте хотя бы одну позицию в быструю продажу."))
 
     menu_item_ids = [str(item["menu_item_id"]) for item in items]
     menu_items = {
@@ -456,7 +460,7 @@ def _normalize_walk_in_sale_items(*, partner_id, items: list[dict]) -> list[dict
     normalized_items: list[dict] = []
     missing_ids = [menu_item_id for menu_item_id in menu_item_ids if menu_item_id not in menu_items]
     if missing_ids:
-        raise BonusServiceError("Часть позиций быстрой продажи недоступна в этом заведении.")
+        raise BonusServiceError(_("Часть позиций быстрой продажи недоступна в этом заведении."))
 
     for item in items:
         menu_item = menu_items[str(item["menu_item_id"])]

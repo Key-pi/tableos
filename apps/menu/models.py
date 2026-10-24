@@ -6,18 +6,19 @@ from django.db import models
 from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
+from core.i18n import gettext_lazy as _lazy
 
 
 class MenuCategory(PartnerBoundModel):
     """Logical menu section used to group items inside a partner catalog."""
 
-    name = models.CharField(max_length=255, verbose_name="Название")
-    sort_order = models.PositiveIntegerField(default=100, verbose_name="Порядок")
-    is_active = models.BooleanField(default=True, verbose_name="Показывать")
+    name = models.CharField(max_length=255, verbose_name=_lazy("Название"))
+    sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+    is_active = models.BooleanField(default=True, verbose_name=_lazy("Показывать"))
 
     class Meta:
-        verbose_name = "категория меню"
-        verbose_name_plural = "Категории меню"
+        verbose_name = _lazy("категория меню")
+        verbose_name_plural = _lazy("Категории меню")
         ordering = ["sort_order", "name"]
         constraints = [
             models.UniqueConstraint(
@@ -34,39 +35,41 @@ class MenuItem(PartnerBoundModel):
     """Sellable menu position shown to guests and reused in carts and orders."""
 
     class ItemType(models.TextChoices):
-        INTERNAL = "internal", "Своя позиция"
-        PARTNER = "partner", "Позиция партнёра"
+        INTERNAL = "internal", _lazy("Своя позиция")
+        PARTNER = "partner", _lazy("Позиция партнёра")
 
     category = models.ForeignKey(
         MenuCategory,
         on_delete=models.CASCADE,
         related_name="items",
-        verbose_name="Категория",
+        verbose_name=_lazy("Категория"),
     )
-    public_id = models.CharField(max_length=12, editable=False, verbose_name="Код позиции")
-    name = models.CharField(max_length=255, verbose_name="Название")
-    description = models.TextField(blank=True, verbose_name="Описание")
+    public_id = models.CharField(max_length=12, editable=False, verbose_name=_lazy("Код позиции"))
+    name = models.CharField(max_length=255, verbose_name=_lazy("Название"))
+    description = models.TextField(blank=True, verbose_name=_lazy("Описание"))
     price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.01"))],
-        verbose_name="Цена",
+        verbose_name=_lazy("Цена"),
     )
-    image_url = models.URLField(blank=True, verbose_name="Ссылка на фото")
+    image_url = models.URLField(blank=True, verbose_name=_lazy("Ссылка на фото"))
     item_type = models.CharField(
         max_length=16,
         choices=ItemType.choices,
         default=ItemType.INTERNAL,
-        verbose_name="Тип",
+        verbose_name=_lazy("Тип"),
     )
-    is_available = models.BooleanField(default=True, verbose_name="В наличии")
+    is_available = models.BooleanField(default=True, verbose_name=_lazy("В наличии"))
     # Ordering channels the item is sold in (ECOSYSTEM_DIRECTION.md): a hookah
     # may be table-only, a bottled drink pickup-only.
-    available_at_table = models.BooleanField(default=True, verbose_name="За столом")
-    available_for_pickup = models.BooleanField(default=True, verbose_name="Самовывоз")
-    available_for_delivery = models.BooleanField(default=True, verbose_name="Доставка")
-    available_for_shipping = models.BooleanField(default=True, verbose_name="Отправка почтой")
-    sort_order = models.PositiveIntegerField(default=100, verbose_name="Порядок")
+    available_at_table = models.BooleanField(default=True, verbose_name=_lazy("За столом"))
+    available_for_pickup = models.BooleanField(default=True, verbose_name=_lazy("Самовывоз"))
+    available_for_delivery = models.BooleanField(default=True, verbose_name=_lazy("Доставка"))
+    available_for_shipping = models.BooleanField(default=True, verbose_name=_lazy(
+        "Отправка почтой",
+    ))
+    sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
 
     CHANNEL_FIELDS = {
         "table": "available_at_table",
@@ -76,8 +79,8 @@ class MenuItem(PartnerBoundModel):
     }
 
     class Meta:
-        verbose_name = "позиция меню"
-        verbose_name_plural = "Позиции меню"
+        verbose_name = _lazy("позиция меню")
+        verbose_name_plural = _lazy("Позиции меню")
         ordering = ["category__sort_order", "sort_order", "name"]
         constraints = [
             models.UniqueConstraint(

@@ -69,6 +69,7 @@ from apps.orders.services import (
 from apps.partners.models import Partner, PartnerBotSettings
 from apps.partners.opening_hours import describe_opening_hours, intervals_for, is_open_at
 from apps.users.models import GuestProfile, User
+from core.i18n import N_, _
 
 # Slot code -> minutes from now. ``now`` means as soon as possible.
 TIME_SLOTS = {"now": 0, "30": 30, "60": 60}
@@ -80,9 +81,9 @@ REMOTE_CHANNELS = {
     Order.Channel.SHIPPING: "module_shipping_enabled",
 }
 CHANNEL_TITLES = {
-    Order.Channel.PICKUP: "самовывоз",
-    Order.Channel.DELIVERY: "доставка",
-    Order.Channel.SHIPPING: "отправка почтой",
+    Order.Channel.PICKUP: N_("самовывоз"),
+    Order.Channel.DELIVERY: N_("доставка"),
+    Order.Channel.SHIPPING: N_("отправка почтой"),
 }
 # Channels with a time slot and opening hours; shipping has neither.
 TIMED_CHANNELS = frozenset({Order.Channel.PICKUP, Order.Channel.DELIVERY})
@@ -168,7 +169,7 @@ def _money(value) -> Decimal:
 
 def _check_channel(channel: str) -> None:
     if channel not in REMOTE_CHANNELS:
-        raise RemoteOrderError("Этот способ заказа пока недоступен.")
+        raise RemoteOrderError(_("Этот способ заказа пока недоступен."))
 
 
 def _settings(partner_id, channel: str) -> PartnerBotSettings:
@@ -181,11 +182,11 @@ def _settings(partner_id, channel: str) -> PartnerBotSettings:
         and settings.module_orders_enabled
         and settings.module_menu_enabled
     ):
-        raise RemoteOrderError(CHANNEL_OFF_MESSAGES[channel])
+        raise RemoteOrderError(_(CHANNEL_OFF_MESSAGES[channel]))
     if not payment_modes_for(settings, channel):
         if getattr(settings, PAYMENT_OPTION_FIELDS[channel][PREPAID]):
-            raise RemoteOrderError("Заведение ещё не указало реквизиты для оплаты переводом.")
-        raise RemoteOrderError("Заведение ещё не настроило оплату заказов.")
+            raise RemoteOrderError(_("Заведение ещё не указало реквизиты для оплаты переводом."))
+        raise RemoteOrderError(_("Заведение ещё не настроило оплату заказов."))
     return settings
 
 
@@ -213,7 +214,7 @@ def _guest(partner_id, telegram_id: int, *, lock: bool = False) -> GuestProfile:
         telegram_account__telegram_id=telegram_id,
     ).first()
     if guest is None:
-        raise RemoteOrderError("Сначала нажмите /start, чтобы бот вас узнал.")
+        raise RemoteOrderError(_("Сначала нажмите /start, чтобы бот вас узнал."))
     return guest
 
 
@@ -227,10 +228,13 @@ def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = 
         .first()
     )
     if cart is None or not cart.items.all():
-        raise RemoteOrderError("Корзина пуста. Добавьте позиции из меню.")
+        raise RemoteOrderError(_("Корзина пуста. Добавьте позиции из меню."))
     if cart.channel != channel:
         raise RemoteOrderError(
-            f"Корзина собрана для другого способа заказа. Нажмите «{CHANNEL_TITLES[channel]}»."
+            _(
+                "Корзина собрана для другого способа заказа. Нажмите «{channel}».",
+                channel=_(CHANNEL_TITLES[channel]),
+            )
         )
     not_sold = [
         item.item_name
@@ -238,7 +242,11 @@ def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = 
         if not (item.menu_item.is_available and item.menu_item.is_sold_in(channel))
     ]
     if not_sold:
-        raise RemoteOrderError(f"Недоступно ({CHANNEL_TITLES[channel]}): {', '.join(not_sold)}.")
+        raise RemoteOrderError(_(
+            "Недоступно ({channel}): {not_sold}.",
+            channel=_(CHANNEL_TITLES[channel]),
+            not_sold=', '.join(not_sold),
+        ))
     return cart
 
 
@@ -269,15 +277,20 @@ def _channel_fee(
     shipping_cost: str = "",
 ) -> Decimal:
     if channel == Order.Channel.DELIVERY:
-        minimum, word = _money(settings.delivery_min_order or 0), "доставку"
+        minimum, word = _money(settings.delivery_min_order or 0), _("доставку")
     elif channel == Order.Channel.SHIPPING:
-        minimum, word = _money(settings.shipping_min_order or 0), "отправку"
+        minimum, word = _money(settings.shipping_min_order or 0), _("отправку")
     else:
         return Decimal("0.00")
     if _money(items_total) < minimum:
         raise RemoteOrderError(
-            f"Минимальная сумма заказа на {word} — {minimum} грн. Сейчас в корзине "
-            f"{_money(items_total)} грн."
+            _(
+                "Минимальная сумма заказа на {word} — {minimum} грн. Сейчас в корзине "
+                "{items_total} грн.",
+                word=word,
+                minimum=minimum,
+                items_total=_money(items_total),
+            )
         )
     if channel == Order.Channel.SHIPPING:
         return shipping_fee_for(settings, items_total, shipping_cost)
@@ -295,7 +308,7 @@ def shipping_cost_options_for(settings: PartnerBotSettings) -> tuple[str, ...]:
 
 
 def carrier_title(carrier: str) -> str:
-    return Order.Carrier(carrier).label if carrier in Order.Carrier.values else ""
+    return str(Order.Carrier(carrier).label) if carrier in Order.Carrier.values else ""
 
 
 @dataclass(frozen=True)
@@ -310,10 +323,14 @@ class ShippingTerms:
         """«70 грн, бесплатно от 1000 грн» — the fixed postage option."""
 
         if self.fee <= 0:
-            return "бесплатно"
+            return _("бесплатно")
         if self.free_from is not None:
-            return f"{self.fee} грн, бесплатно от {self.free_from} грн"
-        return f"{self.fee} грн"
+            return _(
+                "{fee} грн, бесплатно от {free_from} грн",
+                fee=self.fee,
+                free_from=self.free_from,
+            )
+        return _("{fee} грн", fee=self.fee)
 
     def describe(self) -> str:
         """«Отправляем: Нова Пошта, Укрпошта. Пересылка: …»"""
@@ -321,12 +338,16 @@ class ShippingTerms:
         carriers = ", ".join(carrier_title(carrier) for carrier in self.carriers)
         options = []
         if Order.ShippingCost.CARRIER in self.cost_options:
-            options.append("по тарифу перевозчика, оплата на почте")
+            options.append(_("по тарифу перевозчика, оплата на почте"))
         if Order.ShippingCost.FIXED in self.cost_options:
-            options.append(f"в заказе — {self.fixed_label()}")
-        text = f"Отправляем: {carriers}. Пересылка: {' или '.join(options)}."
+            options.append(_("в заказе — {fixed}", fixed=self.fixed_label()))
+        text = _(
+            "Отправляем: {carriers}. Пересылка: {options}.",
+            carriers=carriers,
+            options=_(' или ').join(options),
+        )
         if self.min_order > 0:
-            text += f" Минимальный заказ {self.min_order} грн."
+            text += _(" Минимальный заказ {min_order} грн.", min_order=self.min_order)
         return text
 
 
@@ -360,13 +381,17 @@ class DeliveryTerms:
         """«Доставка 60 грн, бесплатно от 1000 грн. Минимальный заказ 150 грн.»"""
 
         if self.fee <= 0:
-            text = "Доставка бесплатная."
+            text = _("Доставка бесплатная.")
         elif self.free_from is not None:
-            text = f"Доставка {self.fee} грн, бесплатно от {self.free_from} грн."
+            text = _(
+                "Доставка {fee} грн, бесплатно от {free_from} грн.",
+                fee=self.fee,
+                free_from=self.free_from,
+            )
         else:
-            text = f"Доставка {self.fee} грн."
+            text = _("Доставка {fee} грн.", fee=self.fee)
         if self.min_order > 0:
-            text += f" Минимальный заказ {self.min_order} грн."
+            text += _(" Минимальный заказ {min_order} грн.", min_order=self.min_order)
         return text
 
 
@@ -386,8 +411,8 @@ def get_delivery_terms(partner_id) -> DeliveryTerms:
 def closed_message(partner: Partner, channel: str = "") -> str:
     hours = describe_opening_hours(partner, scope=channel)
     if hours:
-        return f"Сейчас заказы не принимаем. Часы работы: {hours}."
-    return "Сейчас заказы не принимаем."
+        return _("Сейчас заказы не принимаем. Часы работы: {hours}.", hours=hours)
+    return _("Сейчас заказы не принимаем.")
 
 
 def available_slots(
@@ -456,7 +481,7 @@ def get_remote_quote(
 def save_guest_phone(*, partner_id, telegram_id: int, phone: str) -> GuestProfile:
     phone = (phone or "").strip()
     if not phone:
-        raise RemoteOrderError("Номер телефона пустой.")
+        raise RemoteOrderError(_("Номер телефона пустой."))
     guest = _guest(partner_id, telegram_id, lock=True)
     guest.phone = phone[:32]
     guest.save(update_fields=["phone", "updated_at"])
@@ -469,9 +494,9 @@ def save_guest_delivery_address(*, partner_id, telegram_id: int, address: str) -
 
     address = " ".join((address or "").split())
     if not address:
-        raise RemoteOrderError("Напишите адрес: улица, дом, квартира.")
+        raise RemoteOrderError(_("Напишите адрес: улица, дом, квартира."))
     if len(address) > MAX_ADDRESS_LENGTH:
-        raise RemoteOrderError("Адрес слишком длинный — сократите, пожалуйста.")
+        raise RemoteOrderError(_("Адрес слишком длинный — сократите, пожалуйста."))
     guest = _guest(partner_id, telegram_id, lock=True)
     if guest.delivery_address != address:
         guest.delivery_latitude = None
@@ -498,9 +523,9 @@ def save_guest_delivery_location(
         lat = Decimal(str(latitude)).quantize(Decimal("0.000001"))
         lon = Decimal(str(longitude)).quantize(Decimal("0.000001"))
     except ArithmeticError as exc:
-        raise RemoteOrderError("Не удалось прочитать геолокацию.") from exc
+        raise RemoteOrderError(_("Не удалось прочитать геолокацию.")) from exc
     if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-        raise RemoteOrderError("Не удалось прочитать геолокацию.")
+        raise RemoteOrderError(_("Не удалось прочитать геолокацию."))
     guest = _guest(partner_id, telegram_id, lock=True)
     guest.delivery_latitude = lat
     guest.delivery_longitude = lon
@@ -512,7 +537,7 @@ def save_guest_delivery_location(
 def save_guest_shipping_carrier(*, partner_id, telegram_id: int, carrier: str) -> GuestProfile:
     settings = _settings(partner_id, Order.Channel.SHIPPING)
     if carrier not in carriers_for(settings):
-        raise RemoteOrderError("Эта служба доставки сейчас недоступна — выберите другую.")
+        raise RemoteOrderError(_("Эта служба доставки сейчас недоступна — выберите другую."))
     guest = _guest(partner_id, telegram_id, lock=True)
     guest.shipping_carrier = carrier
     guest.save(update_fields=["shipping_carrier", "updated_at"])
@@ -525,9 +550,9 @@ def save_guest_shipping_destination(*, partner_id, telegram_id: int, text: str) 
 
     text = " ".join((text or "").split())
     if not text:
-        raise RemoteOrderError("Напишите получателя, город и номер отделения или почтомата.")
+        raise RemoteOrderError(_("Напишите получателя, город и номер отделения или почтомата."))
     if len(text) > MAX_DESTINATION_LENGTH:
-        raise RemoteOrderError("Слишком длинно — сократите, пожалуйста.")
+        raise RemoteOrderError(_("Слишком длинно — сократите, пожалуйста."))
     guest = _guest(partner_id, telegram_id, lock=True)
     guest.shipping_destination = text
     guest.save(update_fields=["shipping_destination", "updated_at"])
@@ -566,34 +591,39 @@ def place_remote_order(
     settings = _settings(partner_id, channel)
     partner = settings.partner
     if payment not in payment_modes_for(settings, channel):
-        raise RemoteOrderError("Этот способ оплаты сейчас недоступен — выберите другой.")
+        raise RemoteOrderError(_("Этот способ оплаты сейчас недоступен — выберите другой."))
     is_delivery = channel == Order.Channel.DELIVERY
     is_shipping = channel == Order.Channel.SHIPPING
     if channel in TIMED_CHANNELS:
         if slot not in TIME_SLOTS:
-            raise RemoteOrderError("Выберите время ещё раз.")
+            raise RemoteOrderError(_("Выберите время ещё раз."))
         if slot not in available_slots(partner, now, channel=channel):
             raise RemoteOrderError(closed_message(partner, channel))
     elif shipping_cost not in shipping_cost_options_for(settings):
-        raise RemoteOrderError("Этот вариант оплаты пересылки сейчас недоступен — выберите другой.")
+        raise RemoteOrderError(_(
+            "Этот вариант оплаты пересылки сейчас недоступен — выберите другой.",
+        ))
     guest = _guest(partner_id, telegram_id, lock=True)
     if not guest.phone:
-        raise RemoteOrderError("Поделитесь номером телефона, чтобы оформить заказ.")
+        raise RemoteOrderError(_("Поделитесь номером телефона, чтобы оформить заказ."))
     # AA-037 (PQ-036): the guest lock serialises this count with other
     # placements of the same guest.
     limit = settings.remote_unpaid_orders_limit
     if limit and open_unpaid_remote_orders(guest).count() >= limit:
         raise RemoteOrderError(
-            f"У вас уже есть неоплаченные заказы ({limit}). Оплатите или получите их, "
-            "чтобы оформить новый."
+            _(
+                "У вас уже есть неоплаченные заказы ({limit}). Оплатите или получите их, чтобы "
+                "оформить новый.",
+                limit=limit,
+            )
         )
     if is_delivery and not guest.delivery_address:
-        raise RemoteOrderError("Укажите адрес доставки.")
+        raise RemoteOrderError(_("Укажите адрес доставки."))
     if is_shipping:
         if not guest.shipping_destination:
-            raise RemoteOrderError("Куда отправить? Укажите получателя и отделение.")
+            raise RemoteOrderError(_("Куда отправить? Укажите получателя и отделение."))
         if guest.shipping_carrier not in carriers_for(settings):
-            raise RemoteOrderError("Эта служба доставки сейчас недоступна — выберите другую.")
+            raise RemoteOrderError(_("Эта служба доставки сейчас недоступна — выберите другую."))
     cart = _active_cart(partner_id, guest, channel, lock=True)
     cart_items = list(cart.items.all())
     items_total = _money(
@@ -602,7 +632,7 @@ def place_remote_order(
     fee = _channel_fee(settings, channel, items_total, shipping_cost)
     total = _money(items_total + fee)
     if total != _money(expected_total):
-        raise StaleQuoteError("Корзина изменилась — проверьте новую сумму.")
+        raise StaleQuoteError(_("Корзина изменилась — проверьте новую сумму."))
 
     minutes = TIME_SLOTS[slot] if channel in TIMED_CHANNELS else 0
     order = create_order(
@@ -652,14 +682,16 @@ def place_remote_order(
         partner_id=partner_id,
         order_ids=[str(order.id)],
         kind=Bill.Kind.PERSONAL,
-        label=f"{CHANNEL_TITLES[channel].capitalize()} #{order.public_id}",
+        label=f"{_(CHANNEL_TITLES[channel]).capitalize()} #{order.public_id}",
     )
     bill = issue_bill(bill)
     if use_bonuses:
         try:
             result = pay_bill_with_bonuses(bill=bill)
         except BillingServiceError as exc:
-            raise RemoteOrderError("Бонусы сейчас списать нельзя — проверьте сумму ещё раз.") from exc
+            raise RemoteOrderError(_(
+                "Бонусы сейчас списать нельзя — проверьте сумму ещё раз.",
+            )) from exc
         bill = result.bill
     bill.refresh_from_db()
     if bill.bonus_spent_amount:
@@ -668,43 +700,71 @@ def place_remote_order(
     if bill.status == Bill.Status.PAID:
         to_pay = Decimal("0.00")
     if to_pay != _money(expected_to_pay):
-        raise StaleQuoteError("Сумма к оплате изменилась — проверьте её ещё раз.")
+        raise StaleQuoteError(_("Сумма к оплате изменилась — проверьте её ещё раз."))
 
-    if to_pay > 0 and payment == ON_RECEIPT and is_shipping:
-        note = (
-            f"Наложенный платёж: {to_pay} грн. Отметьте оплату в карточке заказа, "
-            "когда служба перечислит деньги."
-        )
-    elif to_pay > 0 and payment == ON_RECEIPT:
-        note = (
-            f"Оплата при получении: {to_pay} грн (наличные или карта). Отметьте оплату "
-            "в карточке заказа, когда гость заплатит."
-        )
-    elif to_pay > 0:
-        note = (
-            f"Гость сообщил о переводе {to_pay} грн. Проверьте поступление и "
-            "подтвердите оплату в карточке заказа."
-        )
-    else:
-        note = "Оплачен бонусами полностью."
-    contact = f"Телефон: {guest.phone}."
-    if is_delivery:
-        contact += f"\nАдрес: {guest.delivery_address}."
-        if guest.delivery_latitude is not None:
-            contact += f"\nНа карте: {map_link(guest.delivery_latitude, guest.delivery_longitude)}"
-    if is_shipping:
-        contact += (
-            f"\n{carrier_title(guest.shipping_carrier)}: {guest.shipping_destination}."
-            f"\nПересылка: {_shipping_cost_label(shipping_cost, fee)}."
-        )
-    notify_staff_about_new_order(order, note=f"{contact}\n{note}")
+    phone = guest.phone
+    address = guest.delivery_address
+    point = (
+        map_link(guest.delivery_latitude, guest.delivery_longitude)
+        if guest.delivery_latitude is not None
+        else ""
+    )
+    carrier = guest.shipping_carrier
+    destination = guest.shipping_destination
+
+    def staff_note() -> str:
+        # Built per employee, in their language (PQ-040).
+        lines = [_("Телефон: {phone}.", phone=phone)]
+        if is_delivery:
+            lines.append(_("Адрес: {delivery_address}.", delivery_address=address))
+            if point:
+                lines.append(_("На карте: {map_link}", map_link=point))
+        if is_shipping:
+            lines.append(
+                _(
+                    "{carrier}: {shipping_destination}.",
+                    carrier=carrier_title(carrier),
+                    shipping_destination=destination,
+                )
+            )
+            cost = _shipping_cost_label(shipping_cost, fee)
+            lines.append(_("Пересылка: {shipping_cost}.", shipping_cost=cost))
+        if to_pay > 0 and payment == ON_RECEIPT and is_shipping:
+            lines.append(
+                _(
+                    "Наложенный платёж: {to_pay} грн. Отметьте оплату в карточке заказа, когда "
+                    "служба перечислит деньги.",
+                    to_pay=to_pay,
+                )
+            )
+        elif to_pay > 0 and payment == ON_RECEIPT:
+            lines.append(
+                _(
+                    "Оплата при получении: {to_pay} грн (наличные или карта). Отметьте оплату в "
+                    "карточке заказа, когда гость заплатит.",
+                    to_pay=to_pay,
+                )
+            )
+        elif to_pay > 0:
+            lines.append(
+                _(
+                    "Гость сообщил о переводе {to_pay} грн. Проверьте поступление и подтвердите "
+                    "оплату в карточке заказа.",
+                    to_pay=to_pay,
+                )
+            )
+        else:
+            lines.append(_("Оплачен бонусами полностью."))
+        return "\n".join(lines)
+
+    notify_staff_about_new_order(order, note=staff_note)
     return Order.objects.select_related("partner").get(id=order.id)
 
 
 def _shipping_cost_label(cost: str, fee: Decimal) -> str:
     if cost == Order.ShippingCost.CARRIER:
-        return "по тарифу перевозчика, платит получатель на почте"
-    return f"в заказе, {fee} грн" if fee > 0 else "в заказе, бесплатно"
+        return _("по тарифу перевозчика, платит получатель на почте")
+    return _("в заказе, {fee} грн", fee=fee) if fee > 0 else _("в заказе, бесплатно")
 
 
 def shipping_cost_label(order: Order) -> str:
@@ -731,7 +791,7 @@ def _order_bill(order: Order) -> Bill:
         .first()
     )
     if bill is None:
-        raise RemoteOrderError("У заказа нет действующего счёта.")
+        raise RemoteOrderError(_("У заказа нет действующего счёта."))
     return bill
 
 
@@ -742,7 +802,7 @@ def _check_actor(actor, partner_id) -> None:
         or str(actor.partner_id) != str(partner_id)
         or actor.role not in PAYMENT_CHECK_ROLES
     ):
-        raise RemoteOrderError("Подтверждать оплату может владелец, менеджер или кассир.")
+        raise RemoteOrderError(_("Подтверждать оплату может владелец, менеджер или кассир."))
 
 
 def _lock_remote_order(order: Order, payment: str = PREPAID) -> Order:
@@ -753,8 +813,8 @@ def _lock_remote_order(order: Order, payment: str = PREPAID) -> Order:
     )
     if order.payment_timing != payment:
         if payment == PREPAID:
-            raise RemoteOrderError("У этого заказа нет оплаты переводом.")
-        raise RemoteOrderError("Этот заказ оплачивается переводом заранее, а не при получении.")
+            raise RemoteOrderError(_("У этого заказа нет оплаты переводом."))
+        raise RemoteOrderError(_("Этот заказ оплачивается переводом заранее, а не при получении."))
     return order
 
 
@@ -784,7 +844,7 @@ def confirm_transfer(*, order: Order, actor) -> Order:
     bill = _order_bill(order)
     order = _lock_remote_order(order)
     if not awaits_transfer_check(order):
-        raise RemoteOrderError("Оплата по этому заказу уже обработана.")
+        raise RemoteOrderError(_("Оплата по этому заказу уже обработана."))
     if bill.status != Bill.Status.PAID:
         remaining = _money(bill.total_amount - bill.paid_amount)
         record_payment(
@@ -792,14 +852,14 @@ def confirm_transfer(*, order: Order, actor) -> Order:
             amount=remaining,
             method=Payment.Method.TRANSFER,
             created_by=actor,
-            comment=f"Перевод за заказ #{order.public_id} подтверждён.",
+            comment=_("Перевод за заказ #{public_id} подтверждён.", public_id=order.public_id),
         )
     order.refresh_from_db()
     return transition_order_status(
         order=order,
         to_status=Order.Status.ACCEPTED,
         actor_user=actor,
-        note="Оплата переводом подтверждена.",
+        note=_("Оплата переводом подтверждена."),
     )
 
 
@@ -811,9 +871,9 @@ def reject_transfer(*, order: Order, actor, comment: str = "") -> Order:
     bill = _order_bill(order)
     order = _lock_remote_order(order)
     if not awaits_transfer_check(order):
-        raise RemoteOrderError("Оплата по этому заказу уже обработана.")
+        raise RemoteOrderError(_("Оплата по этому заказу уже обработана."))
     if bill.status == Bill.Status.PAID or bill.paid_amount > 0:
-        raise RemoteOrderError("По заказу уже есть оплата — отменить его так нельзя.")
+        raise RemoteOrderError(_("По заказу уже есть оплата — отменить его так нельзя."))
     _void_locked_bill(
         bill=bill,
         actor=actor,
@@ -824,7 +884,7 @@ def reject_transfer(*, order: Order, actor, comment: str = "") -> Order:
         order=order,
         to_status=Order.Status.CANCELED,
         actor_user=actor,
-        note="Оплата переводом не поступила.",
+        note=_("Оплата переводом не поступила."),
     )
 
 
@@ -839,18 +899,18 @@ def record_payment_on_receipt(*, order: Order, actor, method: str) -> Order:
     _check_actor(actor, order.partner_id)
     if method not in ON_RECEIPT_METHODS.get(order.channel, ()):
         if order.channel == Order.Channel.SHIPPING:
-            raise RemoteOrderError("Отправка оплачивается наложенным платежом.")
-        raise RemoteOrderError("При получении принимаем наличные или карту — выберите способ.")
+            raise RemoteOrderError(_("Отправка оплачивается наложенным платежом."))
+        raise RemoteOrderError(_("При получении принимаем наличные или карту — выберите способ."))
     bill = _order_bill(order)
     order = _lock_remote_order(order, ON_RECEIPT)
     if bill.status == Bill.Status.PAID or order.paid_at is not None:
-        raise RemoteOrderError("Заказ уже оплачен.")
+        raise RemoteOrderError(_("Заказ уже оплачен."))
     record_payment(
         bill=bill,
         amount=_money(bill.total_amount - bill.paid_amount),
         method=method,
         created_by=actor,
-        comment=f"Оплата при получении за заказ #{order.public_id}.",
+        comment=_("Оплата при получении за заказ #{public_id}.", public_id=order.public_id),
     )
     return Order.objects.select_related("partner").get(id=order.id)
 
@@ -863,11 +923,11 @@ def cancel_unpaid_remote_order(*, order: Order, actor, comment: str = "") -> Ord
     bill = _order_bill(order)
     order = _lock_remote_order(order, ON_RECEIPT)
     if order.status in {Order.Status.COMPLETED, Order.Status.CANCELED}:
-        raise RemoteOrderError("Заказ уже закрыт.")
+        raise RemoteOrderError(_("Заказ уже закрыт."))
     if bill.status == Bill.Status.PAID or bill.payments.exclude(
         method=Payment.Method.BONUSES
     ).filter(status=Payment.Status.PAID).exists():
-        raise RemoteOrderError("По заказу уже есть оплата — отменить его так нельзя.")
+        raise RemoteOrderError(_("По заказу уже есть оплата — отменить его так нельзя."))
     _void_locked_bill(
         bill=bill,
         actor=actor,
@@ -878,7 +938,7 @@ def cancel_unpaid_remote_order(*, order: Order, actor, comment: str = "") -> Ord
         order=order,
         to_status=Order.Status.CANCELED,
         actor_user=actor,
-        note="Гость не забрал заказ.",
+        note=_("Гость не забрал заказ."),
     )
 
 
@@ -923,13 +983,16 @@ def expire_unconfirmed_transfer(*, order_id, now: datetime | None = None) -> boo
         bill=bill,
         actor=None,
         reason_code=BillAdjustment.ReasonCode.PAYMENT_NOT_RECEIVED,
-        reason_text=f"Автоотмена: перевод не подтверждён за {minutes} мин.",
+        reason_text=_("Автоотмена: перевод не подтверждён за {minutes} мин.", minutes=minutes),
     )
     transition_order_status(
         order=order,
         to_status=Order.Status.CANCELED,
         actor_user=None,
-        note=f"Оплата переводом не подтверждена за {minutes} мин — отменён автоматически.",
+        note=_(
+            "Оплата переводом не подтверждена за {minutes} мин — отменён автоматически.",
+            minutes=minutes,
+        ),
     )
     return True
 
@@ -965,7 +1028,7 @@ def normalize_tracking_number(raw: str) -> str:
     number = "".join((raw or "").split()).upper()
     if not TRACKING_NUMBER_RE.match(number):
         raise RemoteOrderError(
-            "Не похоже на ТТН: нужны только цифры и латинские буквы, от 5 знаков."
+            _("Не похоже на ТТН: нужны только цифры и латинские буквы, от 5 знаков.")
         )
     return number
 
@@ -984,25 +1047,25 @@ def mark_order_shipped(*, order: Order, actor, tracking_number: str) -> Order:
         or not actor.is_active
         or str(actor.partner_id) != str(order.partner_id)
     ):
-        raise RemoteOrderError("Отмечать отправку может только сотрудник этого заведения.")
+        raise RemoteOrderError(_("Отмечать отправку может только сотрудник этого заведения."))
     order = (
         Order.objects.select_for_update(of=("self",))
         .select_related("partner")
         .get(id=order.id, partner_id=order.partner_id)
     )
     if order.channel != Order.Channel.SHIPPING:
-        raise RemoteOrderError("ТТН бывает только у отправки почтой.")
+        raise RemoteOrderError(_("ТТН бывает только у отправки почтой."))
     if order.status != Order.Status.READY:
         if order.status == Order.Status.DELIVERING:
-            raise RemoteOrderError("Заказ уже отправлен.")
-        raise RemoteOrderError("Сначала отметьте, что заказ собран.")
+            raise RemoteOrderError(_("Заказ уже отправлен."))
+        raise RemoteOrderError(_("Сначала отметьте, что заказ собран."))
     order.tracking_number = number
     order.save(update_fields=["tracking_number", "updated_at"])
     return transition_order_status(
         order=order,
         to_status=Order.Status.DELIVERING,
         actor_user=actor,
-        note=f"Отправлен, ТТН {number}.",
+        note=_("Отправлен, ТТН {number}.", number=number),
     )
 
 

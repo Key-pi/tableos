@@ -3,22 +3,25 @@ from django import forms
 from apps.partners.bot_texts import GROUP_LABELS, editable_texts
 from apps.partners.models import BotInstance, BotText, text_key
 from core.i18n import _, gettext_in, placeholders
+from core.i18n import gettext_lazy as _lazy
 
 
 class BotInstanceAdminForm(forms.ModelForm):
     username = forms.CharField(
-        label="Имя бота (без @)",
+        label=_lazy("Имя бота (без @)"),
         required=True,
         help_text=(
-            "Имя бота в Telegram без @, например smoke_lounge_bot. "
-            "По нему строятся ссылки для QR-кодов столов."
+            _lazy(
+                "Имя бота в Telegram без @, например smoke_lounge_bot. По нему строятся ссылки "
+                "для QR-кодов столов.",
+            )
         ),
     )
     raw_token = forms.CharField(
-        label="Токен бота",
+        label=_lazy("Токен бота"),
         required=False,
         widget=forms.PasswordInput(render_value=True),
-        help_text="Вставьте токен от @BotFather. Он хранится зашифрованным.",
+        help_text=_lazy("Вставьте токен от @BotFather. Он хранится зашифрованным."),
     )
 
     class Meta:
@@ -36,10 +39,10 @@ class BotInstanceAdminForm(forms.ModelForm):
     def clean_username(self) -> str:
         username = BotInstance.normalize_username(self.cleaned_data["username"])
         if not username:
-            raise forms.ValidationError("Укажите имя бота.")
+            raise forms.ValidationError(_("Укажите имя бота."))
         if not BotInstance.looks_like_valid_username(username):
             raise forms.ValidationError(
-                "Имя бота Telegram без @, например smoke_lounge_bot."
+                _("Имя бота Telegram без @, например smoke_lounge_bot.")
             )
         return username
 
@@ -52,13 +55,13 @@ class BotInstanceAdminForm(forms.ModelForm):
         if raw_token and not BotInstance.looks_like_valid_token(raw_token):
             self.add_error(
                 "raw_token",
-                "Токен не похож на настоящий. Вставьте токен от @BotFather целиком.",
+                _("Токен не похож на настоящий. Вставьте токен от @BotFather целиком."),
             )
 
         if mode == BotInstance.Mode.WEBHOOK and is_active:
             self.add_error(
                 "mode",
-                "Режим webhook пока не поддерживается — выберите polling.",
+                _("Режим webhook пока не поддерживается — выберите polling."),
             )
 
         if not self.instance.pk and not raw_token:
@@ -87,7 +90,7 @@ class BotTextForm(forms.ModelForm):
 
     scope_partner_id = None  # set by the admin for a venue's own staff
 
-    msgid = forms.ChoiceField(label="Текст в каталоге")
+    msgid = forms.ChoiceField(label=_lazy("Текст в каталоге"))
 
     class Meta:
         model = BotText
@@ -103,12 +106,12 @@ class BotTextForm(forms.ModelForm):
             for msgid, group in sorted(texts.items(), key=lambda item: (item[1], item[0]))
         ]
         if current and current not in texts:
-            choices.insert(0, (current, f"(нет в каталоге) {_short(current)}"))
+            choices.insert(0, (current, _("(нет в каталоге) {short}", short=_short(current))))
         self.fields["msgid"].choices = choices
         msgid = self.initial.get("msgid") or current
         if msgid:
             names = sorted(placeholders(msgid))
-            hint = "Подстановки: " + ", ".join(f"{{{name}}}" for name in names) if names else ""
+            hint = _("Подстановки: ") + ", ".join(f"{{{name}}}" for name in names) if names else ""
             translations = " · ".join(
                 f"{code}: {gettext_in(code, msgid)}" for code in ("uk", "ru", "en")
             )
@@ -129,7 +132,7 @@ class BotTextForm(forms.ModelForm):
             ).exclude(id=self.instance.id)
             if duplicate.exists():
                 raise forms.ValidationError(
-                    "Для этого текста и языка уже есть свой вариант — измените его."
+                    _("Для этого текста и языка уже есть свой вариант — измените его.")
                 )
         return cleaned
 

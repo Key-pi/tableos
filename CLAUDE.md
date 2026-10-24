@@ -111,7 +111,9 @@
 - **Языки (PQ-040):** по умолчанию украинский; готовые тексты uk/ru/en;
   владелец выбирает основной и включённые языки гостей и может заменить любой
   текст гостя на каждом языке (`BotText`); гость — язык Telegram или выбор в
-  профиле; персонал и Admin — свой язык (`User.language`). Документация —
+  профиле; персонал и Admin — свой язык (`User.language`, переключатель в
+  шапке Admin), по умолчанию — язык платформы `uk`. Уведомления — на языке
+  получателя (`speaking_to_employee` / `speaking_to_guest`). Документация —
   русская.
 - **Данные гостей (PQ-024):** хранятся, гость меняет сам. Мониторинг ошибок —
   будущий Telegram-бот для всех систем Botera (PQ-039), пока не делаем.
@@ -145,7 +147,12 @@
   в `locale/{uk,en}/LC_MESSAGES/django.po`: `python
   infrastructure/scripts/messages.py update`, перевести, `… compile`
   (PQ-040, `docs/architecture/LANGUAGES.md`; `core/tests_i18n_catalog.py`
-  проверяет полноту). Сообщения бота в HTML, все динамические значения через
+  проверяет полноту). Подписи, вычисляемые при импорте (`verbose_name`,
+  `choices`, `@admin.display`, `fieldsets`), — `gettext_lazy as _lazy`; в
+  шаблонах — `{% load botera_i18n %}{% tr "…" %}`; текст для другого
+  человека (уведомление) — внутри `speaking_to_employee(...)` /
+  `speaking_to_guest(...)`; `_` не использовать как переменную
+  (`_unused`). Сообщения бота в HTML, все динамические значения через
   `escape_html`. У новых полей и вариантов — `verbose_name` и подписи
   по-русски (`core/tests_admin_language.py`); строки темы Admin —
   `locale/<язык>/LC_MESSAGES/theme.po`.

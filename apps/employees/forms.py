@@ -2,6 +2,8 @@ from django import forms
 
 from apps.employees.models import EmployeeProfile
 from apps.users.models import AdminAccessProfile, TelegramAccount
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 def _is_owner_or_superuser(user) -> bool:
@@ -20,11 +22,11 @@ def _is_owner_or_superuser(user) -> bool:
 class EmployeeProfileAdminForm(forms.ModelForm):
     telegram_id = forms.IntegerField(
         required=False,
-        help_text="Telegram ID сотрудника для уведомлений в боте.",
+        help_text=_lazy("Telegram ID сотрудника для уведомлений в боте."),
     )
     telegram_username = forms.CharField(
         required=False,
-        help_text="Опционально: username сотрудника без @.",
+        help_text=_lazy("Опционально: username сотрудника без @."),
     )
 
     class Meta:
@@ -61,13 +63,13 @@ class EmployeeProfileAdminForm(forms.ModelForm):
             # PQ-028: only the venue owner grants the right to change bills.
             self.fields["can_adjust_bills"].disabled = True
             self.fields["can_adjust_bills"].help_text = (
-                "Право выдаёт только владелец заведения."
+                _("Право выдаёт только владелец заведения.")
             )
         if not getattr(self.actor_user, "is_superuser", False):
             self.fields["telegram_id"].disabled = True
             self.fields[
                 "telegram_id"
-            ].help_text = "Только superuser может менять глобальный Telegram ID."
+            ].help_text = _("Только superuser может менять глобальный Telegram ID.")
 
     def clean_telegram_username(self) -> str:
         return self.cleaned_data.get("telegram_username", "").strip().removeprefix("@")
@@ -88,7 +90,7 @@ class EmployeeProfileAdminForm(forms.ModelForm):
         if wants_notifications and not telegram_id:
             self.add_error(
                 "telegram_id",
-                "Для уведомлений в боте нужен Telegram ID.",
+                _("Для уведомлений в боте нужен Telegram ID."),
             )
         return cleaned_data
 
@@ -98,7 +100,7 @@ class EmployeeProfileAdminForm(forms.ModelForm):
         telegram_username = self.cleaned_data.get("telegram_username", "")
 
         if telegram_id:
-            account, _ = TelegramAccount.objects.get_or_create(
+            account, _unused = TelegramAccount.objects.get_or_create(
                 telegram_id=telegram_id,
                 defaults={"username": telegram_username},
             )

@@ -5,6 +5,7 @@ from django.core.exceptions import PermissionDenied
 
 from apps.partners.models import Partner
 from apps.users.models import AdminAccessProfile, User
+from core.i18n import _
 
 
 def get_admin_access_profile(user) -> AdminAccessProfile | None:
@@ -212,7 +213,7 @@ class ScopedAdminMixin(admin.ModelAdmin):
                 if not hasattr(instance, "partner_id"):
                     continue
                 if instance.partner_id not in {None, partner_scope_id}:
-                    raise PermissionDenied("Запись принадлежит другому заведению.")
+                    raise PermissionDenied(_("Запись принадлежит другому заведению."))
                 instance.partner_id = partner_scope_id
 
         for deleted_object in formset.deleted_objects:

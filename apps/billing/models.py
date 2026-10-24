@@ -6,35 +6,37 @@ from django.db import models
 from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 class Bill(PartnerBoundModel):
     """Payable check built from one or many orders without mutating the original order data."""
 
     class Status(models.TextChoices):
-        DRAFT = "draft", "Черновик"
-        ISSUED = "issued", "Выставлен"
-        PARTIALLY_PAID = "partially_paid", "Оплачен частично"
-        PAID = "paid", "Оплачен"
-        CANCELED = "canceled", "Аннулирован"
+        DRAFT = "draft", _lazy("Черновик")
+        ISSUED = "issued", _lazy("Выставлен")
+        PARTIALLY_PAID = "partially_paid", _lazy("Оплачен частично")
+        PAID = "paid", _lazy("Оплачен")
+        CANCELED = "canceled", _lazy("Аннулирован")
 
     class Kind(models.TextChoices):
-        PERSONAL = "personal", "Личный"
-        SHARED = "shared", "Общий"
-        SPLIT = "split", "Деление"
+        PERSONAL = "personal", _lazy("Личный")
+        SHARED = "shared", _lazy("Общий")
+        SPLIT = "split", _lazy("Деление")
 
     class Source(models.TextChoices):
         INTERNAL = "internal", "Botera Shop"
-        POS = "pos", "Касса (POS)"
+        POS = "pos", _lazy("Касса (POS)")
 
-    public_id = models.CharField(max_length=12, editable=False, verbose_name="Номер")
+    public_id = models.CharField(max_length=12, editable=False, verbose_name=_lazy("Номер"))
     table = models.ForeignKey(
         "tables.Table",
         on_delete=models.PROTECT,
         related_name="bills",
         null=True,
         blank=True,
-        verbose_name="Стол",
+        verbose_name=_lazy("Стол"),
     )
     primary_guest = models.ForeignKey(
         "users.GuestProfile",
@@ -42,7 +44,7 @@ class Bill(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="billing_bills",
-        verbose_name="Гость счёта",
+        verbose_name=_lazy("Гость счёта"),
     )
     # Bills of a table belong to one table visit (ADR-0007); bills without a
     # table and bills created before visits existed have none.
@@ -52,72 +54,74 @@ class Bill(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="bills",
-        verbose_name="Визит",
+        verbose_name=_lazy("Визит"),
     )
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
         default=Status.DRAFT,
-        verbose_name="Статус",
+        verbose_name=_lazy("Статус"),
     )
     kind = models.CharField(
         max_length=16,
         choices=Kind.choices,
         default=Kind.SHARED,
-        verbose_name="Вид счёта",
+        verbose_name=_lazy("Вид счёта"),
     )
     source = models.CharField(
         max_length=16,
         choices=Source.choices,
         default=Source.INTERNAL,
-        verbose_name="Источник",
+        verbose_name=_lazy("Источник"),
     )
-    label = models.CharField(max_length=255, blank=True, verbose_name="Подпись счёта")
+    label = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Подпись счёта"))
     subtotal_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Сумма позиций",
+        verbose_name=_lazy("Сумма позиций"),
     )
     discount_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Скидка",
+        verbose_name=_lazy("Скидка"),
     )
     bonus_spent_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Оплачено бонусами",
+        verbose_name=_lazy("Оплачено бонусами"),
     )
     total_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Итого",
+        verbose_name=_lazy("Итого"),
     )
     paid_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Оплачено",
+        verbose_name=_lazy("Оплачено"),
     )
     # Money given back to guests by refunds (PQ-037); payments stay as they were.
     refunded_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Возвращено",
+        verbose_name=_lazy("Возвращено"),
     )
-    external_ref = models.CharField(max_length=255, blank=True, verbose_name="Внешний номер")
-    pos_tab_id = models.CharField(max_length=255, blank=True, verbose_name="Счёт в кассе (POS)")
-    issued_at = models.DateTimeField(null=True, blank=True, verbose_name="Выставлен")
-    closed_at = models.DateTimeField(null=True, blank=True, verbose_name="Закрыт")
+    external_ref = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Внешний номер"))
+    pos_tab_id = models.CharField(max_length=255, blank=True, verbose_name=_lazy(
+        "Счёт в кассе (POS)",
+    ))
+    issued_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Выставлен"))
+    closed_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Закрыт"))
 
     class Meta:
-        verbose_name = "счёт"
-        verbose_name_plural = "Счета"
+        verbose_name = _lazy("счёт")
+        verbose_name_plural = _lazy("Счета")
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -139,44 +143,44 @@ class BillingRequest(PartnerBoundModel):
     """Guest settlement intent that records how the table wants to pay before final payment."""
 
     class RequestType(models.TextChoices):
-        PERSONAL = "personal", "Личный счёт"
-        SHARED = "shared", "Общий счёт"
-        CUSTOM_SPLIT = "custom_split", "Особое деление"
+        PERSONAL = "personal", _lazy("Личный счёт")
+        SHARED = "shared", _lazy("Общий счёт")
+        CUSTOM_SPLIT = "custom_split", _lazy("Особое деление")
 
     class Status(models.TextChoices):
-        OPEN = "open", "Открыт"
-        AUTO_PREPARED = "auto_prepared", "Счёт подготовлен"
-        PROCESSED = "processed", "Обработан"
-        CANCELED = "canceled", "Отменён"
+        OPEN = "open", _lazy("Открыт")
+        AUTO_PREPARED = "auto_prepared", _lazy("Счёт подготовлен")
+        PROCESSED = "processed", _lazy("Обработан")
+        CANCELED = "canceled", _lazy("Отменён")
 
     table = models.ForeignKey(
         "tables.Table",
         on_delete=models.PROTECT,
         related_name="billing_requests",
-        verbose_name="Стол",
+        verbose_name=_lazy("Стол"),
     )
     guest = models.ForeignKey(
         "users.GuestProfile",
         on_delete=models.PROTECT,
         related_name="billing_requests",
-        verbose_name="Гость",
+        verbose_name=_lazy("Гость"),
     )
     table_session = models.ForeignKey(
         "tables.TableSession",
         on_delete=models.PROTECT,
         related_name="billing_requests",
-        verbose_name="Сессия стола",
+        verbose_name=_lazy("Сессия стола"),
     )
     request_type = models.CharField(
         max_length=32,
         choices=RequestType.choices,
-        verbose_name="Что запросили",
+        verbose_name=_lazy("Что запросили"),
     )
     status = models.CharField(
         max_length=24,
         choices=Status.choices,
         default=Status.OPEN,
-        verbose_name="Статус",
+        verbose_name=_lazy("Статус"),
     )
     bill = models.ForeignKey(
         "billing.Bill",
@@ -184,14 +188,14 @@ class BillingRequest(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="billing_requests",
-        verbose_name="Счёт",
+        verbose_name=_lazy("Счёт"),
     )
-    note = models.CharField(max_length=255, blank=True, verbose_name="Примечание")
-    processed_at = models.DateTimeField(null=True, blank=True, verbose_name="Обработан")
+    note = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Примечание"))
+    processed_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Обработан"))
 
     class Meta:
-        verbose_name = "запрос счёта"
-        verbose_name_plural = "Запросы счёта"
+        verbose_name = _lazy("запрос счёта")
+        verbose_name_plural = _lazy("Запросы счёта")
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -205,18 +209,18 @@ class BillOrder(PartnerBoundModel):
         Bill,
         on_delete=models.CASCADE,
         related_name="bill_orders",
-        verbose_name="Счёт",
+        verbose_name=_lazy("Счёт"),
     )
     order = models.ForeignKey(
         "orders.Order",
         on_delete=models.PROTECT,
         related_name="bill_links",
-        verbose_name="Заказ",
+        verbose_name=_lazy("Заказ"),
     )
 
     class Meta:
-        verbose_name = "заказ в счёте"
-        verbose_name_plural = "Заказы в счетах"
+        verbose_name = _lazy("заказ в счёте")
+        verbose_name_plural = _lazy("Заказы в счетах")
         ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -236,45 +240,45 @@ class BillItem(PartnerBoundModel):
         Bill,
         on_delete=models.CASCADE,
         related_name="items",
-        verbose_name="Счёт",
+        verbose_name=_lazy("Счёт"),
     )
     order = models.ForeignKey(
         "orders.Order",
         on_delete=models.PROTECT,
         related_name="billing_items",
-        verbose_name="Заказ",
+        verbose_name=_lazy("Заказ"),
     )
     order_item = models.ForeignKey(
         "orders.OrderItem",
         on_delete=models.PROTECT,
         related_name="billing_items",
-        verbose_name="Строка заказа",
+        verbose_name=_lazy("Строка заказа"),
     )
-    item_name = models.CharField(max_length=255, verbose_name="Позиция")
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Цена")
-    quantity = models.PositiveIntegerField(default=1, verbose_name="Количество")
+    item_name = models.CharField(max_length=255, verbose_name=_lazy("Позиция"))
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_lazy("Цена"))
+    quantity = models.PositiveIntegerField(default=1, verbose_name=_lazy("Количество"))
     line_total = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Сумма строки",
+        verbose_name=_lazy("Сумма строки"),
     )
-    comment = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
+    comment = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Комментарий"))
     # Removed lines stay for history; only active lines count and allocate.
-    is_active = models.BooleanField(default=True, verbose_name="Активен")
-    removed_at = models.DateTimeField(null=True, blank=True, verbose_name="Убрана")
+    is_active = models.BooleanField(default=True, verbose_name=_lazy("Активен"))
+    removed_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Убрана"))
     removed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="removed_bill_items",
-        verbose_name="Кто убрал",
+        verbose_name=_lazy("Кто убрал"),
     )
 
     class Meta:
-        verbose_name = "строка счёта"
-        verbose_name_plural = "Строки счетов"
+        verbose_name = _lazy("строка счёта")
+        verbose_name_plural = _lazy("Строки счетов")
         ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -296,62 +300,64 @@ class Payment(PartnerBoundModel):
     """Payment attempt or completed payment attached to one bill."""
 
     class Status(models.TextChoices):
-        PENDING = "pending", "Ожидает"
-        AUTHORIZED = "authorized", "Авторизована"
-        PAID = "paid", "Проведена"
-        FAILED = "failed", "Ошибка"
-        REFUNDED = "refunded", "Возвращена"
-        CANCELED = "canceled", "Отменена"
+        PENDING = "pending", _lazy("Ожидает")
+        AUTHORIZED = "authorized", _lazy("Авторизована")
+        PAID = "paid", _lazy("Проведена")
+        FAILED = "failed", _lazy("Ошибка")
+        REFUNDED = "refunded", _lazy("Возвращена")
+        CANCELED = "canceled", _lazy("Отменена")
 
     class Method(models.TextChoices):
-        CASH = "cash", "Наличные"
-        TERMINAL = "terminal", "Карта (терминал)"
-        TRANSFER = "transfer", "Перевод"
-        ONLINE = "online", "Онлайн"
-        MIXED = "mixed", "Смешанная"
-        BONUSES = "bonuses", "Бонусы"
+        CASH = "cash", _lazy("Наличные")
+        TERMINAL = "terminal", _lazy("Карта (терминал)")
+        TRANSFER = "transfer", _lazy("Перевод")
+        ONLINE = "online", _lazy("Онлайн")
+        MIXED = "mixed", _lazy("Смешанная")
+        BONUSES = "bonuses", _lazy("Бонусы")
         # Cash on delivery by post (PQ-034): the carrier passes the money on.
-        COD = "cod", "Наложенный платёж"
+        COD = "cod", _lazy("Наложенный платёж")
 
     bill = models.ForeignKey(
         Bill,
         on_delete=models.CASCADE,
         related_name="payments",
-        verbose_name="Счёт",
+        verbose_name=_lazy("Счёт"),
     )
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
         default=Status.PENDING,
-        verbose_name="Статус",
+        verbose_name=_lazy("Статус"),
     )
     method = models.CharField(
         max_length=16,
         choices=Method.choices,
         default=Method.CASH,
-        verbose_name="Способ",
+        verbose_name=_lazy("Способ"),
     )
-    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Сумма")
-    provider_code = models.CharField(max_length=64, blank=True, verbose_name="Платёжный провайдер")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_lazy("Сумма"))
+    provider_code = models.CharField(max_length=64, blank=True, verbose_name=_lazy(
+        "Платёжный провайдер",
+    ))
     external_payment_id = models.CharField(
         max_length=255,
         blank=True,
-        verbose_name="Номер платежа у провайдера",
+        verbose_name=_lazy("Номер платежа у провайдера"),
     )
-    comment = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
-    paid_at = models.DateTimeField(null=True, blank=True, verbose_name="Оплачен")
+    comment = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Комментарий"))
+    paid_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Оплачен"))
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="billing_payments",
-        verbose_name="Кто создал",
+        verbose_name=_lazy("Кто создал"),
     )
 
     class Meta:
-        verbose_name = "оплата"
-        verbose_name_plural = "Оплаты"
+        verbose_name = _lazy("оплата")
+        verbose_name_plural = _lazy("Оплаты")
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -362,45 +368,51 @@ class BillAdjustment(PartnerBoundModel):
     """Append-only record of a correction made to a bill by an authorised person."""
 
     class Kind(models.TextChoices):
-        REMOVE_LINE = "remove_line", "Строка убрана"
-        ORDER_CANCELED = "order_canceled", "Заказ отменён"
-        VOID = "void", "Счёт аннулирован"
+        REMOVE_LINE = "remove_line", _lazy("Строка убрана")
+        ORDER_CANCELED = "order_canceled", _lazy("Заказ отменён")
+        VOID = "void", _lazy("Счёт аннулирован")
 
     class ReasonCode(models.TextChoices):
-        INPUT_ERROR = "input_error", "Ошибка ввода"
-        GUEST_REFUSED = "guest_refused", "Отказ гостя"
-        COMPLIMENT = "compliment", "Комплимент заведения"
-        PAYMENT_NOT_RECEIVED = "payment_not_received", "Оплата не поступила"
-        OTHER = "other", "Другое"
+        INPUT_ERROR = "input_error", _lazy("Ошибка ввода")
+        GUEST_REFUSED = "guest_refused", _lazy("Отказ гостя")
+        COMPLIMENT = "compliment", _lazy("Комплимент заведения")
+        PAYMENT_NOT_RECEIVED = "payment_not_received", _lazy("Оплата не поступила")
+        OTHER = "other", _lazy("Другое")
 
     bill = models.ForeignKey(
         Bill,
         on_delete=models.PROTECT,
         related_name="adjustments",
-        verbose_name="Счёт",
+        verbose_name=_lazy("Счёт"),
     )
-    kind = models.CharField(max_length=24, choices=Kind.choices, verbose_name="Что изменено")
+    kind = models.CharField(max_length=24, choices=Kind.choices, verbose_name=_lazy("Что изменено"))
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="bill_adjustments",
-        verbose_name="Кто изменил",
+        verbose_name=_lazy("Кто изменил"),
     )
     reason_code = models.CharField(
         max_length=24,
         choices=ReasonCode.choices,
-        verbose_name="Причина",
+        verbose_name=_lazy("Причина"),
     )
-    reason_text = models.CharField(max_length=255, blank=True, verbose_name="Комментарий к причине")
-    total_before = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Итог до")
-    total_after = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Итог после")
-    payload = models.JSONField(default=dict, blank=True, verbose_name="Данные изменения")
+    reason_text = models.CharField(max_length=255, blank=True, verbose_name=_lazy(
+        "Комментарий к причине",
+    ))
+    total_before = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_lazy(
+        "Итог до",
+    ))
+    total_after = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_lazy(
+        "Итог после",
+    ))
+    payload = models.JSONField(default=dict, blank=True, verbose_name=_lazy("Данные изменения"))
 
     class Meta:
-        verbose_name = "изменение счёта"
-        verbose_name_plural = "Изменения счетов"
+        verbose_name = _lazy("изменение счёта")
+        verbose_name_plural = _lazy("Изменения счетов")
         ordering = ["created_at"]
 
     def __str__(self) -> str:
@@ -416,21 +428,21 @@ class Refund(PartnerBoundModel):
     """
 
     class ReasonCode(models.TextChoices):
-        OUT_OF_STOCK = "out_of_stock", "Нет в наличии"
-        QUALITY = "quality", "Претензия к качеству"
-        GUEST_REFUSED = "guest_refused", "Отказ гостя"
-        INPUT_ERROR = "input_error", "Ошибка ввода"
-        OTHER = "other", "Другое"
+        OUT_OF_STOCK = "out_of_stock", _lazy("Нет в наличии")
+        QUALITY = "quality", _lazy("Претензия к качеству")
+        GUEST_REFUSED = "guest_refused", _lazy("Отказ гостя")
+        INPUT_ERROR = "input_error", _lazy("Ошибка ввода")
+        OTHER = "other", _lazy("Другое")
 
     class Method(models.TextChoices):
         # How the money went back to the guest; done by hand, outside the bot.
-        CASH = "cash", "Наличными"
-        TRANSFER = "transfer", "Переводом на карту"
-        TERMINAL = "terminal", "На карту через терминал"
-        NONE = "none", "Деньги не возвращались (только бонусы)"
+        CASH = "cash", _lazy("Наличными")
+        TRANSFER = "transfer", _lazy("Переводом на карту")
+        TERMINAL = "terminal", _lazy("На карту через терминал")
+        NONE = "none", _lazy("Деньги не возвращались (только бонусы)")
 
     bill = models.ForeignKey(
-        Bill, on_delete=models.PROTECT, related_name="refunds", verbose_name="Счёт"
+        Bill, on_delete=models.PROTECT, related_name="refunds", verbose_name=_lazy("Счёт")
     )
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -438,58 +450,66 @@ class Refund(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="bill_refunds",
-        verbose_name="Кто вернул",
+        verbose_name=_lazy("Кто вернул"),
     )
     reason_code = models.CharField(
-        max_length=24, choices=ReasonCode.choices, verbose_name="Причина"
+        max_length=24, choices=ReasonCode.choices, verbose_name=_lazy("Причина")
     )
-    reason_text = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
-    method = models.CharField(max_length=16, choices=Method.choices, verbose_name="Как вернули")
-    is_full = models.BooleanField(default=False, verbose_name="Полный возврат")
+    reason_text = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Комментарий"))
+    method = models.CharField(max_length=16, choices=Method.choices, verbose_name=_lazy(
+        "Как вернули",
+    ))
+    is_full = models.BooleanField(default=False, verbose_name=_lazy("Полный возврат"))
     money_amount = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, verbose_name="Возвращено денег"
+        max_digits=10, decimal_places=2, default=0, verbose_name=_lazy("Возвращено денег")
     )
     bonus_returned = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, verbose_name="Возвращено бонусов"
+        max_digits=10, decimal_places=2, default=0, verbose_name=_lazy("Возвращено бонусов")
     )
     cashback_revoked = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, verbose_name="Снято кешбэка"
+        max_digits=10, decimal_places=2, default=0, verbose_name=_lazy("Снято кешбэка")
     )
     cashback_not_revoked = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Кешбэк не снят (гость уже потратил)",
+        verbose_name=_lazy("Кешбэк не снят (гость уже потратил)"),
     )
 
     class Meta:
-        verbose_name = "возврат"
-        verbose_name_plural = "Возвраты"
+        verbose_name = _lazy("возврат")
+        verbose_name_plural = _lazy("Возвраты")
         ordering = ["created_at"]
 
     def __str__(self) -> str:
-        return f"{self.bill.public_id} / возврат {self.money_amount}"
+        return _(
+            "{public_id} / возврат {money_amount}",
+            public_id=self.bill.public_id,
+            money_amount=self.money_amount,
+        )
 
 
 class RefundLine(PartnerBoundModel):
     """One refunded bill line; a line is refunded at most once."""
 
     refund = models.ForeignKey(
-        Refund, on_delete=models.PROTECT, related_name="lines", verbose_name="Возврат"
+        Refund, on_delete=models.PROTECT, related_name="lines", verbose_name=_lazy("Возврат")
     )
     bill_item = models.OneToOneField(
-        BillItem, on_delete=models.PROTECT, related_name="refund_line", verbose_name="Строка счёта"
+        BillItem, on_delete=models.PROTECT, related_name="refund_line", verbose_name=_lazy(
+            "Строка счёта",
+        )
     )
     money_amount = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, verbose_name="Деньги"
+        max_digits=10, decimal_places=2, default=0, verbose_name=_lazy("Деньги")
     )
     bonus_amount = models.DecimalField(
-        max_digits=10, decimal_places=2, default=0, verbose_name="Бонусы"
+        max_digits=10, decimal_places=2, default=0, verbose_name=_lazy("Бонусы")
     )
 
     class Meta:
-        verbose_name = "строка возврата"
-        verbose_name_plural = "Строки возвратов"
+        verbose_name = _lazy("строка возврата")
+        verbose_name_plural = _lazy("Строки возвратов")
         ordering = ["created_at"]
 
     def __str__(self) -> str:

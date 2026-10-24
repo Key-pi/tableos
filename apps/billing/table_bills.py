@@ -32,6 +32,7 @@ from apps.tables.services import (
     close_table_session_if_settled,
     get_active_table_session,
 )
+from core.i18n import _
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +64,7 @@ def resolve_table_visit_for_billing(*, partner_id, table_id, visit_id=_VISIT_NOT
     )
     if len(active_visit_ids) > 1:
         raise BillingServiceError(
-            "За столом несколько визитов — выставьте счёт из карточки нужного визита."
+            _("За столом несколько визитов — выставьте счёт из карточки нужного визита.")
         )
     return active_visit_ids[0] if active_visit_ids else None
 
@@ -137,7 +138,7 @@ def create_shared_bill_for_table(
         ),
     )
     if not orders:
-        raise BillingServiceError("На этом столе нет заказов, доступных для нового счёта.")
+        raise BillingServiceError(_("На этом столе нет заказов, доступных для нового счёта."))
 
     table = orders[0].table
     return create_bill_from_orders(
@@ -166,7 +167,7 @@ def create_personal_bills_for_table(
         ),
     )
     if not orders:
-        raise BillingServiceError("На этом столе нет заказов, доступных для split bill.")
+        raise BillingServiceError(_("На этом столе нет заказов, доступных для split bill."))
 
     bills: list[Bill] = []
     for _guest_id, guest_orders_iter in groupby(orders, key=lambda order: order.guest_id):
@@ -218,7 +219,7 @@ def get_or_create_personal_bill_for_guest_table(
             order_ids=[str(order.id) for order in guest_orders],
         )
     if not guest_orders:
-        raise BillingServiceError("У этого гостя нет новых заказов для персонального счёта.")
+        raise BillingServiceError(_("У этого гостя нет новых заказов для персонального счёта."))
 
     guest = guest_orders[0].guest
     guest_label = guest.telegram_account.username or guest.customer_code
@@ -258,7 +259,7 @@ def get_or_create_shared_bill_for_table(
             order_ids=[str(order.id) for order in orders],
         )
     if not orders:
-        raise BillingServiceError("На этом столе нет новых заказов для общего счёта.")
+        raise BillingServiceError(_("На этом столе нет новых заказов для общего счёта."))
     return create_bill_from_orders(
         partner_id=partner_id,
         order_ids=[str(order.id) for order in orders],
@@ -279,7 +280,7 @@ def create_billing_request_for_telegram_user(
     table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
     if table_session is None:
         raise BillingServiceError(
-            "Запросить счёт можно только после активации стола по QR-коду."
+            _("Запросить счёт можно только после активации стола по QR-коду.")
         )
 
     recent_duplicate = BillingRequest.objects.filter(
@@ -292,7 +293,7 @@ def create_billing_request_for_telegram_user(
     ).exists()
     if recent_duplicate:
         raise BillingServiceError(
-            "Похожий запрос счёта уже был отправлен совсем недавно. Подождите немного."
+            _("Похожий запрос счёта уже был отправлен совсем недавно. Подождите немного.")
         )
 
     bill = None
@@ -316,7 +317,7 @@ def create_billing_request_for_telegram_user(
         status = BillingRequest.Status.AUTO_PREPARED
         note = "Shared draft bill prepared automatically."
     elif request_type != BillingRequest.RequestType.CUSTOM_SPLIT:
-        raise BillingServiceError("Неизвестный тип запроса счёта.")
+        raise BillingServiceError(_("Неизвестный тип запроса счёта."))
 
     billing_request = BillingRequest.objects.create(
         partner_id=partner_id,
@@ -345,9 +346,9 @@ def mark_billing_request_processed(billing_request: BillingRequest) -> BillingRe
             partner_id=billing_request.partner_id,
         )
     except BillingRequest.DoesNotExist as exc:
-        raise BillingServiceError("Запрос счёта не найден в этом заведении.") from exc
+        raise BillingServiceError(_("Запрос счёта не найден в этом заведении.")) from exc
     if billing_request.status == BillingRequest.Status.CANCELED:
-        raise BillingServiceError("Нельзя обработать уже отменённый запрос счёта.")
+        raise BillingServiceError(_("Нельзя обработать уже отменённый запрос счёта."))
     if billing_request.status != BillingRequest.Status.PROCESSED:
         billing_request.status = BillingRequest.Status.PROCESSED
         billing_request.processed_at = timezone.now()
@@ -364,9 +365,9 @@ def cancel_billing_request(billing_request: BillingRequest) -> BillingRequest:
             partner_id=billing_request.partner_id,
         )
     except BillingRequest.DoesNotExist as exc:
-        raise BillingServiceError("Запрос счёта не найден в этом заведении.") from exc
+        raise BillingServiceError(_("Запрос счёта не найден в этом заведении.")) from exc
     if billing_request.status == BillingRequest.Status.PROCESSED:
-        raise BillingServiceError("Нельзя отменить уже обработанный запрос счёта.")
+        raise BillingServiceError(_("Нельзя отменить уже обработанный запрос счёта."))
     if billing_request.status != BillingRequest.Status.CANCELED:
         billing_request.status = BillingRequest.Status.CANCELED
         billing_request.processed_at = timezone.now()

@@ -15,11 +15,15 @@ from functools import wraps
 from django.core.cache import cache
 from django.http import HttpResponse
 
+from core.i18n import N_, _
+
 MAX_FAILURES = 5
 WINDOW_SECONDS = 15 * 60
 LOCKED_MESSAGE = (
-    "Слишком много неудачных попыток входа. Попробуйте через 15 минут "
-    "или попросите администратора проверить учётную запись."
+    N_(
+        "Слишком много неудачных попыток входа. Попробуйте через 15 минут или попросите "
+        "администратора проверить учётную запись.",
+    )
 )
 
 
@@ -36,7 +40,7 @@ def throttle_login(login_view):
         key = _key(request.POST.get("username", ""))
         if (cache.get(key) or 0) >= MAX_FAILURES:
             return HttpResponse(
-                LOCKED_MESSAGE, status=429, content_type="text/plain; charset=utf-8"
+                _(LOCKED_MESSAGE), status=429, content_type="text/plain; charset=utf-8"
             )
         response = login_view(request, *args, **kwargs)
         if request.user.is_authenticated:

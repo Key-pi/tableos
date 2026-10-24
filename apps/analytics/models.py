@@ -4,31 +4,32 @@ from django.core.validators import RegexValidator
 from django.db import models
 
 from core.database.models import PartnerBoundModel
+from core.i18n import gettext_lazy as _lazy
 
 
 class PartnerDailyMetric(PartnerBoundModel):
     """Daily aggregated KPI snapshot for partner dashboards and reporting."""
 
-    bucket_date = models.DateField(verbose_name="День")
+    bucket_date = models.DateField(verbose_name=_lazy("День"))
     revenue = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         default=0,
-        verbose_name="Выручка",
+        verbose_name=_lazy("Выручка"),
     )
-    orders_count = models.PositiveIntegerField(default=0, verbose_name="Заказов")
+    orders_count = models.PositiveIntegerField(default=0, verbose_name=_lazy("Заказов"))
     average_check = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
-        verbose_name="Средний чек",
+        verbose_name=_lazy("Средний чек"),
     )
-    active_guests = models.PositiveIntegerField(default=0, verbose_name="Активных гостей")
-    repeat_visits = models.PositiveIntegerField(default=0, verbose_name="Повторных визитов")
+    active_guests = models.PositiveIntegerField(default=0, verbose_name=_lazy("Активных гостей"))
+    repeat_visits = models.PositiveIntegerField(default=0, verbose_name=_lazy("Повторных визитов"))
 
     class Meta:
-        verbose_name = "метрика за день"
-        verbose_name_plural = "Метрики по дням"
+        verbose_name = _lazy("метрика за день")
+        verbose_name_plural = _lazy("Метрики по дням")
         ordering = ["-bucket_date"]
         constraints = [
             models.UniqueConstraint(
@@ -51,34 +52,38 @@ class TrafficSource(PartnerBoundModel):
     PAYLOAD_PREFIX = "src_"
     CODE_PATTERN = r"^[a-z0-9_-]{2,40}$"
 
-    name = models.CharField(max_length=120, verbose_name="Название")
+    name = models.CharField(max_length=120, verbose_name=_lazy("Название"))
     code = models.CharField(
         max_length=40,
         blank=True,
-        verbose_name="Код в ссылке",
+        verbose_name=_lazy("Код в ссылке"),
         help_text=(
-            "Латинские буквы в нижнем регистре, цифры, «-» и «_», от 2 до 40 символов. "
-            "Оставьте пустым — код придумается сам. После создания не меняется: "
-            "иначе перестанут работать уже напечатанные ссылки."
+            _lazy(
+                "Латинские буквы в нижнем регистре, цифры, «-» и «_», от 2 до 40 символов. "
+                "Оставьте пустым — код придумается сам. После создания не меняется: иначе "
+                "перестанут работать уже напечатанные ссылки.",
+            )
         ),
         validators=[
             RegexValidator(
                 CODE_PATTERN,
-                "Только латинские буквы в нижнем регистре, цифры, «-» и «_», 2–40 символов.",
+                _lazy("Только латинские буквы в нижнем регистре, цифры, «-» и «_», 2–40 символов."),
             )
         ],
     )
     is_active = models.BooleanField(
         default=True,
-        verbose_name="Активен",
-        help_text="Выключенный источник не считает переходы; гость всё равно попадает в бота.",
+        verbose_name=_lazy("Активен"),
+        help_text=_lazy(
+            "Выключенный источник не считает переходы; гость всё равно попадает в бота.",
+        ),
     )
-    note = models.TextField(blank=True, verbose_name="Заметка")
+    note = models.TextField(blank=True, verbose_name=_lazy("Заметка"))
 
     class Meta:
         ordering = ["name"]
-        verbose_name = "Источник перехода"
-        verbose_name_plural = "Источники переходов"
+        verbose_name = _lazy("Источник перехода")
+        verbose_name_plural = _lazy("Источники переходов")
         constraints = [
             models.UniqueConstraint(
                 fields=["partner", "code"],
@@ -121,20 +126,20 @@ class SourceVisit(PartnerBoundModel):
         TrafficSource,
         on_delete=models.CASCADE,
         related_name="visits",
-        verbose_name="Источник",
+        verbose_name=_lazy("Источник"),
     )
     guest = models.ForeignKey(
         "users.GuestProfile",
         on_delete=models.CASCADE,
         related_name="source_visits",
-        verbose_name="Гость",
+        verbose_name=_lazy("Гость"),
     )
-    is_new_guest = models.BooleanField(default=False, verbose_name="Новый гость")
+    is_new_guest = models.BooleanField(default=False, verbose_name=_lazy("Новый гость"))
 
     class Meta:
         ordering = ["-created_at"]
-        verbose_name = "Переход по источнику"
-        verbose_name_plural = "Переходы по источникам"
+        verbose_name = _lazy("Переход по источнику")
+        verbose_name_plural = _lazy("Переходы по источникам")
         indexes = [models.Index(fields=["source", "created_at"])]
         constraints = [
             models.UniqueConstraint(

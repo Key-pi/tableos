@@ -21,6 +21,7 @@ from apps.partners.models import (
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 from core.i18n import LANGUAGE_NAMES, _, texts
+from core.i18n import gettext_lazy as _lazy
 
 
 class OpeningHoursInline(admin.TabularInline):
@@ -32,10 +33,12 @@ class OpeningHoursInline(admin.TabularInline):
     model = OpeningHours
     extra = 0
     fields = ("scope", "weekday", "opens_at", "closes_at")
-    verbose_name = "Интервал работы"
+    verbose_name = _lazy("Интервал работы")
     verbose_name_plural = (
-        "Часы работы (время заведения; закрытие раньше открытия — после полуночи; "
-        "пусто — всегда открыто)"
+        _lazy(
+            "Часы работы (время заведения; закрытие раньше открытия — после полуночи; пусто — "
+            "всегда открыто)",
+        )
     )
 
 
@@ -45,11 +48,13 @@ class PartnerBotSettingsInline(admin.StackedInline):
     max_num = 1
     fieldsets = (
         (
-            "Модули · Базовые",
+            _lazy("Модули · Базовые"),
             {
                 "description": (
-                    "Профиль гостя и бонусный баланс считаются базовой частью "
-                    "продукта. Меню нужно для заказов, корзины и быстрых продаж."
+                    _lazy(
+                        "Профиль гостя и бонусный баланс считаются базовой частью продукта. Меню "
+                        "нужно для заказов, корзины и быстрых продаж.",
+                    )
                 ),
                 "fields": (
                     "module_menu_enabled",
@@ -57,16 +62,18 @@ class PartnerBotSettingsInline(admin.StackedInline):
             },
         ),
         (
-            "Модули · Сценарии заказа",
+            _lazy("Модули · Сценарии заказа"),
             {
                 "description": (
-                    "Столы, самовывоз, доставка и отправка почтой — независимые "
-                    "сценарии. Можно включить любой набор; для заказов нужен хотя бы "
-                    "один. У каждого удалённого сценария включите способы оплаты: "
-                    "переводом заранее (на реквизиты ниже) и/или при получении; если "
-                    "включены оба, гость выбирает. У отправки так же включаются службы "
-                    "и варианты оплаты пересылки — гость выбирает из включённых. "
-                    "Часы работы (для самовывоза и доставки) — в карточке партнёра."
+                    _lazy(
+                        "Столы, самовывоз, доставка и отправка почтой — независимые сценарии. "
+                        "Можно включить любой набор; для заказов нужен хотя бы один. У каждого "
+                        "удалённого сценария включите способы оплаты: переводом заранее (на "
+                        "реквизиты ниже) и/или при получении; если включены оба, гость выбирает. "
+                        "У отправки так же включаются службы и варианты оплаты пересылки — гость "
+                        "выбирает из включённых. Часы работы (для самовывоза и доставки) — в "
+                        "карточке партнёра.",
+                    )
                 ),
                 "fields": (
                     "module_tables_enabled",
@@ -90,11 +97,13 @@ class PartnerBotSettingsInline(admin.StackedInline):
             },
         ),
         (
-            "Модули · Заказы и оплата",
+            _lazy("Модули · Заказы и оплата"),
             {
                 "description": (
-                    "Корзина требует меню и заказы. Счета требуют заказы; "
-                    "запрос счёта гостем работает только при включённых столах."
+                    _lazy(
+                        "Корзина требует меню и заказы. Счета требуют заказы; запрос счёта "
+                        "гостем работает только при включённых столах.",
+                    )
                 ),
                 "fields": (
                     "module_orders_enabled",
@@ -104,10 +113,10 @@ class PartnerBotSettingsInline(admin.StackedInline):
             },
         ),
         (
-            "Модули · Операции и отчёты",
+            _lazy("Модули · Операции и отчёты"),
             {
                 "description": (
-                    "Вызов персонала требует столы. Быстрые продажи требуют меню."
+                    _lazy("Вызов персонала требует столы. Быстрые продажи требуют меню.")
                 ),
                 "fields": (
                     "module_staff_call_enabled",
@@ -117,7 +126,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
             },
         ),
         (
-            "Поведение бота",
+            _lazy("Поведение бота"),
             {
                 "fields": (
                     "auto_close_table_session_after_payment",
@@ -132,12 +141,14 @@ class PartnerBotSettingsInline(admin.StackedInline):
             },
         ),
         (
-            "Языки",
+            _lazy("Языки"),
             {
                 "description": (
-                    "Гость видит язык своего Telegram, если он включён, иначе основной, "
-                    "и может переключить язык в «Мой профиль». Кнопки и сообщения бота "
-                    "на каждом языке меняются в разделе «Тексты бота»."
+                    _lazy(
+                        "Гость видит язык своего Telegram, если он включён, иначе основной, и "
+                        "может переключить язык в «Мой профиль». Кнопки и сообщения бота на "
+                        "каждом языке меняются в разделе «Тексты бота».",
+                    )
                 ),
                 "fields": (
                     "default_language",
@@ -246,7 +257,7 @@ class BotInstanceAdmin(ScopedAdminMixin):
             return self.search_fields
         return ("display_name", "username")
 
-    @admin.display(description="Токен")
+    @admin.display(description=_lazy("Токен"))
     def token_status(self, obj: BotInstance) -> str:
         return obj.token_status_label
 
@@ -325,11 +336,11 @@ class BotTextAdmin(ScopedAdminMixin):
     search_fields = ("msgid", "text")
     change_list_template = "admin/partners/bottext/change_list.html"
 
-    @admin.display(description="Текст в каталоге")
+    @admin.display(description=_lazy("Текст в каталоге"))
     def catalog_text(self, obj: BotText) -> str:
         return _short(obj.msgid)
 
-    @admin.display(description="Свой текст")
+    @admin.display(description=_lazy("Свой текст"))
     def own_text(self, obj: BotText) -> str:
         return _short(obj.text)
 
@@ -407,7 +418,7 @@ class BotTextAdmin(ScopedAdminMixin):
         page = Paginator(rows, 50).get_page(request.GET.get("page"))
         context = {
             **self.admin_site.each_context(request),
-            "title": "Каталог текстов бота",
+            "title": _("Каталог текстов бота"),
             "opts": self.model._meta,
             "page": page,
             "languages": [LANGUAGE_NAMES[code] for code in languages],

@@ -9,6 +9,8 @@ from apps.analytics.models import PartnerDailyMetric, SourceVisit, TrafficSource
 from apps.partners.models import BotInstance
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
+from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 @admin.register(PartnerDailyMetric)
@@ -31,11 +33,16 @@ class PartnerDailyMetricAdmin(ScopedAdminMixin):
 class SourcePeriodFilter(admin.SimpleListFilter):
     """Period of the click and new-guest counts in the source list."""
 
-    title = "Период"
+    title = _lazy("Период")
     parameter_name = "period"
 
     def lookups(self, request, model_admin):
-        return (("1", "Сегодня и вчера"), ("7", "7 дней"), ("30", "30 дней"), ("90", "90 дней"))
+        return (
+            ("1", _("Сегодня и вчера")),
+            ("7", _("7 дней")),
+            ("30", _("30 дней")),
+            ("90", _("90 дней")),
+        )
 
     def queryset(self, request, queryset):
         # Called for every changelist request (also with no period chosen): it
@@ -67,7 +74,7 @@ class TrafficSourceForm(forms.ModelForm):
             if self.instance.pk:
                 duplicate = duplicate.exclude(pk=self.instance.pk)
             if duplicate.exists():
-                raise forms.ValidationError("Источник с таким кодом уже есть.")
+                raise forms.ValidationError(_("Источник с таким кодом уже есть."))
         return code
 
 
@@ -95,24 +102,27 @@ class TrafficSourceAdmin(ScopedAdminMixin):
         ScopedForm.scope_partner_id = scope_partner_id
         return ScopedForm
 
-    @admin.display(description="Ссылка (её же можно превратить в QR-код)")
+    @admin.display(description=_lazy("Ссылка (её же можно превратить в QR-код)"))
     def link(self, obj):
         if obj is None or not obj.pk:
-            return "появится после сохранения"
+            return _("появится после сохранения")
         bot = (
             BotInstance.objects.filter(partner_id=obj.partner_id, is_active=True)
             .order_by("created_at")
             .first()
         )
         if bot is None:
-            return f"/start {obj.deep_link_payload} (у заведения нет активного бота)"
+            return _(
+                "/start {deep_link_payload} (у заведения нет активного бота)",
+                deep_link_payload=obj.deep_link_payload,
+            )
         return obj.telegram_start_url(bot.username)
 
-    @admin.display(description="Переходы", ordering="clicks")
+    @admin.display(description=_lazy("Переходы"), ordering="clicks")
     def clicks_column(self, obj):
         return getattr(obj, "clicks", "—")
 
-    @admin.display(description="Новые гости", ordering="new_guests")
+    @admin.display(description=_lazy("Новые гости"), ordering="new_guests")
     def new_guests_column(self, obj):
         return getattr(obj, "new_guests", "—")
 
