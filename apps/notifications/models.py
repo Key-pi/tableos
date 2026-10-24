@@ -31,6 +31,8 @@ class StaffNotification(PartnerBoundModel):
         GUEST_CALL = "guest_call", "Guest call"
         BILLING_REQUEST = "billing_request", "Billing request"
         TABLE_VISIT = "table_visit", "Table visit"
+        # Changes that move money or rights, sent to the owner (AA-035).
+        SECURITY = "security", "Безопасность"
 
     class DeliveryStatus(models.TextChoices):
         PENDING = "pending", "Pending"

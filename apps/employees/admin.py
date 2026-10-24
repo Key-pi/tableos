@@ -2,8 +2,9 @@ from django.contrib import admin
 
 from apps.employees.forms import EmployeeProfileAdminForm
 from apps.employees.models import EmployeeProfile
+from apps.users.admin import is_owner_user
 from apps.users.constants import AdminSection
-from core.admin_mixins import ScopedAdminMixin
+from core.admin_mixins import ScopedAdminMixin, is_partner_owner_or_superuser
 
 
 @admin.register(EmployeeProfile)
@@ -83,6 +84,22 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
             },
         ),
     )
+
+    def has_change_permission(self, request, obj=None):
+        if obj is not None and not self._may_touch(request, obj):
+            return False
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if obj is not None and not self._may_touch(request, obj):
+            return False
+        return super().has_delete_permission(request, obj)
+
+    @staticmethod
+    def _may_touch(request, employee) -> bool:
+        # AA-036: only the owner changes the owner's staff profile (it carries
+        # the owner's bot access and security alerts).
+        return is_partner_owner_or_superuser(request.user) or not is_owner_user(employee.user)
 
     def get_form(self, request, obj=None, change=False, **kwargs):
         form_class = super().get_form(request, obj, change, **kwargs)

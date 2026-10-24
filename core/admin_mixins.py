@@ -34,6 +34,17 @@ def has_admin_sensitive_permission(user, section: str) -> bool:
     return has_admin_section_permission(user, section, "manage_sensitive")
 
 
+def is_partner_owner_or_superuser(user) -> bool:
+    """The venue owner (active owner admin profile) or a platform superuser."""
+
+    if not getattr(user, "is_authenticated", False) or not user.is_active:
+        return False
+    if user.is_superuser:
+        return True
+    profile = get_admin_access_profile(user)
+    return profile is not None and profile.is_partner_owner
+
+
 class ScopedAdminMixin(admin.ModelAdmin):
     """Reusable admin guard that scopes partner data and section permissions."""
 
@@ -43,6 +54,8 @@ class ScopedAdminMixin(admin.ModelAdmin):
     platform_only: bool = False
     platform_only_fields: tuple[str, ...] = ()
     sensitive_fields: tuple[str, ...] = ()
+    # Hidden from everyone but the venue owner and superusers (AA-035).
+    owner_only_fields: tuple[str, ...] = ()
     allow_partner_add = True
     allow_partner_delete = True
 
@@ -138,6 +151,10 @@ class ScopedAdminMixin(admin.ModelAdmin):
                     exclude.append(field_name)
             if not has_admin_sensitive_permission(request.user, self.admin_section):
                 for field_name in self.sensitive_fields:
+                    if field_name not in exclude:
+                        exclude.append(field_name)
+            if not is_partner_owner_or_superuser(request.user):
+                for field_name in self.owner_only_fields:
                     if field_name not in exclude:
                         exclude.append(field_name)
         return tuple(exclude) or None

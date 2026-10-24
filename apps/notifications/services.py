@@ -214,9 +214,17 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
     if notification.delivery_status == StaffNotification.DeliveryStatus.SENT:
         return notification
     employee = notification.employee
+    # Security alerts reach the owner even with bot notifications off (AA-035).
+    opted_in = (
+        employee is not None
+        and (
+            employee.bot_notifications_enabled
+            or notification.category == StaffNotification.Category.SECURITY
+        )
+    )
     if employee is not None and not (
         employee.is_active
-        and employee.bot_notifications_enabled
+        and opted_in
         and employee.partner_id == notification.partner_id
         and employee.user.is_active
         and employee.user.partner_id == notification.partner_id
@@ -567,6 +575,52 @@ def notify_staff_about_parallel_visit(visit) -> int:
         deliver_staff_notification(notification)
         queued_count += 1
     return queued_count
+
+
+def notify_partner_owners(*, partner_id, title: str, message: str) -> int:
+    """A security alert to the venue owners linked to the staff bot.
+
+    Owners are the users with an active owner admin profile or the owner role.
+    The per-topic notification switches do not apply: the owner must know
+    when payment details or rights change (AA-035).
+    """
+
+    recipients = EmployeeProfile.objects.filter(
+        Q(user__admin_access_profile__is_partner_owner=True)
+        | Q(user__role="owner"),
+        partner_id=partner_id,
+        is_active=True,
+        telegram_account__isnull=False,
+        user__is_active=True,
+        user__partner_id=partner_id,
+    ).distinct()
+    queued_count = 0
+    for employee in recipients:
+        notification = StaffNotification.objects.create(
+            partner_id=partner_id,
+            employee=employee,
+            category=StaffNotification.Category.SECURITY,
+            title=title,
+            message=message,
+        )
+        deliver_staff_notification(notification)
+        queued_count += 1
+    return queued_count
+
+
+def notify_owners_about_transfer_details_change(*, settings, actor) -> int:
+    who = getattr(actor, "username", "") or "неизвестно"
+    details = settings.transfer_payment_details or "(пусто)"
+    return notify_partner_owners(
+        partner_id=settings.partner_id,
+        title="Изменены реквизиты для оплаты",
+        message=(
+            f"Реквизиты для перевода изменил пользователь {who}.\n"
+            f"Новые реквизиты: {details}\n"
+            "Если это сделали не вы — сразу верните реквизиты, смените пароль и "
+            "проверьте доступы в Admin."
+        ),
+    )
 
 
 def notify_staff_about_billing_request(billing_request) -> int:

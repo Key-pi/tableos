@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from apps.notifications.services import notify_owners_about_transfer_details_change
 from apps.partners.forms import BotInstanceAdminForm
 from apps.partners.models import BotInstance, OpeningHours, Partner, PartnerBotSettings
 from apps.users.constants import AdminSection
@@ -216,6 +217,15 @@ class PartnerAdmin(ScopedAdminMixin):
             return super().get_inline_instances(request, obj)
         return []
 
+    def save_formset(self, request, form, formset, change):
+        super().save_formset(request, form, formset, change)
+        if formset.model is PartnerBotSettings:
+            for inline_form in formset.forms:
+                if inline_form.instance.pk is not None:
+                    _alert_owners_if_transfer_details_changed(
+                        inline_form, inline_form.instance, request.user
+                    )
+
 
 @admin.register(BotInstance)
 class BotInstanceAdmin(ScopedAdminMixin):
@@ -255,9 +265,17 @@ class BotInstanceAdmin(ScopedAdminMixin):
         return obj.token_status_label
 
 
+def _alert_owners_if_transfer_details_changed(form, obj, actor) -> None:
+    # AA-035: the owner is told whenever the payment details change.
+    if "transfer_payment_details" in getattr(form, "changed_data", ()):
+        notify_owners_about_transfer_details_change(settings=obj, actor=actor)
+
+
 @admin.register(PartnerBotSettings)
 class PartnerBotSettingsAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BOT_CONTENT
+    # Guests pay to these details: only the owner sees and changes them.
+    owner_only_fields = ("transfer_payment_details",)
     platform_only_fields = ("extra_config",)
     list_display = (
         "partner",
@@ -287,3 +305,7 @@ class PartnerBotSettingsAdmin(ScopedAdminMixin):
         if request.user.is_superuser:
             return self.search_fields
         return ("partner__name",)
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        _alert_owners_if_transfer_details_changed(form, obj, request.user)
