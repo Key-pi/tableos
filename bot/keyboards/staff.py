@@ -32,6 +32,7 @@ def build_staff_order_actions_keyboard(
     cash_on_delivery: bool = False,
     ship_needs_tracking: bool = False,
     status_labels: dict[str, str] | None = None,
+    can_refund: bool = False,
 ) -> InlineKeyboardMarkup | None:
     labels = status_labels or STATUS_LABELS
     keyboard = []
@@ -99,6 +100,11 @@ def build_staff_order_actions_keyboard(
     if status_buttons:
         for index in range(0, len(status_buttons), 2):
             keyboard.append(status_buttons[index:index + 2])
+    if can_refund:
+        # Refund of a paid order (PQ-037); the right is checked on press.
+        keyboard.append(
+            [InlineKeyboardButton(text="↩️ Возврат", callback_data=f"strf:{order_public_id}:0")]
+        )
     keyboard.append(
         [
             InlineKeyboardButton(

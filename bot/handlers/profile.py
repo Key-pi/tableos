@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
 from apps.billing.remote_orders import tracking_link
+from apps.billing.services import get_order_refunded_money
 from apps.bonuses.selectors import (
     active_bonus_programs_for_partner,
     recent_bonus_transactions_for_guest,
@@ -315,6 +316,9 @@ def _render_my_order(order: Order) -> str:
     payment = _payment_line(order)
     if payment:
         lines.append(f"Оплата: {payment}")
+    refunded = getattr(order, "refunded_money", 0)
+    if refunded:
+        lines.append(f"Возвращено: {refunded} грн")
     return "\n".join(lines)
 
 
@@ -334,12 +338,15 @@ def _load_my_orders(partner_id, telegram_id: int, page: int):
 
 
 def _load_my_order(partner_id, telegram_id: int, public_id: str):
-    return (
+    order = (
         get_guest_orders(partner_id=partner_id, telegram_id=telegram_id)
         .prefetch_related("items")
         .filter(public_id=public_id)
         .first()
     )
+    if order is not None:
+        order.refunded_money = get_order_refunded_money(order)
+    return order
 
 
 @router.callback_query(lambda c: bool(c.data and _MY_ORDERS_CALLBACK.match(c.data)))

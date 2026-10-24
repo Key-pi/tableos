@@ -36,6 +36,7 @@ from core.settings.env import app_settings
 DELIVER_STAFF_NOTIFICATION_TASK = "notifications.deliver_staff_notification"
 SEND_GUEST_ORDER_STATUS_UPDATE_TASK = "notifications.send_guest_order_status_update"
 SEND_BROADCAST_CAMPAIGN_TASK = "notifications.send_broadcast_campaign"
+SEND_GUEST_REFUND_NOTICE_TASK = "notifications.send_guest_refund_notice"
 PROCESS_SCHEDULED_BROADCAST_CAMPAIGNS_TASK = "notifications.process_scheduled_broadcast_campaigns"
 RECOVER_STALLED_BROADCASTS_TASK = "notifications.recover_stalled_broadcast_campaigns"
 # A claimed broadcast message whose result is not recorded within this time is
@@ -456,6 +457,71 @@ def send_guest_order_status_update_now(
     if not is_sent and _is_retryable_result(results[0]):
         # At least once (PQ-015): only a transient failure is retried; nothing
         # after a successful send raises, so a sent update is not repeated.
+        raise RetryableDeliveryError(error_message or "Transient Telegram delivery failure.")
+    return is_sent
+
+
+def send_guest_refund_notice(refund) -> None:
+    """Tell the guest about a refund after it is committed (PQ-037)."""
+
+    from apps.notifications.tasks import send_guest_refund_notice_task
+
+    transaction.on_commit(lambda: send_guest_refund_notice_task.delay(str(refund.id)))
+
+
+def render_guest_refund_notice(refund) -> str:
+    lines = [f"<b>Возврат по счёту #{_escape_html(refund.bill.public_id)}</b>"]
+    by_order: dict[str, list[str]] = {}
+    for line in refund.lines.select_related("bill_item__order").order_by("created_at"):
+        item = line.bill_item
+        by_order.setdefault(item.order.public_id, []).append(
+            f"{_escape_html(item.item_name)} × {item.quantity}"
+        )
+    for public_id, items in by_order.items():
+        lines.append(f"Заказ #{_escape_html(public_id)}: {', '.join(items)}")
+    if refund.money_amount > 0 and refund.method != refund.Method.NONE:
+        lines.append(
+            f"Деньги: {refund.money_amount} грн — {refund.get_method_display().lower()}."
+        )
+    if refund.bonus_returned > 0:
+        lines.append(f"Бонусы вернулись: {refund.bonus_returned}.")
+    if refund.cashback_revoked > 0:
+        lines.append(f"Кешбэк за возвращённое снят: {refund.cashback_revoked}.")
+    lines.append(f"Причина: {refund.get_reason_code_display()}.")
+    if refund.reason_text:
+        lines.append(_escape_html(refund.reason_text))
+    return "\n".join(lines)
+
+
+def send_guest_refund_notice_now(refund_id: str) -> bool:
+    from apps.billing.models import Refund
+
+    refund = (
+        Refund.objects.select_related("bill__primary_guest__telegram_account", "partner")
+        .filter(id=refund_id)
+        .first()
+    )
+    if refund is None:
+        return False
+    guest = refund.bill.primary_guest
+    if guest is None:
+        first_line = refund.lines.select_related("bill_item__order__guest").first()
+        guest = first_line.bill_item.order.guest if first_line else None
+    if guest is None or guest.telegram_account_id is None:
+        return False
+    try:
+        bot_instance = _active_partner_bot(refund.partner_id)
+    except NotificationDeliveryError:
+        return False
+    results = async_to_sync(_send_telegram_messages)(
+        bot_instance.token,
+        [(guest.telegram_account.telegram_id, render_guest_refund_notice(refund))],
+    )
+    _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
+    if should_mark_blocked:
+        guest.telegram_account.is_blocked = True
+        guest.telegram_account.save(update_fields=["is_blocked", "updated_at"])
+    if not is_sent and _is_retryable_result(results[0]):
         raise RetryableDeliveryError(error_message or "Transient Telegram delivery failure.")
     return is_sent
 

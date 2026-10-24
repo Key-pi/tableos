@@ -277,6 +277,15 @@ apps.notifications.tasks` — цикл, разорванный только им
    блокировка заказа, `Order.tracking_number`, переход в `delivering`;
    `transition_order_status` не пускает отправку в `delivering` без ТТН);
    гость получает ТТН, ссылку на отслеживание и кнопку «Получил(а)».
+   **Возвраты** (PQ-037, [REFUNDS.md](REFUNDS.md)) — по оплаченному счёту любого
+   канала: `billing/services.py:refund_bill_lines` (право как на изменение
+   счёта; блокировки `Bill → BillItem → GuestProfile → Order`) пишет `Refund`
+   и `RefundLine` (строка — один раз), увеличивает `Bill.refunded_amount`,
+   возвращает долю списанных бонусов (`reversal`, `bill_refund`), снимает
+   долю кешбэка не ниже баланса (`refund_cashback`), отменяет заказ, у
+   которого возвращены все строки (кроме завершённого), и после коммита
+   сообщает гостю. Бот — `bot/handlers/staff_refunds.py`, Admin — действие
+   строк счёта. Отчёт дня вычитает возвраты.
 6. Подтверждение получения гостем (`confirm_order_received_by_guest`)
    блокирует заказ и переводит его в `completed` из любого статуса из
    `GUEST_RECEIPT_CONFIRMABLE_STATUSES` (все нефинальные, включая `new`;
@@ -443,8 +452,8 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 491 тест после «Моих заказов», зелёные на SQLite и на
-  PostgreSQL 16. Двенадцать выполняются только на PostgreSQL и на SQLite
+- 512 тестов после возвратов, зелёные на SQLite и на
+  PostgreSQL 16. Тринадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа
   (`apps/orders/test_concurrency.py`); параллельные сканы QR, два гостя
@@ -454,7 +463,8 @@ Admin показывает поля жизненного цикла, произ�
   против выставления счёта (`apps/billing/test_concurrency.py`); два
   сотрудника вводят ТТН одной посылки
   (`apps/billing/test_shipping_concurrency.py`); автоотмена против
-  подтверждения перевода (`apps/billing/test_unpaid_concurrency.py`). Тест
+  подтверждения перевода (`apps/billing/test_unpaid_concurrency.py`); два
+  возврата одной строки (`apps/billing/test_refund_concurrency.py`). Тест
   миграции (`apps/tables/test_visit_migration.py`) прогоняет заполнение
   визитов назад и вперёд.
 - Записанные прогоны — в

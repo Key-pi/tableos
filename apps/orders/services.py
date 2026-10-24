@@ -361,6 +361,8 @@ def transition_order_status(
         partner_id=order.partner_id,
         order_id=order.id,
         is_active=True,
+        # Refunded lines (PQ-037) no longer hold the order.
+        refund_line__isnull=True,
     ).exists():
         # Checked after the order lock, so a concurrently created bill is seen.
         raise OrderFlowError(

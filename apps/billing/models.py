@@ -103,6 +103,13 @@ class Bill(PartnerBoundModel):
         default=0,
         verbose_name="Оплачено",
     )
+    # Money given back to guests by refunds (PQ-037); payments stay as they were.
+    refunded_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Возвращено",
+    )
     external_ref = models.CharField(max_length=255, blank=True, verbose_name="Внешний номер")
     pos_tab_id = models.CharField(max_length=255, blank=True, verbose_name="Счёт в кассе (POS)")
     issued_at = models.DateTimeField(null=True, blank=True, verbose_name="Выставлен")
@@ -398,3 +405,92 @@ class BillAdjustment(PartnerBoundModel):
 
     def __str__(self) -> str:
         return f"{self.bill.public_id} / {self.kind} / {self.reason_code}"
+
+
+class Refund(PartnerBoundModel):
+    """Money (and bonuses) given back for lines of a paid bill (PQ-037).
+
+    Append-only: the bill's payments are never edited; each refund records
+    the lines it covers, the money returned to the guest by hand, the
+    bonuses returned and the cashback taken back.
+    """
+
+    class ReasonCode(models.TextChoices):
+        OUT_OF_STOCK = "out_of_stock", "Нет в наличии"
+        QUALITY = "quality", "Претензия к качеству"
+        GUEST_REFUSED = "guest_refused", "Отказ гостя"
+        INPUT_ERROR = "input_error", "Ошибка ввода"
+        OTHER = "other", "Другое"
+
+    class Method(models.TextChoices):
+        # How the money went back to the guest; done by hand, outside the bot.
+        CASH = "cash", "Наличными"
+        TRANSFER = "transfer", "Переводом на карту"
+        TERMINAL = "terminal", "На карту через терминал"
+        NONE = "none", "Деньги не возвращались (только бонусы)"
+
+    bill = models.ForeignKey(
+        Bill, on_delete=models.PROTECT, related_name="refunds", verbose_name="Счёт"
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bill_refunds",
+        verbose_name="Кто вернул",
+    )
+    reason_code = models.CharField(
+        max_length=24, choices=ReasonCode.choices, verbose_name="Причина"
+    )
+    reason_text = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
+    method = models.CharField(max_length=16, choices=Method.choices, verbose_name="Как вернули")
+    is_full = models.BooleanField(default=False, verbose_name="Полный возврат")
+    money_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, verbose_name="Возвращено денег"
+    )
+    bonus_returned = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, verbose_name="Возвращено бонусов"
+    )
+    cashback_revoked = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, verbose_name="Снято кешбэка"
+    )
+    cashback_not_revoked = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Кешбэк не снят (гость уже потратил)",
+    )
+
+    class Meta:
+        verbose_name = "возврат"
+        verbose_name_plural = "Возвраты"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.bill.public_id} / возврат {self.money_amount}"
+
+
+class RefundLine(PartnerBoundModel):
+    """One refunded bill line; a line is refunded at most once."""
+
+    refund = models.ForeignKey(
+        Refund, on_delete=models.PROTECT, related_name="lines", verbose_name="Возврат"
+    )
+    bill_item = models.OneToOneField(
+        BillItem, on_delete=models.PROTECT, related_name="refund_line", verbose_name="Строка счёта"
+    )
+    money_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, verbose_name="Деньги"
+    )
+    bonus_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, verbose_name="Бонусы"
+    )
+
+    class Meta:
+        verbose_name = "строка возврата"
+        verbose_name_plural = "Строки возвратов"
+        ordering = ["created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.bill_item} / {self.money_amount}"

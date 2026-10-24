@@ -9,7 +9,7 @@ from django import forms
 from django.contrib import messages
 from django.template.response import TemplateResponse
 
-from apps.billing.models import BillAdjustment
+from apps.billing.models import BillAdjustment, Refund
 
 
 class AdjustmentReasonForm(forms.Form):
@@ -74,6 +74,78 @@ def run_with_reason(
             "form": form,
             "object_labels": [object_label(obj) for obj in queryset],
             "selected_ids": [str(obj.pk) for obj in queryset],
+            "action_name": action_name,
+            "opts": modeladmin.model._meta,
+        },
+    )
+
+
+class RefundForm(forms.Form):
+    reason_code = forms.ChoiceField(label="Причина", choices=Refund.ReasonCode.choices)
+    method = forms.ChoiceField(label="Как вернули деньги", choices=Refund.Method.choices)
+    reason_text = forms.CharField(
+        label="Комментарий (необязательно)", required=False, max_length=255
+    )
+
+
+def run_refund(modeladmin, request, queryset, *, action_name: str, perform):
+    """Refund the selected bill lines, one refund per bill (PQ-037).
+
+    ``perform(bill, items, reason_code, method, reason_text)`` calls the
+    billing command, which checks the owner-granted right.
+    """
+
+    items = list(queryset.select_related("bill"))
+    if request.POST.get("apply"):
+        form = RefundForm(request.POST)
+        if form.is_valid():
+            by_bill: dict = {}
+            for item in items:
+                by_bill.setdefault(item.bill_id, (item.bill, []))[1].append(item)
+            done = 0
+            for bill, bill_items in by_bill.values():
+                try:
+                    refund = perform(
+                        bill,
+                        bill_items,
+                        form.cleaned_data["reason_code"],
+                        form.cleaned_data["method"],
+                        form.cleaned_data["reason_text"],
+                    )
+                except Exception as exc:  # noqa: BLE001 - shown to the admin user
+                    modeladmin.message_user(
+                        request, f"Счёт #{bill.public_id}: {exc}", level=messages.WARNING
+                    )
+                    continue
+                done += 1
+                modeladmin.message_user(
+                    request,
+                    f"Счёт #{bill.public_id}: возвращено {refund.money_amount} грн, "
+                    f"бонусов {refund.bonus_returned}, снято кешбэка {refund.cashback_revoked}.",
+                )
+            return None
+    else:
+        form = RefundForm()
+    return TemplateResponse(
+        request,
+        "admin/billing/adjustment_reason.html",
+        {
+            **modeladmin.admin_site.each_context(request),
+            "title": "Вернуть деньги за строки",
+            "description": (
+                "Только по оплаченному счёту. Вернётся доля оплаченных денег и "
+                "списанных бонусов за выбранные строки, кешбэк за них снимется. "
+                "Деньги гостю передайте сами — бот сообщит ему сумму. Заказ, у "
+                "которого вернули все строки, отменится (кроме завершённых)."
+            ),
+            "submit_label": "Вернуть",
+            "form": form,
+            "object_labels": [
+                f"#{item.bill.public_id}: {item.item_name} × {item.quantity} — "
+                f"{item.line_total} грн"
+                for item in items
+            ],
+            "selected_ids": [str(item.pk) for item in items],
             "action_name": action_name,
             "opts": modeladmin.model._meta,
         },

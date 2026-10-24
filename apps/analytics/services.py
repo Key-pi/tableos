@@ -12,7 +12,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.analytics.models import PartnerDailyMetric
-from apps.billing.models import Bill, BillingRequest, Payment
+from apps.billing.models import Bill, BillingRequest, Payment, Refund
 from apps.billing.services import get_bill_context_label
 from apps.bonuses.models import WalkInSale
 from apps.orders.models import Order
@@ -38,6 +38,8 @@ class DailyOperationsReport:
     staff_breakdown: list[dict]
     # ADR-0009: orders created today and money of the day by ordering channel.
     channel_breakdown: tuple[dict, ...] = ()
+    # Money given back today (PQ-037); total_revenue is net of it.
+    refunds_total: Decimal = Decimal("0.00")
 
 
 @dataclass(frozen=True, slots=True)
@@ -244,10 +246,16 @@ def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOpera
                 }
             )
 
+    refunds_total = Refund.objects.filter(
+        partner_id=partner_id,
+        created_at__gte=day_start,
+        created_at__lte=day_end,
+    ).aggregate(total=Coalesce(Sum("money_amount"), Decimal("0.00")))["total"]
     return DailyOperationsReport(
         partner_name=partner.name,
         local_date_label=day_start_local.strftime("%d.%m.%Y"),
-        total_revenue=(bill_revenue + walk_in_revenue).quantize(Decimal("0.01")),
+        total_revenue=(bill_revenue + walk_in_revenue - refunds_total).quantize(Decimal("0.01")),
+        refunds_total=Decimal(refunds_total).quantize(Decimal("0.01")),
         bill_revenue=Decimal(bill_revenue).quantize(Decimal("0.01")),
         walk_in_revenue=Decimal(walk_in_revenue).quantize(Decimal("0.01")),
         paid_bills_count=paid_bills_count,

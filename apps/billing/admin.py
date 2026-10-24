@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 
-from apps.billing.admin_actions import run_with_reason
+from apps.billing.admin_actions import run_refund, run_with_reason
 from apps.billing.forms import PaymentAdminForm
 from apps.billing.models import (
     Bill,
@@ -9,12 +9,15 @@ from apps.billing.models import (
     BillItem,
     BillOrder,
     Payment,
+    Refund,
+    RefundLine,
 )
 from apps.billing.services import (
     BillingServiceError,
     get_bill_remaining_amount,
     issue_bill,
     record_payment,
+    refund_bill_lines,
     remove_bill_lines,
     void_bill,
 )
@@ -73,6 +76,32 @@ class BillAdjustmentInline(admin.TabularInline):
         "reason_text",
         "total_before",
         "total_after",
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+class RefundInline(admin.TabularInline):
+    """Refunds of the bill (PQ-037); made with the bill line action."""
+
+    model = Refund
+    extra = 0
+    can_delete = False
+    fields = (
+        "created_at",
+        "actor",
+        "reason_code",
+        "method",
+        "money_amount",
+        "bonus_returned",
+        "cashback_revoked",
+        "cashback_not_revoked",
+        "is_full",
     )
     readonly_fields = fields
 
@@ -193,13 +222,20 @@ class BillAdmin(ScopedAdminMixin):
         "subtotal_amount",
         "total_amount",
         "paid_amount",
+        "refunded_amount",
         "remaining_amount",
         "issued_at",
         "closed_at",
         "created_at",
         "updated_at",
     )
-    inlines = [BillOrderInline, BillItemInline, PaymentInline, BillAdjustmentInline]
+    inlines = [
+        BillOrderInline,
+        BillItemInline,
+        PaymentInline,
+        RefundInline,
+        BillAdjustmentInline,
+    ]
     actions = (
         "mark_as_issued",
         "record_remaining_cash_payment",
@@ -311,7 +347,24 @@ class BillItemAdmin(ScopedAdminMixin):
         "partner",
     )
     list_filter = ("partner", "is_active")
-    actions = ("remove_selected_lines",)
+    actions = ("remove_selected_lines", "refund_selected_lines")
+
+    @admin.action(description="Вернуть деньги за строки (право от владельца)")
+    def refund_selected_lines(self, request, queryset):
+        return run_refund(
+            self,
+            request,
+            queryset.filter(is_active=True),
+            action_name="refund_selected_lines",
+            perform=lambda bill, items, code, method, text: refund_bill_lines(
+                bill=bill,
+                bill_item_ids=[item.id for item in items],
+                actor=request.user,
+                reason_code=code,
+                method=method,
+                reason_text=text,
+            ),
+        )
 
     @admin.action(description="Убрать строки из счетов (право от владельца)")
     def remove_selected_lines(self, request, queryset):
@@ -430,3 +483,57 @@ class PaymentAdmin(ScopedAdminMixin):
         obj.amount = payment.amount
         obj.paid_at = payment.paid_at
         obj.created_by = payment.created_by
+
+
+class RefundLineInline(admin.TabularInline):
+    model = RefundLine
+    extra = 0
+    can_delete = False
+    fields = ("bill_item", "money_amount", "bonus_amount")
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Refund)
+class RefundAdmin(ScopedAdminMixin):
+    """Read-only list of refunds; a refund is made from the bill lines."""
+
+    admin_section = AdminSection.BILLING
+    allow_partner_add = False
+    allow_partner_delete = False
+    list_display = (
+        "created_at",
+        "bill",
+        "money_amount",
+        "bonus_returned",
+        "cashback_revoked",
+        "method",
+        "reason_code",
+        "actor",
+        "is_full",
+        "partner",
+    )
+    list_filter = ("partner", "reason_code", "method", "is_full")
+    search_fields = ("bill__public_id", "partner__name", "reason_text")
+    inlines = [RefundLineInline]
+    readonly_fields = (
+        "bill",
+        "actor",
+        "reason_code",
+        "reason_text",
+        "method",
+        "is_full",
+        "money_amount",
+        "bonus_returned",
+        "cashback_revoked",
+        "cashback_not_revoked",
+        "created_at",
+    )
+
+    def has_change_permission(self, request, obj=None):
+        return False

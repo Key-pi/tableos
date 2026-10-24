@@ -44,6 +44,7 @@
 | Направление сети Botera | `docs/product/ECOSYSTEM_DIRECTION.md` |
 | Визиты стола, правка/аннулирование счёта, кешбэк | `docs/architecture/B3_2_VISITS_AND_BILL_CHANGES.md`, ADR-0007 |
 | Каналы заказа (стол, самовывоз, доставка, отправка) | ADR-0009, `docs/architecture/PICKUP.md`, `DELIVERY.md`, `SHIPPING.md`, `PAYMENT_OPTIONS.md` |
+| Возвраты | `docs/architecture/REFUNDS.md` (PQ-037) |
 | Доставка уведомлений и рассылок | `docs/architecture/BACKGROUND_JOBS.md`, ADR-0008 |
 | Бот, callback-и | `docs/architecture/BOT_RUNTIME.md` |
 | Находки аудита и что сделано по батчам | `docs/audits/ARCHITECTURE_AUDIT.md`, `REFACTOR_ROADMAP.md` |
@@ -99,13 +100,17 @@
   заказов на гостя (`remote_unpaid_orders_limit`, 2) и автоотмена
   неподтверждённого перевода (`transfer_wait_minutes`, 60; beat
   `billing.cancel_expired_transfer_orders`).
+- **Возвраты (PQ-037):** полный и частичный по строкам оплаченного счёта
+  (`refund_bill_lines`), отдельная запись `Refund`, оплата не правится;
+  бонусы за возвращённое — гостю, кешбэк — снять (не ниже баланса); право
+  как на изменение счёта; деньги вручную, гостю сообщение.
 - Новый продуктовый смысл без решения владельца не выбирать — спросить.
 
 ## Порядок блокировок (не менять без причины)
 
 - Оплата: `Bill → Order → GuestProfile → BillingRequest → TableSession → TableVisit`.
 - Активация стола: `GuestProfile → Table → свои TableSession → TableVisit`.
-- Изменение счёта: `Bill → BillItem → GuestProfile → Order`.
+- Изменение счёта и возврат: `Bill → BillItem → GuestProfile → Order`.
 - На PostgreSQL `select_for_update` с nullable-join только с `of=("self",)`.
 
 ## Как работаем

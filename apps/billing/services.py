@@ -14,6 +14,8 @@ from apps.billing.models import (
     BillItem,
     BillOrder,
     Payment,
+    Refund,
+    RefundLine,
 )
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import (
@@ -1073,6 +1075,313 @@ def cancel_order(
         actor_user=actor,
         note=note or reason_text,
     )
+
+
+CENT = Decimal("0.01")
+
+
+def _split(total: Decimal, weights: list[Decimal]) -> list[Decimal]:
+    """Split ``total`` by ``weights``; the rounding remainder goes to the last."""
+
+    weight_sum = sum(weights, Decimal("0.00"))
+    if total <= 0 or weight_sum <= 0:
+        return [Decimal("0.00") for _ in weights]
+    parts = [(total * weight / weight_sum).quantize(CENT) for weight in weights[:-1]]
+    return [*parts, total - sum(parts, Decimal("0.00"))]
+
+
+def _refund_amounts(bill: Bill, lines, refunded_ids, selected) -> tuple[Decimal, Decimal, bool]:
+    """Money and bonuses due for ``selected`` lines; the last refund takes the rest."""
+
+    remaining = [line for line in lines if line.id not in refunded_ids]
+    is_last = len(selected) == len(remaining)
+    lines_total = sum((Decimal(line.line_total) for line in lines), Decimal("0.00"))
+    selected_total = sum((Decimal(line.line_total) for line in selected), Decimal("0.00"))
+    money_paid = Decimal(bill.paid_amount).quantize(CENT)
+    bonus_spent = Decimal(bill.bonus_spent_amount).quantize(CENT)
+    if is_last:
+        money = money_paid - Decimal(bill.refunded_amount).quantize(CENT)
+        bonus = bonus_spent - sum(
+            (refund.bonus_returned for refund in bill.refunds.all()), Decimal("0.00")
+        )
+    elif lines_total > 0:
+        money = (money_paid * selected_total / lines_total).quantize(CENT)
+        bonus = (bonus_spent * selected_total / lines_total).quantize(CENT)
+    else:
+        money = bonus = Decimal("0.00")
+    return max(money, Decimal("0.00")), max(bonus, Decimal("0.00")), is_last
+
+
+@dataclass(frozen=True)
+class RefundableLine:
+    id: str
+    item_name: str
+    quantity: int
+    line_total: Decimal
+    refunded: bool
+
+
+def get_order_refund_lines(order: Order) -> tuple[Bill | None, list[RefundableLine]]:
+    """The paid bill holding the order and the order's lines in it (read only)."""
+
+    bill = (
+        Bill.objects.filter(
+            partner_id=order.partner_id,
+            status=Bill.Status.PAID,
+            items__order_id=order.id,
+            items__is_active=True,
+        )
+        .order_by("created_at")
+        .first()
+    )
+    if bill is None:
+        return None, []
+    items = list(
+        BillItem.objects.filter(
+            partner_id=order.partner_id, bill_id=bill.id, order_id=order.id, is_active=True
+        )
+        .select_related("refund_line")
+        .order_by("created_at", "id")
+    )
+    return bill, [
+        RefundableLine(
+            id=str(item.id),
+            item_name=item.item_name,
+            quantity=item.quantity,
+            line_total=Decimal(item.line_total),
+            refunded=hasattr(item, "refund_line"),
+        )
+        for item in items
+    ]
+
+
+def get_order_refunded_money(order: Order) -> Decimal:
+    """Money refunded for the order's lines so far (PQ-037)."""
+
+    total = RefundLine.objects.filter(
+        partner_id=order.partner_id, bill_item__order_id=order.id
+    ).values_list("money_amount", flat=True)
+    return sum(total, Decimal("0.00"))
+
+
+def preview_refund(bill: Bill, bill_item_ids) -> tuple[Decimal, Decimal]:
+    """(money, bonuses) a refund of these lines would give back now."""
+
+    item_ids = {str(item_id) for item_id in bill_item_ids}
+    lines = list(
+        BillItem.objects.filter(
+            partner_id=bill.partner_id, bill_id=bill.id, is_active=True
+        ).order_by("created_at", "id")
+    )
+    refunded_ids = set(
+        RefundLine.objects.filter(bill_item__in=lines).values_list("bill_item_id", flat=True)
+    )
+    selected = [
+        line for line in lines if str(line.id) in item_ids and line.id not in refunded_ids
+    ]
+    money, bonus, _is_last = _refund_amounts(bill, lines, refunded_ids, selected)
+    return money, bonus
+
+
+@transaction.atomic
+def refund_bill_lines(
+    *,
+    bill: Bill,
+    bill_item_ids,
+    actor,
+    reason_code: str,
+    method: str,
+    reason_text: str = "",
+) -> Refund:
+    """Give money (and bonuses) back for lines of a paid bill (PQ-037).
+
+    The payments stay as they were; the refund is its own record. Each line
+    is refunded once, as a whole. Its share of the money paid and of the
+    bonuses spent comes back (the last refund of a bill takes the rounding
+    remainders, so the sums add up exactly); cashback earned on the refunded
+    part is taken back, but never below the guest's balance (the rest is
+    recorded as not taken). An order whose every line is refunded is
+    canceled unless it was already completed. The money itself goes back to
+    the guest by hand; the guest gets a message after commit.
+
+    Who: the owner, or staff with the owner-granted bill right
+    (``user_can_adjust_bills``), as for bill changes (PQ-028).
+    Locks: Bill → BillItem → GuestProfile → Order (bill change order).
+    """
+
+    if reason_code not in Refund.ReasonCode.values:
+        raise BillingServiceError("Укажите причину возврата.")
+    if method not in Refund.Method.values:
+        raise BillingServiceError("Укажите, как вернули деньги.")
+    item_ids = {str(item_id) for item_id in bill_item_ids}
+    if not item_ids:
+        raise BillingServiceError("Выберите, что вернуть.")
+    try:
+        bill = Bill.objects.select_for_update().get(id=bill.id, partner_id=bill.partner_id)
+    except Bill.DoesNotExist as exc:
+        raise BillingServiceError("Счёт не найден в этом заведении.") from exc
+    if not user_can_adjust_bills(actor, bill.partner_id):
+        raise BillingServiceError("Нет права на возвраты. Его выдаёт владелец заведения.")
+    if bill.status != Bill.Status.PAID:
+        raise BillingServiceError("Возврат возможен только по оплаченному счёту.")
+
+    lines = list(
+        BillItem.objects.select_for_update()
+        .filter(partner_id=bill.partner_id, bill_id=bill.id, is_active=True)
+        .order_by("created_at", "id")
+    )
+    by_id = {str(line.id): line for line in lines}
+    if not item_ids <= set(by_id):
+        raise BillingServiceError("Строка не из этого счёта.")
+    refunded_ids = set(
+        RefundLine.objects.filter(bill_item__in=lines).values_list("bill_item_id", flat=True)
+    )
+    selected = [line for line in lines if str(line.id) in item_ids]
+    for line in selected:
+        if line.id in refunded_ids:
+            raise BillingServiceError(f"Строка «{line.item_name}» уже возвращена.")
+    money, bonus, is_last = _refund_amounts(bill, lines, refunded_ids, selected)
+    money_already = Decimal(bill.refunded_amount).quantize(CENT)
+
+    refund = Refund.objects.create(
+        partner_id=bill.partner_id,
+        bill=bill,
+        actor=actor,
+        reason_code=reason_code,
+        reason_text=(reason_text or "")[:255],
+        method=method,
+        is_full=is_last,
+        money_amount=money,
+        bonus_returned=bonus,
+    )
+    weights = [Decimal(line.line_total) for line in selected]
+    for line, line_money, line_bonus in zip(
+        selected, _split(money, weights), _split(bonus, weights), strict=True
+    ):
+        RefundLine.objects.create(
+            partner_id=bill.partner_id,
+            refund=refund,
+            bill_item=line,
+            money_amount=line_money,
+            bonus_amount=line_bonus,
+        )
+
+    # Guests: the one whose bonuses paid the bill and those who earned
+    # cashback on its orders; locked in id order.
+    order_ids = sorted({line.order_id for line in selected}, key=str)
+    guest_ids = {bill.primary_guest_id} if bonus > 0 else set()
+    guest_ids |= set(
+        Order.objects.filter(id__in=order_ids).values_list("guest_id", flat=True)
+    )
+    guests = {
+        guest.id: guest
+        for guest in GuestProfile.objects.select_for_update()
+        .filter(id__in=[gid for gid in guest_ids if gid], partner_id=bill.partner_id)
+        .order_by("id")
+    }
+    for guest in guests.values():
+        try:
+            assert_bonus_balance_reconciled(guest)
+        except BonusServiceError as exc:
+            raise BillingServiceError(str(exc)) from exc
+    if bonus > 0:
+        guest = guests.get(bill.primary_guest_id)
+        if guest is None:
+            raise BillingServiceError("У счёта с бонусами нет гостя — вернуть бонусы некому.")
+        BonusTransaction.objects.create(
+            partner_id=bill.partner_id,
+            guest=guest,
+            bill=bill,
+            transaction_type=BonusTransaction.TransactionType.REVERSAL,
+            amount=bonus,
+            source_type="bill_refund",
+            source_id=str(refund.id),
+            idempotency_key=f"refund:{refund.id}:redemption_reversal",
+            comment=f"Возврат по счёту #{bill.public_id}: бонусы вернулись.",
+        )
+        sync_bonus_balance_from_ledger(guest)
+
+    revoked = not_revoked = Decimal("0.00")
+    refunded_lines = {line.id for line in selected} | refunded_ids
+    orders = {
+        order.id: order
+        for order in Order.objects.select_for_update(of=("self",))
+        .filter(id__in=order_ids, partner_id=bill.partner_id)
+        .order_by("id")
+    }
+    for order_id in order_ids:
+        order = orders[order_id]
+        order_lines = [line for line in lines if line.order_id == order_id]
+        order_total = sum((Decimal(line.line_total) for line in order_lines), Decimal("0.00"))
+        refunded_total = sum(
+            (Decimal(line.line_total) for line in order_lines if line.id in refunded_lines),
+            Decimal("0.00"),
+        )
+        accrued = sum(
+            BonusTransaction.objects.filter(
+                partner_id=bill.partner_id,
+                order=order,
+                transaction_type=BonusTransaction.TransactionType.ACCRUAL,
+                amount__gt=0,
+            ).values_list("amount", flat=True),
+            Decimal("0.00"),
+        )
+        guest = guests.get(order.guest_id)
+        if accrued > 0 and order_total > 0 and guest is not None:
+            all_refunded = refunded_total >= order_total
+            target = (
+                accrued
+                if all_refunded
+                else (accrued * refunded_total / order_total).quantize(CENT)
+            )
+            already = -sum(
+                BonusTransaction.objects.filter(
+                    partner_id=bill.partner_id,
+                    order=order,
+                    source_type="refund_cashback",
+                ).values_list("amount", flat=True),
+                Decimal("0.00"),
+            )
+            due = max(target - already, Decimal("0.00"))
+            guest.refresh_from_db(fields=["loyalty_balance"])
+            take = min(due, max(Decimal(guest.loyalty_balance), Decimal("0.00")))
+            if take > 0:
+                BonusTransaction.objects.create(
+                    partner_id=bill.partner_id,
+                    guest=guest,
+                    order=order,
+                    bill=bill,
+                    transaction_type=BonusTransaction.TransactionType.REVERSAL,
+                    amount=-take,
+                    source_type="refund_cashback",
+                    source_id=str(refund.id),
+                    idempotency_key=f"refund:{refund.id}:cashback:{order.id}",
+                    comment=f"Возврат по заказу #{order.public_id}: кешбэк снят.",
+                )
+                sync_bonus_balance_from_ledger(guest)
+            revoked += take
+            not_revoked += due - take
+        if refunded_total >= order_total and order.status not in {
+            Order.Status.COMPLETED,
+            Order.Status.CANCELED,
+        }:
+            transition_order_status(
+                order=order,
+                to_status=Order.Status.CANCELED,
+                actor_user=actor,
+                note=f"Полный возврат по счёту #{bill.public_id}.",
+            )
+
+    refund.cashback_revoked = revoked
+    refund.cashback_not_revoked = not_revoked
+    refund.save(update_fields=["cashback_revoked", "cashback_not_revoked", "updated_at"])
+    bill.refunded_amount = money_already + money
+    bill.save(update_fields=["refunded_amount", "updated_at"])
+
+    from apps.notifications.services import send_guest_refund_notice
+
+    send_guest_refund_notice(refund)
+    return refund
 
 
 ADJUSTMENT_COMMENT_WINDOW = timedelta(minutes=30)

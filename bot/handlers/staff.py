@@ -214,6 +214,7 @@ def _order_actions_keyboard(order: Order):
         cash_on_delivery=is_shipping,
         ship_needs_tracking=is_shipping and order.status == Order.Status.READY,
         status_labels=_status_labels(order),
+        can_refund=order.paid_at is not None and order.status != Order.Status.CANCELED,
     )
 
 
@@ -421,6 +422,7 @@ def _render_day_report(report) -> str:
         f"Всего выручка: {report.total_revenue} грн",
         f"По счетам: {report.bill_revenue} грн",
         f"Быстрые продажи: {report.walk_in_revenue} грн",
+        *([f"Возвраты: −{report.refunds_total} грн"] if report.refunds_total else []),
         "",
         "<b>Операции</b>",
         f"Оплаченных счетов: {report.paid_bills_count}",
