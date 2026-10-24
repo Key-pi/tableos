@@ -22,6 +22,7 @@ from __future__ import annotations
 import ast
 import pathlib
 import re
+import string
 import struct
 import sys
 from dataclasses import dataclass, field
@@ -50,7 +51,6 @@ PLURAL_FORMS = {
     "en": "nplurals=2; plural=(n != 1);",
 }
 TAG = re.compile(r"</?([a-zA-Z][a-zA-Z0-9-]*)[^>]*>")
-FIELD = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
 
 
 @dataclass
@@ -188,7 +188,14 @@ def read_catalog(language: str, name: str = CODE_CATALOG, root: pathlib.Path = R
 
 
 def _fields(text: str) -> list[str]:
-    return sorted(FIELD.findall(text))
+    try:
+        return sorted(
+            name + (f"!{conv}" if conv else "") + (f":{spec}" if spec else "")
+            for _literal, name, spec, conv in string.Formatter().parse(text)
+            if name is not None
+        )
+    except ValueError:
+        return ["<неверные скобки>"]
 
 
 def _tags(text: str) -> list[str]:

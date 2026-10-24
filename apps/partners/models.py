@@ -13,20 +13,6 @@ MIN_TRANSFER_WAIT_MINUTES = 15
 LANGUAGE_CHOICES = [(code, LANGUAGE_NAMES[code]) for code in LANGUAGES]
 GUEST_LANGUAGE_FIELDS = {code: f"language_{code}" for code in LANGUAGES}
 
-_ROUTED_REPLY_LABEL_FIELDS = (
-    "button_menu_label",
-    "button_session_label",
-    "button_cart_label",
-    "button_checkout_label",
-    "button_delivery_label",
-    "button_pickup_label",
-    "button_shipping_label",
-    "button_help_label",
-    "button_my_profile",
-    "button_call_staff_label",
-    "button_request_bill_label",
-)
-
 
 class Partner(TimeStampedModel):
     """Venue or business account that owns isolated data inside the platform."""
@@ -379,148 +365,6 @@ class PartnerBotSettings(TimeStampedModel):
     language_uk = models.BooleanField(default=True, verbose_name="Язык гостей: украинский")
     language_ru = models.BooleanField(default=True, verbose_name="Язык гостей: русский")
     language_en = models.BooleanField(default=True, verbose_name="Язык гостей: английский")
-    button_menu_label = models.CharField(
-        max_length=64,
-        default="Открыть меню",
-        verbose_name="Кнопка «Меню»",
-    )
-    button_session_label = models.CharField(
-        max_length=64,
-        default="Мой стол",
-        verbose_name="Кнопка «Мой стол»",
-    )
-    button_cart_label = models.CharField(
-        max_length=64,
-        default="Корзина",
-        verbose_name="Кнопка «Корзина»",
-    )
-    button_checkout_label = models.CharField(
-        max_length=64,
-        default="Оформить заказ",
-        verbose_name="Кнопка «Оформить заказ»",
-    )
-    button_delivery_label = models.CharField(
-        max_length=64,
-        default="Заказать доставку",
-        verbose_name="Кнопка «Доставка»",
-    )
-    button_pickup_label = models.CharField(
-        max_length=64,
-        default="Самовывоз",
-        verbose_name="Кнопка «Самовывоз»",
-    )
-    button_shipping_label = models.CharField(
-        max_length=64,
-        default="Отправка почтой",
-        verbose_name="Кнопка «Отправка почтой»",
-    )
-    button_help_label = models.CharField(
-        max_length=64,
-        default="Как заказать",
-        verbose_name="Кнопка «Как заказать»",
-    )
-    button_my_profile = models.CharField(
-        max_length=64,
-        default="Мой профиль",
-        verbose_name="Кнопка «Мой профиль»",
-    )
-    button_profile_bonuses_label = models.CharField(
-        max_length=64,
-        default="Бонусы",
-        verbose_name="Кнопка «Бонусы»",
-    )
-    button_call_staff_label = models.CharField(
-        max_length=64,
-        default="Позвать персонал",
-        verbose_name="Кнопка «Вызвать персонал»",
-    )
-    button_request_bill_label = models.CharField(
-        max_length=64,
-        default="Запросить счёт",
-        verbose_name="Кнопка «Запросить счёт»",
-    )
-    button_call_waiter_label = models.CharField(
-        max_length=64,
-        default="Официант",
-        verbose_name="Кнопка «Официант»",
-    )
-    button_call_bartender_label = models.CharField(
-        max_length=64,
-        default="Бар / касса",
-        verbose_name="Кнопка «Бармен»",
-    )
-    button_call_hookah_label = models.CharField(
-        max_length=64,
-        default="Кальянщик",
-        verbose_name="Кнопка «Кальянщик»",
-    )
-    welcome_message_template = models.TextField(
-        blank=True,
-        help_text="Переменные: {partner_name}",
-        verbose_name="Приветствие",
-    )
-    table_activated_message_template = models.TextField(
-        blank=True,
-        help_text="Переменные: {partner_name}, {table_number}",
-        verbose_name="Стол открыт",
-    )
-    menu_header_template = models.TextField(
-        blank=True,
-        help_text="Переменные: {partner_name}",
-        verbose_name="Заголовок меню",
-    )
-    menu_requires_session_hint_template = models.TextField(
-        blank=True,
-        help_text="Показывается, когда меню видно, но для заказа за столом нужно сканировать QR.",
-        verbose_name="Подсказка: меню после сканирования стола",
-    )
-    menu_active_session_hint_template = models.TextField(
-        blank=True,
-        help_text="Переменные: {table_number}",
-        verbose_name="Подсказка: меню за столом",
-    )
-    menu_empty_message_template = models.TextField(blank=True, verbose_name="Меню пустое")
-    ordering_help_message_template = models.TextField(
-        blank=True,
-        verbose_name="Как заказать (текст)",
-    )
-    cart_empty_message_template = models.TextField(blank=True, verbose_name="Корзина пустая")
-    cart_cleared_message_template = models.TextField(blank=True, verbose_name="Корзина очищена")
-    staff_call_prompt_template = models.TextField(
-        blank=True,
-        help_text="Показывается, когда гость открывает вызов персонала.",
-        verbose_name="Вызов персонала: вопрос",
-    )
-    staff_call_success_template = models.TextField(
-        blank=True,
-        help_text="Переменные: {partner_name}, {table_number}, {call_target_label}",
-        verbose_name="Вызов персонала: принят",
-    )
-    request_bill_prompt_template = models.TextField(
-        blank=True,
-        help_text="Показывается, когда гость открывает запрос счёта.",
-        verbose_name="Запрос счёта: вопрос",
-    )
-    request_bill_personal_success_template = models.TextField(
-        blank=True,
-        help_text="Переменные: {partner_name}, {table_number}, {bill_public_id}",
-        verbose_name="Запрос личного счёта: принят",
-    )
-    request_bill_shared_success_template = models.TextField(
-        blank=True,
-        help_text="Переменные: {partner_name}, {table_number}, {bill_public_id}",
-        verbose_name="Запрос общего счёта: принят",
-    )
-    request_bill_custom_success_template = models.TextField(
-        blank=True,
-        help_text="Переменные: {partner_name}, {table_number}",
-        verbose_name="Запрос особого деления: принят",
-    )
-    order_created_message_template = models.TextField(
-        blank=True,
-        help_text="Переменные: {order_public_id}, {total_amount}, {status_display}",
-        verbose_name="Заказ принят (текст)",
-    )
 
     class Meta:
         verbose_name = "настройки бота"
@@ -614,25 +458,6 @@ class PartnerBotSettings(TimeStampedModel):
             add_error(
                 "max_menu_items_per_category_message",
                 "At least one menu item must be shown per category message.",
-            )
-
-        labels_by_text: dict[str, str] = {}
-        for field_name in _ROUTED_REPLY_LABEL_FIELDS:
-            label = getattr(self, field_name).strip()
-            if not label:
-                add_error(field_name, "Action button label cannot be empty.")
-                continue
-            existing_field = labels_by_text.get(label)
-            if existing_field is None:
-                labels_by_text[label] = field_name
-                continue
-            add_error(
-                existing_field,
-                "Action button labels must be unique for each partner bot.",
-            )
-            add_error(
-                field_name,
-                "Action button labels must be unique for each partner bot.",
             )
 
         if errors:
@@ -736,6 +561,30 @@ class BotText(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.language}: {self.text[:60]}"
+
+    def clean(self) -> None:
+        super().clean()
+        from apps.partners.bot_texts import BUTTON_TEXTS, editable_texts, text_problems
+        from core.i18n import _, gettext_in
+
+        if self.msgid not in editable_texts():
+            raise ValidationError({"msgid": _("Такого текста нет в каталоге бота.")})
+        problems = text_problems(self.msgid, self.text)
+        if not problems and self.msgid in BUTTON_TEXTS.values() and self.partner_id:
+            label = self.text.strip()
+            own = dict(
+                BotText.objects.filter(partner_id=self.partner_id, language=self.language)
+                .exclude(id=self.id)
+                .values_list("msgid", "text")
+            )
+            for other in BUTTON_TEXTS.values():
+                if other == self.msgid:
+                    continue
+                if (own.get(other) or gettext_in(self.language, other)).strip() == label:
+                    problems.append(_("Такая подпись уже у другой кнопки: бот их спутает."))
+                    break
+        if problems:
+            raise ValidationError({"text": problems})
 
     def save(self, *args, **kwargs):
         self.key = text_key(self.msgid)

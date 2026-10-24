@@ -31,46 +31,65 @@ from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
 from bot.utils.html import escape_html
+from core.i18n import N_, _
 
 router = Router()
 
 
 def _cart_place(cart) -> str:
     if cart.channel == Order.Channel.PICKUP:
-        return "самовывоз"
+        return _("самовывоз")
     if cart.channel == Order.Channel.DELIVERY:
-        return "доставка"
+        return _("доставка")
     if cart.table_session is not None:
-        return f"стол #{cart.table_session.table.number}"
-    return "за столом"
+        return _("стол #{number}", number=cart.table_session.table.number)
+    return _("за столом")
 
 
 def _render_cart(cart, *, removed: list[str] | None = None) -> str:
     removed_line = (
-        ["Убрали — недоступно для этого способа заказа: " + escape_html(", ".join(removed))]
+        [
+            _(
+                "Убрали — недоступно для этого способа заказа: {items}",
+                items=escape_html(", ".join(removed)),
+            )
+        ]
         if removed
         else []
     )
     if not cart.items.all():
-        return "\n".join([f"<b>Корзина</b> • {_cart_place(cart)}", "Корзина пуста.", *removed_line])
+        return "\n".join(
+            [
+                _("<b>Корзина</b> • {cart_place}", cart_place=_cart_place(cart)),
+                _("Корзина пуста."),
+                *removed_line,
+            ]
+        )
 
     preview_items = list(cart.items.all()[:6])
     lines = [
-        f"<b>Корзина</b> • {_cart_place(cart)}",
+        _("<b>Корзина</b> • {cart_place}", cart_place=_cart_place(cart)),
         *removed_line,
     ]
     for item in preview_items:
         line_total = item.unit_price * item.quantity
         lines.append(
-            f"{escape_html(item.item_name)} • {item.quantity} x {item.unit_price} "
-            f"= {line_total} грн"
+            _(
+                "{item_name} • {quantity} x {unit_price} = {line_total} грн",
+                item_name=escape_html(item.item_name),
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                line_total=line_total,
+            )
         )
     hidden_items_count = cart.items.count() - len(preview_items)
     if hidden_items_count > 0:
-        lines.append(f"И ещё позиций: {hidden_items_count}")
+        lines.append(
+            _("И ещё позиций: {hidden_items_count}", hidden_items_count=hidden_items_count)
+        )
     lines.append("")
-    lines.append(f"Итого: {cart.total_amount} грн")
-    lines.append("Используйте кнопки ниже, чтобы менять количество и оформить заказ.")
+    lines.append(_("Итого: {total_amount} грн", total_amount=cart.total_amount))
+    lines.append(_("Используйте кнопки ниже, чтобы менять количество и оформить заказ."))
     return "\n".join(lines)
 
 
@@ -99,7 +118,7 @@ def _mode_switch(cart, content: BotContent):
     table flow starts only from the table's QR code (scanning it again)."""
 
     if cart.channel == Order.Channel.TABLE and content.supports_pickup_orders():
-        return ("🥡 Взять с собой (самовывоз)", "cart:mode:pickup")
+        return (_("🥡 Взять с собой (самовывоз)"), "cart:mode:pickup")
     return None
 
 
@@ -165,22 +184,28 @@ async def _send_navigation_keyboard_message(
 # the channel and the menu shows only what is sold there.
 REMOTE_FLOW_INTROS = {
     Order.Channel.PICKUP: (
-        "<b>Самовывоз</b>",
-        "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
-        "«Оформить»: выберете время и способ оплаты.",
-        "не продаётся на вынос",
+        N_("<b>Самовывоз</b>"),
+        N_(
+            "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
+            "«Оформить»: выберете время и способ оплаты."
+        ),
+        N_("не продаётся на вынос"),
     ),
     Order.Channel.DELIVERY: (
-        "<b>Доставка</b>",
-        "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
-        "«Оформить»: адрес, время и способ оплаты.",
-        "не доставляем",
+        N_("<b>Доставка</b>"),
+        N_(
+            "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
+            "«Оформить»: адрес, время и способ оплаты."
+        ),
+        N_("не доставляем"),
     ),
     Order.Channel.SHIPPING: (
-        "<b>Отправка почтой</b>",
-        "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
-        "«Оформить»: служба, получатель, пересылка и способ оплаты.",
-        "не отправляем почтой",
+        N_("<b>Отправка почтой</b>"),
+        N_(
+            "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
+            "«Оформить»: служба, получатель, пересылка и способ оплаты."
+        ),
+        N_("не отправляем почтой"),
     ),
 }
 
@@ -196,9 +221,9 @@ def _remote_flow_supported(content: BotContent, channel: str) -> bool:
 async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
-    title, how_to, removed_reason = REMOTE_FLOW_INTROS[channel]
+    title, how_to, removed_reason = (_(text) for text in REMOTE_FLOW_INTROS[channel])
     if not (_remote_flow_supported(content, channel) and content.supports_cart()):
-        text = CHANNEL_OFF_MESSAGES[channel]
+        text = _(CHANNEL_OFF_MESSAGES[channel])
     elif channel != Order.Channel.SHIPPING and not await sync_to_async(available_slots)(
         partner, channel=channel
     ):
@@ -225,10 +250,14 @@ async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
             lines.append(how_to)
             if removed:
                 lines.append(
-                    f"Убрали из корзины — {removed_reason}: " + escape_html(", ".join(removed))
+                    _(
+                        "Убрали из корзины — {reason}: {items}",
+                        reason=removed_reason,
+                        items=escape_html(", ".join(removed)),
+                    )
                 )
             if await _has_active_session(partner, content, message.from_user.id):
-                lines.append("Чтобы снова заказывать к столу, отсканируйте QR-код стола.")
+                lines.append(_("Чтобы снова заказывать к столу, отсканируйте QR-код стола."))
             await _send_navigation_keyboard_message(
                 message=message,
                 partner_id=partner.id,
@@ -391,7 +420,7 @@ async def cart_refresh_callback(callback: CallbackQuery, bot: Bot) -> None:
     if updated:
         await callback.answer()
     else:
-        await callback.answer("Без изменений")
+        await callback.answer(_("Без изменений"))
 
 
 @router.callback_query(F.data == "cart:clear")
@@ -414,7 +443,7 @@ async def cart_clear_callback(callback: CallbackQuery, bot: Bot) -> None:
         telegram_id=callback.from_user.id,
         content=content,
     )
-    await callback.answer("Корзина очищена.")
+    await callback.answer(_("Корзина очищена."))
 
 
 @router.callback_query(F.data == "cart:checkout")
@@ -454,7 +483,7 @@ async def cart_mode_callback(callback: CallbackQuery, bot: Bot) -> None:
     )
     await _safe_edit_cart_message(callback.message, text, reply_markup=markup)
     await callback.answer(
-        "Корзина: самовывоз" if channel == Order.Channel.PICKUP else "Корзина: к столу"
+        _("Корзина: самовывоз") if channel == Order.Channel.PICKUP else _("Корзина: к столу")
     )
 
 
@@ -482,7 +511,7 @@ async def _checkout_at_table(callback: CallbackQuery, partner, content) -> None:
         telegram_id=callback.from_user.id,
         content=content,
     )
-    await callback.answer("Заказ оформлен.")
+    await callback.answer(_("Заказ оформлен."))
 
 
 @router.callback_query(F.data.startswith("cart:item:noop:"))
@@ -517,12 +546,12 @@ async def cart_item_quantity_callback(callback: CallbackQuery, bot: Bot) -> None
             telegram_id=callback.from_user.id,
             content=content,
         )
-        await callback.answer("Корзина обновлена.")
+        await callback.answer(_("Корзина обновлена."))
         return
 
     text, markup = await _cart_view(cart, partner, content, callback.from_user.id)
     await _safe_edit_cart_message(callback.message, text, reply_markup=markup)
-    await callback.answer("Корзина обновлена.")
+    await callback.answer(_("Корзина обновлена."))
 
 
 @router.callback_query(F.data.startswith("cart:item:remove:"))
@@ -549,9 +578,9 @@ async def cart_item_remove_callback(callback: CallbackQuery, bot: Bot) -> None:
             telegram_id=callback.from_user.id,
             content=content,
         )
-        await callback.answer("Позиция удалена.")
+        await callback.answer(_("Позиция удалена."))
         return
 
     text, markup = await _cart_view(cart, partner, content, callback.from_user.id)
     await _safe_edit_cart_message(callback.message, text, reply_markup=markup)
-    await callback.answer("Позиция удалена.")
+    await callback.answer(_("Позиция удалена."))

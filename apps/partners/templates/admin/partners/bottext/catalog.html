@@ -1,0 +1,57 @@
+{% extends "admin/base_site.html" %}
+{% block content %}
+<div class="px-4">
+  <h2 style="margin-bottom: 8px;">{{ title }}</h2>
+  <p style="margin-bottom: 12px;">
+    Всё, что бот говорит гостям и персоналу, на каждом включённом языке. Жирным — ваш
+    собственный текст; остальное — готовый перевод. Нажмите на текст, чтобы заменить его
+    своим. Подстановки в фигурных скобках (<code>{partner_name}</code>) бот заменит сам.
+  </p>
+  <form method="get" style="margin-bottom: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+    {% if partners %}
+      <select name="partner">
+        {% for partner in partners %}
+          <option value="{{ partner.id }}"{% if partner_id == partner.id|stringformat:"s" %} selected{% endif %}>{{ partner.name }}</option>
+        {% endfor %}
+      </select>
+    {% endif %}
+    <select name="group">
+      <option value="">Все тексты</option>
+      {% for key, label in groups %}
+        <option value="{{ key }}"{% if group == key %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <input type="search" name="q" value="{{ query }}" placeholder="Поиск по тексту">
+    <button type="submit">Найти</button>
+  </form>
+  <table style="width: 100%;">
+    <thead>
+      <tr>
+        <th style="text-align: left;">Раздел</th>
+        {% for language in languages %}<th style="text-align: left;">{{ language }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in page %}
+        <tr style="vertical-align: top; border-top: 1px solid rgba(128,128,128,.25);">
+          <td style="padding: 6px 8px 6px 0; white-space: nowrap;">{{ row.group }}</td>
+          {% for cell in row.cells %}
+            <td style="padding: 6px 8px; white-space: pre-line;">
+              <a href="{{ cell.url }}">{% if cell.own %}<strong>{{ cell.text }}</strong>{% else %}{{ cell.text }}{% endif %}</a>
+            </td>
+          {% endfor %}
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">Ничего не найдено.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if page.has_other_pages %}
+    <p style="margin-top: 12px;">
+      {% if page.has_previous %}<a href="?{% if partner_id %}partner={{ partner_id }}&amp;{% endif %}group={{ group }}&amp;q={{ query|urlencode }}&amp;page={{ page.previous_page_number }}">← Назад</a>{% endif %}
+      Страница {{ page.number }} из {{ page.paginator.num_pages }}
+      {% if page.has_next %}<a href="?{% if partner_id %}partner={{ partner_id }}&amp;{% endif %}group={{ group }}&amp;q={{ query|urlencode }}&amp;page={{ page.next_page_number }}">Дальше →</a>{% endif %}
+    </p>
+  {% endif %}
+</div>
+{% endblock %}

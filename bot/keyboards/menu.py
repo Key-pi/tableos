@@ -1,5 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from core.i18n import _
+
 
 def build_menu_keyboard(
     *,
@@ -31,14 +33,14 @@ def build_menu_keyboard(
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=f"➕ {item.name} • {item.price} грн",
+                        text=_("➕ {name} • {price} грн", name=item.name, price=item.price),
                         callback_data=f"menuadd:{item.public_id}",
                     )
                 ]
             )
-        rows.append([InlineKeyboardButton(text="Открыть корзину", callback_data="cart:refresh")])
+        rows.append([InlineKeyboardButton(text=_("Открыть корзину"), callback_data="cart:refresh")])
 
-    rows.append([InlineKeyboardButton(text="Обновить меню", callback_data="menurefresh")])
+    rows.append([InlineKeyboardButton(text=_("Обновить меню"), callback_data="menurefresh")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -79,12 +81,12 @@ def build_cart_keyboard(
     if has_items:
         rows.append(
             [
-                InlineKeyboardButton(text="Оформить", callback_data="cart:checkout"),
-                InlineKeyboardButton(text="Очистить", callback_data="cart:clear"),
+                InlineKeyboardButton(text=_("Оформить"), callback_data="cart:checkout"),
+                InlineKeyboardButton(text=_("Очистить"), callback_data="cart:clear"),
             ]
         )
     if mode_switch is not None:
         text, callback_data = mode_switch
         rows.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
-    rows.append([InlineKeyboardButton(text="Обновить корзину", callback_data="cart:refresh")])
+    rows.append([InlineKeyboardButton(text=_("Обновить корзину"), callback_data="cart:refresh")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

@@ -9,6 +9,8 @@ class BotRuntimeDisabledError(Exception):
 class PartnerSuspendedError(Exception):
     """Raised when a partner is no longer active for a live bot update."""
 
+    partner: Partner | None = None
+
 
 def resolve_partner_for_bot_token(bot_token: str) -> Partner:
     runtime_config = get_runtime_config_by_token(bot_token)
@@ -23,5 +25,7 @@ def resolve_partner_for_bot_token(bot_token: str) -> Partner:
     if not bot_instance.is_active:
         raise BotRuntimeDisabledError("Bot instance is disabled.")
     if bot_instance.partner.status != Partner.Status.ACTIVE:
-        raise PartnerSuspendedError("Partner is not active.")
+        error = PartnerSuspendedError("Partner is not active.")
+        error.partner = bot_instance.partner
+        raise error
     return bot_instance.partner

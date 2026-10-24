@@ -26,6 +26,11 @@ class LanguageChoiceTests(TestCase):
         self.assertEqual(choose_language(s, telegram="ru-RU"), "ru")
         self.assertEqual(choose_language(s), "uk")
 
+    @override_settings(LANGUAGE_CODE="en")
+    def test_without_settings_the_platform_language_is_main(self):
+        self.assertEqual(enabled_languages(None), ("en", "uk", "ru"))
+        self.assertEqual(choose_language(None), "en")
+
     def test_disabled_languages_are_skipped_for_guests(self):
         self.assertEqual(choose_language(self.settings, guest_choice="en"), "uk")
         self.assertEqual(choose_language(self.settings, telegram="en"), "uk")

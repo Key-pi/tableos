@@ -1,10 +1,26 @@
+from urllib.parse import urlencode
+
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 
 from apps.notifications.services import notify_owners_about_transfer_details_change
-from apps.partners.forms import BotInstanceAdminForm
-from apps.partners.models import BotInstance, OpeningHours, Partner, PartnerBotSettings
+from apps.partners.bot_texts import GROUP_LABELS, editable_texts
+from apps.partners.forms import BotInstanceAdminForm, BotTextForm, _short
+from apps.partners.languages import enabled_languages, text_overrides
+from apps.partners.models import (
+    BotInstance,
+    BotText,
+    OpeningHours,
+    Partner,
+    PartnerBotSettings,
+    text_key,
+)
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
+from core.i18n import LANGUAGE_NAMES, _, texts
 
 
 class OpeningHoursInline(admin.TabularInline):
@@ -116,48 +132,17 @@ class PartnerBotSettingsInline(admin.StackedInline):
             },
         ),
         (
-            "Кнопки",
+            "Языки",
             {
+                "description": (
+                    "Гость видит язык своего Telegram, если он включён, иначе основной, "
+                    "и может переключить язык в «Мой профиль». Кнопки и сообщения бота "
+                    "на каждом языке меняются в разделе «Тексты бота»."
+                ),
                 "fields": (
-                    "button_menu_label",
-                    "button_session_label",
-                    "button_cart_label",
-                    "button_checkout_label",
-                    "button_delivery_label",
-                    "button_pickup_label",
-                    "button_shipping_label",
-                    "button_help_label",
-                    "button_my_profile",
-                    "button_profile_bonuses_label",
-                    "button_call_staff_label",
-                    "button_request_bill_label",
-                    "button_call_waiter_label",
-                    "button_call_bartender_label",
-                    "button_call_hookah_label",
-                )
-            },
-        ),
-        (
-            "Тексты сообщений",
-            {
-                "fields": (
-                    "welcome_message_template",
-                    "table_activated_message_template",
-                    "menu_header_template",
-                    "menu_requires_session_hint_template",
-                    "menu_active_session_hint_template",
-                    "menu_empty_message_template",
-                    "ordering_help_message_template",
-                    "cart_empty_message_template",
-                    "cart_cleared_message_template",
-                    "staff_call_prompt_template",
-                    "staff_call_success_template",
-                    "request_bill_prompt_template",
-                    "request_bill_personal_success_template",
-                    "request_bill_shared_success_template",
-                    "request_bill_custom_success_template",
-                    "order_created_message_template",
-                )
+                    "default_language",
+                    ("language_uk", "language_ru", "language_en"),
+                ),
             },
         ),
     )
@@ -323,3 +308,113 @@ class OpeningHoursAdmin(ScopedAdminMixin):
     list_filter = ("partner", "scope", "weekday")
     ordering = ("partner", "scope", "weekday", "opens_at")
     fields = ("partner", "scope", "weekday", "opens_at", "closes_at")
+
+
+@admin.register(BotText)
+class BotTextAdmin(ScopedAdminMixin):
+    """The owner's own bot texts per language (PQ-040).
+
+    «Каталог текстов» lists every text the bot can say with the current wording
+    in each language; a link opens this text's own variant for editing.
+    """
+
+    admin_section = AdminSection.BOT_CONTENT
+    form = BotTextForm
+    list_display = ("language", "catalog_text", "own_text", "updated_at")
+    list_filter = ("language",)
+    search_fields = ("msgid", "text")
+    change_list_template = "admin/partners/bottext/change_list.html"
+
+    @admin.display(description="Текст в каталоге")
+    def catalog_text(self, obj: BotText) -> str:
+        return _short(obj.msgid)
+
+    @admin.display(description="Свой текст")
+    def own_text(self, obj: BotText) -> str:
+        return _short(obj.text)
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        return type("ScopedBotTextForm", (form,), {
+            "scope_partner_id": self.get_partner_scope_id(request)
+        })
+
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        key = request.GET.get("key", "")
+        for msgid in editable_texts():
+            if text_key(msgid) == key:
+                initial["msgid"] = msgid
+                break
+        return initial
+
+    def get_urls(self):
+        urls = super().get_urls()
+        catalog = path(
+            "catalog/",
+            self.admin_site.admin_view(self.catalog_view),
+            name="partners_bottext_catalog",
+        )
+        return [catalog, *urls]
+
+    def catalog_view(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        partner_id = self.get_partner_scope_id(request) or request.GET.get("partner") or None
+        partners = Partner.objects.order_by("name") if self.is_platform_admin(request) else None
+        if partner_id is None and partners is not None:
+            first = partners.first()
+            partner_id = first.id if first else None
+        settings = PartnerBotSettings.objects.filter(partner_id=partner_id).first()
+        languages = enabled_languages(settings)
+        own = {
+            (language, msgid): text_id
+            for language, msgid, text_id in BotText.objects.filter(
+                partner_id=partner_id
+            ).values_list("language", "msgid", "id")
+        }
+        overrides = text_overrides(partner_id) if partner_id else {}
+        catalog = sorted(editable_texts().items(), key=lambda item: (item[1], item[0]))
+        current = {}
+        for language in languages:
+            with texts(language, overrides):
+                current[language] = {msgid: _(msgid) for msgid, _group in catalog}
+        query = request.GET.get("q", "").strip().lower()
+        group = request.GET.get("group", "")
+        rows = []
+        for msgid, msgid_group in catalog:
+            if group and msgid_group != group:
+                continue
+            cells = []
+            for language in languages:
+                text_id = own.get((language, msgid))
+                if text_id:
+                    url = reverse("admin:partners_bottext_change", args=[text_id])
+                else:
+                    params = {"key": text_key(msgid), "language": language}
+                    if self.is_platform_admin(request) and partner_id:
+                        params["partner"] = partner_id
+                    url = reverse("admin:partners_bottext_add") + "?" + urlencode(params)
+                cells.append(
+                    {"text": current[language][msgid], "own": bool(text_id), "url": url}
+                )
+            haystack = " ".join([msgid, *(cell["text"] for cell in cells)]).lower()
+            if query and query not in haystack:
+                continue
+            rows.append(
+                {"msgid": msgid, "group": _(GROUP_LABELS[msgid_group]), "cells": cells}
+            )
+        page = Paginator(rows, 50).get_page(request.GET.get("page"))
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Каталог текстов бота",
+            "opts": self.model._meta,
+            "page": page,
+            "languages": [LANGUAGE_NAMES[code] for code in languages],
+            "groups": [(key, _(label)) for key, label in GROUP_LABELS.items()],
+            "group": group,
+            "query": request.GET.get("q", ""),
+            "partners": partners,
+            "partner_id": str(partner_id or ""),
+        }
+        return TemplateResponse(request, "admin/partners/bottext/catalog.html", context)

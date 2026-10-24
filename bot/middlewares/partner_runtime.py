@@ -11,9 +11,9 @@ from bot.services.context import (
     resolve_partner_for_bot_token,
 )
 from bot.services.language import language_context
-from core.i18n import texts
+from core.i18n import N_, _, default_language, texts
 
-SUSPENDED_PARTNER_MESSAGE = "Работа бота приостановлена, ожидайте обновлений."
+SUSPENDED_PARTNER_MESSAGE = N_("Работа бота приостановлена, ожидайте обновлений.")
 
 
 class PartnerRuntimeMiddleware(BaseMiddleware):
@@ -36,26 +36,34 @@ class PartnerRuntimeMiddleware(BaseMiddleware):
             # Polling transport remains alive until the process is restarted,
             # but a live deactivation must not process or acknowledge updates.
             return None
-        except PartnerSuspendedError:
-            await self._answer_suspended_update(event)
+        except PartnerSuspendedError as exc:
+            language, overrides = await self._language(exc.partner, data)
+            with texts(language, overrides):
+                await self._answer_suspended_update(event)
             return None
-        user = data.get("event_from_user")
-        language, overrides = await sync_to_async(language_context)(
-            partner,
-            getattr(user, "id", None),
-            getattr(user, "language_code", None),
-        )
+        language, overrides = await self._language(partner, data)
         data["language"] = language
         with texts(language, overrides):
             return await handler(event, data)
 
     @staticmethod
+    async def _language(partner, data: dict[str, Any]):
+        if partner is None:
+            return default_language(), {}
+        user = data.get("event_from_user")
+        return await sync_to_async(language_context)(
+            partner,
+            getattr(user, "id", None),
+            getattr(user, "language_code", None),
+        )
+
+    @staticmethod
     async def _answer_suspended_update(event: TelegramObject) -> None:
         callback_query = getattr(event, "callback_query", None)
         if callback_query is not None:
-            await callback_query.answer(SUSPENDED_PARTNER_MESSAGE, show_alert=True)
+            await callback_query.answer(_(SUSPENDED_PARTNER_MESSAGE), show_alert=True)
             return
 
         message = getattr(event, "message", None)
         if message is not None:
-            await message.answer(SUSPENDED_PARTNER_MESSAGE)
+            await message.answer(_(SUSPENDED_PARTNER_MESSAGE))

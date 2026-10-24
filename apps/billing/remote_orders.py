@@ -139,6 +139,10 @@ class RemoteOrderError(BillingServiceError):
     """A checkout step cannot be completed; the message is shown to the user."""
 
 
+class StaleQuoteError(RemoteOrderError):
+    """The cart or the amount changed since the guest saw the summary."""
+
+
 @dataclass(frozen=True)
 class RemoteQuote:
     total: Decimal  # what the order costs, the delivery fee included
@@ -598,7 +602,7 @@ def place_remote_order(
     fee = _channel_fee(settings, channel, items_total, shipping_cost)
     total = _money(items_total + fee)
     if total != _money(expected_total):
-        raise RemoteOrderError("Корзина изменилась — проверьте новую сумму.")
+        raise StaleQuoteError("Корзина изменилась — проверьте новую сумму.")
 
     minutes = TIME_SLOTS[slot] if channel in TIMED_CHANNELS else 0
     order = create_order(
@@ -664,7 +668,7 @@ def place_remote_order(
     if bill.status == Bill.Status.PAID:
         to_pay = Decimal("0.00")
     if to_pay != _money(expected_to_pay):
-        raise RemoteOrderError("Сумма к оплате изменилась — проверьте её ещё раз.")
+        raise StaleQuoteError("Сумма к оплате изменилась — проверьте её ещё раз.")
 
     if to_pay > 0 and payment == ON_RECEIPT and is_shipping:
         note = (
@@ -1008,6 +1012,7 @@ __all__ = [
     "TIME_SLOTS",
     "RemoteOrderError",
     "RemoteQuote",
+    "StaleQuoteError",
     "available_slots",
     "closed_message",
     "confirm_transfer",

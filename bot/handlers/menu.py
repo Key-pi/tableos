@@ -19,6 +19,7 @@ from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
 from bot.utils.html import escape_html
+from core.i18n import _
 
 router = Router()
 
@@ -59,16 +60,21 @@ def _render_menu_category_view(
     *, partner, content, category, menu_items, session, channel=None
 ) -> str:
     lines = [content.menu_header(partner_name=partner.name)]
-    lines.append(f"Категория: <b>{escape_html(category.name)}</b>")
+    lines.append(_("Категория: <b>{name}</b>", name=escape_html(category.name)))
     lines.append("")
     if not menu_items:
-        lines.append("В этой категории сейчас нет доступных позиций.")
+        lines.append(_("В этой категории сейчас нет доступных позиций."))
         lines.append("")
     else:
         for item in menu_items:
-            category_name = item.category.name if item.category_id else "Без категории"
+            category_name = item.category.name if item.category_id else _("Без категории")
             lines.append(
-                f"{escape_html(item.name)} • {item.price} грн • {escape_html(category_name)}"
+                _(
+                    "{name} • {price} грн • {category_name}",
+                    name=escape_html(item.name),
+                    price=item.price,
+                    category_name=escape_html(category_name),
+                )
             )
             # If category chips become visually enough later, we can trim the
             # repeated category label here without changing add-to-cart behavior.
@@ -78,15 +84,17 @@ def _render_menu_category_view(
 
     if channel == Order.Channel.PICKUP:
         lines.append(
-            "Самовывоз: показаны позиции на вынос. Нажмите кнопку с позицией, чтобы "
-            "добавить её в корзину."
+            _(
+                "Самовывоз: показаны позиции на вынос. Нажмите кнопку с позицией, чтобы "
+                "добавить её в корзину."
+            )
         )
     elif session is None:
         if content.supports_cart():
             lines.append(content.menu_requires_session_hint())
     else:
         if content.supports_cart():
-            lines.append("Нажмите кнопку с позицией ниже, чтобы добавить её в корзину.")
+            lines.append(_("Нажмите кнопку с позицией ниже, чтобы добавить её в корзину."))
         lines.extend(content.ordering_entry_lines(table_number=session.table.number))
     return "\n".join(lines).strip()
 
@@ -100,7 +108,7 @@ async def send_menu_view(*, target, bot: Bot, category_id: str | None = None) ->
         content=content,
     )
     if not content.supports_menu():
-        text = "Меню сейчас отключено для этого бота."
+        text = _("Меню сейчас отключено для этого бота.")
         if isinstance(target, CallbackQuery):
             await target.message.answer(
                 text,
@@ -192,7 +200,7 @@ async def send_menu_view(*, target, bot: Bot, category_id: str | None = None) ->
         if updated:
             await target.answer()
         else:
-            await target.answer("Без изменений")
+            await target.answer(_("Без изменений"))
     else:
         await target.answer(text, reply_markup=keyboard)
 
@@ -231,4 +239,4 @@ async def menu_add_callback(callback: CallbackQuery, bot: Bot) -> None:
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
-    await callback.answer("Позиция добавлена в корзину.")
+    await callback.answer(_("Позиция добавлена в корзину."))

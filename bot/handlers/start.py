@@ -27,6 +27,7 @@ from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
 from bot.utils.html import escape_html
+from core.i18n import _
 
 router = Router()
 
@@ -64,7 +65,7 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
     if payload:
         if not content.supports_tables():
             await message.answer(
-                "Столы сейчас отключены для этого бота.",
+                _("Столы сейчас отключены для этого бота."),
                 reply_markup=build_main_keyboard(
                     content,
                     navigation_state=await sync_to_async(resolve_guest_navigation_state)(
@@ -92,15 +93,21 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
             [
                 content.welcome_message(partner_name=partner.name),
                 "",
-                f"Вы зарегистрированы в программе лояльности {escape_html(partner.name)}.",
-                f"Ваш код клиента: <code>{guest_profile.customer_code}</code>",
-                "Этот код можно назвать на баре или кассе для начисления бонусов.",
+                _(
+                    "Вы зарегистрированы в программе лояльности {name}.",
+                    name=escape_html(partner.name),
+                ),
+                _(
+                    "Ваш код клиента: <code>{customer_code}</code>",
+                    customer_code=guest_profile.customer_code,
+                ),
+                _("Этот код можно назвать на баре или кассе для начисления бонусов."),
             ]
             + ([""] + start_hint_lines if start_hint_lines else [])
             + (
                 [
                     "",
-                    "Если вы сотрудник заведения, откройте рабочий режим командой /staff.",
+                    _("Если вы сотрудник заведения, откройте рабочий режим командой /staff."),
                 ]
                 if employee is not None
                 else []
@@ -131,7 +138,7 @@ async def _activate_and_reply(*, message: Message, user, partner, content, paylo
         )
     except VisitChoiceRequired as exc:
         await message.answer(
-            "За этим столом уже сидит компания. Подсесть к ней или начать новый визит?",
+            _("За этим столом уже сидит компания. Подсесть к ней или начать новый визит?"),
             reply_markup=build_visit_choice_keyboard(
                 table_id=exc.table.id,
                 options=[
@@ -165,13 +172,18 @@ async def _activate_and_reply(*, message: Message, user, partner, content, paylo
                     table_number=session.table.number,
                 ),
                 "",
-                f"Ваш код клиента: <code>{guest_profile.customer_code}</code>",
+                _(
+                    "Ваш код клиента: <code>{customer_code}</code>",
+                    customer_code=guest_profile.customer_code,
+                ),
             ]
             + (
                 [
                     "",
-                    "Убрали из корзины — не подаётся за столом: "
-                    + escape_html(", ".join(removed)),
+                    _(
+                        "Убрали из корзины — не подаётся за столом: {items}",
+                        items=escape_html(", ".join(removed)),
+                    ),
                 ]
                 if removed
                 else []
@@ -191,7 +203,11 @@ async def _activate_and_reply(*, message: Message, user, partner, content, paylo
 def _visit_option_label(option, partner_timezone: str) -> str:
     # No guest names: other guests' identities are not shown (ADR-0007).
     started = option.started_at.astimezone(ZoneInfo(partner_timezone)).strftime("%H:%M")
-    return f"Подсесть к компании (с {started}, гостей: {option.guest_count})"
+    return _(
+        "Подсесть к компании (с {started}, гостей: {guest_count})",
+        started=started,
+        guest_count=option.guest_count,
+    )
 
 
 def _resolve_visit_choice_target(*, partner_id, action: str, raw_id: str):
@@ -231,7 +247,9 @@ async def visit_choice_callback(callback: CallbackQuery, bot: Bot) -> None:
             raw_id=parts[2],
         )
     if target is None:
-        await callback.answer("Выбор устарел. Отсканируйте QR-код стола ещё раз.", show_alert=True)
+        await callback.answer(
+            _("Выбор устарел. Отсканируйте QR-код стола ещё раз."), show_alert=True
+        )
         return
 
     payload, visit_choice = target

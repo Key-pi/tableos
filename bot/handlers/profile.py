@@ -63,22 +63,22 @@ def _render_profile_summary(
         guest_profile.telegram_account.telegram_id
     )
     lines = [
-        "<b>Мой профиль</b>",
-        f"Заведение: {escape_html(partner_name)}",
+        _("<b>Мой профиль</b>"),
+        _("Заведение: {partner_name}", partner_name=escape_html(partner_name)),
         f"Telegram: {identity_line}",
-        f"Код клиента: <code>{guest_profile.customer_code}</code>",
-        f"Баланс: {guest_profile.loyalty_balance} бонусов",
+        _("Код клиента: <code>{customer_code}</code>", customer_code=guest_profile.customer_code),
+        _("Баланс: {loyalty_balance} бонусов", loyalty_balance=guest_profile.loyalty_balance),
         "",
-        "<b>Статус</b>",
+        _("<b>Статус</b>"),
         (
-            f"Активный стол: #{active_session.table.number}"
+            _("Активный стол: #{number}", number=active_session.table.number)
             if active_session is not None
-            else "Активного стола сейчас нет."
+            else _("Активного стола сейчас нет.")
         ),
-        f"Первый визит: {_format_dt(guest_profile.first_visit_at)}",
-        f"Последний визит: {_format_dt(guest_profile.last_visit_at)}",
+        _("Первый визит: {date}", date=_format_dt(guest_profile.first_visit_at)),
+        _("Последний визит: {date}", date=_format_dt(guest_profile.last_visit_at)),
         "",
-        "Код клиента можно назвать на баре или кассе для бонусов и быстрых продаж.",
+        _("Код клиента можно назвать на баре или кассе для бонусов и быстрых продаж."),
     ]
     return "\n".join(lines)
 
@@ -99,10 +99,13 @@ def _render_profile_bonuses(
     page_transactions = recent_transactions[start:end]
 
     lines = [
-        "<b>Бонусы</b>",
-        f"Текущий баланс: {guest_profile.loyalty_balance} бонусов",
+        _("<b>Бонусы</b>"),
+        _(
+            "Текущий баланс: {loyalty_balance} бонусов",
+            loyalty_balance=guest_profile.loyalty_balance,
+        ),
         "",
-        "<b>Активные программы</b>",
+        _("<b>Активные программы</b>"),
     ]
     if active_programs:
         preview_programs = active_programs[:_BONUS_PROGRAMS_PREVIEW_LIMIT]
@@ -113,24 +116,33 @@ def _render_profile_bonuses(
             )
         hidden_programs = len(active_programs) - len(preview_programs)
         if hidden_programs > 0:
-            lines.append(f"• И ещё программ: {hidden_programs}")
+            lines.append(_("• И ещё программ: {hidden_programs}", hidden_programs=hidden_programs))
     else:
-        lines.append("• Сейчас активных бонусных программ нет.")
+        lines.append(_("• Сейчас активных бонусных программ нет."))
 
-    lines.extend(["", "<b>Последние движения</b>"])
+    lines.extend(["", _("<b>Последние движения</b>")])
     if page_transactions:
         for transaction in page_transactions:
-            program_name = transaction.program.name if transaction.program_id else "Ручная операция"
+            program_name = (
+                transaction.program.name if transaction.program_id else _("Ручная операция")
+            )
             sign = "+" if transaction.amount >= 0 else ""
             lines.append(
-                f"• {sign}{transaction.amount} через {escape_html(program_name)} "
-                f"({transaction.created_at:%d.%m %H:%M})"
+                _(
+                    "• {sign}{amount} через {program_name} ({created})",
+                    sign=sign,
+                    amount=transaction.amount,
+                    program_name=escape_html(program_name),
+                    created=f"{transaction.created_at:%d.%m %H:%M}",
+                )
             )
     else:
-        lines.append("• История бонусов пока пуста.")
+        lines.append(_("• История бонусов пока пуста."))
     if total_pages > 1:
         lines.append("")
-        lines.append(f"Страница истории: {page + 1}/{total_pages}")
+        lines.append(
+            _("Страница истории: {page}/{total_pages}", page=page + 1, total_pages=total_pages)
+        )
     return "\n".join(lines), total_pages
 
 
@@ -208,7 +220,7 @@ async def profile_summary_callback(callback: CallbackQuery, bot: Bot) -> None:
     if updated:
         await callback.answer()
     else:
-        await callback.answer("Без изменений")
+        await callback.answer(_("Без изменений"))
 
 
 @router.callback_query(F.data.startswith("guestprofile:bonuses:"))
@@ -248,7 +260,7 @@ async def profile_bonuses_callback(callback: CallbackQuery, bot: Bot) -> None:
     if updated:
         await callback.answer()
     else:
-        await callback.answer("Без изменений")
+        await callback.answer(_("Без изменений"))
 
 
 # «Мои заказы»: the guest's own orders with status, payment and ТТН.
@@ -260,14 +272,14 @@ def _payment_line(order: Order) -> str:
     if order.status == Order.Status.CANCELED:
         return ""
     if order.paid_at is not None:
-        return "оплачен"
+        return _("оплачен")
     if order.payment_timing == Order.PaymentTiming.ON_RECEIPT:
         if order.channel == Order.Channel.SHIPPING:
-            return "наложенным платежом при получении"
-        return "оплата при получении"
+            return _("наложенным платежом при получении")
+        return _("оплата при получении")
     if order.payment_timing == Order.PaymentTiming.PREPAID:
-        return "ждёт подтверждения перевода"
-    return "не оплачен"
+        return _("ждёт подтверждения перевода")
+    return _("не оплачен")
 
 
 def _local(order: Order, value):
@@ -276,11 +288,15 @@ def _local(order: Order, value):
 
 def _render_my_orders(orders: list[Order], *, page: int, total_pages: int) -> str:
     if not orders:
-        return "<b>Мои заказы</b>\nЗаказов пока нет."
-    lines = ["<b>Мои заказы</b>"]
+        return _("<b>Мои заказы</b>\nЗаказов пока нет.")
+    lines = [_("<b>Мои заказы</b>")]
     for order in orders:
         payment = _payment_line(order)
-        details = f"{order.get_status_display()} · {order.total_amount} грн"
+        details = _(
+            "{status} · {total_amount} грн",
+            status=order.get_status_display(),
+            total_amount=order.total_amount,
+        )
         if payment:
             details += f" · {payment}"
         lines += [
@@ -291,50 +307,71 @@ def _render_my_orders(orders: list[Order], *, page: int, total_pages: int) -> st
             details,
         ]
         if order.tracking_number:
-            lines.append(f"ТТН <code>{escape_html(order.tracking_number)}</code>")
+            lines.append(
+                _(
+                    "ТТН <code>{tracking_number}</code>",
+                    tracking_number=escape_html(order.tracking_number),
+                )
+            )
     if total_pages > 1:
-        lines += ["", f"Страница {page + 1}/{total_pages}"]
+        lines += ["", _("Страница {page}/{total_pages}", page=page + 1, total_pages=total_pages)]
     return "\n".join(lines)
 
 
 def _render_my_order(order: Order) -> str:
     lines = [
-        f"<b>Заказ #{escape_html(order.public_id)}</b>",
+        _("<b>Заказ #{public_id}</b>", public_id=escape_html(order.public_id)),
         f"{escape_html(order.get_channel_display())} · "
         f"{_local(order, order.created_at):%d.%m.%Y %H:%M}",
-        f"Статус: {order.get_status_display()}",
+        _("Статус: {status}", status=order.get_status_display()),
     ]
     if order.channel == Order.Channel.TABLE and order.table is not None:
-        lines.append(f"Стол #{order.table.number}")
+        lines.append(_("Стол #{number}", number=order.table.number))
     elif order.channel in (Order.Channel.PICKUP, Order.Channel.DELIVERY):
-        lines.append(f"Время: {escape_html(requested_time_label(order))}")
+        lines.append(
+            _(
+                "Время: {requested_time_label}",
+                requested_time_label=escape_html(requested_time_label(order)),
+            )
+        )
     if order.channel == Order.Channel.DELIVERY:
-        lines.append(f"Адрес: {escape_html(order.delivery_address)}")
+        lines.append(
+            _("Адрес: {delivery_address}", delivery_address=escape_html(order.delivery_address))
+        )
     if order.channel == Order.Channel.SHIPPING:
         lines.append(
             f"{escape_html(order.get_shipping_carrier_display())}: "
             f"{escape_html(order.shipping_destination)}"
         )
         if order.tracking_number:
-            lines.append(f"ТТН <code>{escape_html(order.tracking_number)}</code>")
+            lines.append(
+                _(
+                    "ТТН <code>{tracking_number}</code>",
+                    tracking_number=escape_html(order.tracking_number),
+                )
+            )
             link = tracking_link(order.shipping_carrier, order.tracking_number)
             if link:
-                lines.append(f'<a href="{escape_html(link)}">Отследить посылку</a>')
+                lines.append(_('<a href="{link}">Отследить посылку</a>', link=escape_html(link)))
     lines.append("")
     for item in order.items.all():
         lines.append(
-            f"• {escape_html(item.item_name)} × {item.quantity} — "
-            f"{item.unit_price * item.quantity} грн"
+            _(
+                "• {item_name} × {quantity} — {line_total} грн",
+                item_name=escape_html(item.item_name),
+                quantity=item.quantity,
+                line_total=item.unit_price * item.quantity,
+            )
         )
-    lines.append(f"<b>Итого: {order.total_amount} грн</b>")
+    lines.append(_("<b>Итого: {total_amount} грн</b>", total_amount=order.total_amount))
     if order.bonus_spent:
-        lines.append(f"Оплачено бонусами: {order.bonus_spent}")
+        lines.append(_("Оплачено бонусами: {bonus_spent}", bonus_spent=order.bonus_spent))
     payment = _payment_line(order)
     if payment:
-        lines.append(f"Оплата: {payment}")
+        lines.append(_("Оплата: {payment}", payment=payment))
     refunded = getattr(order, "refunded_money", 0)
     if refunded:
-        lines.append(f"Возвращено: {refunded} грн")
+        lines.append(_("Возвращено: {refunded} грн", refunded=refunded))
     return "\n".join(lines)
 
 
@@ -387,14 +424,14 @@ async def my_orders_callback(callback: CallbackQuery, bot: Bot) -> None:
             partner.id, callback.from_user.id, match.group(2)
         )
         if order is None:
-            await callback.answer("Заказ не найден.", show_alert=True)
+            await callback.answer(_("Заказ не найден."), show_alert=True)
             return
         text = _render_my_order(order)
         markup = build_my_order_keyboard(
             public_id=order.public_id, can_confirm=_can_confirm_from_list(order)
         )
     updated = await _safe_profile_message_edit(callback.message, text, reply_markup=markup)
-    await callback.answer() if updated else await callback.answer("Без изменений")
+    await callback.answer() if updated else await callback.answer(_("Без изменений"))
 
 
 # Bot language (PQ-040): the guest picks one of the venue's languages or

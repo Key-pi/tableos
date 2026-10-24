@@ -1,21 +1,23 @@
-from aiogram import Bot
 from aiogram.filters import BaseFilter
 from aiogram.types import Message
-from asgiref.sync import sync_to_async
 
-from bot.services.content import BotContent
-from bot.services.context import resolve_partner_for_bot_token
+from apps.partners.bot_texts import BUTTON_TEXTS
+from core.i18n import variants
 
 
 class PartnerButtonFilter(BaseFilter):
-    """Match reply-keyboard buttons using partner-specific labels."""
+    """Match a reply-keyboard button by its text in any language (PQ-040).
+
+    The owner's own button texts of this update's venue are included
+    (``core.i18n.texts``), so a keyboard sent before the guest switched the
+    language still works.
+    """
 
     def __init__(self, label_attr: str) -> None:
         self.label_attr = label_attr
+        self.msgid = BUTTON_TEXTS[label_attr]
 
-    async def __call__(self, message: Message, bot: Bot) -> bool:
+    async def __call__(self, message: Message) -> bool:
         if not message.text:
             return False
-        partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
-        content = await sync_to_async(BotContent.for_partner)(partner)
-        return message.text == getattr(content, self.label_attr)
+        return message.text in variants(self.msgid)

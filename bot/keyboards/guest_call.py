@@ -1,6 +1,8 @@
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from core.i18n import _
+
 
 def build_guest_call_keyboard(*, targets: list[tuple[str, str]]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
@@ -10,7 +12,7 @@ def build_guest_call_keyboard(*, targets: list[tuple[str, str]]) -> InlineKeyboa
             callback_data=f"guestcall:request:{target_code}",
         )
     builder.button(
-        text="Отмена",
+        text=_("Отмена"),
         callback_data="guestcall:cancel",
     )
     builder.adjust(2, 1)

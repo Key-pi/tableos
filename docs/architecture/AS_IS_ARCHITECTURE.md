@@ -160,11 +160,14 @@ apps.notifications.tasks` — цикл, разорванный только им
    обработчик внутри `core.i18n.texts(...)`; подробно —
    [LANGUAGES.md](LANGUAGES.md).
 3. Обработчики снова вызывают `resolve_partner_for_bot_token` и строят
-   `bot/services/content.py:BotContent` из `PartnerBotSettings`.
+   `bot/services/content.py:BotContent`: модули — из `PartnerBotSettings`,
+   кнопки и сообщения — из каталога на языке обновления со своими текстами
+   владельца (`apps/partners/bot_texts.py`, `BotText`, PQ-040).
 4. Действия reply-клавиатуры сопоставляются по точному тексту через
-   `bot/filters/content.py:PartnerButtonFilter`; каждая проверка фильтра
-   заново загружает партнёра и его тексты. `PartnerBotSettings.clean`
-   отклоняет пустые и повторяющиеся подписи с маршрутизацией.
+   `bot/filters/content.py:PartnerButtonFilter` — с подписью кнопки на любом
+   языке (каталог и свои тексты заведения из контекста обновления), без
+   запросов к базе. `BotText.clean` отклоняет пустую, многострочную и
+   совпадающую с другой кнопкой того же языка подпись.
 5. Обработчики персонала определяют исполнителя через
    `bot/handlers/staff.py:_resolve_staff_employee_by_telegram_id` →
    `employees/selectors.py:get_staff_employee_by_telegram`, что требует
@@ -463,7 +466,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 544 теста после механики языков, зелёные на SQLite и на
+- 556 тестов после текстов гостя и своих текстов владельца, зелёные на SQLite и на
   PostgreSQL 16. Тринадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

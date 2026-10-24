@@ -388,7 +388,10 @@ class Command(BaseCommand):
         settings.shipping_pay_transfer = True
         settings.shipping_pay_on_receipt = True
         settings.transfer_payment_details = TRANSFER_DETAILS
-        settings.button_my_profile = "Мой профиль"
+        # Languages (PQ-040): Ukrainian first; the guest's Telegram language
+        # (Russian, English) is offered too.
+        settings.default_language = "uk"
+        settings.language_uk = settings.language_ru = settings.language_en = True
         settings.staff_call_waiter_enabled = True
         settings.staff_call_bartender_enabled = True
         settings.staff_call_hookah_enabled = is_hookah

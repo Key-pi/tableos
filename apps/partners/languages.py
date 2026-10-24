@@ -14,13 +14,12 @@ from core.i18n import LANGUAGES, default_language, normalize_language
 def enabled_languages(settings: PartnerBotSettings | None) -> tuple[str, ...]:
     """Languages the venue offers guests, the main one first."""
 
-    if settings is None:
-        return LANGUAGES
     main = main_language(settings)
     others = [
         code
         for code in LANGUAGES
-        if code != main and getattr(settings, GUEST_LANGUAGE_FIELDS[code])
+        if code != main
+        and (settings is None or getattr(settings, GUEST_LANGUAGE_FIELDS[code]))
     ]
     return (main, *others)
 

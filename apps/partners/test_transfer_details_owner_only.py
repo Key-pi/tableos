@@ -75,9 +75,9 @@ class TransferDetailsOwnerOnlyTests(TestCase):
         request = self._request(self.manager)
         form_class = self.model_admin.get_form(request, self.settings, change=True)
         self.assertNotIn("transfer_payment_details", form_class.base_fields)
-        self._save(self.manager, button_menu_label="Меню заведения")
+        self._save(self.manager, duplicate_request_cooldown_seconds=90)
         self.assertEqual(self.settings.transfer_payment_details, "Карта 4149 0000 0000 0001")
-        self.assertEqual(self.settings.button_menu_label, "Меню заведения")
+        self.assertEqual(self.settings.duplicate_request_cooldown_seconds, 90)
 
     def test_owner_changes_details_and_gets_a_security_message(self):
         self._save(self.owner, transfer_payment_details="Карта 5168 0000 0000 0002")
@@ -88,7 +88,7 @@ class TransferDetailsOwnerOnlyTests(TestCase):
         self.assertIn("own", alert.message)
 
     def test_no_message_when_details_did_not_change(self):
-        self._save(self.owner, button_menu_label="Меню")
+        self._save(self.owner, duplicate_request_cooldown_seconds=90)
         self.assertFalse(StaffNotification.objects.exists())
 
     def test_alert_is_sent_even_with_bot_notifications_off(self):

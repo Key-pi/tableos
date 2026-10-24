@@ -79,7 +79,6 @@ class Command(BaseCommand):
         settings.module_tables_enabled = True
         settings.module_cart_enabled = True
         settings.module_orders_enabled = True
-        settings.button_my_profile = "Мой профиль"
         settings.save(
             update_fields=[
                 "allow_menu_without_session",
@@ -87,7 +86,6 @@ class Command(BaseCommand):
                 "module_tables_enabled",
                 "module_cart_enabled",
                 "module_orders_enabled",
-                "button_my_profile",
                 "updated_at",
             ]
         )

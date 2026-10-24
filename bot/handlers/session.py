@@ -24,16 +24,21 @@ from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.navigation import resolve_guest_navigation_state
 from bot.utils.html import escape_html
+from core.i18n import _
 
 router = Router()
 
 
 def _render_guest_order_line(order: Order) -> str:
-    payment_label = "оплачен" if is_order_paid(order) else "не оплачен"
-    received_label = "получен" if is_order_received(order) else "не получен"
-    return (
-        f"• #{order.public_id} — {order.get_status_display()} — "
-        f"{order.total_amount} грн — {payment_label} — {received_label}"
+    payment_label = _("оплачен") if is_order_paid(order) else _("не оплачен")
+    received_label = _("получен") if is_order_received(order) else _("не получен")
+    return _(
+        "• #{public_id} — {status} — {total_amount} грн — {payment_label} — {received_label}",
+        public_id=order.public_id,
+        status=order.get_status_display(),
+        total_amount=order.total_amount,
+        payment_label=payment_label,
+        received_label=received_label,
     )
 
 
@@ -41,7 +46,7 @@ def _build_guest_order_shortcuts(orders: list[Order]) -> list[tuple[str, str]]:
     visible_orders = [order for order in orders if not is_order_final(order)]
     shortcuts: list[tuple[str, str]] = []
     for order in visible_orders[:8]:
-        payment_badge = "не опл." if not is_order_paid(order) else "опл."
+        payment_badge = _("не опл.") if not is_order_paid(order) else _("опл.")
         shortcuts.append(
             (
                 order.public_id,
@@ -61,15 +66,15 @@ def _build_guest_session_view(
     visible_orders = [order for order in orders if not is_order_final(order)]
     preview_orders = visible_orders[:6]
     lines = [
-        f"Ваш стол: #{session.table.number}",
-        f"Заведение: {escape_html(partner.name)}",
+        _("Ваш стол: #{number}", number=session.table.number),
+        _("Заведение: {name}", name=escape_html(partner.name)),
     ]
 
     if not visible_orders:
         lines.extend(
             [
                 "",
-                "По вашему столу сейчас нет незавершённых заказов.",
+                _("По вашему столу сейчас нет незавершённых заказов."),
             ]
         )
         lines.extend(content.ordering_entry_lines(table_number=session.table.number))
@@ -80,25 +85,32 @@ def _build_guest_session_view(
     lines.extend(
         [
             "",
-            f"Незавершённых заказов: {len(visible_orders)}",
-            f"Не оплачено: {unpaid_count}",
-            f"Не получено: {unreceived_count}",
+            _(
+                "Незавершённых заказов: {visible_orders_count}",
+                visible_orders_count=len(visible_orders),
+            ),
+            _("Не оплачено: {unpaid_count}", unpaid_count=unpaid_count),
+            _("Не получено: {unreceived_count}", unreceived_count=unreceived_count),
             "",
-            "Ваши заказы:",
+            _("Ваши заказы:"),
         ]
     )
     lines.extend(_render_guest_order_line(order) for order in preview_orders)
     hidden_orders_count = len(visible_orders) - len(preview_orders)
     if hidden_orders_count > 0:
-        lines.append(f"• И ещё заказов: {hidden_orders_count}")
+        lines.append(
+            _("• И ещё заказов: {hidden_orders_count}", hidden_orders_count=hidden_orders_count)
+        )
 
     if unpaid_count:
         lines.extend(
             [
                 "",
                 (
-                    "Если заказ уже у вас, но он ещё не оплачен, "
-                    "запросите счёт кнопкой «Запросить счёт»."
+                    _(
+                        "Если заказ уже у вас, но он ещё не оплачен, запросите счёт "
+                        "кнопкой «Запросить счёт»."
+                    )
                 ),
             ]
         )
@@ -108,29 +120,38 @@ def _build_guest_session_view(
 
 def _employee_label(order: Order) -> str:
     if not order.assigned_employee_id:
-        return "ещё не назначен"
+        return _("ещё не назначен")
     full_name = order.assigned_employee.user.get_full_name().strip()
     return full_name or order.assigned_employee.user.username
 
 
 def _build_guest_order_card_text(order: Order) -> str:
-    payment_label = "ещё не зафиксирована" if not is_order_paid(order) else "уже зафиксирована"
-    received_label = "ещё не подтверждено" if not is_order_received(order) else "уже подтверждено"
+    payment_label = (
+        _("ещё не зафиксирована") if not is_order_paid(order) else _("уже зафиксирована")
+    )
+    received_label = (
+        _("ещё не подтверждено") if not is_order_received(order) else _("уже подтверждено")
+    )
     lines = [
-        f"<b>Заказ #{order.public_id}</b>",
-        f"Стол: #{order.table.number}",
-        f"Новый статус: {order.get_status_display()}",
-        f"Оплата: {payment_label}",
-        f"Получение: {received_label}",
-        f"Заказ взял в работу: {escape_html(_employee_label(order))}",
+        _("<b>Заказ #{public_id}</b>", public_id=order.public_id),
+        _("Стол: #{number}", number=order.table.number),
+        _("Новый статус: {status}", status=order.get_status_display()),
+        _("Оплата: {payment_label}", payment_label=payment_label),
+        _("Получение: {received_label}", received_label=received_label),
+        _(
+            "Заказ взял в работу: {employee_label}",
+            employee_label=escape_html(_employee_label(order)),
+        ),
     ]
     if not is_order_paid(order):
         lines.extend(
             [
                 "",
                 (
-                    "Если заказ уже у вас, но он ещё не оплачен, "
-                    "запросите счёт кнопкой «Запросить счёт»."
+                    _(
+                        "Если заказ уже у вас, но он ещё не оплачен, запросите счёт "
+                        "кнопкой «Запросить счёт»."
+                    )
                 ),
             ]
         )
@@ -138,7 +159,7 @@ def _build_guest_order_card_text(order: Order) -> str:
         lines.extend(
             [
                 "",
-                "Если заказ уже получили, подтвердите это кнопкой ниже.",
+                _("Если заказ уже получили, подтвердите это кнопкой ниже."),
             ]
         )
     return "\n".join(lines)
@@ -165,7 +186,7 @@ async def session_handler(message: Message, bot: Bot) -> None:
             content=content,
         )
         await message.answer(
-            "Столы сейчас отключены для этого бота.",
+            _("Столы сейчас отключены для этого бота."),
             reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
         )
         return
@@ -180,7 +201,7 @@ async def session_handler(message: Message, bot: Bot) -> None:
             content=content,
         )
         await message.answer(
-            "Активной сессии нет. Сначала отсканируйте QR-код на столе.",
+            _("Активной сессии нет. Сначала отсканируйте QR-код на столе."),
             reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
         )
         return
@@ -211,7 +232,7 @@ async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
         telegram_id=callback.from_user.id,
     )
     if session is None:
-        await callback.answer("Активная сессия уже закрыта.", show_alert=True)
+        await callback.answer(_("Активная сессия уже закрыта."), show_alert=True)
         return
 
     orders = await sync_to_async(list)(
@@ -220,7 +241,7 @@ async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
     try:
         order = next(order for order in orders if order.public_id == order_public_id)
     except StopIteration:
-        await callback.answer("Заказ уже не найден для активного стола.", show_alert=True)
+        await callback.answer(_("Заказ уже не найден для активного стола."), show_alert=True)
         return
 
     updated = await _safe_edit_session_message(
@@ -234,7 +255,7 @@ async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
     if updated:
         await callback.answer()
     else:
-        await callback.answer("Без изменений")
+        await callback.answer(_("Без изменений"))
 
 
 @router.callback_query(F.data == "guestsession:back")
@@ -246,7 +267,7 @@ async def guest_session_back_callback(callback: CallbackQuery, bot: Bot) -> None
         telegram_id=callback.from_user.id,
     )
     if session is None:
-        await callback.answer("Активная сессия уже закрыта.", show_alert=True)
+        await callback.answer(_("Активная сессия уже закрыта."), show_alert=True)
         return
 
     orders = await sync_to_async(list)(
@@ -268,7 +289,7 @@ async def guest_session_back_callback(callback: CallbackQuery, bot: Bot) -> None
     if updated:
         await callback.answer()
     else:
-        await callback.answer("Без изменений")
+        await callback.answer(_("Без изменений"))
 
 
 @router.callback_query(F.data.startswith("guestorderconfirm:"))
@@ -294,11 +315,14 @@ async def guest_order_confirm_callback(callback: CallbackQuery, bot: Bot) -> Non
         if order.channel == Order.Channel.SHIPPING:
             # Confirmed from the «отправлен» message (PQ-034), no table.
             await callback.message.edit_text(
-                f"Получение заказа #{escape_html(order.public_id)} подтверждено. Спасибо!"
+                _(
+                    "Получение заказа #{public_id} подтверждено. Спасибо!",
+                    public_id=escape_html(order.public_id),
+                )
             )
         else:
-            await callback.message.edit_text("Активная сессия уже закрыта.")
-        await callback.answer("Получение подтверждено.")
+            await callback.message.edit_text(_("Активная сессия уже закрыта."))
+        await callback.answer(_("Получение подтверждено."))
         return
 
     updated = await _safe_edit_session_message(
@@ -310,6 +334,8 @@ async def guest_order_confirm_callback(callback: CallbackQuery, bot: Bot) -> Non
         ),
     )
     if updated:
-        await callback.answer(f"Заказ #{order.public_id} отмечен как полученный.")
+        await callback.answer(
+            _("Заказ #{public_id} отмечен как полученный.", public_id=order.public_id)
+        )
     else:
-        await callback.answer("Без изменений")
+        await callback.answer(_("Без изменений"))

@@ -1,8 +1,15 @@
 from dataclasses import dataclass
 from typing import Any
 
+from apps.partners.bot_texts import (
+    BUTTON_TEXTS,
+    INLINE_BUTTON_TEXTS,
+    TEMPLATE_TEXTS,
+    WHOLE_TEXTS,
+)
 from apps.partners.models import Partner, PartnerBotSettings
 from bot.utils.html import escape_html
+from core.i18n import _, own_text
 
 
 def _render_template(template: str, **context) -> str:
@@ -80,6 +87,17 @@ class BotContent:
             return cls.defaults()
         return cls.from_settings(settings)
 
+    @staticmethod
+    def _texts() -> dict[str, str]:
+        """Buttons and messages in the active language with the owner's texts (PQ-040)."""
+
+        texts = {
+            field: _(msgid)
+            for field, msgid in {**BUTTON_TEXTS, **INLINE_BUTTON_TEXTS, **TEMPLATE_TEXTS}.items()
+        }
+        texts.update({field: own_text(msgid) for field, msgid in WHOLE_TEXTS.items()})
+        return texts
+
     @classmethod
     def defaults(cls) -> "BotContent":
         return cls(
@@ -97,69 +115,16 @@ class BotContent:
             auto_close_table_session_after_payment=True,
             max_menu_items_per_category_message=8,
             duplicate_request_cooldown_seconds=45,
-            button_menu_label="Открыть меню",
-            button_session_label="Мой стол",
-            button_cart_label="Корзина",
-            button_checkout_label="Оформить заказ",
-            button_delivery_label="Заказать доставку",
-            button_pickup_label="Самовывоз",
-            button_shipping_label="Отправка почтой",
-            button_help_label="Как заказать",
-            button_my_profile="Мой профиль",
-            button_profile_bonuses_label="Бонусы",
-            button_call_staff_label="Позвать персонал",
-            button_request_bill_label="Запросить счёт",
-            button_call_waiter_label="Официант",
-            button_call_bartender_label="Бар / касса",
-            button_call_hookah_label="Кальянщик",
             staff_call_waiter_enabled=True,
             staff_call_bartender_enabled=True,
             staff_call_hookah_enabled=True,
             allow_menu_without_session=True,
             extra_config={},
-            welcome_message_template="Добро пожаловать в {partner_name}.",
-            table_activated_message_template="",
-            menu_header_template="<b>Меню {partner_name}</b>",
-            menu_requires_session_hint_template=(
-                "Меню можно смотреть уже сейчас.\n"
-                "Чтобы оформить заказ, сначала отсканируйте QR-код вашего стола."
-            ),
-            menu_active_session_hint_template="Активный стол: #{table_number}",
-            menu_empty_message_template="Сейчас в меню нет доступных позиций.",
-            ordering_help_message_template="",
-            cart_empty_message_template=(
-                "Корзина пока пуста. Откройте меню и добавьте позиции кнопками."
-            ),
-            cart_cleared_message_template="Корзина очищена.",
-            staff_call_prompt_template=(
-                "Кого нужно позвать к столу? Выберите нужный вариант ниже."
-            ),
-            staff_call_success_template=(
-                "{call_target_label} уже получает уведомление по столу #{table_number}."
-            ),
-            request_bill_prompt_template=(
-                "Как вы хотите оформить счёт? Выберите подходящий вариант ниже."
-            ),
-            request_bill_personal_success_template=(
-                "Подготовили персональный счёт #{bill_public_id} по столу #{table_number}."
-            ),
-            request_bill_shared_success_template=(
-                "Подготовили общий счёт #{bill_public_id} по столу #{table_number}."
-            ),
-            request_bill_custom_success_template=(
-                "Запрос на нестандартное разделение счёта "
-                "по столу #{table_number} отправлен персоналу."
-            ),
-            order_created_message_template=(
-                "Заказ принят: #{order_public_id}\n"
-                "Сумма: {total_amount} грн\n"
-                "Мы уже передали его персоналу."
-            ),
+            **cls._texts(),
         )
 
     @classmethod
     def from_settings(cls, settings: PartnerBotSettings) -> "BotContent":
-        defaults = cls.defaults()
         return cls(
             module_menu_enabled=settings.module_menu_enabled,
             module_tables_enabled=settings.module_tables_enabled,
@@ -177,94 +142,12 @@ class BotContent:
             ),
             max_menu_items_per_category_message=settings.max_menu_items_per_category_message,
             duplicate_request_cooldown_seconds=settings.duplicate_request_cooldown_seconds,
-            button_menu_label=settings.button_menu_label or defaults.button_menu_label,
-            button_session_label=settings.button_session_label or defaults.button_session_label,
-            button_cart_label=settings.button_cart_label or defaults.button_cart_label,
-            button_checkout_label=settings.button_checkout_label or defaults.button_checkout_label,
-            button_delivery_label=(
-                settings.button_delivery_label or defaults.button_delivery_label
-            ),
-            button_pickup_label=settings.button_pickup_label or defaults.button_pickup_label,
-            button_shipping_label=(
-                settings.button_shipping_label or defaults.button_shipping_label
-            ),
-            button_help_label=settings.button_help_label or defaults.button_help_label,
-            button_my_profile=settings.button_my_profile or defaults.button_my_profile,
-            button_profile_bonuses_label=(
-                settings.button_profile_bonuses_label or defaults.button_profile_bonuses_label
-            ),
-            button_call_staff_label=(
-                settings.button_call_staff_label or defaults.button_call_staff_label
-            ),
-            button_request_bill_label=(
-                settings.button_request_bill_label or defaults.button_request_bill_label
-            ),
-            button_call_waiter_label=(
-                settings.button_call_waiter_label or defaults.button_call_waiter_label
-            ),
-            button_call_bartender_label=(
-                settings.button_call_bartender_label or defaults.button_call_bartender_label
-            ),
-            button_call_hookah_label=(
-                settings.button_call_hookah_label or defaults.button_call_hookah_label
-            ),
             staff_call_waiter_enabled=settings.staff_call_waiter_enabled,
             staff_call_bartender_enabled=settings.staff_call_bartender_enabled,
             staff_call_hookah_enabled=settings.staff_call_hookah_enabled,
             allow_menu_without_session=settings.allow_menu_without_session,
             extra_config=settings.extra_config or {},
-            welcome_message_template=(
-                settings.welcome_message_template or defaults.welcome_message_template
-            ),
-            table_activated_message_template=(
-                settings.table_activated_message_template
-                or defaults.table_activated_message_template
-            ),
-            menu_header_template=settings.menu_header_template or defaults.menu_header_template,
-            menu_requires_session_hint_template=(
-                settings.menu_requires_session_hint_template
-                or defaults.menu_requires_session_hint_template
-            ),
-            menu_active_session_hint_template=(
-                settings.menu_active_session_hint_template
-                or defaults.menu_active_session_hint_template
-            ),
-            menu_empty_message_template=(
-                settings.menu_empty_message_template or defaults.menu_empty_message_template
-            ),
-            ordering_help_message_template=(
-                settings.ordering_help_message_template or defaults.ordering_help_message_template
-            ),
-            cart_empty_message_template=(
-                settings.cart_empty_message_template or defaults.cart_empty_message_template
-            ),
-            cart_cleared_message_template=(
-                settings.cart_cleared_message_template or defaults.cart_cleared_message_template
-            ),
-            staff_call_prompt_template=(
-                settings.staff_call_prompt_template or defaults.staff_call_prompt_template
-            ),
-            staff_call_success_template=(
-                settings.staff_call_success_template or defaults.staff_call_success_template
-            ),
-            request_bill_prompt_template=(
-                settings.request_bill_prompt_template or defaults.request_bill_prompt_template
-            ),
-            request_bill_personal_success_template=(
-                settings.request_bill_personal_success_template
-                or defaults.request_bill_personal_success_template
-            ),
-            request_bill_shared_success_template=(
-                settings.request_bill_shared_success_template
-                or defaults.request_bill_shared_success_template
-            ),
-            request_bill_custom_success_template=(
-                settings.request_bill_custom_success_template
-                or defaults.request_bill_custom_success_template
-            ),
-            order_created_message_template=(
-                settings.order_created_message_template or defaults.order_created_message_template
-            ),
+            **cls._texts(),
         )
 
     def supports_cart(self) -> bool:
@@ -344,7 +227,7 @@ class BotContent:
         return self.module_billing_enabled and self.supports_orders()
 
     def cart_disabled_message(self) -> str:
-        return "В этом боте корзина сейчас недоступна для выбранного сценария заказа."
+        return _("В этом боте корзина сейчас недоступна для выбранного сценария заказа.")
 
     def config_value(self, key: str, default: Any = None) -> Any:
         return self.extra_config.get(key, default)
@@ -366,7 +249,7 @@ class BotContent:
         if self.supports_billing_request():
             actions.append(self.button_request_bill_label)
         if actions:
-            lines.append("Доступные действия:")
+            lines.append(_("Доступные действия:"))
             lines.extend(f"• {escape_html(action)}" for action in actions)
         return lines
 
@@ -404,45 +287,58 @@ class BotContent:
             lines.append(f"{len(lines) + 1}. {text}")
 
         if self.supports_menu():
-            add_step("Откройте меню и посмотрите доступные позиции.")
+            add_step(_("Откройте меню и посмотрите доступные позиции."))
         if self.supports_table_orders():
-            add_step("Активируйте стол по QR-коду, чтобы оформить заказ.")
+            add_step(_("Активируйте стол по QR-коду, чтобы оформить заказ."))
         if self.supports_delivery_orders():
             add_step(
-                f"Для доставки нажмите «{escape_html(self.button_delivery_label)}», "
-                "добавьте позиции из меню, затем в корзине «Оформить»: адрес, время, "
-                "бонусы, способ оплаты."
+                _(
+                    "Для доставки нажмите «{button_delivery_label}», добавьте позиции из "
+                    "меню, затем в корзине «Оформить»: адрес, время, бонусы, способ оплаты.",
+                    button_delivery_label=escape_html(self.button_delivery_label),
+                )
             )
         if self.supports_pickup_orders():
             add_step(
-                f"Для самовывоза нажмите «{escape_html(self.button_pickup_label)}», "
-                "добавьте позиции из меню, затем в корзине «Оформить»: время, бонусы, "
-                "способ оплаты."
+                _(
+                    "Для самовывоза нажмите «{button_pickup_label}», добавьте позиции из "
+                    "меню, затем в корзине «Оформить»: время, бонусы, способ оплаты.",
+                    button_pickup_label=escape_html(self.button_pickup_label),
+                )
             )
         if self.supports_shipping_orders():
             add_step(
-                f"Для отправки почтой нажмите «{escape_html(self.button_shipping_label)}», "
-                "добавьте позиции из меню, затем в корзине «Оформить»: служба, получатель "
-                "и отделение, пересылка, бонусы, способ оплаты."
+                _(
+                    "Для отправки почтой нажмите «{button_shipping_label}», добавьте "
+                    "позиции из меню, затем в корзине «Оформить»: служба, получатель и "
+                    "отделение, пересылка, бонусы, способ оплаты.",
+                    button_shipping_label=escape_html(self.button_shipping_label),
+                )
             )
         if self.supports_cart():
-            add_step("Добавьте позиции кнопками из меню.")
-            add_step("Проверьте заказ в корзине.")
-            add_step("Нажмите «Оформить заказ».")
+            add_step(_("Добавьте позиции кнопками из меню."))
+            add_step(_("Проверьте заказ в корзине."))
+            add_step(_("Нажмите «Оформить заказ»."))
         if self.supports_staff_call():
             add_step(
-                f"После активации стола можно позвать персонал кнопкой "
-                f'"{escape_html(self.button_call_staff_label)}".'
+                _(
+                    "После активации стола можно позвать персонал кнопкой "
+                    '"{button_call_staff_label}".',
+                    button_call_staff_label=escape_html(self.button_call_staff_label),
+                )
             )
         if self.supports_billing_request():
             add_step(
-                f"Когда будете готовы к оплате, используйте "
-                f'"{escape_html(self.button_request_bill_label)}".'
+                _(
+                    'Когда будете готовы к оплате, используйте "{button_request_bill_label}".',
+                    button_request_bill_label=escape_html(self.button_request_bill_label),
+                )
             )
         if not lines:
-            return (
-                "В этом боте сейчас доступен профиль клиента. "
-                f"Откройте его кнопкой «{escape_html(self.button_my_profile)}»."
+            return _(
+                "В этом боте сейчас доступен профиль клиента. Откройте его кнопкой "
+                "«{button_my_profile}».",
+                button_my_profile=escape_html(self.button_my_profile),
             )
         return "\n".join(lines)
 
@@ -452,31 +348,41 @@ class BotContent:
     def start_hint_lines(self) -> list[str]:
         lines: list[str] = []
         if self.supports_tables() and self.supports_table_orders():
-            lines.append("Сканируйте QR-код стола, чтобы открыть сессию и оформить заказ.")
+            lines.append(_("Сканируйте QR-код стола, чтобы открыть сессию и оформить заказ."))
         if self.supports_pickup_orders() and self.supports_cart():
             lines.append(
-                f"Забрать заказ с собой — кнопка «{escape_html(self.button_pickup_label)}»."
+                _(
+                    "Забрать заказ с собой — кнопка «{button_pickup_label}».",
+                    button_pickup_label=escape_html(self.button_pickup_label),
+                )
             )
         if not lines and self.supports_menu():
-            lines.append(f"Можно открыть меню кнопкой «{escape_html(self.button_menu_label)}».")
+            lines.append(
+                _(
+                    "Можно открыть меню кнопкой «{button_menu_label}».",
+                    button_menu_label=escape_html(self.button_menu_label),
+                )
+            )
         return lines
 
     def table_activated_message(self, *, partner_name: str, table_number: int) -> str:
         if not self.table_activated_message_template:
             lines = [
-                f"Ваш стол: #{table_number}",
-                f"Заведение: {escape_html(partner_name)}",
+                _("Ваш стол: #{table_number}", table_number=table_number),
+                _("Заведение: {partner_name}", partner_name=escape_html(partner_name)),
                 "",
             ]
             if self.supports_cart():
                 lines.append(
-                    "Стол активирован. Теперь можно открыть меню, собрать корзину "
-                    "и оформить заказ."
+                    _(
+                        "Стол активирован. Теперь можно открыть меню, собрать корзину и "
+                        "оформить заказ."
+                    )
                 )
             elif self.supports_menu():
-                lines.append("Стол активирован. Теперь можно открыть меню.")
+                lines.append(_("Стол активирован. Теперь можно открыть меню."))
             else:
-                lines.append("Стол активирован.")
+                lines.append(_("Стол активирован."))
             return "\n".join(lines)
 
         return _render_template(

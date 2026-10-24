@@ -1,6 +1,8 @@
 from django import forms
 
-from apps.partners.models import BotInstance
+from apps.partners.bot_texts import GROUP_LABELS, editable_texts
+from apps.partners.models import BotInstance, BotText, text_key
+from core.i18n import _, gettext_in, placeholders
 
 
 class BotInstanceAdminForm(forms.ModelForm):
@@ -78,3 +80,60 @@ class BotInstanceAdminForm(forms.ModelForm):
             instance.save()
             self.save_m2m()
         return instance
+
+
+class BotTextForm(forms.ModelForm):
+    """The owner's own wording of one catalog text in one language (PQ-040)."""
+
+    scope_partner_id = None  # set by the admin for a venue's own staff
+
+    msgid = forms.ChoiceField(label="Текст в каталоге")
+
+    class Meta:
+        model = BotText
+        fields = ("partner", "language", "msgid", "text")
+        widgets = {"text": forms.Textarea(attrs={"rows": 4})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        texts = editable_texts()
+        current = self.instance.msgid if self.instance.pk else None
+        choices = [
+            (msgid, f"{_(GROUP_LABELS[group])} · {_short(msgid)}")
+            for msgid, group in sorted(texts.items(), key=lambda item: (item[1], item[0]))
+        ]
+        if current and current not in texts:
+            choices.insert(0, (current, f"(нет в каталоге) {_short(current)}"))
+        self.fields["msgid"].choices = choices
+        msgid = self.initial.get("msgid") or current
+        if msgid:
+            names = sorted(placeholders(msgid))
+            hint = "Подстановки: " + ", ".join(f"{{{name}}}" for name in names) if names else ""
+            translations = " · ".join(
+                f"{code}: {gettext_in(code, msgid)}" for code in ("uk", "ru", "en")
+            )
+            self.fields["text"].help_text = " ".join(filter(None, [hint, translations]))
+
+    def _post_clean(self):
+        if self.scope_partner_id is not None:
+            self.instance.partner_id = self.scope_partner_id
+        super()._post_clean()
+
+    def clean(self):
+        cleaned = super().clean()
+        partner_id = self.scope_partner_id or getattr(cleaned.get("partner"), "id", None)
+        language, msgid = cleaned.get("language"), cleaned.get("msgid")
+        if partner_id and language and msgid:
+            duplicate = BotText.objects.filter(
+                partner_id=partner_id, language=language, key=text_key(msgid)
+            ).exclude(id=self.instance.id)
+            if duplicate.exists():
+                raise forms.ValidationError(
+                    "Для этого текста и языка уже есть свой вариант — измените его."
+                )
+        return cleaned
+
+
+def _short(text: str, limit: int = 90) -> str:
+    flat = " ⏎ ".join(line for line in text.splitlines() if line)
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"

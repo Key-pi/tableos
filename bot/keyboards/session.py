@@ -1,5 +1,7 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from core.i18n import _
+
 
 def build_guest_session_overview_keyboard(
     *,
@@ -8,7 +10,7 @@ def build_guest_session_overview_keyboard(
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
-                text="Обновить мой стол",
+                text=_("Обновить мой стол"),
                 callback_data="guestsession:back",
             )
         ]
@@ -36,7 +38,9 @@ def build_guest_order_card_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    text=f"Подтвердить получение #{order_public_id}",
+                    text=_(
+                        "Подтвердить получение #{order_public_id}", order_public_id=order_public_id
+                    ),
                     callback_data=f"guestorderconfirm:{order_public_id}",
                 )
             ]
@@ -44,7 +48,7 @@ def build_guest_order_card_keyboard(
     keyboard.append(
         [
             InlineKeyboardButton(
-                text="К моему столу",
+                text=_("К моему столу"),
                 callback_data="guestsession:back",
             )
         ]
@@ -76,7 +80,7 @@ def build_visit_choice_keyboard(
     rows.append(
         [
             InlineKeyboardButton(
-                text="Начать новый визит",
+                text=_("Начать новый визит"),
                 callback_data=f"tv:n:{_hex(table_id)}",
             )
         ]

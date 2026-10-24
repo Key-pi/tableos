@@ -1,8 +1,8 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from core.i18n import LANGUAGE_FLAGS, LANGUAGE_NAMES, _
+from core.i18n import LANGUAGE_FLAGS, LANGUAGE_NAMES, N_, _
 
-MY_ORDERS_LABEL = "📋 Мои заказы"
+MY_ORDERS_LABEL = N_("📋 Мои заказы")
 
 
 def build_profile_summary_keyboard(
@@ -15,7 +15,7 @@ def build_profile_summary_keyboard(
                 callback_data="guestprofile:bonuses:0",
             )
         ],
-        [InlineKeyboardButton(text=MY_ORDERS_LABEL, callback_data="guestorders:0")],
+        [InlineKeyboardButton(text=_(MY_ORDERS_LABEL), callback_data="guestorders:0")],
     ]
     if show_language:
         rows.append([InlineKeyboardButton(text=_("🌐 Язык"), callback_data="guestlang:menu")])
@@ -60,15 +60,15 @@ def build_my_orders_keyboard(
     navigation: list[InlineKeyboardButton] = []
     if page > 0:
         navigation.append(
-            InlineKeyboardButton(text="← Назад", callback_data=f"guestorders:{page - 1}")
+            InlineKeyboardButton(text=_("← Назад"), callback_data=f"guestorders:{page - 1}")
         )
     if page + 1 < total_pages:
         navigation.append(
-            InlineKeyboardButton(text="Дальше →", callback_data=f"guestorders:{page + 1}")
+            InlineKeyboardButton(text=_("Дальше →"), callback_data=f"guestorders:{page + 1}")
         )
     if navigation:
         rows.append(navigation)
-    rows.append([InlineKeyboardButton(text="К профилю", callback_data="guestprofile:summary")])
+    rows.append([InlineKeyboardButton(text=_("К профилю"), callback_data="guestprofile:summary")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -78,11 +78,11 @@ def build_my_order_keyboard(*, public_id: str, can_confirm: bool) -> InlineKeybo
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="✅ Получил(а)", callback_data=f"guestorderconfirm:{public_id}"
+                    text=_("✅ Получил(а)"), callback_data=f"guestorderconfirm:{public_id}"
                 )
             ]
         )
-    rows.append([InlineKeyboardButton(text="← К заказам", callback_data="guestorders:0")])
+    rows.append([InlineKeyboardButton(text=_("← К заказам"), callback_data="guestorders:0")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -92,14 +92,14 @@ def build_profile_bonuses_keyboard(*, page: int, total_pages: int) -> InlineKeyb
     if page > 0:
         navigation_row.append(
             InlineKeyboardButton(
-                text="← Назад",
+                text=_("← Назад"),
                 callback_data=f"guestprofile:bonuses:{page - 1}",
             )
         )
     if page + 1 < total_pages:
         navigation_row.append(
             InlineKeyboardButton(
-                text="Дальше →",
+                text=_("Дальше →"),
                 callback_data=f"guestprofile:bonuses:{page + 1}",
             )
         )
@@ -108,7 +108,7 @@ def build_profile_bonuses_keyboard(*, page: int, total_pages: int) -> InlineKeyb
     rows.append(
         [
             InlineKeyboardButton(
-                text="К профилю",
+                text=_("К профилю"),
                 callback_data="guestprofile:summary",
             )
         ]

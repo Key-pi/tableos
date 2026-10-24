@@ -77,8 +77,9 @@
 - `PartnerBotSettings`: `module_shipping_enabled`, `shipping_nova_poshta`,
   `shipping_ukrposhta`, `shipping_meest`, `shipping_cost_carrier`,
   `shipping_cost_fixed`, `shipping_fee`, `shipping_free_from`,
-  `shipping_min_order`, `shipping_pay_transfer`, `shipping_pay_on_receipt`,
-  `button_shipping_label`.
+  `shipping_min_order`, `shipping_pay_transfer`, `shipping_pay_on_receipt`.
+  Подпись кнопки «Отправка почтой» — текст каталога, свой вариант — в
+  «Тексты бота» (PQ-040).
 - `MenuItem.available_for_shipping`.
 
 ## Команды
