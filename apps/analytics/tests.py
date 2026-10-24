@@ -299,7 +299,7 @@ class DailyOperationsReportTests(TestCase):
 
         metric = refresh_partner_daily_metric(
             partner_id=self.partner.id,
-            bucket_date=payment.paid_at.astimezone().date(),
+            bucket_date=payment.paid_at.astimezone(ZoneInfo(self.partner.timezone)).date(),
         )
 
         self.assertEqual(metric.revenue, Decimal("200.00"))

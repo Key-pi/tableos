@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 
@@ -233,7 +234,9 @@ class RefundRulesTests(RefundFixture):
     def test_daily_report_counts_refunds(self):
         refund = self._refund([self.juice])
         report = build_daily_operations_report(
-            partner_id=self.partner.id, bucket_date=refund.created_at.date()
+            partner_id=self.partner.id,
+            # The report day is the venue's day, not the UTC date.
+            bucket_date=refund.created_at.astimezone(ZoneInfo(self.partner.timezone)).date(),
         )
         self.assertEqual(report.refunds_total, Decimal("80.00"))
         self.assertEqual(
