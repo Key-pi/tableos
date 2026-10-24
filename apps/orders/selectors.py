@@ -34,3 +34,21 @@ def get_orders_for_session(session_id, *, partner_id):
         .prefetch_related("items")
         .order_by("created_at")
     )
+
+
+def get_guest_orders(*, partner_id, telegram_id: int):
+    """The guest's own orders in this venue, newest first («Мои заказы»).
+
+    Scoped by the partner of the bot and the guest's own Telegram ID: a public
+    order number from a callback is never enough to read someone's order.
+    """
+
+    return (
+        Order.objects.filter(
+            partner_id=partner_id,
+            guest__partner_id=partner_id,
+            guest__telegram_account__telegram_id=telegram_id,
+        )
+        .select_related("partner", "table")
+        .order_by("-created_at")
+    )

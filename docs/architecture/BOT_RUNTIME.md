@@ -85,6 +85,13 @@ billing → guest_call → staff`. aiogram выбирает первый под�
   Сохранённый адрес предлагается кнопками `rc:d:a:ok` / `rc:d:a:new`.
   Геолокация (`location_handler`) сохраняется, только если корзина гостя
   на доставку.
+- «Мои заказы»: `guestorders:<страница>` (список) и
+  `guestorder:<номер>` (карточка). Обработчик:
+  `bot/handlers/profile.py:my_orders_callback`.
+  - Заказ ищется только среди заказов этого гостя у партнёра бота
+    (`apps/orders/selectors.py:get_guest_orders`); чужой номер из callback
+    даёт «Заказ не найден».
+  - Фильтр — регулярное выражение, `guestorderconfirm:` в него не попадает.
 - Отправка почтой (PQ-034): код канала `s`. Служба — `rc:s:c:<np|up|mm>`
   (сервис отказывает в выключенной), получатель — ответ на ForceReply
   «📦 Куда отправить» (`remote_checkout.py:_is_destination_answer`),

@@ -92,7 +92,8 @@ class ProfileKeyboardTests(SimpleTestCase):
         )
 
         button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
-        self.assertEqual(button_texts, ["Бонусы"])
+        # «Мои заказы» follows the configurable bonuses button.
+        self.assertEqual(button_texts, ["Бонусы", "📋 Мои заказы"])
 
     def test_bonuses_keyboard_shows_pagination_and_back(self):
         keyboard = build_profile_bonuses_keyboard(page=1, total_pages=3)

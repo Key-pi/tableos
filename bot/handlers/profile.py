@@ -1,17 +1,26 @@
+import re
+from zoneinfo import ZoneInfo
+
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
+from apps.billing.remote_orders import tracking_link
 from apps.bonuses.selectors import (
     active_bonus_programs_for_partner,
     recent_bonus_transactions_for_guest,
 )
+from apps.orders.models import Order
+from apps.orders.selectors import get_guest_orders
+from apps.orders.services import requested_time_label
 from apps.tables.services import get_active_table_session
 from apps.users.services import get_or_create_guest_profile
 from bot.filters.content import PartnerButtonFilter
 from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.profile import (
+    build_my_order_keyboard,
+    build_my_orders_keyboard,
     build_profile_bonuses_keyboard,
     build_profile_summary_keyboard,
 )
@@ -223,3 +232,143 @@ async def profile_bonuses_callback(callback: CallbackQuery, bot: Bot) -> None:
         await callback.answer()
     else:
         await callback.answer("Без изменений")
+
+
+# «Мои заказы»: the guest's own orders with status, payment and ТТН.
+_MY_ORDERS_PAGE_SIZE = 5
+_MY_ORDERS_CALLBACK = re.compile(r"^guestorders:(\d{1,4})$|^guestorder:([0-9a-f]{1,32})$")
+
+
+def _payment_line(order: Order) -> str:
+    if order.status == Order.Status.CANCELED:
+        return ""
+    if order.paid_at is not None:
+        return "оплачен"
+    if order.payment_timing == Order.PaymentTiming.ON_RECEIPT:
+        if order.channel == Order.Channel.SHIPPING:
+            return "наложенным платежом при получении"
+        return "оплата при получении"
+    if order.payment_timing == Order.PaymentTiming.PREPAID:
+        return "ждёт подтверждения перевода"
+    return "не оплачен"
+
+
+def _local(order: Order, value):
+    return value.astimezone(ZoneInfo(order.partner.timezone))
+
+
+def _render_my_orders(orders: list[Order], *, page: int, total_pages: int) -> str:
+    if not orders:
+        return "<b>Мои заказы</b>\nЗаказов пока нет."
+    lines = ["<b>Мои заказы</b>"]
+    for order in orders:
+        payment = _payment_line(order)
+        details = f"{order.get_status_display()} · {order.total_amount} грн"
+        if payment:
+            details += f" · {payment}"
+        lines += [
+            "",
+            f"<b>#{escape_html(order.public_id)}</b> · "
+            f"{_local(order, order.created_at):%d.%m %H:%M} · "
+            f"{escape_html(order.get_channel_display())}",
+            details,
+        ]
+        if order.tracking_number:
+            lines.append(f"ТТН <code>{escape_html(order.tracking_number)}</code>")
+    if total_pages > 1:
+        lines += ["", f"Страница {page + 1}/{total_pages}"]
+    return "\n".join(lines)
+
+
+def _render_my_order(order: Order) -> str:
+    lines = [
+        f"<b>Заказ #{escape_html(order.public_id)}</b>",
+        f"{escape_html(order.get_channel_display())} · "
+        f"{_local(order, order.created_at):%d.%m.%Y %H:%M}",
+        f"Статус: {order.get_status_display()}",
+    ]
+    if order.channel == Order.Channel.TABLE and order.table is not None:
+        lines.append(f"Стол #{order.table.number}")
+    elif order.channel in (Order.Channel.PICKUP, Order.Channel.DELIVERY):
+        lines.append(f"Время: {escape_html(requested_time_label(order))}")
+    if order.channel == Order.Channel.DELIVERY:
+        lines.append(f"Адрес: {escape_html(order.delivery_address)}")
+    if order.channel == Order.Channel.SHIPPING:
+        lines.append(
+            f"{escape_html(order.get_shipping_carrier_display())}: "
+            f"{escape_html(order.shipping_destination)}"
+        )
+        if order.tracking_number:
+            lines.append(f"ТТН <code>{escape_html(order.tracking_number)}</code>")
+            link = tracking_link(order.shipping_carrier, order.tracking_number)
+            if link:
+                lines.append(f'<a href="{escape_html(link)}">Отследить посылку</a>')
+    lines.append("")
+    for item in order.items.all():
+        lines.append(
+            f"• {escape_html(item.item_name)} × {item.quantity} — "
+            f"{item.unit_price * item.quantity} грн"
+        )
+    lines.append(f"<b>Итого: {order.total_amount} грн</b>")
+    if order.bonus_spent:
+        lines.append(f"Оплачено бонусами: {order.bonus_spent}")
+    payment = _payment_line(order)
+    if payment:
+        lines.append(f"Оплата: {payment}")
+    return "\n".join(lines)
+
+
+def _can_confirm_from_list(order: Order) -> bool:
+    # Without a table only a parcel on its way is confirmed by the guest
+    # (orders/services.py:confirm_order_received_by_guest, PQ-034).
+    return order.channel == Order.Channel.SHIPPING and order.status == Order.Status.DELIVERING
+
+
+def _load_my_orders(partner_id, telegram_id: int, page: int):
+    queryset = get_guest_orders(partner_id=partner_id, telegram_id=telegram_id)
+    total = queryset.count()
+    total_pages = max(1, (total + _MY_ORDERS_PAGE_SIZE - 1) // _MY_ORDERS_PAGE_SIZE)
+    page = min(max(page, 0), total_pages - 1)
+    start = page * _MY_ORDERS_PAGE_SIZE
+    return list(queryset[start:start + _MY_ORDERS_PAGE_SIZE]), page, total_pages
+
+
+def _load_my_order(partner_id, telegram_id: int, public_id: str):
+    return (
+        get_guest_orders(partner_id=partner_id, telegram_id=telegram_id)
+        .prefetch_related("items")
+        .filter(public_id=public_id)
+        .first()
+    )
+
+
+@router.callback_query(lambda c: bool(c.data and _MY_ORDERS_CALLBACK.match(c.data)))
+async def my_orders_callback(callback: CallbackQuery, bot: Bot) -> None:
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    match = _MY_ORDERS_CALLBACK.match(callback.data)
+    if match.group(1) is not None:
+        orders, page, total_pages = await sync_to_async(_load_my_orders)(
+            partner.id, callback.from_user.id, int(match.group(1))
+        )
+        text = _render_my_orders(orders, page=page, total_pages=total_pages)
+        markup = build_my_orders_keyboard(
+            orders=[
+                (order.public_id, f"#{order.public_id} · {order.get_status_display()}")
+                for order in orders
+            ],
+            page=page,
+            total_pages=total_pages,
+        )
+    else:
+        order = await sync_to_async(_load_my_order)(
+            partner.id, callback.from_user.id, match.group(2)
+        )
+        if order is None:
+            await callback.answer("Заказ не найден.", show_alert=True)
+            return
+        text = _render_my_order(order)
+        markup = build_my_order_keyboard(
+            public_id=order.public_id, can_confirm=_can_confirm_from_list(order)
+        )
+    updated = await _safe_profile_message_edit(callback.message, text, reply_markup=markup)
+    await callback.answer() if updated else await callback.answer("Без изменений")
