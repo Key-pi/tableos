@@ -38,7 +38,7 @@ flowchart LR
 | Management-команды, `runserver` | `manage.py` | миграции, наполнение демо-данными, `runbot`, `ensure_admin` | `core.settings.local` |
 | Telegram-бот | `manage.py runbot` → `bot/main.py:run_polling` | polling всех активных `BotInstance` в одном процессе | `core.settings.local` (через `manage.py`) |
 | Воркер Celery | `celery -A core.celery worker` → `core/celery.py` | уведомления персонала и гостей, рассылки, обновление метрик | `core.settings.local` |
-| Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `refresh-daily-partner-metrics` (15 мин) | `core.settings.local` |
+| Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `cancel-expired-transfer-orders` (5 мин), `refresh-daily-partner-metrics` (15 мин) | `core.settings.local` |
 | PostgreSQL 16, Redis 7 | `docker-compose.yml` | долговечные данные; брокер и хранилище результатов Celery | — |
 
 `docker-compose.yml` объявляет `db`, `redis` (оба с healthcheck), разовый
@@ -220,6 +220,13 @@ apps.notifications.tasks` — цикл, разорванный только им
    (`record_payment_on_receipt`: `cash` или `terminal`) или отказ гостя
    (`cancel_unpaid_remote_order`: счёт аннулируется с причиной
    `guest_refused`, бонусы возвращаются).
+   **Неоплаченные заказы** (PQ-036): `place_remote_order` под блокировкой
+   гостя отказывает, если у него уже `PartnerBotSettings.remote_unpaid_orders_limit`
+   открытых неоплаченных удалённых заказов (`open_unpaid_remote_orders`;
+   0 — без лимита, по умолчанию 2); заказ с переводом заранее, оплату
+   которого никто не подтвердил за `transfer_wait_minutes` (по умолчанию 60,
+   не меньше 15, 0 — выключено), отменяет задача beat
+   `billing.cancel_expired_transfer_orders`.
    **Доставка** (`Order.channel = delivery`, [DELIVERY.md](DELIVERY.md), PQ-032)
    идёт тем же путём, плюс адрес: текст обязателен
    (`remote_orders.py:save_guest_delivery_address`), геолокация по желанию
@@ -413,8 +420,8 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 464 теста после защиты прав владельца, зелёные на SQLite и на
-  PostgreSQL 16. Одиннадцать выполняются только на PostgreSQL и на SQLite
+- 474 теста после лимита неоплаченных заказов, зелёные на SQLite и на
+  PostgreSQL 16. Двенадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа
   (`apps/orders/test_concurrency.py`); параллельные сканы QR, два гостя
@@ -423,7 +430,8 @@ Admin показывает поля жизненного цикла, произ�
   оплата бонусами, последняя оплата, аннулирование против оплаты и отмена
   против выставления счёта (`apps/billing/test_concurrency.py`); два
   сотрудника вводят ТТН одной посылки
-  (`apps/billing/test_shipping_concurrency.py`). Тест
+  (`apps/billing/test_shipping_concurrency.py`); автоотмена против
+  подтверждения перевода (`apps/billing/test_unpaid_concurrency.py`). Тест
   миграции (`apps/tables/test_visit_migration.py`) прогоняет заполнение
   визитов назад и вперёд.
 - Записанные прогоны — в

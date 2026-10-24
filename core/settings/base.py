@@ -124,6 +124,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "notifications.recover_stalled_broadcast_campaigns",
         "schedule": timedelta(minutes=5),
     },
+    # PQ-036: unconfirmed transfers past the venue's wait are canceled.
+    "cancel-expired-transfer-orders": {
+        "task": "billing.cancel_expired_transfer_orders",
+        "schedule": timedelta(minutes=5),
+    },
     "refresh-daily-partner-metrics": {
         "task": "analytics.refresh_daily_partner_metrics",
         "schedule": timedelta(minutes=15),

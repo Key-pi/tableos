@@ -59,6 +59,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                     "module_delivery_enabled",
                     ("delivery_pay_transfer", "delivery_pay_on_receipt"),
                     "transfer_payment_details",
+                    ("remote_unpaid_orders_limit", "transfer_wait_minutes"),
                     "delivery_fee",
                     "delivery_free_from",
                     "delivery_min_order",

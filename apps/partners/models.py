@@ -7,6 +7,8 @@ from django.db import models
 from core.database.models import TimeStampedModel
 from core.security.crypto import decrypt_text, encrypt_text
 
+MIN_TRANSFER_WAIT_MINUTES = 15
+
 _ROUTED_REPLY_LABEL_FIELDS = (
     "button_menu_label",
     "button_session_label",
@@ -239,8 +241,26 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name="Реквизиты для оплаты переводом",
         help_text=(
             "Куда гость переводит деньги за заказы с предоплатой (самовывоз, "
-            "доставка): номер карты или IBAN, получатель. Гость видит этот текст "
-            "перед оплатой."
+            "доставка, отправка): номер карты или IBAN, получатель. Гость видит "
+            "этот текст перед оплатой. Меняет только владелец."
+        ),
+    )
+    # Unpaid remote orders (AA-037, PQ-036): limits against fake orders.
+    remote_unpaid_orders_limit = models.PositiveSmallIntegerField(
+        default=2,
+        verbose_name="Неоплаченных заказов на гостя, не больше",
+        help_text=(
+            "Самовывоз, доставка, отправка: сколько открытых неоплаченных заказов "
+            "может быть у одного гостя. 0 — без лимита."
+        ),
+    )
+    transfer_wait_minutes = models.PositiveSmallIntegerField(
+        default=60,
+        verbose_name="Ждать перевод, минут",
+        help_text=(
+            "Заказ с оплатой переводом, оплату которого никто не подтвердил за это "
+            "время, отменяется автоматически, бонусы возвращаются. Не меньше 15; "
+            "0 — не отменять."
         ),
     )
     delivery_fee = models.DecimalField(
@@ -438,6 +458,12 @@ class PartnerBotSettings(TimeStampedModel):
                     "shipping_cost_carrier",
                     "Для отправки включите хотя бы один вариант оплаты пересылки.",
                 )
+        if 0 < self.transfer_wait_minutes < MIN_TRANSFER_WAIT_MINUTES:
+            add_error(
+                "transfer_wait_minutes",
+                f"Не меньше {MIN_TRANSFER_WAIT_MINUTES} минут (или 0 — не отменять): "
+                "перевод может идти не сразу.",
+            )
         for field in (
             "delivery_fee",
             "delivery_free_from",

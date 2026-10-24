@@ -571,6 +571,14 @@ def place_remote_order(
     guest = _guest(partner_id, telegram_id, lock=True)
     if not guest.phone:
         raise RemoteOrderError("Поделитесь номером телефона, чтобы оформить заказ.")
+    # AA-037 (PQ-036): the guest lock serialises this count with other
+    # placements of the same guest.
+    limit = settings.remote_unpaid_orders_limit
+    if limit and open_unpaid_remote_orders(guest).count() >= limit:
+        raise RemoteOrderError(
+            f"У вас уже есть неоплаченные заказы ({limit}). Оплатите или получите их, "
+            "чтобы оформить новый."
+        )
     if is_delivery and not guest.delivery_address:
         raise RemoteOrderError("Укажите адрес доставки.")
     if is_shipping:
@@ -866,6 +874,85 @@ def cancel_unpaid_remote_order(*, order: Order, actor, comment: str = "") -> Ord
     )
 
 
+def open_unpaid_remote_orders(guest: GuestProfile):
+    """The guest's remote orders not yet paid, neither finished nor canceled."""
+
+    return Order.objects.filter(
+        partner_id=guest.partner_id,
+        guest=guest,
+        channel__in=Order.REMOTE_CHANNELS,
+        paid_at__isnull=True,
+    ).exclude(status__in=[Order.Status.COMPLETED, Order.Status.CANCELED])
+
+
+@transaction.atomic
+def expire_unconfirmed_transfer(*, order_id, now: datetime | None = None) -> bool:
+    """Cancel one order whose transfer nobody confirmed in time (PQ-036).
+
+    Same locks and effects as ``reject_transfer`` (Bill → Order; the bill is
+    voided with ``payment_not_received``, bonuses come back), with no staff
+    actor. Rechecked under the locks, so a transfer confirmed meanwhile wins.
+    """
+
+    now = now or timezone.now()
+    order = Order.objects.select_related("partner").filter(id=order_id).first()
+    if order is None or order.partner.status != Partner.Status.ACTIVE:
+        return False
+    settings = PartnerBotSettings.objects.filter(partner_id=order.partner_id).first()
+    minutes = settings.transfer_wait_minutes if settings is not None else 0
+    if not minutes or order.payment_timing != PREPAID:
+        return False
+    try:
+        bill = _order_bill(order)
+    except RemoteOrderError:
+        return False
+    order = _lock_remote_order(order)
+    if not awaits_transfer_check(order) or order.created_at > now - timedelta(minutes=minutes):
+        return False
+    if bill.status == Bill.Status.PAID or bill.paid_amount > 0:
+        return False
+    _void_locked_bill(
+        bill=bill,
+        actor=None,
+        reason_code=BillAdjustment.ReasonCode.PAYMENT_NOT_RECEIVED,
+        reason_text=f"Автоотмена: перевод не подтверждён за {minutes} мин.",
+    )
+    transition_order_status(
+        order=order,
+        to_status=Order.Status.CANCELED,
+        actor_user=None,
+        note=f"Оплата переводом не подтверждена за {minutes} мин — отменён автоматически.",
+    )
+    return True
+
+
+def cancel_expired_transfer_orders(*, now: datetime | None = None) -> int:
+    """Beat job: cancel every remote order whose transfer wait has passed.
+
+    Each order is its own transaction; suspended partners are left alone (the
+    decision is taken at run time, AGENTS.md).
+    """
+
+    now = now or timezone.now()
+    canceled = 0
+    waits = PartnerBotSettings.objects.filter(
+        partner__status=Partner.Status.ACTIVE, transfer_wait_minutes__gt=0
+    ).values_list("partner_id", "transfer_wait_minutes")
+    for partner_id, minutes in waits:
+        order_ids = Order.objects.filter(
+            partner_id=partner_id,
+            channel__in=Order.REMOTE_CHANNELS,
+            payment_timing=PREPAID,
+            paid_at__isnull=True,
+            status=Order.Status.NEW,
+            created_at__lte=now - timedelta(minutes=minutes),
+        ).values_list("id", flat=True)
+        for order_id in list(order_ids):
+            if expire_unconfirmed_transfer(order_id=order_id, now=now):
+                canceled += 1
+    return canceled
+
+
 def normalize_tracking_number(raw: str) -> str:
     number = "".join((raw or "").split()).upper()
     if not TRACKING_NUMBER_RE.match(number):
@@ -927,7 +1014,10 @@ __all__ = [
     "get_remote_quote",
     "awaits_payment_on_receipt",
     "awaits_transfer_check",
+    "cancel_expired_transfer_orders",
     "cancel_unpaid_remote_order",
+    "expire_unconfirmed_transfer",
+    "open_unpaid_remote_orders",
     "carrier_title",
     "carriers_for",
     "get_shipping_terms",
