@@ -15,7 +15,7 @@ class OpeningHoursInline(admin.TabularInline):
 
     model = OpeningHours
     extra = 0
-    fields = ("weekday", "opens_at", "closes_at")
+    fields = ("scope", "weekday", "opens_at", "closes_at")
     verbose_name = "Интервал работы"
     verbose_name_plural = (
         "Часы работы (время заведения; закрытие раньше открытия — после полуночи; "
@@ -310,3 +310,16 @@ class PartnerBotSettingsAdmin(ScopedAdminMixin):
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         _alert_owners_if_transfer_details_changed(form, obj, request.user)
+
+
+@admin.register(OpeningHours)
+class OpeningHoursAdmin(ScopedAdminMixin):
+    """Opening hours the owner edits: common ones and per module (pickup,
+    delivery). A module without its own hours uses the common ones; without
+    any hours it is always open."""
+
+    admin_section = AdminSection.PARTNER_PROFILE
+    list_display = ("scope", "weekday", "opens_at", "closes_at", "partner")
+    list_filter = ("partner", "scope", "weekday")
+    ordering = ("partner", "scope", "weekday", "opens_at")
+    fields = ("partner", "scope", "weekday", "opens_at", "closes_at")

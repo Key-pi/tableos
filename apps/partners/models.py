@@ -638,24 +638,44 @@ class OpeningHours(TimeStampedModel):
         SATURDAY = 5, "Суббота"
         SUNDAY = 6, "Воскресенье"
 
+    class Scope(models.TextChoices):
+        # Modules with their own hours; empty = the venue's common hours,
+        # used by a module that has none of its own.
+        COMMON = "", "Общие (для всех модулей)"
+        PICKUP = "pickup", "Самовывоз"
+        DELIVERY = "delivery", "Доставка"
+
     partner = models.ForeignKey(
         Partner,
         on_delete=models.CASCADE,
         related_name="opening_hours",
         verbose_name="Заведение",
     )
+    scope = models.CharField(
+        max_length=16,
+        choices=Scope.choices,
+        default=Scope.COMMON,
+        blank=True,
+        verbose_name="Для чего",
+        help_text=(
+            "Свои часы модуля. Если у модуля своих часов нет, действуют общие; "
+            "если нет и общих — модуль работает всегда."
+        ),
+    )
     weekday = models.PositiveSmallIntegerField(choices=Weekday.choices, verbose_name="День недели")
     opens_at = models.TimeField(verbose_name="Открытие")
     closes_at = models.TimeField(verbose_name="Закрытие")
 
     class Meta:
-        ordering = ["partner_id", "weekday", "opens_at"]
+        ordering = ["partner_id", "scope", "weekday", "opens_at"]
         verbose_name = "Часы работы"
         verbose_name_plural = "Часы работы"
 
     def __str__(self) -> str:
+        prefix = f"{self.get_scope_display()}: " if self.scope else ""
         return (
-            f"{self.get_weekday_display()} {self.opens_at:%H:%M}–{self.closes_at:%H:%M}"
+            f"{prefix}{self.get_weekday_display()} "
+            f"{self.opens_at:%H:%M}–{self.closes_at:%H:%M}"
         )
 
     def clean(self) -> None:

@@ -199,8 +199,10 @@ async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
     title, how_to, removed_reason = REMOTE_FLOW_INTROS[channel]
     if not (_remote_flow_supported(content, channel) and content.supports_cart()):
         text = CHANNEL_OFF_MESSAGES[channel]
-    elif channel != Order.Channel.SHIPPING and not await sync_to_async(available_slots)(partner):
-        text = await sync_to_async(closed_message)(partner)
+    elif channel != Order.Channel.SHIPPING and not await sync_to_async(available_slots)(
+        partner, channel=channel
+    ):
+        text = await sync_to_async(closed_message)(partner, channel)
     else:
         try:
             _cart, removed = await sync_to_async(switch_cart_channel_for_telegram_user)(

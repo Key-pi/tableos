@@ -114,6 +114,15 @@ VENUES = (
 # The owner whose Telegram is replaced by DEMO_TELEGRAM_ID in each venue.
 TESTER_OWNER_USERNAME = {HOOKAH_SLUG: "smoke_owner_1", CAFE_SLUG: "cafe_owner_1"}
 
+def _hours_text(partner: Partner, module: str) -> str:
+    from apps.partners.opening_hours import intervals_for
+
+    hours = intervals_for(partner, module)
+    if not hours:
+        return "открыто всегда"
+    return f"ежедневно {hours[0].opens_at:%H:%M}–{hours[0].closes_at:%H:%M}"
+
+
 def _payment_options(settings: PartnerBotSettings, module: str) -> str:
     options = []
     if getattr(settings, f"{module}_pay_transfer"):
@@ -387,11 +396,23 @@ class Command(BaseCommand):
         settings.save()
 
         # Night Owl works 18:00–04:00 (pickup is refused in the daytime: handy to
-        # see the "closed" message); Riverstone has no hours, i.e. always open.
+        # see the "closed" message). Riverstone has no common hours (pickup is
+        # always open) but delivers only 10:00–22:00: hours per module.
         OpeningHours.objects.filter(partner=partner).delete()
         if is_hookah:
             OpeningHours.objects.bulk_create(
                 OpeningHours(partner=partner, weekday=day, opens_at=time(18), closes_at=time(4))
+                for day in range(7)
+            )
+        else:
+            OpeningHours.objects.bulk_create(
+                OpeningHours(
+                    partner=partner,
+                    scope=OpeningHours.Scope.DELIVERY,
+                    weekday=day,
+                    opens_at=time(10),
+                    closes_at=time(22),
+                )
                 for day in range(7)
             )
         return partner
@@ -537,19 +558,14 @@ class Command(BaseCommand):
                 out(self.style.WARNING(f"  бот: не подключён — впишите токен в {env_name}"))
             pickup = PartnerBotSettings.objects.filter(partner=partner).first()
             if pickup is not None and pickup.module_pickup_enabled:
-                hours = OpeningHours.objects.filter(partner=partner).first()
-                hours_text = (
-                    f"ежедневно {hours.opens_at:%H:%M}–{hours.closes_at:%H:%M}"
-                    if hours is not None
-                    else "открыто всегда"
-                )
+                hours_text = _hours_text(partner, "pickup")
                 payment = _payment_options(pickup, "pickup")
                 out(f"  самовывоз: включён, {hours_text}, оплата: {payment}")
             if pickup is not None and pickup.module_delivery_enabled:
                 fee = pickup.delivery_fee
                 free = pickup.delivery_free_from
                 out(
-                    f"  доставка: включена, {fee:.0f} грн"
+                    f"  доставка: включена, {_hours_text(partner, 'delivery')}, {fee:.0f} грн"
                     + (f", бесплатно от {free:.0f} грн" if free is not None else "")
                     + f", минимальный заказ {pickup.delivery_min_order:.0f} грн"
                     + f", оплата: {_payment_options(pickup, 'delivery')}"

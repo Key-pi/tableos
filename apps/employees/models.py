@@ -42,6 +42,19 @@ class EmployeeProfile(PartnerBoundModel):
     )
     notify_on_guest_calls = models.BooleanField(default=True, verbose_name="О вызовах персонала")
     notify_on_billing_requests = models.BooleanField(default=True, verbose_name="О запросах счёта")
+    # Orders of which ordering modules this employee hears about (e.g. a
+    # courier — only delivery). Applies to new orders and status changes.
+    notify_channel_table = models.BooleanField(default=True, verbose_name="Заказы за столом")
+    notify_channel_pickup = models.BooleanField(default=True, verbose_name="Самовывоз")
+    notify_channel_delivery = models.BooleanField(default=True, verbose_name="Доставка")
+    notify_channel_shipping = models.BooleanField(default=True, verbose_name="Отправка почтой")
+
+    CHANNEL_NOTIFY_FIELDS = {
+        "table": "notify_channel_table",
+        "pickup": "notify_channel_pickup",
+        "delivery": "notify_channel_delivery",
+        "shipping": "notify_channel_shipping",
+    }
     # Granted only by the venue owner: change or void bills (PQ-028).
     can_adjust_bills = models.BooleanField(
         default=False,

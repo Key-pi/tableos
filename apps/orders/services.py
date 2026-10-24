@@ -963,7 +963,7 @@ def requested_time_label(order: Order) -> str:
 def _staff_notification_recipients(order: Order):
     # Staff notifications must stay partner-scoped even if one Telegram account
     # is reused by the same person across different venues.
-    return EmployeeProfile.objects.filter(
+    recipients = EmployeeProfile.objects.filter(
         partner_id=order.partner_id,
         is_active=True,
         bot_notifications_enabled=True,
@@ -971,6 +971,11 @@ def _staff_notification_recipients(order: Order):
         user__is_active=True,
         user__partner_id=order.partner_id,
     )
+    # Each employee chooses the ordering modules they hear about.
+    channel_field = EmployeeProfile.CHANNEL_NOTIFY_FIELDS.get(order.channel)
+    if channel_field:
+        recipients = recipients.filter(**{channel_field: True})
+    return recipients
 
 
 def _create_staff_notifications_for_order_created(order: Order, *, note: str = "") -> None:

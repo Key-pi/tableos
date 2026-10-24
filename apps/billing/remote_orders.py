@@ -67,7 +67,7 @@ from apps.orders.services import (
     transition_order_status,
 )
 from apps.partners.models import Partner, PartnerBotSettings
-from apps.partners.opening_hours import describe_opening_hours, is_open_at
+from apps.partners.opening_hours import describe_opening_hours, intervals_for, is_open_at
 from apps.users.models import GuestProfile, User
 
 # Slot code -> minutes from now. ``now`` means as soon as possible.
@@ -379,24 +379,28 @@ def get_delivery_terms(partner_id) -> DeliveryTerms:
     )
 
 
-def closed_message(partner: Partner) -> str:
-    hours = describe_opening_hours(partner)
+def closed_message(partner: Partner, channel: str = "") -> str:
+    hours = describe_opening_hours(partner, scope=channel)
     if hours:
         return f"Сейчас заказы не принимаем. Часы работы: {hours}."
     return "Сейчас заказы не принимаем."
 
 
-def available_slots(partner: Partner, now: datetime | None = None) -> tuple[str, ...]:
-    """Slots whose moment falls within opening hours; none if closed now."""
+def available_slots(
+    partner: Partner, now: datetime | None = None, *, channel: str = ""
+) -> tuple[str, ...]:
+    """Slots whose moment falls within the module's hours; none if closed now."""
 
     now = now or timezone.now()
-    if not is_open_at(partner, now):
+    intervals = intervals_for(partner, channel)
+    if not is_open_at(partner, now, intervals=intervals):
         return ()
     return tuple(
         code
         for code, minutes in TIME_SLOTS.items()
-        if is_open_at(partner, now + timedelta(minutes=minutes))
+        if is_open_at(partner, now + timedelta(minutes=minutes), intervals=intervals)
     )
+
 
 
 def get_remote_quote(
@@ -429,7 +433,7 @@ def get_remote_quote(
         bonus_to_spend=bonus_to_spend,
         to_pay=_money(total - bonus_to_spend),
         payment_details=settings.transfer_payment_details.strip(),
-        slots=available_slots(settings.partner),
+        slots=available_slots(settings.partner, channel=channel),
         items_total=items_total,
         delivery_fee=fee,
         delivery_address=guest.delivery_address if channel == Order.Channel.DELIVERY else "",
@@ -564,8 +568,8 @@ def place_remote_order(
     if channel in TIMED_CHANNELS:
         if slot not in TIME_SLOTS:
             raise RemoteOrderError("Выберите время ещё раз.")
-        if slot not in available_slots(partner, now):
-            raise RemoteOrderError(closed_message(partner))
+        if slot not in available_slots(partner, now, channel=channel):
+            raise RemoteOrderError(closed_message(partner, channel))
     elif shipping_cost not in shipping_cost_options_for(settings):
         raise RemoteOrderError("Этот вариант оплаты пересылки сейчас недоступен — выберите другой.")
     guest = _guest(partner_id, telegram_id, lock=True)

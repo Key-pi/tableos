@@ -76,6 +76,12 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
                     "notify_on_order_status_changed",
                     "notify_on_guest_calls",
                     "notify_on_billing_requests",
+                    (
+                        "notify_channel_table",
+                        "notify_channel_pickup",
+                        "notify_channel_delivery",
+                        "notify_channel_shipping",
+                    ),
                 ),
                 "description": (
                     "Какие рабочие уведомления сотрудник получает в Telegram-боте."

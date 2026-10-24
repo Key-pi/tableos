@@ -431,9 +431,9 @@ def _is_address_answer(message: Message) -> bool:
 
 
 async def _send_time_step(target, partner, channel: str, *, edit: bool = False) -> None:
-    slots = await sync_to_async(available_slots)(partner)
+    slots = await sync_to_async(available_slots)(partner, channel=channel)
     if not slots:
-        await _reply(target, await sync_to_async(closed_message)(partner), edit=edit)
+        await _reply(target, await sync_to_async(closed_message)(partner, channel), edit=edit)
         return
     code = CODE_OF[channel]
     rows = [

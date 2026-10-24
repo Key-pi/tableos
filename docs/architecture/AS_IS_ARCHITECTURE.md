@@ -243,6 +243,13 @@ apps.notifications.tasks` — цикл, разорванный только им
    (`record_payment_on_receipt`: `cash` или `terminal`) или отказ гостя
    (`cancel_unpaid_remote_order`: счёт аннулируется с причиной
    `guest_refused`, бонусы возвращаются).
+   **Часы и уведомления по модулю** (PQ-038): у самовывоза и доставки могут
+   быть свои часы (`OpeningHours.scope`; без своих — общие, без общих —
+   всегда открыто; `partners/opening_hours.py:intervals_for`,
+   `remote_orders.py:available_slots(channel=…)`); сотрудник получает
+   уведомления о заказах только выбранных способов
+   (`EmployeeProfile.notify_channel_*`,
+   `orders/services.py:_staff_notification_recipients`).
    **Неоплаченные заказы** (PQ-036): `place_remote_order` под блокировкой
    гостя отказывает, если у него уже `PartnerBotSettings.remote_unpaid_orders_limit`
    открытых неоплаченных удалённых заказов (`open_unpaid_remote_orders`;
@@ -452,7 +459,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 512 тестов после возвратов, зелёные на SQLite и на
+- 517 тестов после часов и уведомлений по модулю, зелёные на SQLite и на
   PostgreSQL 16. Тринадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

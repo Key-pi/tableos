@@ -397,3 +397,28 @@ class ChannelReportTests(PickupFixtureMixin, TestCase):
         self.assertEqual(pickup["orders_count"], 1)
         self.assertEqual(pickup["revenue"], Decimal("400.00"))
         self.assertFalse([item for item in report.channel_breakdown if item["channel"] == "table"])
+
+
+class ChannelNotificationTests(PickupFixtureMixin, TestCase):
+    """Staff choose the ordering modules they hear about (constructor, PQ-033)."""
+
+    def test_employee_without_pickup_gets_no_pickup_order(self):
+        save_guest_phone(partner_id=self.partner.id, telegram_id=TG, phone="+380501112233")
+        courier = User.objects.create_user(
+            username="courier", password="x", partner=self.partner, role=User.Role.WAITER
+        )
+        EmployeeProfile.objects.create(
+            partner=self.partner,
+            user=courier,
+            telegram_account=TelegramAccount.objects.create(telegram_id=7300902),
+            notify_channel_pickup=False,
+        )
+        self._cart()
+        order = self._place()
+        recipients = set(
+            StaffNotification.objects.filter(order=order).values_list(
+                "employee__user__username", flat=True
+            )
+        )
+        self.assertIn("pickup_cashier", recipients)
+        self.assertNotIn("courier", recipients)

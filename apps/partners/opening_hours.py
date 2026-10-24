@@ -4,6 +4,9 @@ Intervals live in ``OpeningHours`` in the venue's local time
 (``Partner.timezone``). An interval whose ``closes_at`` is at or before
 ``opens_at`` runs past midnight into the next day. A venue without intervals
 is always open.
+
+Hours per module (``OpeningHours.scope``): pickup and delivery may have their
+own intervals; a module without its own uses the common ones (empty scope).
 """
 
 from __future__ import annotations
@@ -16,8 +19,13 @@ from apps.partners.models import OpeningHours, Partner
 _SHORT_DAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 
 
-def _intervals(partner: Partner) -> list[OpeningHours]:
-    return list(OpeningHours.objects.filter(partner=partner).order_by("weekday", "opens_at"))
+def intervals_for(partner: Partner, scope: str = "") -> list[OpeningHours]:
+    rows = OpeningHours.objects.filter(partner=partner).order_by("weekday", "opens_at")
+    if scope:
+        own = list(rows.filter(scope=scope))
+        if own:
+            return own
+    return list(rows.filter(scope=""))
 
 
 def _covers(interval: OpeningHours, *, weekday: int, moment: time) -> bool:
@@ -32,8 +40,8 @@ def _covers(interval: OpeningHours, *, weekday: int, moment: time) -> bool:
     return False
 
 
-def is_open_at(partner: Partner, moment: datetime, *, intervals=None) -> bool:
-    intervals = _intervals(partner) if intervals is None else intervals
+def is_open_at(partner: Partner, moment: datetime, *, intervals=None, scope: str = "") -> bool:
+    intervals = intervals_for(partner, scope) if intervals is None else intervals
     if not intervals:
         return True
     local = moment.astimezone(ZoneInfo(partner.timezone))
@@ -42,14 +50,14 @@ def is_open_at(partner: Partner, moment: datetime, *, intervals=None) -> bool:
     return any(_covers(interval, weekday=weekday, moment=local_time) for interval in intervals)
 
 
-def has_opening_hours(partner: Partner) -> bool:
-    return OpeningHours.objects.filter(partner=partner).exists()
+def has_opening_hours(partner: Partner, scope: str = "") -> bool:
+    return bool(intervals_for(partner, scope))
 
 
-def describe_opening_hours(partner: Partner) -> str:
+def describe_opening_hours(partner: Partner, scope: str = "") -> str:
     """Human text such as ``Пн 10:00–22:00, Пт 18:00–03:00``; empty if none."""
 
-    intervals = _intervals(partner)
+    intervals = intervals_for(partner, scope)
     if not intervals:
         return ""
     by_day: dict[int, list[str]] = {}

@@ -69,8 +69,14 @@ class SeedBaselineDemoTests(TestCase):
         self.assertFalse(
             MenuItem.objects.filter(partner=hookah, available_for_shipping=True).exists()
         )
-        self.assertIn("доставка: включена, 60 грн, бесплатно от 800 грн", output)
-        self.assertFalse(OpeningHours.objects.filter(partner=cafe).exists())
+        self.assertIn(
+            "доставка: включена, ежедневно 10:00–22:00, 60 грн, бесплатно от 800 грн", output
+        )
+        # The cafe has no common hours (pickup always open), only delivery hours.
+        self.assertFalse(OpeningHours.objects.filter(partner=cafe, scope="").exists())
+        self.assertEqual(
+            OpeningHours.objects.filter(partner=cafe, scope="delivery").count(), 7
+        )
         self.assertFalse(
             MenuItem.objects.get(partner=hookah, public_id="SMKHK001").available_for_pickup
         )
