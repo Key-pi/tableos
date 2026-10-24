@@ -310,8 +310,8 @@ class Command(BaseCommand):
         if user is None:
             user = user_model(username=username)
         user.email = email
-        user.first_name = "Platform"
-        user.last_name = "Admin"
+        user.first_name = "Администратор"
+        user.last_name = "платформы"
         user.role = user_model.Role.ADMIN
         user.is_staff = True
         user.is_superuser = True
@@ -990,7 +990,7 @@ class Command(BaseCommand):
                 "Maksym",
                 "Bondar",
                 "manager",
-                "General Manager",
+                "Управляющий",
                 Decimal("220.00"),
                 Decimal("2.50"),
                 700100004,
@@ -1002,7 +1002,7 @@ class Command(BaseCommand):
                 "Denys",
                 "Tkachenko",
                 "hookah_master",
-                "Hookah Master",
+                "Кальянный мастер",
                 Decimal("180.00"),
                 Decimal("5.00"),
                 700100005,
@@ -1055,7 +1055,7 @@ class Command(BaseCommand):
                 "Roman",
                 "Lysenko",
                 "cashier",
-                "Bartender",
+                "Бармен",
                 Decimal("170.00"),
                 Decimal("3.00"),
                 700200004,
@@ -1067,7 +1067,7 @@ class Command(BaseCommand):
                 "Iryna",
                 "Koval",
                 "waiter",
-                "Waiter",
+                "Официант",
                 Decimal("145.00"),
                 Decimal("4.00"),
                 700200005,
@@ -1079,7 +1079,7 @@ class Command(BaseCommand):
                 "Nazar",
                 "Kushnir",
                 "waiter",
-                "Waiter",
+                "Официант",
                 Decimal("145.00"),
                 Decimal("4.00"),
                 700200006,
@@ -1091,7 +1091,7 @@ class Command(BaseCommand):
                 "Olha",
                 "Romanenko",
                 "waiter",
-                "Waiter",
+                "Официант",
                 Decimal("145.00"),
                 Decimal("4.00"),
                 700200007,
@@ -1103,7 +1103,7 @@ class Command(BaseCommand):
                 "Artem",
                 "Savchuk",
                 "waiter",
-                "Waiter",
+                "Официант",
                 Decimal("145.00"),
                 Decimal("4.00"),
                 700200008,

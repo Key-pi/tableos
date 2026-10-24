@@ -11,61 +11,82 @@ class BonusProgram(PartnerBoundModel):
     """Partner-defined loyalty ruleset used to accrue and spend bonuses."""
 
     class TriggerEvent(models.TextChoices):
-        VISIT = "visit", "Visit"
-        ORDER_COMPLETED = "order_completed", "Order completed"
-        MANUAL_PURCHASE = "manual_purchase", "Manual purchase"
+        VISIT = "visit", "Визит"
+        ORDER_COMPLETED = "order_completed", "Оплаченный заказ"
+        MANUAL_PURCHASE = "manual_purchase", "Покупка, внесённая вручную"
 
     class ProgramType(models.TextChoices):
-        CASHBACK = "cashback", "Cashback"
-        VISIT = "visit", "Visit"
-        MILESTONE = "milestone", "Milestone"
+        CASHBACK = "cashback", "Кешбэк"
+        VISIT = "visit", "За визит"
+        MILESTONE = "milestone", "За N-й заказ"
 
     class AccrualBase(models.TextChoices):
-        FULL_TOTAL = "full_total", "Full purchase total"
-        MONEY_PAID = "money_paid", "Money paid (without the bonus-paid part)"
+        FULL_TOTAL = "full_total", "Вся сумма покупки"
+        MONEY_PAID = "money_paid", "Только оплаченное деньгами (без бонусов)"
 
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, verbose_name="Название")
     trigger_event = models.CharField(
         max_length=32,
         choices=TriggerEvent.choices,
         default=TriggerEvent.ORDER_COMPLETED,
+        verbose_name="Событие",
     )
-    program_type = models.CharField(max_length=16, choices=ProgramType.choices)
+    program_type = models.CharField(
+        max_length=16,
+        choices=ProgramType.choices,
+        verbose_name="Тип программы",
+    )
     strategy_code = models.CharField(
         max_length=64,
         blank=True,
-        help_text="Optional custom strategy key for partner-specific bonus code paths.",
+        help_text="Необязательный ключ особой стратегии начисления.",
+        verbose_name="Код стратегии",
     )
-    fixed_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    min_order_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    fixed_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Фиксированная сумма",
+    )
+    percent = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name="Процент")
+    min_order_total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Минимальная сумма",
+    )
     accrual_base = models.CharField(
         max_length=16,
         choices=AccrualBase.choices,
         default=AccrualBase.FULL_TOTAL,
         help_text=(
-            "Cashback programmes only: accrue on the full purchase total or only "
-            "on the part paid with money (PQ-030). The minimum order total is "
-            "always compared with the full total."
+            "Только для кешбэка: начислять со всей суммы покупки или только с "
+            "оплаченного деньгами (PQ-030). Минимальная сумма всегда сравнивается "
+            "со всей суммой."
         ),
+        verbose_name="База начисления",
     )
-    milestone_order_count = models.PositiveIntegerField(default=0)
+    milestone_order_count = models.PositiveIntegerField(default=0, verbose_name="Каждый N-й заказ")
     max_redeem_share = models.DecimalField(
         max_digits=5,
         decimal_places=2,
         default=30,
         validators=[MinValueValidator(0), MaxValueValidator(100)],
-        help_text="Maximum percentage of a bill payable with bonuses (0-100).",
+        help_text="Какую долю счёта можно оплатить бонусами, % (0–100).",
+        verbose_name="Можно оплатить бонусами, % счёта",
     )
-    expires_in_days = models.PositiveIntegerField(default=90)
+    expires_in_days = models.PositiveIntegerField(default=90, verbose_name="Сгорают через, дней")
     config = models.JSONField(
         default=dict,
         blank=True,
-        help_text="Reserved for custom strategy options and partner-specific tuning.",
+        help_text="Резерв для настроек особой стратегии.",
+        verbose_name="Настройки (JSON)",
     )
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, verbose_name="Работает")
 
     class Meta:
+        verbose_name = "бонусная программа"
+        verbose_name_plural = "Бонусные программы"
         ordering = ["partner__name", "name"]
 
     def __str__(self) -> str:
@@ -76,17 +97,18 @@ class BonusTransaction(PartnerBoundModel):
     """Ledger record for bonus accrual, redemption, expiration, or manual change."""
 
     class TransactionType(models.TextChoices):
-        ACCRUAL = "accrual", "Accrual"
-        REDEMPTION = "redemption", "Redemption"
-        EXPIRATION = "expiration", "Expiration"
-        MANUAL = "manual", "Manual"
+        ACCRUAL = "accrual", "Начисление"
+        REDEMPTION = "redemption", "Списание"
+        EXPIRATION = "expiration", "Сгорание"
+        MANUAL = "manual", "Вручную"
         # Compensating credit, e.g. bonuses returned when a bill is voided.
-        REVERSAL = "reversal", "Reversal"
+        REVERSAL = "reversal", "Возврат"
 
     guest = models.ForeignKey(
         "users.GuestProfile",
         on_delete=models.CASCADE,
         related_name="bonus_transactions",
+        verbose_name="Гость",
     )
     program = models.ForeignKey(
         BonusProgram,
@@ -94,6 +116,7 @@ class BonusTransaction(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="transactions",
+        verbose_name="Программа",
     )
     order = models.ForeignKey(
         "orders.Order",
@@ -101,6 +124,7 @@ class BonusTransaction(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="bonus_transactions",
+        verbose_name="Заказ",
     )
     bill = models.ForeignKey(
         "billing.Bill",
@@ -108,6 +132,7 @@ class BonusTransaction(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="bonus_transactions",
+        verbose_name="Счёт",
     )
     walk_in_sale = models.ForeignKey(
         "bonuses.WalkInSale",
@@ -115,16 +140,27 @@ class BonusTransaction(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="bonus_transactions",
+        verbose_name="Быстрая продажа",
     )
-    transaction_type = models.CharField(max_length=16, choices=TransactionType.choices)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    expires_at = models.DateTimeField(null=True, blank=True)
-    comment = models.CharField(max_length=255, blank=True)
-    source_type = models.CharField(max_length=32, blank=True)
-    source_id = models.CharField(max_length=64, blank=True)
-    idempotency_key = models.CharField(max_length=128, blank=True)
+    transaction_type = models.CharField(
+        max_length=16,
+        choices=TransactionType.choices,
+        verbose_name="Операция",
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Сумма")
+    expires_at = models.DateTimeField(null=True, blank=True, verbose_name="Сгорают")
+    comment = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
+    source_type = models.CharField(max_length=32, blank=True, verbose_name="Тип источника")
+    source_id = models.CharField(max_length=64, blank=True, verbose_name="ID источника")
+    idempotency_key = models.CharField(
+        max_length=128,
+        blank=True,
+        verbose_name="Ключ идемпотентности",
+    )
 
     class Meta:
+        verbose_name = "бонусная операция"
+        verbose_name_plural = "Бонусные операции"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -147,25 +183,44 @@ class WalkInSale(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="walk_in_sales",
+        verbose_name="Гость",
     )
-    customer_code_snapshot = models.CharField(max_length=12, blank=True)
+    customer_code_snapshot = models.CharField(
+        max_length=12,
+        blank=True,
+        verbose_name="Код клиента (на момент продажи)",
+    )
     amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name="Сумма продажи",
     )
-    bonus_awarded_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    bonus_spent_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    comment = models.CharField(max_length=255, blank=True)
+    bonus_awarded_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Начислено бонусов",
+    )
+    bonus_spent_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Оплачено бонусами",
+    )
+    comment = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
     created_by = models.ForeignKey(
         "users.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="created_walk_in_sales",
+        verbose_name="Кто создал",
     )
 
     class Meta:
+        verbose_name = "быстрая продажа"
+        verbose_name_plural = "Быстрые продажи"
         ordering = ["-created_at"]
         constraints = [
             models.CheckConstraint(
@@ -196,6 +251,7 @@ class WalkInSaleItem(PartnerBoundModel):
         WalkInSale,
         on_delete=models.CASCADE,
         related_name="items",
+        verbose_name="Продажа",
     )
     menu_item = models.ForeignKey(
         "menu.MenuItem",
@@ -203,12 +259,15 @@ class WalkInSaleItem(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="walk_in_sale_items",
+        verbose_name="Позиция меню",
     )
-    item_name = models.CharField(max_length=255)
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    quantity = models.PositiveIntegerField(default=1)
+    item_name = models.CharField(max_length=255, verbose_name="Позиция")
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Цена")
+    quantity = models.PositiveIntegerField(default=1, verbose_name="Количество")
 
     class Meta:
+        verbose_name = "позиция быстрой продажи"
+        verbose_name_plural = "Позиции быстрых продаж"
         ordering = ["created_at", "item_name"]
 
     def __str__(self) -> str:

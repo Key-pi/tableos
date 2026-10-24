@@ -59,7 +59,7 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Compensation",
+            "Оплата труда",
             {
                 "fields": (
                     "hourly_rate",
@@ -68,7 +68,7 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Bot notifications",
+            "Уведомления в боте",
             {
                 "fields": (
                     "bot_notifications_enabled",
@@ -78,8 +78,7 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
                     "notify_on_billing_requests",
                 ),
                 "description": (
-                    "Controls whether this employee receives operational notifications "
-                    "in the Telegram staff bot."
+                    "Какие рабочие уведомления сотрудник получает в Telegram-боте."
                 ),
             },
         ),
@@ -114,6 +113,6 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
     @admin.display(description="Telegram")
     def telegram_binding(self, obj: EmployeeProfile) -> str:
         if obj.telegram_account_id is None:
-            return "Not linked"
+            return "Не привязан"
         username = f"@{obj.telegram_account.username}" if obj.telegram_account.username else "-"
         return f"{obj.telegram_account.telegram_id} / {username}"

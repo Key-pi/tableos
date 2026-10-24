@@ -1,5 +1,4 @@
 from django.contrib import admin, messages
-from django.utils.translation import gettext_lazy as _
 
 from apps.billing.admin_actions import run_with_reason
 from apps.billing.models import Bill, BillItem
@@ -122,7 +121,7 @@ class OrderAdmin(ScopedAdminMixin):
         "mark_as_canceled",
     )
 
-    @admin.action(description=_("Create draft bill from selected orders"))
+    @admin.action(description="Создать черновик счёта из заказов")
     def create_draft_bill(self, request, queryset):
         order_ids = [str(order.id) for order in queryset]
         if not order_ids:
@@ -143,7 +142,7 @@ class OrderAdmin(ScopedAdminMixin):
                 partner_id=queryset[0].partner_id,
                 order_ids=order_ids,
                 kind=Bill.Kind.SHARED,
-                label="Created from order admin",
+                label="Создан в Admin из заказов",
             )
         except BillingServiceError as exc:
             self.message_user(request, str(exc), level=messages.WARNING)
@@ -154,27 +153,27 @@ class OrderAdmin(ScopedAdminMixin):
             f"Создан draft bill #{bill.public_id} на сумму {bill.total_amount}.",
         )
 
-    @admin.action(description=_("Change selected orders to accepted"))
+    @admin.action(description="Статус: принят")
     def mark_as_accepted(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.ACCEPTED)
 
-    @admin.action(description=_("Change selected orders to preparing"))
+    @admin.action(description="Статус: готовится")
     def mark_as_preparing(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.PREPARING)
 
-    @admin.action(description=_("Change selected orders to ready"))
+    @admin.action(description="Статус: готов")
     def mark_as_ready(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.READY)
 
-    @admin.action(description=_("Change selected orders to delivering"))
+    @admin.action(description="Статус: в пути")
     def mark_as_delivering(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.DELIVERING)
 
-    @admin.action(description=_("Change selected orders to completed"))
+    @admin.action(description="Статус: завершён")
     def mark_as_completed(self, request, queryset):
         self._transition_orders(request, queryset, Order.Status.COMPLETED)
 
-    @admin.action(description=_("Change selected orders to canceled"))
+    @admin.action(description="Отменить заказы")
     def mark_as_canceled(self, request, queryset):
         billed = BillItem.objects.filter(order__in=queryset, is_active=True).exists()
         if not billed:

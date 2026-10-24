@@ -99,7 +99,7 @@ def apply_bonus_programs(
     comment: str = "",
 ) -> list[BonusTransaction]:
     if guest.partner_id != partner_id:
-        raise BonusServiceError("Guest profile does not belong to the selected venue.")
+        raise BonusServiceError("Гость не из этого заведения.")
     bonus_paid_amount = Decimal(bonus_paid_amount).quantize(Decimal("0.01"))
     if not bonus_paid_amount.is_finite() or bonus_paid_amount < 0:
         raise BonusServiceError("Bonus-paid amount cannot be negative.")
@@ -115,7 +115,7 @@ def apply_bonus_programs(
             guest_id=guest.id,
         )
     if bill is not None and bill.partner_id != partner_id:
-        raise BonusServiceError("Bill does not belong to the selected venue.")
+        raise BonusServiceError("Счёт не из этого заведения.")
     if walk_in_sale is not None and walk_in_sale.partner_id != partner_id:
         raise BonusServiceError("Walk-in sale does not belong to the selected venue.")
 
@@ -205,7 +205,7 @@ def register_walk_in_sale(
 ) -> WalkInSale:
     total = _parse_positive_money(amount, label="Сумма быстрой продажи")
     if guest is not None and guest.partner_id != partner_id:
-        raise BonusServiceError("Guest profile does not belong to the selected venue.")
+        raise BonusServiceError("Гость не из этого заведения.")
     if guest is not None:
         guest = GuestProfile.objects.select_for_update().get(
             id=guest.id,
@@ -287,7 +287,7 @@ def register_walk_in_sale_by_customer_code(
         try:
             guest = get_guest_profile_by_customer_code(partner_id, normalized_customer_code)
         except GuestProfile.DoesNotExist as exc:
-            raise BonusServiceError("Customer code was not found for this venue.") from exc
+            raise BonusServiceError("Гость с таким кодом в этом заведении не найден.") from exc
     return register_walk_in_sale(
         partner_id=partner_id,
         guest=guest,
@@ -312,7 +312,7 @@ def preview_walk_in_sale_by_customer_code(
         try:
             guest = get_guest_profile_by_customer_code(partner_id, normalized_customer_code)
         except GuestProfile.DoesNotExist as exc:
-            raise BonusServiceError("Customer code was not found for this venue.") from exc
+            raise BonusServiceError("Гость с таким кодом в этом заведении не найден.") from exc
     normalized_items: list[dict] = []
     total_amount = Decimal("0.00")
     projected_bonus_amount = Decimal("0.00")
@@ -442,7 +442,7 @@ def get_redeemable_bonus_amount(
 
 def _normalize_walk_in_sale_items(*, partner_id, items: list[dict]) -> list[dict]:
     if not items:
-        raise BonusServiceError("At least one item is required for a quick sale.")
+        raise BonusServiceError("Добавьте хотя бы одну позицию в быструю продажу.")
 
     menu_item_ids = [str(item["menu_item_id"]) for item in items]
     menu_items = {
@@ -456,7 +456,7 @@ def _normalize_walk_in_sale_items(*, partner_id, items: list[dict]) -> list[dict
     normalized_items: list[dict] = []
     missing_ids = [menu_item_id for menu_item_id in menu_item_ids if menu_item_id not in menu_items]
     if missing_ids:
-        raise BonusServiceError("Some quick-sale items are unavailable for this venue.")
+        raise BonusServiceError("Часть позиций быстрой продажи недоступна в этом заведении.")
 
     for item in items:
         menu_item = menu_items[str(item["menu_item_id"])]

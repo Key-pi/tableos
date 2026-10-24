@@ -20,11 +20,11 @@ class Order(PartnerBoundModel):
         CANCELED = "canceled", "Отменён"
 
     class PaymentMethod(models.TextChoices):
-        CASH = "cash", "Cash"
-        TERMINAL = "terminal", "Terminal"
-        TRANSFER = "transfer", "Transfer"
-        MIXED = "mixed", "Mixed"
-        BONUSES = "bonuses", "Bonuses"
+        CASH = "cash", "Наличные"
+        TERMINAL = "terminal", "Карта (терминал)"
+        TRANSFER = "transfer", "Перевод"
+        MIXED = "mixed", "Смешанная"
+        BONUSES = "bonuses", "Бонусы"
         COD = "cod", "Наложенный платёж"
 
     class Channel(models.TextChoices):
@@ -60,11 +60,12 @@ class Order(PartnerBoundModel):
     # always prepaid.
     PREPAID_CHANNELS = REMOTE_CHANNELS
 
-    public_id = models.CharField(max_length=12, editable=False)
+    public_id = models.CharField(max_length=12, editable=False, verbose_name="Номер")
     guest = models.ForeignKey(
         "users.GuestProfile",
         on_delete=models.PROTECT,
         related_name="orders",
+        verbose_name="Гость",
     )
     table = models.ForeignKey(
         "tables.Table",
@@ -72,6 +73,7 @@ class Order(PartnerBoundModel):
         related_name="orders",
         null=True,
         blank=True,
+        verbose_name="Стол",
     )
     table_session = models.ForeignKey(
         "tables.TableSession",
@@ -79,6 +81,7 @@ class Order(PartnerBoundModel):
         related_name="orders",
         null=True,
         blank=True,
+        verbose_name="Сессия стола",
     )
     assigned_employee = models.ForeignKey(
         "employees.EmployeeProfile",
@@ -86,16 +89,27 @@ class Order(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="assigned_orders",
+        verbose_name="Ответственный",
     )
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.NEW)
-    channel = models.CharField(max_length=16, choices=Channel.choices, default=Channel.TABLE)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.NEW,
+        verbose_name="Статус",
+    )
+    channel = models.CharField(
+        max_length=16,
+        choices=Channel.choices,
+        default=Channel.TABLE,
+        verbose_name="Способ заказа",
+    )
     requested_for = models.DateTimeField(
         null=True,
         blank=True,
         help_text=(
-            "Remote orders (pickup, delivery): the requested time; empty "
-            "means as soon as possible."
+            "Самовывоз и доставка: к какому времени; пусто — как можно скорее."
         ),
+        verbose_name="Ко времени",
     )
     # Delivery (PQ-032): where to bring the order, a snapshot taken at checkout.
     delivery_address = models.TextField(blank=True, verbose_name="Адрес доставки")
@@ -125,17 +139,40 @@ class Order(PartnerBoundModel):
         max_length=16,
         choices=PaymentMethod.choices,
         default=PaymentMethod.CASH,
+        verbose_name="Способ оплаты",
     )
-    comment = models.TextField(blank=True)
-    subtotal_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    bonus_spent = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    accepted_at = models.DateTimeField(null=True, blank=True)
-    received_at = models.DateTimeField(null=True, blank=True)
-    paid_at = models.DateTimeField(null=True, blank=True)
+    comment = models.TextField(blank=True, verbose_name="Комментарий")
+    subtotal_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Сумма позиций",
+    )
+    bonus_spent = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Оплачено бонусами",
+    )
+    discount_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Скидка",
+    )
+    total_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Итого",
+    )
+    accepted_at = models.DateTimeField(null=True, blank=True, verbose_name="Принят")
+    received_at = models.DateTimeField(null=True, blank=True, verbose_name="Получен")
+    paid_at = models.DateTimeField(null=True, blank=True, verbose_name="Оплачен")
 
     class Meta:
+        verbose_name = "заказ"
+        verbose_name_plural = "Заказы"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -160,19 +197,27 @@ class OrderStatusHistory(PartnerBoundModel):
         Order,
         on_delete=models.CASCADE,
         related_name="status_history",
+        verbose_name="Заказ",
     )
-    from_status = models.CharField(max_length=16, blank=True)
-    to_status = models.CharField(max_length=16, choices=Order.Status.choices)
+    from_status = models.CharField(max_length=16, blank=True, verbose_name="Из статуса")
+    to_status = models.CharField(
+        max_length=16,
+        choices=Order.Status.choices,
+        verbose_name="В статус",
+    )
     changed_by = models.ForeignKey(
         "users.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="changed_order_statuses",
+        verbose_name="Кто изменил",
     )
-    note = models.CharField(max_length=255, blank=True)
+    note = models.CharField(max_length=255, blank=True, verbose_name="Примечание")
 
     class Meta:
+        verbose_name = "смена статуса"
+        verbose_name_plural = "История статусов"
         ordering = ["created_at"]
 
     def __str__(self) -> str:
@@ -183,14 +228,15 @@ class Cart(PartnerBoundModel):
     """Draft basket for a guest before checkout into a final order."""
 
     class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        CHECKED_OUT = "checked_out", "Checked out"
-        ABANDONED = "abandoned", "Abandoned"
+        ACTIVE = "active", "Активна"
+        CHECKED_OUT = "checked_out", "Оформлена"
+        ABANDONED = "abandoned", "Брошена"
 
     guest = models.ForeignKey(
         "users.GuestProfile",
         on_delete=models.CASCADE,
         related_name="carts",
+        verbose_name="Гость",
     )
     table_session = models.ForeignKey(
         "tables.TableSession",
@@ -198,20 +244,39 @@ class Cart(PartnerBoundModel):
         related_name="carts",
         null=True,
         blank=True,
+        verbose_name="Сессия стола",
     )
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+        verbose_name="Статус",
+    )
     # The flow the guest chose: at the table or pickup. Checkout follows it.
     channel = models.CharField(
         max_length=16,
         choices=Order.Channel.choices,
         default=Order.Channel.TABLE,
+        verbose_name="Способ заказа",
     )
-    comment = models.TextField(blank=True)
-    subtotal_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    checked_out_at = models.DateTimeField(null=True, blank=True)
+    comment = models.TextField(blank=True, verbose_name="Комментарий")
+    subtotal_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Сумма позиций",
+    )
+    total_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Итого",
+    )
+    checked_out_at = models.DateTimeField(null=True, blank=True, verbose_name="Оформлена")
 
     class Meta:
+        verbose_name = "корзина"
+        verbose_name_plural = "Корзины"
         ordering = ["-updated_at"]
         constraints = [
             models.UniqueConstraint(
@@ -236,21 +301,34 @@ class OrderItem(PartnerBoundModel):
         ITEM = "item", "Позиция меню"
         DELIVERY_FEE = "delivery_fee", "Доставка"
 
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
-    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.ITEM)
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="Заказ",
+    )
+    kind = models.CharField(
+        max_length=16,
+        choices=Kind.choices,
+        default=Kind.ITEM,
+        verbose_name="Вид строки",
+    )
     menu_item = models.ForeignKey(
         "menu.MenuItem",
         on_delete=models.PROTECT,
         related_name="order_items",
         null=True,
         blank=True,
+        verbose_name="Позиция меню",
     )
-    item_name = models.CharField(max_length=255)
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    quantity = models.PositiveIntegerField(default=1)
-    comment = models.CharField(max_length=255, blank=True)
+    item_name = models.CharField(max_length=255, verbose_name="Позиция")
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Цена")
+    quantity = models.PositiveIntegerField(default=1, verbose_name="Количество")
+    comment = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
 
     class Meta:
+        verbose_name = "строка заказа"
+        verbose_name_plural = "Строки заказов"
         ordering = ["created_at"]
         constraints = [
             models.CheckConstraint(
@@ -269,18 +347,26 @@ class OrderItem(PartnerBoundModel):
 class CartItem(PartnerBoundModel):
     """Draft basket line for a menu item before the order is created."""
 
-    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
+    cart = models.ForeignKey(
+        Cart,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="Корзина",
+    )
     menu_item = models.ForeignKey(
         "menu.MenuItem",
         on_delete=models.PROTECT,
         related_name="cart_items",
+        verbose_name="Позиция меню",
     )
-    item_name = models.CharField(max_length=255)
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    quantity = models.PositiveIntegerField(default=1)
-    comment = models.CharField(max_length=255, blank=True)
+    item_name = models.CharField(max_length=255, verbose_name="Позиция")
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Цена")
+    quantity = models.PositiveIntegerField(default=1, verbose_name="Количество")
+    comment = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
 
     class Meta:
+        verbose_name = "строка корзины"
+        verbose_name_plural = "Строки корзин"
         ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(

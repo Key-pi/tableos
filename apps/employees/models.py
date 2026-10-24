@@ -11,6 +11,7 @@ class EmployeeProfile(PartnerBoundModel):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="employee_profile",
+        verbose_name="Пользователь",
     )
     telegram_account = models.ForeignKey(
         "users.TelegramAccount",
@@ -18,15 +19,29 @@ class EmployeeProfile(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="employee_profiles",
+        verbose_name="Telegram",
     )
-    title = models.CharField(max_length=255, blank=True)
-    hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    commission_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    bot_notifications_enabled = models.BooleanField(default=True)
-    notify_on_order_created = models.BooleanField(default=True)
-    notify_on_order_status_changed = models.BooleanField(default=True)
-    notify_on_guest_calls = models.BooleanField(default=True)
-    notify_on_billing_requests = models.BooleanField(default=True)
+    title = models.CharField(max_length=255, blank=True, verbose_name="Должность")
+    hourly_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Ставка в час",
+    )
+    commission_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=0,
+        verbose_name="Процент с продаж",
+    )
+    bot_notifications_enabled = models.BooleanField(default=True, verbose_name="Уведомления в боте")
+    notify_on_order_created = models.BooleanField(default=True, verbose_name="О новых заказах")
+    notify_on_order_status_changed = models.BooleanField(
+        default=True,
+        verbose_name="О смене статуса заказа",
+    )
+    notify_on_guest_calls = models.BooleanField(default=True, verbose_name="О вызовах персонала")
+    notify_on_billing_requests = models.BooleanField(default=True, verbose_name="О запросах счёта")
     # Granted only by the venue owner: change or void bills (PQ-028).
     can_adjust_bills = models.BooleanField(
         default=False,
@@ -34,9 +49,11 @@ class EmployeeProfile(PartnerBoundModel):
         help_text="Убирать позиции, отменять заказы в счёте и аннулировать счета. "
         "Выдаёт только владелец заведения.",
     )
-    is_active = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True, verbose_name="Активен")
 
     class Meta:
+        verbose_name = "сотрудник"
+        verbose_name_plural = "Сотрудники"
         ordering = ["partner__name", "user__username"]
         constraints = [
             models.UniqueConstraint(

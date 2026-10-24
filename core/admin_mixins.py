@@ -114,7 +114,13 @@ class ScopedAdminMixin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        if self.is_platform_admin(request) or not self.partner_filter:
+        if self.is_platform_admin(request):
+            return queryset
+        if self.platform_only:
+            # Platform-only data (e.g. the global Telegram identity) is never in
+            # a venue's scope; a direct URL then answers 404 instead of failing.
+            return queryset.none()
+        if not self.partner_filter:
             return queryset
         partner_scope_id = self.get_partner_scope_id(request)
         if partner_scope_id is None:
@@ -206,7 +212,7 @@ class ScopedAdminMixin(admin.ModelAdmin):
                 if not hasattr(instance, "partner_id"):
                     continue
                 if instance.partner_id not in {None, partner_scope_id}:
-                    raise PermissionDenied("Inline object belongs to another partner.")
+                    raise PermissionDenied("Запись принадлежит другому заведению.")
                 instance.partner_id = partner_scope_id
 
         for deleted_object in formset.deleted_objects:

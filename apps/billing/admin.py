@@ -1,5 +1,4 @@
 from django.contrib import admin, messages
-from django.utils.translation import gettext_lazy as _
 
 from apps.billing.admin_actions import run_with_reason
 from apps.billing.forms import PaymentAdminForm
@@ -134,7 +133,7 @@ class BillingRequestAdmin(ScopedAdminMixin):
     )
     actions = ("mark_processed", "mark_canceled")
 
-    @admin.action(description=_("Mark selected billing requests as processed"))
+    @admin.action(description="Отметить запросы обработанными")
     def mark_processed(self, request, queryset):
         updated = 0
         for billing_request in queryset:
@@ -149,7 +148,7 @@ class BillingRequestAdmin(ScopedAdminMixin):
         if updated:
             self.message_user(request, f"Обработано запросов счёта: {updated}.")
 
-    @admin.action(description=_("Mark selected billing requests as canceled"))
+    @admin.action(description="Отменить запросы")
     def mark_canceled(self, request, queryset):
         updated = 0
         for billing_request in queryset:
@@ -208,7 +207,7 @@ class BillAdmin(ScopedAdminMixin):
         "void_selected_bills",
     )
 
-    @admin.action(description=_("Void selected bills (owner-granted right)"))
+    @admin.action(description="Аннулировать счета (право от владельца)")
     def void_selected_bills(self, request, queryset):
         return run_with_reason(
             self,
@@ -231,11 +230,11 @@ class BillAdmin(ScopedAdminMixin):
             ),
         )
 
-    @admin.display(description="Remaining")
+    @admin.display(description="Осталось оплатить")
     def remaining_amount(self, obj: Bill):
         return get_bill_remaining_amount(obj)
 
-    @admin.action(description=_("Issue selected bills"))
+    @admin.action(description="Выставить счета")
     def mark_as_issued(self, request, queryset):
         issued_count = 0
         for bill in queryset:
@@ -252,11 +251,11 @@ class BillAdmin(ScopedAdminMixin):
         if issued_count:
             self.message_user(request, f"Выдано счетов: {issued_count}.")
 
-    @admin.action(description=_("Record remaining cash payment for selected bills"))
+    @admin.action(description="Принять остаток наличными")
     def record_remaining_cash_payment(self, request, queryset):
         self._record_remaining_payment(request, queryset, Payment.Method.CASH)
 
-    @admin.action(description=_("Record remaining terminal payment for selected bills"))
+    @admin.action(description="Принять остаток картой")
     def record_remaining_terminal_payment(self, request, queryset):
         self._record_remaining_payment(request, queryset, Payment.Method.TERMINAL)
 
@@ -272,7 +271,7 @@ class BillAdmin(ScopedAdminMixin):
                     amount=remaining_amount,
                     method=method,
                     created_by=request.user,
-                    comment=f"Recorded via admin action ({method}).",
+                    comment=f"Проведено в Admin ({method}).",
                 )
             except BillingServiceError as exc:
                 self.message_user(
@@ -314,7 +313,7 @@ class BillItemAdmin(ScopedAdminMixin):
     list_filter = ("partner", "is_active")
     actions = ("remove_selected_lines",)
 
-    @admin.action(description=_("Remove selected lines from their bills (owner-granted right)"))
+    @admin.action(description="Убрать строки из счетов (право от владельца)")
     def remove_selected_lines(self, request, queryset):
         return run_with_reason(
             self,

@@ -124,7 +124,10 @@
   Число тестов также упоминается в `AGENTS.md`, `.agents/skills/…/SKILL.md`,
   `PROJECT_CHEATSHEET.md`, AS-IS — менять везде.
 - Тексты для людей (бот, Admin) и документация — по-русски; сообщения бота в HTML, все
-  динамические значения через `escape_html`.
+  динамические значения через `escape_html`. У новых полей и вариантов —
+  `verbose_name` и подписи по-русски (`core/tests_admin_language.py` это
+  проверяет); строки темы Admin — `locale/ru/LC_MESSAGES/django.po`, после
+  правки `python infrastructure/scripts/compile_messages.py`.
 - Telegram callback_data ≤ 64 байт: UUID в виде hex, состояние шагов — в
   самом callback (без FSM, где можно).
 

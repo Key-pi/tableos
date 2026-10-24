@@ -69,6 +69,8 @@ DATABASES = {"default": app_settings.database_config}
 AUTH_USER_MODEL = "users.User"
 
 LANGUAGE_CODE = app_settings.language_code
+# Russian for the Admin theme strings (locale/ru/LC_MESSAGES/django.po).
+LOCALE_PATHS = [BASE_DIR / "locale"]
 TIME_ZONE = app_settings.timezone
 USE_I18N = True
 USE_TZ = True

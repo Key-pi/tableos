@@ -9,13 +9,15 @@ from core.database.models import PartnerBoundModel
 class Table(PartnerBoundModel):
     """Physical table in a venue with QR metadata for Telegram deep links."""
 
-    number = models.PositiveIntegerField()
-    name = models.CharField(max_length=255, blank=True)
-    qr_token = models.CharField(max_length=32, unique=True, blank=True)
-    seats = models.PositiveSmallIntegerField(default=4)
-    is_active = models.BooleanField(default=True)
+    number = models.PositiveIntegerField(verbose_name="Номер")
+    name = models.CharField(max_length=255, blank=True, verbose_name="Название")
+    qr_token = models.CharField(max_length=32, unique=True, blank=True, verbose_name="Код QR")
+    seats = models.PositiveSmallIntegerField(default=4, verbose_name="Мест")
+    is_active = models.BooleanField(default=True, verbose_name="Работает")
 
     class Meta:
+        verbose_name = "стол"
+        verbose_name_plural = "Столы"
         ordering = ["partner__name", "number"]
         constraints = [
             models.UniqueConstraint(
@@ -45,22 +47,35 @@ class TableVisit(PartnerBoundModel):
     """One party sitting at a table: groups guest sessions and scopes billing (ADR-0007)."""
 
     class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        CLOSED = "closed", "Closed"
+        ACTIVE = "active", "Идёт"
+        CLOSED = "closed", "Закрыт"
 
-    table = models.ForeignKey(Table, on_delete=models.CASCADE, related_name="visits")
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
-    started_at = models.DateTimeField(auto_now_add=True)
-    closed_at = models.DateTimeField(null=True, blank=True)
+    table = models.ForeignKey(
+        Table,
+        on_delete=models.CASCADE,
+        related_name="visits",
+        verbose_name="Стол",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+        verbose_name="Статус",
+    )
+    started_at = models.DateTimeField(auto_now_add=True, verbose_name="Начат")
+    closed_at = models.DateTimeField(null=True, blank=True, verbose_name="Закрыт")
     closed_by = models.ForeignKey(
         "users.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="closed_table_visits",
+        verbose_name="Кто закрыл",
     )
 
     class Meta:
+        verbose_name = "визит стола"
+        verbose_name_plural = "Визиты столов"
         ordering = ["-started_at"]
         indexes = [
             models.Index(fields=["partner", "table", "status"], name="table_visit_lookup_idx"),
@@ -74,16 +89,22 @@ class TableSession(PartnerBoundModel):
     """Active or historical guest session created after scanning a table QR code."""
 
     class Status(models.TextChoices):
-        ACTIVE = "active", "Active"
-        CLOSED = "closed", "Closed"
-        TIMED_OUT = "timed_out", "Timed out"
+        ACTIVE = "active", "Активна"
+        CLOSED = "closed", "Закрыта"
+        TIMED_OUT = "timed_out", "Истекла"
 
     guest = models.ForeignKey(
         "users.GuestProfile",
         on_delete=models.CASCADE,
         related_name="table_sessions",
+        verbose_name="Гость",
     )
-    table = models.ForeignKey(Table, on_delete=models.CASCADE, related_name="sessions")
+    table = models.ForeignKey(
+        Table,
+        on_delete=models.CASCADE,
+        related_name="sessions",
+        verbose_name="Стол",
+    )
     # Historical sessions closed before table visits existed have no visit.
     visit = models.ForeignKey(
         TableVisit,
@@ -91,13 +112,21 @@ class TableSession(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="sessions",
+        verbose_name="Визит",
     )
-    started_at = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField(null=True, blank=True)
-    closed_at = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    started_at = models.DateTimeField(auto_now_add=True, verbose_name="Начат")
+    expires_at = models.DateTimeField(null=True, blank=True, verbose_name="Истекает")
+    closed_at = models.DateTimeField(null=True, blank=True, verbose_name="Закрыт")
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+        verbose_name="Статус",
+    )
 
     class Meta:
+        verbose_name = "сессия стола"
+        verbose_name_plural = "Сессии столов"
         ordering = ["-started_at"]
         constraints = [
             models.UniqueConstraint(

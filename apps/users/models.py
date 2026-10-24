@@ -17,12 +17,12 @@ class User(AbstractUser):
     """Back-office or staff user with an optional partner scope and business role."""
 
     class Role(models.TextChoices):
-        OWNER = "owner", "Owner"
-        MANAGER = "manager", "Manager"
-        CASHIER = "cashier", "Cashier"
-        WAITER = "waiter", "Waiter"
-        HOOKAH_MASTER = "hookah_master", "Hookah master"
-        ADMIN = "admin", "Admin"
+        OWNER = "owner", "Владелец"
+        MANAGER = "manager", "Менеджер"
+        CASHIER = "cashier", "Кассир"
+        WAITER = "waiter", "Официант"
+        HOOKAH_MASTER = "hookah_master", "Кальянщик"
+        ADMIN = "admin", "Администратор платформы"
 
     partner = models.ForeignKey(
         "partners.Partner",
@@ -30,8 +30,14 @@ class User(AbstractUser):
         null=True,
         blank=True,
         related_name="staff_users",
+        verbose_name="Заведение",
     )
-    role = models.CharField(max_length=32, choices=Role.choices, default=Role.MANAGER)
+    role = models.CharField(
+        max_length=32,
+        choices=Role.choices,
+        default=Role.MANAGER,
+        verbose_name="Роль",
+    )
 
     def __str__(self) -> str:
         return self.get_full_name() or self.username
@@ -40,14 +46,16 @@ class User(AbstractUser):
 class TelegramAccount(TimeStampedModel):
     """Normalized Telegram identity reused across partners and guest profiles."""
 
-    telegram_id = models.BigIntegerField(unique=True)
-    username = models.CharField(max_length=255, blank=True)
-    first_name = models.CharField(max_length=255, blank=True)
-    last_name = models.CharField(max_length=255, blank=True)
-    language_code = models.CharField(max_length=16, blank=True)
-    is_blocked = models.BooleanField(default=False)
+    telegram_id = models.BigIntegerField(unique=True, verbose_name="Telegram ID")
+    username = models.CharField(max_length=255, blank=True, verbose_name="@username")
+    first_name = models.CharField(max_length=255, blank=True, verbose_name="Имя")
+    last_name = models.CharField(max_length=255, blank=True, verbose_name="Фамилия")
+    language_code = models.CharField(max_length=16, blank=True, verbose_name="Язык")
+    is_blocked = models.BooleanField(default=False, verbose_name="Заблокировал бота")
 
     class Meta:
+        verbose_name = "аккаунт Telegram"
+        verbose_name_plural = "Аккаунты Telegram"
         ordering = ["-updated_at"]
 
     def __str__(self) -> str:
@@ -61,26 +69,47 @@ class GuestProfile(PartnerBoundModel):
         TelegramAccount,
         on_delete=models.CASCADE,
         related_name="guest_profiles",
+        verbose_name="Telegram",
     )
-    customer_code = models.CharField(max_length=12, editable=False)
-    first_visit_at = models.DateTimeField(null=True, blank=True)
-    last_visit_at = models.DateTimeField(null=True, blank=True)
-    loyalty_balance = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    is_subscribed = models.BooleanField(default=True)
+    customer_code = models.CharField(max_length=12, editable=False, verbose_name="Код клиента")
+    first_visit_at = models.DateTimeField(null=True, blank=True, verbose_name="Первый визит")
+    last_visit_at = models.DateTimeField(null=True, blank=True, verbose_name="Последний визит")
+    loyalty_balance = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Бонусный баланс",
+    )
+    is_subscribed = models.BooleanField(default=True, verbose_name="Подписан на рассылки")
     phone = models.CharField(
         max_length=32,
         blank=True,
-        help_text="Shared by the guest through Telegram (needed for pickup and delivery).",
+        help_text="Гость делится им в Telegram (нужен для самовывоза, доставки и отправки).",
+        verbose_name="Телефон",
     )
     # The last delivery address (PQ-032), offered again at the next checkout.
-    delivery_address = models.TextField(blank=True)
-    delivery_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    delivery_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    delivery_address = models.TextField(blank=True, verbose_name="Адрес доставки")
+    delivery_latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name="Широта",
+    )
+    delivery_longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        verbose_name="Долгота",
+    )
     # Shipping by post (PQ-034): the last carrier and destination, offered again.
-    shipping_carrier = models.CharField(max_length=16, blank=True)
-    shipping_destination = models.TextField(blank=True)
+    shipping_carrier = models.CharField(max_length=16, blank=True, verbose_name="Служба")
+    shipping_destination = models.TextField(blank=True, verbose_name="Куда отправить")
 
     class Meta:
+        verbose_name = "гость"
+        verbose_name_plural = "Гости"
         constraints = [
             models.UniqueConstraint(
                 fields=["partner", "telegram_account"],
@@ -122,22 +151,27 @@ class AdminAccessProfile(TimeStampedModel):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="admin_access_profile",
+        verbose_name="Пользователь",
     )
     partner = models.ForeignKey(
         "partners.Partner",
         on_delete=models.CASCADE,
         related_name="admin_access_profiles",
+        verbose_name="Заведение",
     )
     preset = models.CharField(
         max_length=32,
         choices=AdminAccessPreset.choices,
         default=AdminAccessPreset.CUSTOM,
+        verbose_name="Набор прав",
     )
-    is_partner_owner = models.BooleanField(default=False)
-    can_access_admin = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
+    is_partner_owner = models.BooleanField(default=False, verbose_name="Владелец заведения")
+    can_access_admin = models.BooleanField(default=False, verbose_name="Вход в Admin")
+    is_active = models.BooleanField(default=True, verbose_name="Активен")
 
     class Meta:
+        verbose_name = "доступ к Admin"
+        verbose_name_plural = "Доступы к Admin"
         ordering = ["partner__name", "user__username"]
 
     def __str__(self) -> str:
@@ -198,15 +232,18 @@ class AdminSectionPermission(TimeStampedModel):
         AdminAccessProfile,
         on_delete=models.CASCADE,
         related_name="section_permissions",
+        verbose_name="Профиль доступа",
     )
-    section = models.CharField(max_length=32, choices=AdminSection.choices)
-    can_view = models.BooleanField(default=False)
-    can_add = models.BooleanField(default=False)
-    can_change = models.BooleanField(default=False)
-    can_delete = models.BooleanField(default=False)
-    can_manage_sensitive = models.BooleanField(default=False)
+    section = models.CharField(max_length=32, choices=AdminSection.choices, verbose_name="Раздел")
+    can_view = models.BooleanField(default=False, verbose_name="Просмотр")
+    can_add = models.BooleanField(default=False, verbose_name="Добавление")
+    can_change = models.BooleanField(default=False, verbose_name="Изменение")
+    can_delete = models.BooleanField(default=False, verbose_name="Удаление")
+    can_manage_sensitive = models.BooleanField(default=False, verbose_name="Важные поля")
 
     class Meta:
+        verbose_name = "права на раздел"
+        verbose_name_plural = "Права на разделы"
         ordering = ["section"]
         constraints = [
             models.UniqueConstraint(

@@ -101,7 +101,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
             },
         ),
         (
-            "Behavior",
+            "Поведение бота",
             {
                 "fields": (
                     "auto_close_table_session_after_payment",
@@ -116,7 +116,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
             },
         ),
         (
-            "Buttons",
+            "Кнопки",
             {
                 "fields": (
                     "button_menu_label",
@@ -138,7 +138,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
             },
         ),
         (
-            "Messages",
+            "Тексты сообщений",
             {
                 "fields": (
                     "welcome_message_template",
@@ -261,7 +261,7 @@ class BotInstanceAdmin(ScopedAdminMixin):
             return self.search_fields
         return ("display_name", "username")
 
-    @admin.display(description="Token status")
+    @admin.display(description="Токен")
     def token_status(self, obj: BotInstance) -> str:
         return obj.token_status_label
 

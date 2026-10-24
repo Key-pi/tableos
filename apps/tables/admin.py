@@ -36,7 +36,7 @@ class TableAdmin(ScopedAdminMixin):
     search_fields = ("name", "partner__name", "qr_token")
     readonly_fields = (
         "qr_token",
-        "deep_link_payload",
+        "start_parameter",
         "qr_source_status",
         "telegram_start_url_primary",
         "telegram_start_links",
@@ -65,7 +65,7 @@ class TableAdmin(ScopedAdminMixin):
             {
                 "fields": (
                     "qr_token",
-                    "deep_link_payload",
+                    "start_parameter",
                     "qr_source_status",
                     "telegram_start_url_primary",
                     "telegram_start_urls_text",
@@ -74,7 +74,7 @@ class TableAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Table Operations",
+            "Работа стола",
             {
                 "fields": (
                     "operations_links",
@@ -121,7 +121,11 @@ class TableAdmin(ScopedAdminMixin):
             urlencode({"table__id__exact": str(obj.id)}),
         )
 
-    @admin.display(description="Operational links")
+    @admin.display(description="Параметр ссылки (start)")
+    def start_parameter(self, obj):
+        return obj.deep_link_payload
+
+    @admin.display(description="Ссылки")
     def operations_links(self, obj: Table) -> str:
         return format_html(
             '<a href="{}">Открыть заказы стола</a><br><a href="{}">Открыть счета стола</a>',
@@ -129,7 +133,7 @@ class TableAdmin(ScopedAdminMixin):
             self._bills_changelist_url(obj),
         )
 
-    @admin.display(description="Active sessions")
+    @admin.display(description="Активные сессии")
     def active_sessions_summary(self, obj: Table) -> str:
         sessions = list(
             obj.sessions.select_related("guest__telegram_account")
@@ -152,7 +156,7 @@ class TableAdmin(ScopedAdminMixin):
             ),
         )
 
-    @admin.display(description="Orders on table")
+    @admin.display(description="Заказы стола")
     def orders_summary(self, obj: Table) -> str:
         orders = list(
             obj.orders.select_related("guest__telegram_account")
@@ -175,7 +179,7 @@ class TableAdmin(ScopedAdminMixin):
             ),
         )
 
-    @admin.display(description="Bills on table")
+    @admin.display(description="Счета стола")
     def bills_summary(self, obj: Table) -> str:
         bills = list(
             obj.bills.select_related("primary_guest__telegram_account")
@@ -201,10 +205,10 @@ class TableAdmin(ScopedAdminMixin):
     def qr_source_status(self, obj: Table) -> str:
         usernames = self._bot_usernames(obj)
         if usernames:
-            return f"Using BotInstance username: @{usernames[0]}"
+            return f"Ссылки строятся по боту @{usernames[0]}"
         return (
-            "Bot username is missing for this partner. "
-            "Open Admin -> Bot instances and fill the `username` field."
+            "У бота заведения не указано имя (@username). "
+            "Откройте Admin → Боты и заполните «Имя бота»."
         )
 
     @admin.display(description="QR source URL")
@@ -214,7 +218,7 @@ class TableAdmin(ScopedAdminMixin):
             return urls[0]
         return f"https://t.me/<bot_username>?start={obj.deep_link_payload}"
 
-    @admin.display(description="Primary Telegram start URL")
+    @admin.display(description="Ссылка для QR")
     def telegram_start_url_primary(self, obj: Table) -> str:
         urls = self._telegram_start_urls(obj)
         value = urls[0] if urls else f"https://t.me/<bot_username>?start={obj.deep_link_payload}"
@@ -223,11 +227,11 @@ class TableAdmin(ScopedAdminMixin):
             value,
         )
 
-    @admin.display(description="Telegram start links")
+    @admin.display(description="Ссылки на бота")
     def telegram_start_links(self, obj: Table) -> str:
         urls = self._telegram_start_urls(obj)
         if not urls:
-            return "Add a BotInstance username to generate Telegram deep links."
+            return "Укажите имя бота (Admin → Боты), чтобы появились ссылки для QR."
 
         return format_html_join(
             "<br>",
@@ -235,7 +239,7 @@ class TableAdmin(ScopedAdminMixin):
             ((url, url) for url in urls),
         )
 
-    @admin.display(description="Telegram start URL (copy)")
+    @admin.display(description="Ссылка для QR (скопировать)")
     def telegram_start_urls_text(self, obj: Table) -> str:
         urls = self._telegram_start_urls(obj)
         if not urls:
@@ -251,7 +255,7 @@ class TableAdmin(ScopedAdminMixin):
             text_value,
         )
 
-    @admin.action(description="Create shared bill from selected tables")
+    @admin.action(description="Создать общий счёт по столам")
     def create_shared_bill_action(self, request, queryset):
         created_count = 0
         for table in queryset:
@@ -280,7 +284,7 @@ class TableAdmin(ScopedAdminMixin):
                 level=messages.SUCCESS,
             )
 
-    @admin.action(description="Create personal split bills by guest")
+    @admin.action(description="Создать личные счета по гостям")
     def create_personal_bills_action(self, request, queryset):
         created_count = 0
         for table in queryset:
@@ -332,7 +336,7 @@ class TableSessionAdmin(ScopedAdminMixin):
     )
     actions = ("close_settled_sessions",)
 
-    @admin.action(description="Close selected settled sessions")
+    @admin.action(description="Закрыть рассчитанные сессии")
     def close_settled_sessions(self, request, queryset):
         closed_count = 0
         for session in queryset:
@@ -374,7 +378,7 @@ class TableVisitAdmin(ScopedAdminMixin):
     )
     actions = ("close_settled_visits",)
 
-    @admin.action(description="Close selected settled visits")
+    @admin.action(description="Закрыть рассчитанные визиты")
     def close_settled_visits(self, request, queryset):
         closed_count = 0
         for visit in queryset.select_related("table"):

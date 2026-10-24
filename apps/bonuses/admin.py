@@ -122,7 +122,7 @@ class WalkInSaleAdmin(ScopedAdminMixin):
             },
         ),
         (
-            "Resolved loyalty data",
+            "Данные гостя",
             {
                 "fields": (
                     "guest",
@@ -146,7 +146,7 @@ class WalkInSaleAdmin(ScopedAdminMixin):
 
         return RequestBoundForm
 
-    @admin.display(description="Customer code")
+    @admin.display(description="Код клиента")
     def loyalty_customer(self, obj: WalkInSale) -> str:
         return obj.customer_code_snapshot or "anonymous"
 

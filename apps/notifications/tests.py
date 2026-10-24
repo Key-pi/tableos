@@ -319,7 +319,7 @@ class NotificationDeliveryTests(TestCase):
         self.assertEqual(campaign.status, BroadcastCampaign.Status.FAILED)
         self.assertEqual(campaign.delivered_count, 0)
         self.assertEqual(campaign.failed_count, 0)
-        self.assertEqual(campaign.last_error, "No eligible recipients for this campaign.")
+        self.assertEqual(campaign.last_error, "Нет гостей, которым можно отправить рассылку.")
 
     def test_send_broadcast_campaign_fails_for_suspended_partner(self):
         guest_account = TelegramAccount.objects.create(
@@ -352,7 +352,7 @@ class NotificationDeliveryTests(TestCase):
         self.assertEqual(campaign.status, BroadcastCampaign.Status.FAILED)
         self.assertEqual(
             campaign.last_error,
-            "Partner is not active, delivery is disabled.",
+            "Заведение приостановлено — сообщения не отправляются.",
         )
 
 

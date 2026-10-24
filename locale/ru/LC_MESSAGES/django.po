@@ -1,0 +1,345 @@
+# Russian for the Admin theme (django-unfold has no Russian catalog).
+# Compile: python infrastructure/scripts/compile_messages.py
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgid "Add new item"
+msgstr "Добавить"
+
+msgid "Add row"
+msgstr "Добавить строку"
+
+msgid "After you've created a user, you’ll be able to edit more user options."
+msgstr "После создания пользователя можно будет изменить остальные его настройки."
+
+msgid "All applications"
+msgstr "Все разделы"
+
+msgid "Apply Filters"
+msgstr "Применить фильтры"
+
+msgid "Available shortcuts"
+msgstr "Сочетания клавиш"
+
+msgid "Bold"
+msgstr "Жирный"
+
+msgid "Cancel"
+msgstr "Отмена"
+
+msgid "Change History"
+msgstr "История изменений"
+
+msgid "Change reason"
+msgstr "Причина изменения"
+
+msgid "Changed by"
+msgstr "Кто изменил"
+
+msgid "Changelist shortcuts"
+msgstr "Клавиши в списке"
+
+msgid "Changes"
+msgstr "Изменения"
+
+msgid "Choose file to upload"
+msgstr "Выберите файл"
+
+msgid "Click to cancel"
+msgstr "Нажмите, чтобы отменить"
+
+msgid "Click to download"
+msgstr "Нажмите, чтобы скачать"
+
+msgid "Code"
+msgstr "Код"
+
+msgid "Collapse"
+msgstr "Свернуть"
+
+msgid "Command tool shortcuts"
+msgstr "Клавиши командной строки"
+
+msgid "Comment"
+msgstr "Комментарий"
+
+msgid "Create new record"
+msgstr "Новая запись"
+
+msgid "Current file"
+msgstr "Текущий файл"
+
+msgid "Dark"
+msgstr "Тёмная"
+
+msgid "Date"
+msgstr "Дата"
+
+msgid "Date from"
+msgstr "Дата с"
+
+msgid "Date to"
+msgstr "Дата по"
+
+msgid "Default"
+msgstr "По умолчанию"
+
+msgid "Edit"
+msgstr "Изменить"
+
+msgid "Edit comment:"
+msgstr "Изменить комментарий:"
+
+msgid "Enter an URL"
+msgstr "Введите адрес"
+
+msgid "Export"
+msgstr "Экспорт"
+
+msgid "False"
+msgstr "Нет"
+
+msgid "Field"
+msgstr "Поле"
+
+msgid "Filters"
+msgstr "Фильтры"
+
+msgid "Forgotten your password or username?"
+msgstr "Забыли пароль или имя пользователя?"
+
+msgid "From"
+msgstr "С"
+
+msgid "General"
+msgstr "Основное"
+
+msgid "Global shortcuts"
+msgstr "Общие клавиши"
+
+msgid "Go back"
+msgstr "Назад"
+
+msgid "Group"
+msgstr "Группа"
+
+msgid "Group permissions"
+msgstr "Права группы"
+
+msgid "Heading"
+msgstr "Заголовок"
+
+msgid "Image preview"
+msgstr "Предпросмотр"
+
+msgid "Import"
+msgstr "Импорт"
+
+msgid "Indent decrease"
+msgstr "Уменьшить отступ"
+
+msgid "Indent increase"
+msgstr "Увеличить отступ"
+
+msgid "Italic"
+msgstr "Курсив"
+
+msgid "Light"
+msgstr "Светлая"
+
+msgid "Line number"
+msgstr "Номер строки"
+
+msgid "Link"
+msgstr "Ссылка"
+
+msgid "Manage group"
+msgstr "Группа"
+
+msgid "Manage user"
+msgstr "Пользователь"
+
+msgid "Name"
+msgstr "Название"
+
+msgid "Navigate"
+msgstr "Перейти"
+
+msgid "New"
+msgstr "Новое"
+
+msgid "New value"
+msgstr "Новое значение"
+
+msgid "Next"
+msgstr "Дальше"
+
+msgid "No data"
+msgstr "Нет данных"
+
+msgid "No results found"
+msgstr "Ничего не найдено"
+
+msgid "Not enough data."
+msgstr "Недостаточно данных."
+
+msgid "Nothing matched your search"
+msgstr "По запросу ничего не найдено"
+
+msgid "Object"
+msgstr "Объект"
+
+msgid "Object permissions"
+msgstr "Права на объект"
+
+msgid "Old value"
+msgstr "Старое значение"
+
+msgid "Open command tool"
+msgstr "Открыть командную строку"
+
+msgid "Open selection"
+msgstr "Открыть выбранное"
+
+msgid "Open selection in new tab"
+msgstr "Открыть выбранное в новой вкладке"
+
+msgid "Open shortcuts list"
+msgstr "Показать сочетания клавиш"
+
+msgid "Ordered list"
+msgstr "Нумерованный список"
+
+msgid "Paragraph"
+msgstr "Абзац"
+
+msgid "Previous"
+msgstr "Назад"
+
+msgid "Quote"
+msgstr "Цитата"
+
+msgid "Recent searches"
+msgstr "Недавние запросы"
+
+msgid "Record picture"
+msgstr "Фото записи"
+
+msgid "Redo"
+msgstr "Повторить"
+
+msgid "Reset filters"
+msgstr "Сбросить фильтры"
+
+msgid "Reset to default"
+msgstr "Сбросить"
+
+msgid "Return to site"
+msgstr "На сайт"
+
+msgid "Revert"
+msgstr "Вернуть"
+
+msgid "Row"
+msgstr "Строка"
+
+msgid "Run"
+msgstr "Выполнить"
+
+msgid "Search apps and models..."
+msgstr "Поиск по разделам…"
+
+msgid "Select"
+msgstr "Выбрать"
+
+msgid "Select action"
+msgstr "Выберите действие"
+
+msgid "Select action to run"
+msgstr "Выберите действие"
+
+msgid "Select currency"
+msgstr "Валюта"
+
+msgid "Select format"
+msgstr "Формат"
+
+msgid "Select record"
+msgstr "Выберите запись"
+
+msgid "Select value"
+msgstr "Выберите значение"
+
+msgid "Skipped"
+msgstr "Пропущено"
+
+msgid "Strike"
+msgstr "Зачёркнутый"
+
+msgid "Submit"
+msgstr "Отправить"
+
+msgid "System"
+msgstr "Как в системе"
+
+msgid "This item will be deleted."
+msgstr "Эта запись будет удалена."
+
+msgid "This object doesn't have a change history."
+msgstr "У этой записи нет истории изменений."
+
+msgid "This page yielded into no results."
+msgstr "Здесь пока ничего нет."
+
+msgid "To"
+msgstr "По"
+
+msgid "Toggle dark/light mode"
+msgstr "Светлая или тёмная тема"
+
+msgid "Toggle filter"
+msgstr "Показать фильтры"
+
+msgid "Toggle password visibility"
+msgstr "Показать пароль"
+
+msgid "Toggle sidebar"
+msgstr "Свернуть меню"
+
+msgid "True"
+msgstr "Да"
+
+msgid "Type to search"
+msgstr "Начните вводить"
+
+msgid "Underlined"
+msgstr "Подчёркнутый"
+
+msgid "Undo"
+msgstr "Отменить"
+
+msgid "Unlink"
+msgstr "Убрать ссылку"
+
+msgid "Unordered list"
+msgstr "Список"
+
+msgid "Update"
+msgstr "Обновить"
+
+msgid "User permissions"
+msgstr "Права пользователя"
+
+msgid "Value"
+msgstr "Значение"
+
+msgid "You have been successfully logged out from the administration"
+msgstr "Вы вышли из Admin"
+
+msgid "next"
+msgstr "дальше"
+
+msgid "previous"
+msgstr "назад"

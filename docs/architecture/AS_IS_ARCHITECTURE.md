@@ -55,6 +55,14 @@ flowchart LR
 берут `core.settings.local` (`DEBUG=True`), если `DJANGO_SETTINGS_MODULE` не
 задан явно.
 
+Admin по-русски:
+- подписи моделей, полей и вариантов — `verbose_name` в моделях;
+- разделы — `AppConfig.verbose_name`;
+- строки темы Unfold — `LOCALE_PATHS` → `locale/ru/LC_MESSAGES/django.po`,
+  `.mo` собирает `infrastructure/scripts/compile_messages.py`, gettext не
+  нужен;
+- проверка — `core/tests_admin_language.py`.
+
 Продакшен (AA-038, `docs/engineering/DEPLOYMENT.md`): `docker-compose.prod.yml`
 задаёт `core.settings.production` всем процессам. Модуль отказывается
 стартовать со слабыми значениями (`_refuse`) и включает HTTPS-only, HSTS,
@@ -435,7 +443,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 481 тест после подготовки к запуску, зелёные на SQLite и на
+- 485 тестов после перевода Admin, зелёные на SQLite и на
   PostgreSQL 16. Двенадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

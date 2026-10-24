@@ -12,28 +12,29 @@ class Bill(PartnerBoundModel):
     """Payable check built from one or many orders without mutating the original order data."""
 
     class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        ISSUED = "issued", "Issued"
-        PARTIALLY_PAID = "partially_paid", "Partially paid"
-        PAID = "paid", "Paid"
-        CANCELED = "canceled", "Canceled"
+        DRAFT = "draft", "Черновик"
+        ISSUED = "issued", "Выставлен"
+        PARTIALLY_PAID = "partially_paid", "Оплачен частично"
+        PAID = "paid", "Оплачен"
+        CANCELED = "canceled", "Аннулирован"
 
     class Kind(models.TextChoices):
-        PERSONAL = "personal", "Personal"
-        SHARED = "shared", "Shared"
-        SPLIT = "split", "Split"
+        PERSONAL = "personal", "Личный"
+        SHARED = "shared", "Общий"
+        SPLIT = "split", "Деление"
 
     class Source(models.TextChoices):
-        INTERNAL = "internal", "Internal"
-        POS = "pos", "POS"
+        INTERNAL = "internal", "Botera Shop"
+        POS = "pos", "Касса (POS)"
 
-    public_id = models.CharField(max_length=12, editable=False)
+    public_id = models.CharField(max_length=12, editable=False, verbose_name="Номер")
     table = models.ForeignKey(
         "tables.Table",
         on_delete=models.PROTECT,
         related_name="bills",
         null=True,
         blank=True,
+        verbose_name="Стол",
     )
     primary_guest = models.ForeignKey(
         "users.GuestProfile",
@@ -41,6 +42,7 @@ class Bill(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="billing_bills",
+        verbose_name="Гость счёта",
     )
     # Bills of a table belong to one table visit (ADR-0007); bills without a
     # table and bills created before visits existed have none.
@@ -50,22 +52,65 @@ class Bill(PartnerBoundModel):
         null=True,
         blank=True,
         related_name="bills",
+        verbose_name="Визит",
     )
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
-    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.SHARED)
-    source = models.CharField(max_length=16, choices=Source.choices, default=Source.INTERNAL)
-    label = models.CharField(max_length=255, blank=True)
-    subtotal_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    bonus_spent_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    total_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    paid_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    external_ref = models.CharField(max_length=255, blank=True)
-    pos_tab_id = models.CharField(max_length=255, blank=True)
-    issued_at = models.DateTimeField(null=True, blank=True)
-    closed_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        verbose_name="Статус",
+    )
+    kind = models.CharField(
+        max_length=16,
+        choices=Kind.choices,
+        default=Kind.SHARED,
+        verbose_name="Вид счёта",
+    )
+    source = models.CharField(
+        max_length=16,
+        choices=Source.choices,
+        default=Source.INTERNAL,
+        verbose_name="Источник",
+    )
+    label = models.CharField(max_length=255, blank=True, verbose_name="Подпись счёта")
+    subtotal_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Сумма позиций",
+    )
+    discount_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Скидка",
+    )
+    bonus_spent_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Оплачено бонусами",
+    )
+    total_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Итого",
+    )
+    paid_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Оплачено",
+    )
+    external_ref = models.CharField(max_length=255, blank=True, verbose_name="Внешний номер")
+    pos_tab_id = models.CharField(max_length=255, blank=True, verbose_name="Счёт в кассе (POS)")
+    issued_at = models.DateTimeField(null=True, blank=True, verbose_name="Выставлен")
+    closed_at = models.DateTimeField(null=True, blank=True, verbose_name="Закрыт")
 
     class Meta:
+        verbose_name = "счёт"
+        verbose_name_plural = "Счета"
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -87,44 +132,59 @@ class BillingRequest(PartnerBoundModel):
     """Guest settlement intent that records how the table wants to pay before final payment."""
 
     class RequestType(models.TextChoices):
-        PERSONAL = "personal", "Personal bill"
-        SHARED = "shared", "Shared bill"
-        CUSTOM_SPLIT = "custom_split", "Custom split"
+        PERSONAL = "personal", "Личный счёт"
+        SHARED = "shared", "Общий счёт"
+        CUSTOM_SPLIT = "custom_split", "Особое деление"
 
     class Status(models.TextChoices):
-        OPEN = "open", "Open"
-        AUTO_PREPARED = "auto_prepared", "Auto prepared"
-        PROCESSED = "processed", "Processed"
-        CANCELED = "canceled", "Canceled"
+        OPEN = "open", "Открыт"
+        AUTO_PREPARED = "auto_prepared", "Счёт подготовлен"
+        PROCESSED = "processed", "Обработан"
+        CANCELED = "canceled", "Отменён"
 
     table = models.ForeignKey(
         "tables.Table",
         on_delete=models.PROTECT,
         related_name="billing_requests",
+        verbose_name="Стол",
     )
     guest = models.ForeignKey(
         "users.GuestProfile",
         on_delete=models.PROTECT,
         related_name="billing_requests",
+        verbose_name="Гость",
     )
     table_session = models.ForeignKey(
         "tables.TableSession",
         on_delete=models.PROTECT,
         related_name="billing_requests",
+        verbose_name="Сессия стола",
     )
-    request_type = models.CharField(max_length=32, choices=RequestType.choices)
-    status = models.CharField(max_length=24, choices=Status.choices, default=Status.OPEN)
+    request_type = models.CharField(
+        max_length=32,
+        choices=RequestType.choices,
+        verbose_name="Что запросили",
+    )
+    status = models.CharField(
+        max_length=24,
+        choices=Status.choices,
+        default=Status.OPEN,
+        verbose_name="Статус",
+    )
     bill = models.ForeignKey(
         "billing.Bill",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="billing_requests",
+        verbose_name="Счёт",
     )
-    note = models.CharField(max_length=255, blank=True)
-    processed_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=255, blank=True, verbose_name="Примечание")
+    processed_at = models.DateTimeField(null=True, blank=True, verbose_name="Обработан")
 
     class Meta:
+        verbose_name = "запрос счёта"
+        verbose_name_plural = "Запросы счёта"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -134,14 +194,22 @@ class BillingRequest(PartnerBoundModel):
 class BillOrder(PartnerBoundModel):
     """Join model that tracks which orders were grouped into one bill."""
 
-    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name="bill_orders")
+    bill = models.ForeignKey(
+        Bill,
+        on_delete=models.CASCADE,
+        related_name="bill_orders",
+        verbose_name="Счёт",
+    )
     order = models.ForeignKey(
         "orders.Order",
         on_delete=models.PROTECT,
         related_name="bill_links",
+        verbose_name="Заказ",
     )
 
     class Meta:
+        verbose_name = "заказ в счёте"
+        verbose_name_plural = "Заказы в счетах"
         ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -157,34 +225,49 @@ class BillOrder(PartnerBoundModel):
 class BillItem(PartnerBoundModel):
     """Allocated order line inside a bill so one order can be split across multiple checks."""
 
-    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name="items")
+    bill = models.ForeignKey(
+        Bill,
+        on_delete=models.CASCADE,
+        related_name="items",
+        verbose_name="Счёт",
+    )
     order = models.ForeignKey(
         "orders.Order",
         on_delete=models.PROTECT,
         related_name="billing_items",
+        verbose_name="Заказ",
     )
     order_item = models.ForeignKey(
         "orders.OrderItem",
         on_delete=models.PROTECT,
         related_name="billing_items",
+        verbose_name="Строка заказа",
     )
-    item_name = models.CharField(max_length=255)
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
-    quantity = models.PositiveIntegerField(default=1)
-    line_total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    comment = models.CharField(max_length=255, blank=True)
+    item_name = models.CharField(max_length=255, verbose_name="Позиция")
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Цена")
+    quantity = models.PositiveIntegerField(default=1, verbose_name="Количество")
+    line_total = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Сумма строки",
+    )
+    comment = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
     # Removed lines stay for history; only active lines count and allocate.
-    is_active = models.BooleanField(default=True)
-    removed_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True, verbose_name="Активен")
+    removed_at = models.DateTimeField(null=True, blank=True, verbose_name="Убрана")
     removed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="removed_bill_items",
+        verbose_name="Кто убрал",
     )
 
     class Meta:
+        verbose_name = "строка счёта"
+        verbose_name_plural = "Строки счетов"
         ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
@@ -206,40 +289,62 @@ class Payment(PartnerBoundModel):
     """Payment attempt or completed payment attached to one bill."""
 
     class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        AUTHORIZED = "authorized", "Authorized"
-        PAID = "paid", "Paid"
-        FAILED = "failed", "Failed"
-        REFUNDED = "refunded", "Refunded"
-        CANCELED = "canceled", "Canceled"
+        PENDING = "pending", "Ожидает"
+        AUTHORIZED = "authorized", "Авторизована"
+        PAID = "paid", "Проведена"
+        FAILED = "failed", "Ошибка"
+        REFUNDED = "refunded", "Возвращена"
+        CANCELED = "canceled", "Отменена"
 
     class Method(models.TextChoices):
-        CASH = "cash", "Cash"
-        TERMINAL = "terminal", "Terminal"
-        TRANSFER = "transfer", "Transfer"
-        ONLINE = "online", "Online"
-        MIXED = "mixed", "Mixed"
-        BONUSES = "bonuses", "Bonuses"
+        CASH = "cash", "Наличные"
+        TERMINAL = "terminal", "Карта (терминал)"
+        TRANSFER = "transfer", "Перевод"
+        ONLINE = "online", "Онлайн"
+        MIXED = "mixed", "Смешанная"
+        BONUSES = "bonuses", "Бонусы"
         # Cash on delivery by post (PQ-034): the carrier passes the money on.
         COD = "cod", "Наложенный платёж"
 
-    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name="payments")
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
-    method = models.CharField(max_length=16, choices=Method.choices, default=Method.CASH)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    provider_code = models.CharField(max_length=64, blank=True)
-    external_payment_id = models.CharField(max_length=255, blank=True)
-    comment = models.CharField(max_length=255, blank=True)
-    paid_at = models.DateTimeField(null=True, blank=True)
+    bill = models.ForeignKey(
+        Bill,
+        on_delete=models.CASCADE,
+        related_name="payments",
+        verbose_name="Счёт",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        verbose_name="Статус",
+    )
+    method = models.CharField(
+        max_length=16,
+        choices=Method.choices,
+        default=Method.CASH,
+        verbose_name="Способ",
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Сумма")
+    provider_code = models.CharField(max_length=64, blank=True, verbose_name="Платёжный провайдер")
+    external_payment_id = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Номер платежа у провайдера",
+    )
+    comment = models.CharField(max_length=255, blank=True, verbose_name="Комментарий")
+    paid_at = models.DateTimeField(null=True, blank=True, verbose_name="Оплачен")
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="billing_payments",
+        verbose_name="Кто создал",
     )
 
     class Meta:
+        verbose_name = "оплата"
+        verbose_name_plural = "Оплаты"
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
@@ -250,9 +355,9 @@ class BillAdjustment(PartnerBoundModel):
     """Append-only record of a correction made to a bill by an authorised person."""
 
     class Kind(models.TextChoices):
-        REMOVE_LINE = "remove_line", "Line removed"
-        ORDER_CANCELED = "order_canceled", "Order cancelled"
-        VOID = "void", "Bill voided"
+        REMOVE_LINE = "remove_line", "Строка убрана"
+        ORDER_CANCELED = "order_canceled", "Заказ отменён"
+        VOID = "void", "Счёт аннулирован"
 
     class ReasonCode(models.TextChoices):
         INPUT_ERROR = "input_error", "Ошибка ввода"
@@ -261,22 +366,34 @@ class BillAdjustment(PartnerBoundModel):
         PAYMENT_NOT_RECEIVED = "payment_not_received", "Оплата не поступила"
         OTHER = "other", "Другое"
 
-    bill = models.ForeignKey(Bill, on_delete=models.PROTECT, related_name="adjustments")
-    kind = models.CharField(max_length=24, choices=Kind.choices)
+    bill = models.ForeignKey(
+        Bill,
+        on_delete=models.PROTECT,
+        related_name="adjustments",
+        verbose_name="Счёт",
+    )
+    kind = models.CharField(max_length=24, choices=Kind.choices, verbose_name="Что изменено")
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="bill_adjustments",
+        verbose_name="Кто изменил",
     )
-    reason_code = models.CharField(max_length=24, choices=ReasonCode.choices)
-    reason_text = models.CharField(max_length=255, blank=True)
-    total_before = models.DecimalField(max_digits=10, decimal_places=2)
-    total_after = models.DecimalField(max_digits=10, decimal_places=2)
-    payload = models.JSONField(default=dict, blank=True)
+    reason_code = models.CharField(
+        max_length=24,
+        choices=ReasonCode.choices,
+        verbose_name="Причина",
+    )
+    reason_text = models.CharField(max_length=255, blank=True, verbose_name="Комментарий к причине")
+    total_before = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Итог до")
+    total_after = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Итог после")
+    payload = models.JSONField(default=dict, blank=True, verbose_name="Данные изменения")
 
     class Meta:
+        verbose_name = "изменение счёта"
+        verbose_name_plural = "Изменения счетов"
         ordering = ["created_at"]
 
     def __str__(self) -> str:

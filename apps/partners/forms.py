@@ -5,18 +5,18 @@ from apps.partners.models import BotInstance
 
 class BotInstanceAdminForm(forms.ModelForm):
     username = forms.CharField(
-        label="Bot username",
+        label="Имя бота (без @)",
         required=True,
         help_text=(
-            "Telegram username without @, for example `smoke_lounge_bot`. "
-            "This value is used to build QR deep links for tables."
+            "Имя бота в Telegram без @, например smoke_lounge_bot. "
+            "По нему строятся ссылки для QR-кодов столов."
         ),
     )
     raw_token = forms.CharField(
-        label="Bot token",
+        label="Токен бота",
         required=False,
         widget=forms.PasswordInput(render_value=True),
-        help_text="Paste the token from BotFather. It will be stored encrypted.",
+        help_text="Вставьте токен от @BotFather. Он хранится зашифрованным.",
     )
 
     class Meta:
@@ -34,10 +34,10 @@ class BotInstanceAdminForm(forms.ModelForm):
     def clean_username(self) -> str:
         username = BotInstance.normalize_username(self.cleaned_data["username"])
         if not username:
-            raise forms.ValidationError("Bot username is required.")
+            raise forms.ValidationError("Укажите имя бота.")
         if not BotInstance.looks_like_valid_username(username):
             raise forms.ValidationError(
-                "Use a valid Telegram username without @. Example: `smoke_lounge_bot`."
+                "Имя бота Telegram без @, например smoke_lounge_bot."
             )
         return username
 
@@ -50,13 +50,13 @@ class BotInstanceAdminForm(forms.ModelForm):
         if raw_token and not BotInstance.looks_like_valid_token(raw_token):
             self.add_error(
                 "raw_token",
-                "Bot token looks invalid. Paste the full token from BotFather.",
+                "Токен не похож на настоящий. Вставьте токен от @BotFather целиком.",
             )
 
         if mode == BotInstance.Mode.WEBHOOK and is_active:
             self.add_error(
                 "mode",
-                "Webhook mode is not supported in the current MVP. Use polling mode.",
+                "Режим webhook пока не поддерживается — выберите polling.",
             )
 
         if not self.instance.pk and not raw_token:

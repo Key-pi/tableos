@@ -5,4 +5,4 @@ class TablesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.tables"
     label = "tables"
-    verbose_name = "Tables"
+    verbose_name = "Столы"

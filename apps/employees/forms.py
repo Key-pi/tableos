@@ -20,7 +20,7 @@ def _is_owner_or_superuser(user) -> bool:
 class EmployeeProfileAdminForm(forms.ModelForm):
     telegram_id = forms.IntegerField(
         required=False,
-        help_text="Telegram ID сотрудника для bot-уведомлений.",
+        help_text="Telegram ID сотрудника для уведомлений в боте.",
     )
     telegram_username = forms.CharField(
         required=False,
@@ -84,7 +84,7 @@ class EmployeeProfileAdminForm(forms.ModelForm):
         if wants_notifications and not telegram_id:
             self.add_error(
                 "telegram_id",
-                "Telegram ID is required if bot notifications are enabled.",
+                "Для уведомлений в боте нужен Telegram ID.",
             )
         return cleaned_data
 

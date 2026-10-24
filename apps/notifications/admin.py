@@ -1,5 +1,4 @@
 from django.contrib import admin, messages
-from django.utils.translation import gettext_lazy as _
 
 from apps.notifications.models import (
     BroadcastCampaign,
@@ -51,13 +50,15 @@ class BroadcastCampaignAdmin(ScopedAdminMixin):
     )
     actions = ("send_now",)
 
-    @admin.action(description=_("Queue selected campaigns for sending"))
+    @admin.action(description="Отправить выбранные рассылки")
     def send_now(self, request, queryset):
         queued_count = 0
         for campaign in queryset:
             send_broadcast_campaign(campaign)
             queued_count += 1
-        self.message_user(request, f"Campaigns queued: {queued_count}.", level=messages.INFO)
+        self.message_user(
+            request, f"Поставлено в отправку рассылок: {queued_count}.", level=messages.INFO
+        )
 
 
 @admin.register(BroadcastDelivery)

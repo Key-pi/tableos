@@ -9,14 +9,26 @@ from core.database.models import PartnerBoundModel
 class PartnerDailyMetric(PartnerBoundModel):
     """Daily aggregated KPI snapshot for partner dashboards and reporting."""
 
-    bucket_date = models.DateField()
-    revenue = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    orders_count = models.PositiveIntegerField(default=0)
-    average_check = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    active_guests = models.PositiveIntegerField(default=0)
-    repeat_visits = models.PositiveIntegerField(default=0)
+    bucket_date = models.DateField(verbose_name="День")
+    revenue = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        verbose_name="Выручка",
+    )
+    orders_count = models.PositiveIntegerField(default=0, verbose_name="Заказов")
+    average_check = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Средний чек",
+    )
+    active_guests = models.PositiveIntegerField(default=0, verbose_name="Активных гостей")
+    repeat_visits = models.PositiveIntegerField(default=0, verbose_name="Повторных визитов")
 
     class Meta:
+        verbose_name = "метрика за день"
+        verbose_name_plural = "Метрики по дням"
         ordering = ["-bucket_date"]
         constraints = [
             models.UniqueConstraint(

@@ -2,35 +2,35 @@ from django.db import models
 
 
 class UserRole(models.TextChoices):
-    OWNER = "owner", "Owner"
-    MANAGER = "manager", "Manager"
-    CASHIER = "cashier", "Cashier"
-    WAITER = "waiter", "Waiter"
-    HOOKAH_MASTER = "hookah_master", "Hookah master"
-    ADMIN = "admin", "Admin"
+    OWNER = "owner", "Владелец"
+    MANAGER = "manager", "Менеджер"
+    CASHIER = "cashier", "Кассир"
+    WAITER = "waiter", "Официант"
+    HOOKAH_MASTER = "hookah_master", "Кальянщик"
+    ADMIN = "admin", "Администратор платформы"
 
 
 class AdminSection(models.TextChoices):
-    PARTNER_PROFILE = "partner_profile", "Partner profile"
-    BOT_INSTANCES = "bot_instances", "Bot instances"
-    BOT_CONTENT = "bot_content", "Bot content"
-    TABLES = "tables", "Tables"
-    MENU = "menu", "Menu"
-    ORDERS = "orders", "Orders"
-    BONUSES = "bonuses", "Bonuses"
-    EMPLOYEES = "employees", "Employees"
-    ADMIN_ACCESS = "admin_access", "Admin access"
-    NOTIFICATIONS = "notifications", "Notifications"
-    ANALYTICS = "analytics", "Analytics"
-    BILLING = "billing", "Billing"
+    PARTNER_PROFILE = "partner_profile", "Профиль заведения"
+    BOT_INSTANCES = "bot_instances", "Боты"
+    BOT_CONTENT = "bot_content", "Настройки и тексты бота"
+    TABLES = "tables", "Столы"
+    MENU = "menu", "Меню"
+    ORDERS = "orders", "Заказы"
+    BONUSES = "bonuses", "Бонусы и гости"
+    EMPLOYEES = "employees", "Сотрудники"
+    ADMIN_ACCESS = "admin_access", "Доступ к Admin"
+    NOTIFICATIONS = "notifications", "Уведомления и рассылки"
+    ANALYTICS = "analytics", "Аналитика"
+    BILLING = "billing", "Счета и оплаты"
 
 
 class AdminAccessPreset(models.TextChoices):
-    CUSTOM = "custom", "Custom"
-    OWNER = "owner", "Owner"
-    MANAGER = "manager", "Manager"
-    CASHIER = "cashier", "Cashier"
-    CONTENT_MANAGER = "content_manager", "Content manager"
+    CUSTOM = "custom", "Свой набор"
+    OWNER = "owner", "Владелец"
+    MANAGER = "manager", "Менеджер"
+    CASHIER = "cashier", "Кассир"
+    CONTENT_MANAGER = "content_manager", "Контент-менеджер"
 
 
 FULL_CRUD = {

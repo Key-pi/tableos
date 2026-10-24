@@ -74,11 +74,11 @@ def _active_partner_bot(partner_id) -> BotInstance:
         .first()
     )
     if bot_instance is None:
-        raise NotificationDeliveryError("No active polling bot is configured for this partner.")
+        raise NotificationDeliveryError("У заведения нет включённого бота.")
     if bot_instance.partner.status != Partner.Status.ACTIVE:
-        raise NotificationDeliveryError("Partner is not active, delivery is disabled.")
+        raise NotificationDeliveryError("Заведение приостановлено — сообщения не отправляются.")
     if not bot_instance.has_usable_token:
-        raise NotificationDeliveryError("Partner bot token is missing or invalid.")
+        raise NotificationDeliveryError("Токен бота заведения не задан или неверный.")
     return bot_instance
 
 
@@ -230,12 +230,12 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
         and employee.user.partner_id == notification.partner_id
     ):
         notification.delivery_status = StaffNotification.DeliveryStatus.FAILED
-        notification.delivery_error = "Employee is no longer an active notification recipient."
+        notification.delivery_error = "Сотрудник больше не получает уведомления."
         notification.save(update_fields=["delivery_status", "delivery_error", "updated_at"])
         return notification
     if employee is None or employee.telegram_account_id is None:
         notification.delivery_status = StaffNotification.DeliveryStatus.FAILED
-        notification.delivery_error = "Employee Telegram account is not linked."
+        notification.delivery_error = "У сотрудника не привязан Telegram."
         notification.save(update_fields=["delivery_status", "delivery_error", "updated_at"])
         return notification
 
@@ -782,7 +782,7 @@ def _start_broadcast(campaign_id, *, legacy_after_guest_id: str = ""):
             _record_broadcast_audience(campaign)
 
     if not campaign.deliveries.exists():
-        _fail_locked_broadcast(campaign, "No eligible recipients for this campaign.")
+        _fail_locked_broadcast(campaign, "Нет гостей, которым можно отправить рассылку.")
         return None
     return campaign
 
@@ -884,7 +884,7 @@ def _send_claimed_broadcast_batch(*, campaign, token, claim_token, deliveries) -
                 delivery.id,
                 claim_token,
                 status=BroadcastDelivery.Status.SKIPPED,
-                error="Guest is no longer eligible for marketing messages.",
+                error="Гость больше не получает рассылки.",
             )
     if not to_send:
         return
@@ -999,7 +999,7 @@ def _finalize_locked_broadcast(campaign: BroadcastCampaign) -> None:
     if campaign.delivered_count == 0:
         campaign.status = BroadcastCampaign.Status.FAILED
         if not campaign.last_error:
-            campaign.last_error = "Campaign delivery failed for all recipients."
+            campaign.last_error = "Рассылка не дошла ни до одного гостя."
     else:
         campaign.status = BroadcastCampaign.Status.SENT
     campaign.save(

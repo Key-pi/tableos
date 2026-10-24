@@ -7,11 +7,11 @@ from apps.users.selectors import get_guest_profile_by_customer_code
 
 class WalkInSaleAdminForm(forms.ModelForm):
     customer_code_input = forms.CharField(
-        label="Customer code",
+        label="Код клиента",
         required=True,
         help_text=(
-            "Enter the guest loyalty code. Quick sale is registered only for an "
-            "identified customer profile."
+            "Код клиента из профиля гостя в боте. Быстрая продажа записывается "
+            "только на известного гостя."
         ),
     )
 
@@ -43,7 +43,7 @@ class WalkInSaleAdminForm(forms.ModelForm):
         guest = None
 
         if partner is None:
-            raise forms.ValidationError("Choose the venue before registering a walk-in sale.")
+            raise forms.ValidationError("Сначала выберите заведение.")
 
         if customer_code:
             try:
@@ -51,9 +51,9 @@ class WalkInSaleAdminForm(forms.ModelForm):
             except GuestProfile.DoesNotExist as exc:
                 self.add_error(
                     "customer_code_input",
-                    "No guest with this customer code was found in the selected venue.",
+                    "Гость с таким кодом в этом заведении не найден.",
                 )
-                raise forms.ValidationError("Invalid customer code.") from exc
+                raise forms.ValidationError("Неверный код клиента.") from exc
 
         cleaned_data["partner"] = partner
         cleaned_data["resolved_guest"] = guest

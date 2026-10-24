@@ -28,21 +28,29 @@ class Partner(TimeStampedModel):
     """Venue or business account that owns isolated data inside the platform."""
 
     class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        ACTIVE = "active", "Active"
-        SUSPENDED = "suspended", "Suspended"
+        DRAFT = "draft", "Черновик"
+        ACTIVE = "active", "Работает"
+        SUSPENDED = "suspended", "Приостановлен"
 
-    name = models.CharField(max_length=255)
-    slug = models.SlugField(unique=True)
+    name = models.CharField(max_length=255, verbose_name="Название заведения")
+    slug = models.SlugField(unique=True, verbose_name="Код (slug)")
     timezone = models.CharField(
         max_length=64,
         default="Europe/Kyiv",
-        help_text="IANA timezone of the venue, e.g. Europe/Kyiv (AA-034).",
+        help_text="Часовой пояс заведения (IANA), например Europe/Kyiv.",
+        verbose_name="Часовой пояс",
     )
-    contact_phone = models.CharField(max_length=32, blank=True)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    contact_phone = models.CharField(max_length=32, blank=True, verbose_name="Контактный телефон")
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        verbose_name="Статус",
+    )
 
     class Meta:
+        verbose_name = "заведение"
+        verbose_name_plural = "Заведения"
         ordering = ["name"]
 
     def clean(self) -> None:
@@ -69,15 +77,27 @@ class BotInstance(TimeStampedModel):
         POLLING = "polling", "Polling"
         WEBHOOK = "webhook", "Webhook"
 
-    partner = models.ForeignKey(Partner, on_delete=models.CASCADE, related_name="bot_instances")
-    display_name = models.CharField(max_length=255)
-    username = models.CharField(max_length=255, unique=True)
-    token_encrypted = models.TextField()
-    mode = models.CharField(max_length=16, choices=Mode.choices, default=Mode.POLLING)
-    webhook_url = models.URLField(blank=True)
-    is_active = models.BooleanField(default=True)
+    partner = models.ForeignKey(
+        Partner,
+        on_delete=models.CASCADE,
+        related_name="bot_instances",
+        verbose_name="Заведение",
+    )
+    display_name = models.CharField(max_length=255, verbose_name="Название бота")
+    username = models.CharField(max_length=255, unique=True, verbose_name="Имя бота (@)")
+    token_encrypted = models.TextField(verbose_name="Токен (зашифрован)")
+    mode = models.CharField(
+        max_length=16,
+        choices=Mode.choices,
+        default=Mode.POLLING,
+        verbose_name="Режим",
+    )
+    webhook_url = models.URLField(blank=True, verbose_name="Адрес webhook")
+    is_active = models.BooleanField(default=True, verbose_name="Включён")
 
     class Meta:
+        verbose_name = "бот"
+        verbose_name_plural = "Боты"
         ordering = ["partner__name", "username"]
         constraints = [
             models.UniqueConstraint(
@@ -140,6 +160,7 @@ class PartnerBotSettings(TimeStampedModel):
         Partner,
         on_delete=models.CASCADE,
         related_name="bot_settings",
+        verbose_name="Заведение",
     )
     module_menu_enabled = models.BooleanField(
         default=True,
@@ -317,87 +338,177 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name="Отчёт дня",
         help_text="Операционный отчёт в staff-боте.",
     )
-    auto_close_table_session_after_payment = models.BooleanField(default=True)
-    max_menu_items_per_category_message = models.PositiveSmallIntegerField(default=8)
-    duplicate_request_cooldown_seconds = models.PositiveSmallIntegerField(default=45)
-    allow_menu_without_session = models.BooleanField(default=True)
-    staff_call_waiter_enabled = models.BooleanField(default=True)
-    staff_call_bartender_enabled = models.BooleanField(default=True)
-    staff_call_hookah_enabled = models.BooleanField(default=True)
+    auto_close_table_session_after_payment = models.BooleanField(
+        default=True,
+        verbose_name="Закрывать стол после полной оплаты",
+    )
+    max_menu_items_per_category_message = models.PositiveSmallIntegerField(
+        default=8,
+        verbose_name="Позиций меню в одном сообщении",
+    )
+    duplicate_request_cooldown_seconds = models.PositiveSmallIntegerField(
+        default=45,
+        verbose_name="Пауза между одинаковыми запросами, с",
+    )
+    allow_menu_without_session = models.BooleanField(
+        default=True,
+        verbose_name="Меню без сканирования стола",
+    )
+    staff_call_waiter_enabled = models.BooleanField(default=True, verbose_name="Вызов: официант")
+    staff_call_bartender_enabled = models.BooleanField(default=True, verbose_name="Вызов: бармен")
+    staff_call_hookah_enabled = models.BooleanField(default=True, verbose_name="Вызов: кальянщик")
     extra_config = models.JSONField(
         default=dict,
         blank=True,
-        help_text="Reserved for future feature flags and partner-specific bot behavior.",
+        help_text="Резерв для будущих флагов и особых настроек бота заведения.",
+        verbose_name="Доп. настройки (JSON)",
     )
-    button_menu_label = models.CharField(max_length=64, default="Открыть меню")
-    button_session_label = models.CharField(max_length=64, default="Мой стол")
-    button_cart_label = models.CharField(max_length=64, default="Корзина")
-    button_checkout_label = models.CharField(max_length=64, default="Оформить заказ")
-    button_delivery_label = models.CharField(max_length=64, default="Заказать доставку")
-    button_pickup_label = models.CharField(max_length=64, default="Самовывоз")
-    button_shipping_label = models.CharField(max_length=64, default="Отправка почтой")
-    button_help_label = models.CharField(max_length=64, default="Как заказать")
-    button_my_profile = models.CharField(max_length=64, default="Мой профиль")
-    button_profile_bonuses_label = models.CharField(max_length=64, default="Бонусы")
-    button_call_staff_label = models.CharField(max_length=64, default="Позвать персонал")
-    button_request_bill_label = models.CharField(max_length=64, default="Запросить счёт")
-    button_call_waiter_label = models.CharField(max_length=64, default="Официант")
-    button_call_bartender_label = models.CharField(max_length=64, default="Бар / касса")
-    button_call_hookah_label = models.CharField(max_length=64, default="Кальянщик")
+    button_menu_label = models.CharField(
+        max_length=64,
+        default="Открыть меню",
+        verbose_name="Кнопка «Меню»",
+    )
+    button_session_label = models.CharField(
+        max_length=64,
+        default="Мой стол",
+        verbose_name="Кнопка «Мой стол»",
+    )
+    button_cart_label = models.CharField(
+        max_length=64,
+        default="Корзина",
+        verbose_name="Кнопка «Корзина»",
+    )
+    button_checkout_label = models.CharField(
+        max_length=64,
+        default="Оформить заказ",
+        verbose_name="Кнопка «Оформить заказ»",
+    )
+    button_delivery_label = models.CharField(
+        max_length=64,
+        default="Заказать доставку",
+        verbose_name="Кнопка «Доставка»",
+    )
+    button_pickup_label = models.CharField(
+        max_length=64,
+        default="Самовывоз",
+        verbose_name="Кнопка «Самовывоз»",
+    )
+    button_shipping_label = models.CharField(
+        max_length=64,
+        default="Отправка почтой",
+        verbose_name="Кнопка «Отправка почтой»",
+    )
+    button_help_label = models.CharField(
+        max_length=64,
+        default="Как заказать",
+        verbose_name="Кнопка «Как заказать»",
+    )
+    button_my_profile = models.CharField(
+        max_length=64,
+        default="Мой профиль",
+        verbose_name="Кнопка «Мой профиль»",
+    )
+    button_profile_bonuses_label = models.CharField(
+        max_length=64,
+        default="Бонусы",
+        verbose_name="Кнопка «Бонусы»",
+    )
+    button_call_staff_label = models.CharField(
+        max_length=64,
+        default="Позвать персонал",
+        verbose_name="Кнопка «Вызвать персонал»",
+    )
+    button_request_bill_label = models.CharField(
+        max_length=64,
+        default="Запросить счёт",
+        verbose_name="Кнопка «Запросить счёт»",
+    )
+    button_call_waiter_label = models.CharField(
+        max_length=64,
+        default="Официант",
+        verbose_name="Кнопка «Официант»",
+    )
+    button_call_bartender_label = models.CharField(
+        max_length=64,
+        default="Бар / касса",
+        verbose_name="Кнопка «Бармен»",
+    )
+    button_call_hookah_label = models.CharField(
+        max_length=64,
+        default="Кальянщик",
+        verbose_name="Кнопка «Кальянщик»",
+    )
     welcome_message_template = models.TextField(
         blank=True,
-        help_text="Variables: {partner_name}",
+        help_text="Переменные: {partner_name}",
+        verbose_name="Приветствие",
     )
     table_activated_message_template = models.TextField(
         blank=True,
-        help_text="Variables: {partner_name}, {table_number}",
+        help_text="Переменные: {partner_name}, {table_number}",
+        verbose_name="Стол открыт",
     )
     menu_header_template = models.TextField(
         blank=True,
-        help_text="Variables: {partner_name}",
+        help_text="Переменные: {partner_name}",
+        verbose_name="Заголовок меню",
     )
     menu_requires_session_hint_template = models.TextField(
         blank=True,
-        help_text="Shown when menu is visible but ordering still requires QR.",
+        help_text="Показывается, когда меню видно, но для заказа за столом нужно сканировать QR.",
+        verbose_name="Подсказка: меню после сканирования стола",
     )
     menu_active_session_hint_template = models.TextField(
         blank=True,
-        help_text="Variables: {table_number}",
+        help_text="Переменные: {table_number}",
+        verbose_name="Подсказка: меню за столом",
     )
-    menu_empty_message_template = models.TextField(blank=True)
-    ordering_help_message_template = models.TextField(blank=True)
-    cart_empty_message_template = models.TextField(blank=True)
-    cart_cleared_message_template = models.TextField(blank=True)
+    menu_empty_message_template = models.TextField(blank=True, verbose_name="Меню пустое")
+    ordering_help_message_template = models.TextField(
+        blank=True,
+        verbose_name="Как заказать (текст)",
+    )
+    cart_empty_message_template = models.TextField(blank=True, verbose_name="Корзина пустая")
+    cart_cleared_message_template = models.TextField(blank=True, verbose_name="Корзина очищена")
     staff_call_prompt_template = models.TextField(
         blank=True,
-        help_text="Shown when the guest opens the staff-call actions.",
+        help_text="Показывается, когда гость открывает вызов персонала.",
+        verbose_name="Вызов персонала: вопрос",
     )
     staff_call_success_template = models.TextField(
         blank=True,
-        help_text="Variables: {partner_name}, {table_number}, {call_target_label}",
+        help_text="Переменные: {partner_name}, {table_number}, {call_target_label}",
+        verbose_name="Вызов персонала: принят",
     )
     request_bill_prompt_template = models.TextField(
         blank=True,
-        help_text="Shown when the guest opens billing request options.",
+        help_text="Показывается, когда гость открывает запрос счёта.",
+        verbose_name="Запрос счёта: вопрос",
     )
     request_bill_personal_success_template = models.TextField(
         blank=True,
-        help_text="Variables: {partner_name}, {table_number}, {bill_public_id}",
+        help_text="Переменные: {partner_name}, {table_number}, {bill_public_id}",
+        verbose_name="Запрос личного счёта: принят",
     )
     request_bill_shared_success_template = models.TextField(
         blank=True,
-        help_text="Variables: {partner_name}, {table_number}, {bill_public_id}",
+        help_text="Переменные: {partner_name}, {table_number}, {bill_public_id}",
+        verbose_name="Запрос общего счёта: принят",
     )
     request_bill_custom_success_template = models.TextField(
         blank=True,
-        help_text="Variables: {partner_name}, {table_number}",
+        help_text="Переменные: {partner_name}, {table_number}",
+        verbose_name="Запрос особого деления: принят",
     )
     order_created_message_template = models.TextField(
         blank=True,
-        help_text="Variables: {order_public_id}, {total_amount}, {status_display}",
+        help_text="Переменные: {order_public_id}, {total_amount}, {status_display}",
+        verbose_name="Заказ принят (текст)",
     )
 
     class Meta:
+        verbose_name = "настройки бота"
+        verbose_name_plural = "Настройки ботов"
         ordering = ["partner__name"]
 
     def __str__(self) -> str:
@@ -531,10 +642,11 @@ class OpeningHours(TimeStampedModel):
         Partner,
         on_delete=models.CASCADE,
         related_name="opening_hours",
+        verbose_name="Заведение",
     )
-    weekday = models.PositiveSmallIntegerField(choices=Weekday.choices)
-    opens_at = models.TimeField()
-    closes_at = models.TimeField()
+    weekday = models.PositiveSmallIntegerField(choices=Weekday.choices, verbose_name="День недели")
+    opens_at = models.TimeField(verbose_name="Открытие")
+    closes_at = models.TimeField(verbose_name="Закрытие")
 
     class Meta:
         ordering = ["partner_id", "weekday", "opens_at"]

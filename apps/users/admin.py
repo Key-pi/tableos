@@ -138,10 +138,10 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
 
     fieldsets = (
         (None, {"fields": ("username", "password")}),
-        ("Personal info", {"fields": ("first_name", "last_name", "email")}),
-        ("Partner", {"fields": ("partner", "role")}),
+        ("Личные данные", {"fields": ("first_name", "last_name", "email")}),
+        ("Заведение", {"fields": ("partner", "role")}),
         (
-            "Permissions",
+            "Права платформы",
             {
                 "fields": (
                     "is_active",
@@ -152,7 +152,7 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
                 )
             },
         ),
-        ("Important dates", {"fields": ("last_login", "date_joined")}),
+        ("Даты", {"fields": ("last_login", "date_joined")}),
     )
     add_fieldsets = (
         (
@@ -222,8 +222,8 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
             return self.fieldsets
         return (
             (None, {"fields": ("username", "password")}),
-            ("Personal info", {"fields": ("first_name", "last_name", "email", "role")}),
-            ("Status", {"fields": ("is_active",)}),
+            ("Личные данные", {"fields": ("first_name", "last_name", "email", "role")}),
+            ("Статус", {"fields": ("is_active",)}),
         )
 
     def get_readonly_fields(self, request, obj=None):
@@ -409,13 +409,13 @@ class AdminAccessProfileAdmin(ScopedAdminMixin):
 
         return LimitedAccessProfileForm
 
-    @admin.display(description="Preset permissions")
+    @admin.display(description="Права по набору")
     def permission_summary(self, obj):
         if not obj.pk:
-            return "Save the profile first to preview generated section permissions."
+            return "Сохраните профиль, чтобы увидеть права набора."
         permissions = obj.section_permissions.order_by("section")
         if not permissions:
-            return "No explicit section permissions yet."
+            return "Прав на разделы пока нет."
         return "\n".join(
             (
                 f"{permission.get_section_display()}: "

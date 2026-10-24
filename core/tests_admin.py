@@ -513,3 +513,26 @@ class PickupAdminTests(TestCase):
 
         self.assertIn("channel", OrderAdmin.readonly_fields)
         self.assertIn("requested_for", OrderAdmin.readonly_fields)
+
+
+class PlatformOnlyDirectUrlTests(TestCase):
+    def test_owner_opening_a_platform_only_object_gets_no_server_error(self):
+        partner = Partner.objects.create(name="P", slug="p-direct", status=Partner.Status.ACTIVE)
+        owner = User.objects.create_user(
+            username="own_direct",
+            password="x",
+            partner=partner,
+            role=User.Role.OWNER,
+            is_staff=True,
+        )
+        AdminAccessProfile.objects.create(
+            user=owner,
+            partner=partner,
+            preset=AdminAccessPreset.OWNER,
+            is_partner_owner=True,
+            can_access_admin=True,
+        )
+        account = TelegramAccount.objects.create(telegram_id=9900001)
+        self.client.force_login(owner)
+        response = self.client.get(f"/admin/users/telegramaccount/{account.pk}/change/")
+        self.assertIn(response.status_code, (302, 403, 404))
