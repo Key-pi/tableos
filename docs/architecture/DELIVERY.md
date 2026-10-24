@@ -63,7 +63,7 @@
 
 ## Модель данных
 
-- `Order.Channel.DELIVERY`; доставка входит в `Order.PREPAID_CHANNELS`.
+- `Order.Channel.DELIVERY`; доставка входит в `Order.REMOTE_CHANNELS`.
 - `Order.delivery_address`, `delivery_latitude`, `delivery_longitude` —
   снимок на момент оформления (только для чтения в Admin).
 - `OrderItem.kind`: `item` (позиция меню) или `delivery_fee` (строка
@@ -110,4 +110,4 @@
   минут.
 - Отмена миграции `orders.0008` невозможна, пока в базе есть строки
   «Доставка» (у них нет позиции меню).
-- Отправка почтой — следующий канал (ECOSYSTEM_DIRECTION.md).
+- Отправка почтой сделана тем же путём ([SHIPPING.md](SHIPPING.md)).

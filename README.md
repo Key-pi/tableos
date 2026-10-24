@@ -5,6 +5,27 @@ Botera Shop (бывший TableOS) — multi-tenant платформа зака�
 aiogram, Celery, PostgreSQL и Redis. Часть сети Botera
 ([`docs/product/ECOSYSTEM_DIRECTION.md`](docs/product/ECOSYSTEM_DIRECTION.md)).
 
+## Что умеет
+
+Каждое заведение или магазин — партнёр со своим ботом. Модули включаются по
+отдельности и настраиваются в Admin:
+
+- меню;
+- заказ за столом по QR со счетами;
+- самовывоз;
+- доставка;
+- отправка почтой;
+- оплата переводом заранее и/или при получении;
+- бонусы и кешбэк;
+- вызов персонала;
+- быстрые продажи;
+- отчёт за день;
+- рассылки;
+- источники переходов.
+
+Статус каждой функции — в
+[`docs/product/FEATURE_MATRIX.md`](docs/product/FEATURE_MATRIX.md).
+
 ## Быстрый старт в Docker
 
 ```bash

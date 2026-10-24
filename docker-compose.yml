@@ -89,8 +89,11 @@ services:
   web:
     <<: [*app, *after-init]
     command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+    # Only this computer by default: the demo Admin has a known password and
+    # DEBUG is on, so it must not be reachable from the local network. Set
+    # WEB_BIND_ON_HOST=0.0.0.0 to open it to your Wi-Fi (e.g. from a phone).
     ports:
-      - "${WEB_PORT_ON_HOST:-8000}:8000"
+      - "${WEB_BIND_ON_HOST:-127.0.0.1}:${WEB_PORT_ON_HOST:-8000}:8000"
     healthcheck:
       test:
         - CMD

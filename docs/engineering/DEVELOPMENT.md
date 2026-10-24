@@ -145,6 +145,7 @@ docker compose down -v                    # остановить и удалит
 | `init` завершился с ошибкой про `BOT_TOKEN_ENCRYPTION_KEY` | сгенерируйте ключ (шаг 1) и впишите в `.env` |
 | `init`: «Telegram не принял токен» | проверьте токен в @BotFather; без интернета задайте `DEMO_*_BOT_USERNAME` |
 | порт 8000 занят | в `.env` задайте `WEB_PORT_ON_HOST` |
+| Admin не открывается с телефона или другого компьютера | по умолчанию он доступен только с этого компьютера; в `.env` задайте `WEB_BIND_ON_HOST=0.0.0.0` (только в своей сети: демо-пароль известен) |
 | worker или beat: `Name or service not known` / «имя или сервис неизвестны» про `redis` | контейнер `redis` не запущен: `docker compose ps -a`, `docker compose logs redis`. Остановите старые контейнеры, если они остались: `docker rm -f tableos-redis`, `docker compose -p tableos down`. Затем `docker compose up -d` |
 | бот молчит | `docker compose logs bot`; один токен не должен работать в двух местах (например, ещё и в локальном `runbot`) |
 | не приходят уведомления | нажали «Start» в боте? `DEMO_TELEGRAM_ID` указан? Admin → Notifications → Staff notifications: статус и ошибка доставки; `docker compose logs worker` |
