@@ -45,6 +45,7 @@
 | Визиты стола, правка/аннулирование счёта, кешбэк | `docs/architecture/B3_2_VISITS_AND_BILL_CHANGES.md`, ADR-0007 |
 | Каналы заказа (стол, самовывоз, доставка, отправка) | ADR-0009, `docs/architecture/PICKUP.md`, `DELIVERY.md`, `SHIPPING.md`, `PAYMENT_OPTIONS.md` |
 | Возвраты | `docs/architecture/REFUNDS.md` (PQ-037) |
+| Языки бота и Admin, свои тексты владельца | `docs/architecture/LANGUAGES.md` (PQ-040) |
 | Доставка уведомлений и рассылок | `docs/architecture/BACKGROUND_JOBS.md`, ADR-0008 |
 | Бот, callback-и | `docs/architecture/BOT_RUNTIME.md` |
 | Находки аудита и что сделано по батчам | `docs/audits/ARCHITECTURE_AUDIT.md`, `REFACTOR_ROADMAP.md` |
@@ -107,6 +108,11 @@
 - **Конструктор, часы и уведомления (PQ-038):** свои часы у самовывоза и
   доставки (`OpeningHours.scope`, без своих — общие); сотрудник выбирает
   способы заказа для уведомлений (`notify_channel_*`). Реквизиты общие.
+- **Языки (PQ-040):** по умолчанию украинский; готовые тексты uk/ru/en;
+  владелец выбирает основной и включённые языки гостей и может заменить любой
+  текст гостя на каждом языке (`BotText`); гость — язык Telegram или выбор в
+  профиле; персонал и Admin — свой язык (`User.language`). Документация —
+  русская.
 - **Данные гостей (PQ-024):** хранятся, гость меняет сам. Мониторинг ошибок —
   будущий Telegram-бот для всех систем Botera (PQ-039), пока не делаем.
 - Новый продуктовый смысл без решения владельца не выбирать — спросить.
@@ -133,11 +139,16 @@
   `FEATURE_MATRIX.md`, PQ/ADR при решении, строка прогона в `TESTING.md`.
   Число тестов также упоминается в `AGENTS.md`, `.agents/skills/…/SKILL.md`,
   `PROJECT_CHEATSHEET.md`, AS-IS — менять везде.
-- Тексты для людей (бот, Admin) и документация — по-русски; сообщения бота в HTML, все
-  динамические значения через `escape_html`. У новых полей и вариантов —
-  `verbose_name` и подписи по-русски (`core/tests_admin_language.py` это
-  проверяет); строки темы Admin — `locale/ru/LC_MESSAGES/django.po`, после
-  правки `python infrastructure/scripts/compile_messages.py`.
+- Документация — по-русски. Тексты для людей (бот, Admin) пишутся в коде
+  по-русски внутри `_()` из `core/i18n.py` (значения — параметрами:
+  `_("Сумма: {total} грн", total=...)`), переводы на украинский и английский —
+  в `locale/{uk,en}/LC_MESSAGES/django.po`: `python
+  infrastructure/scripts/messages.py update`, перевести, `… compile`
+  (PQ-040, `docs/architecture/LANGUAGES.md`; `core/tests_i18n_catalog.py`
+  проверяет полноту). Сообщения бота в HTML, все динамические значения через
+  `escape_html`. У новых полей и вариантов — `verbose_name` и подписи
+  по-русски (`core/tests_admin_language.py`); строки темы Admin —
+  `locale/<язык>/LC_MESSAGES/theme.po`.
 - Telegram callback_data ≤ 64 байт: UUID в виде hex, состояние шагов — в
   самом callback (без FSM, где можно).
 

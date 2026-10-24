@@ -1,5 +1,5 @@
 # Russian for the Admin theme (django-unfold has no Russian catalog).
-# Compile: python infrastructure/scripts/compile_messages.py
+# Compile: python infrastructure/scripts/messages.py compile
 msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"

@@ -69,8 +69,13 @@ DATABASES = {"default": app_settings.database_config}
 AUTH_USER_MODEL = "users.User"
 
 LANGUAGE_CODE = app_settings.language_code
-# Russian for the Admin theme strings (locale/ru/LC_MESSAGES/django.po).
+# Bot and Admin languages (PQ-040): texts in code are Russian, catalogs in
+# locale/<language>/LC_MESSAGES (infrastructure/scripts/messages.py).
+LANGUAGES = [("uk", "Українська"), ("ru", "Русский"), ("en", "English")]
 LOCALE_PATHS = [BASE_DIR / "locale"]
+# Tests assert the Russian texts of the code; other languages are tested
+# explicitly (core/test_runner.py).
+TEST_RUNNER = "core.test_runner.BoteraTestRunner"
 TIME_ZONE = app_settings.timezone
 USE_I18N = True
 USE_TZ = True

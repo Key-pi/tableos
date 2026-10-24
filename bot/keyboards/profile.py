@@ -1,20 +1,51 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from core.i18n import LANGUAGE_FLAGS, LANGUAGE_NAMES, _
+
 MY_ORDERS_LABEL = "📋 Мои заказы"
 
 
-def build_profile_summary_keyboard(*, bonuses_label: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+def build_profile_summary_keyboard(
+    *, bonuses_label: str, show_language: bool = False
+) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=bonuses_label,
+                callback_data="guestprofile:bonuses:0",
+            )
+        ],
+        [InlineKeyboardButton(text=MY_ORDERS_LABEL, callback_data="guestorders:0")],
+    ]
+    if show_language:
+        rows.append([InlineKeyboardButton(text=_("🌐 Язык"), callback_data="guestlang:menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def build_language_keyboard(*, languages, chosen: str) -> InlineKeyboardMarkup:
+    """The venue's languages, each named in itself, and «automatic» (PQ-040)."""
+
+    rows = []
+    for code in languages:
+        name = f"{LANGUAGE_FLAGS[code]} {LANGUAGE_NAMES[code]}"
+        rows.append(
             [
                 InlineKeyboardButton(
-                    text=bonuses_label,
-                    callback_data="guestprofile:bonuses:0",
+                    text=f"✓ {name}" if code == chosen else name,
+                    callback_data=f"guestlang:{code}",
                 )
-            ],
-            [InlineKeyboardButton(text=MY_ORDERS_LABEL, callback_data="guestorders:0")],
+            ]
+        )
+    auto = _("Автоматически — как в Telegram")
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=f"✓ {auto}" if not chosen else auto, callback_data="guestlang:auto"
+            )
         ]
     )
+    rows.append([InlineKeyboardButton(text=_("К профилю"), callback_data="guestprofile:summary")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def build_my_orders_keyboard(

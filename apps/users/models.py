@@ -11,6 +11,9 @@ from apps.users.constants import (
     AdminSection,
 )
 from core.database.models import PartnerBoundModel, TimeStampedModel
+from core.i18n import LANGUAGE_NAMES, LANGUAGES
+
+LANGUAGE_CHOICES = [(code, LANGUAGE_NAMES[code]) for code in LANGUAGES]
 
 
 class User(AbstractUser):
@@ -37,6 +40,13 @@ class User(AbstractUser):
         choices=Role.choices,
         default=Role.MANAGER,
         verbose_name="Роль",
+    )
+    language = models.CharField(
+        max_length=8,
+        choices=LANGUAGE_CHOICES,
+        blank=True,
+        verbose_name="Язык",
+        help_text="Язык бота персонала и Admin для этого пользователя. Пусто — по умолчанию.",
     )
 
     def __str__(self) -> str:
@@ -106,6 +116,10 @@ class GuestProfile(PartnerBoundModel):
     # Shipping by post (PQ-034): the last carrier and destination, offered again.
     shipping_carrier = models.CharField(max_length=16, blank=True, verbose_name="Служба")
     shipping_destination = models.TextField(blank=True, verbose_name="Куда отправить")
+    # The language the guest chose in the bot (PQ-040); empty = automatic.
+    language = models.CharField(
+        max_length=8, choices=LANGUAGE_CHOICES, blank=True, verbose_name="Язык (выбран гостем)"
+    )
 
     class Meta:
         verbose_name = "гость"

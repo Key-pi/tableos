@@ -58,9 +58,9 @@ flowchart LR
 Admin по-русски:
 - подписи моделей, полей и вариантов — `verbose_name` в моделях;
 - разделы — `AppConfig.verbose_name`;
-- строки темы Unfold — `LOCALE_PATHS` → `locale/ru/LC_MESSAGES/django.po`,
-  `.mo` собирает `infrastructure/scripts/compile_messages.py`, gettext не
-  нужен;
+- строки темы Unfold — `LOCALE_PATHS` → `locale/ru/LC_MESSAGES/theme.po`,
+  `django.mo` собирает `infrastructure/scripts/messages.py compile`, gettext
+  не нужен;
 - проверка — `core/tests_admin_language.py`.
 
 Продакшен (AA-038, `docs/engineering/DEPLOYMENT.md`): `docker-compose.prod.yml`
@@ -155,6 +155,10 @@ apps.notifications.tasks` — цикл, разорванный только им
    `Работа бота приостановлена, ожидайте обновлений.` (сообщением или
    всплывающим ответом на callback). Само соединение polling остаётся
    открытым до перезапуска процесса.
+   Затем middleware определяет язык человека и свои тексты заведения
+   (`bot/services/language.py:language_context`, PQ-040) и выполняет
+   обработчик внутри `core.i18n.texts(...)`; подробно —
+   [LANGUAGES.md](LANGUAGES.md).
 3. Обработчики снова вызывают `resolve_partner_for_bot_token` и строят
    `bot/services/content.py:BotContent` из `PartnerBotSettings`.
 4. Действия reply-клавиатуры сопоставляются по точному тексту через
@@ -459,7 +463,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 517 тестов после часов и уведомлений по модулю, зелёные на SQLite и на
+- 544 теста после механики языков, зелёные на SQLite и на
   PostgreSQL 16. Тринадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

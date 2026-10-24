@@ -76,3 +76,26 @@ def mark_guest_visit(guest_profile: GuestProfile) -> GuestProfile:
         update_fields = ["last_visit_at", "updated_at"]
     guest_profile.save(update_fields=update_fields)
     return guest_profile
+
+
+class GuestLanguageError(ValueError):
+    pass
+
+
+def set_guest_language(*, partner_id, telegram_id: int, language: str) -> GuestProfile:
+    """The guest picks the bot language among the venue's (PQ-040); "" = automatic."""
+
+    from apps.partners.languages import enabled_languages
+    from apps.partners.models import PartnerBotSettings
+    from core.i18n import _
+
+    settings = PartnerBotSettings.objects.filter(partner_id=partner_id).first()
+    if language and language not in enabled_languages(settings):
+        raise GuestLanguageError(_("Этот язык заведение не включило."))
+    guest = GuestProfile.objects.select_related("telegram_account").get(
+        partner_id=partner_id, telegram_account__telegram_id=telegram_id
+    )
+    if guest.language != language:
+        guest.language = language
+        guest.save(update_fields=["language", "updated_at"])
+    return guest

@@ -91,6 +91,12 @@ billing → guest_call → staff`. aiogram выбирает первый под�
   `strc` (итог) → `strk` (выполнить). Состояние только в callback; право,
   счёт и строки перепроверяет сервис под блокировками
   (`bot/handlers/staff_refunds.py`).
+- Язык гостя (PQ-040): «🌐 Язык» в профиле → `guestlang:menu`; выбор —
+  `guestlang:<uk|ru|en>` или `guestlang:auto` (как в Telegram). Сервис
+  `apps/users/services.py:set_guest_language` отказывает в языке, который
+  заведение выключило. После выбора бот присылает главную клавиатуру на
+  новом языке. Язык каждого обновления ставит `PartnerRuntimeMiddleware`
+  ([LANGUAGES.md](LANGUAGES.md)).
 - «Мои заказы»: `guestorders:<страница>` (список) и
   `guestorder:<номер>` (карточка). Обработчик:
   `bot/handlers/profile.py:my_orders_callback`.

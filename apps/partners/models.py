@@ -1,3 +1,4 @@
+import hashlib
 import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -5,9 +6,12 @@ from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import models
 
 from core.database.models import TimeStampedModel
+from core.i18n import LANGUAGE_NAMES, LANGUAGES, default_language
 from core.security.crypto import decrypt_text, encrypt_text
 
 MIN_TRANSFER_WAIT_MINUTES = 15
+LANGUAGE_CHOICES = [(code, LANGUAGE_NAMES[code]) for code in LANGUAGES]
+GUEST_LANGUAGE_FIELDS = {code: f"language_{code}" for code in LANGUAGES}
 
 _ROUTED_REPLY_LABEL_FIELDS = (
     "button_menu_label",
@@ -363,6 +367,18 @@ class PartnerBotSettings(TimeStampedModel):
         help_text="Резерв для будущих флагов и особых настроек бота заведения.",
         verbose_name="Доп. настройки (JSON)",
     )
+    # Languages (PQ-040): the guest sees the language of their Telegram when
+    # it is enabled here, otherwise the main one, and may switch in the profile.
+    default_language = models.CharField(
+        max_length=8,
+        choices=LANGUAGE_CHOICES,
+        default=default_language,
+        verbose_name="Основной язык бота",
+        help_text="Для гостей, чей язык Telegram не включён ниже. Должен быть включён.",
+    )
+    language_uk = models.BooleanField(default=True, verbose_name="Язык гостей: украинский")
+    language_ru = models.BooleanField(default=True, verbose_name="Язык гостей: русский")
+    language_en = models.BooleanField(default=True, verbose_name="Язык гостей: английский")
     button_menu_label = models.CharField(
         max_length=64,
         default="Открыть меню",
@@ -586,6 +602,8 @@ class PartnerBotSettings(TimeStampedModel):
             value = getattr(self, field)
             if value is not None and value < 0:
                 add_error(field, "Сумма не может быть отрицательной.")
+        if not getattr(self, GUEST_LANGUAGE_FIELDS.get(self.default_language, ""), False):
+            add_error("default_language", "Основной язык должен быть среди включённых языков.")
         if self.module_billing_enabled and not self.module_orders_enabled:
             add_error("module_billing_enabled", "Billing module requires orders module.")
         if self.module_staff_call_enabled and not self.module_tables_enabled:
@@ -682,3 +700,43 @@ class OpeningHours(TimeStampedModel):
         super().clean()
         if self.opens_at is not None and self.opens_at == self.closes_at:
             raise ValidationError({"closes_at": "Время закрытия совпадает со временем открытия."})
+
+
+def text_key(msgid: str) -> str:
+    return hashlib.sha1(msgid.encode("utf-8")).hexdigest()
+
+
+class BotText(TimeStampedModel):
+    """The owner's own wording of a bot text in one language (PQ-040).
+
+    ``msgid`` is the catalog text (Russian, as in the code); the bot shows
+    ``text`` instead of the catalog translation for this partner and language.
+    """
+
+    partner = models.ForeignKey(
+        Partner,
+        on_delete=models.CASCADE,
+        related_name="bot_texts",
+        verbose_name="Заведение",
+    )
+    language = models.CharField(max_length=8, choices=LANGUAGE_CHOICES, verbose_name="Язык")
+    msgid = models.TextField(verbose_name="Текст в каталоге")
+    key = models.CharField(max_length=40, editable=False, verbose_name="Ключ")
+    text = models.TextField(verbose_name="Свой текст")
+
+    class Meta:
+        ordering = ["partner_id", "language", "msgid"]
+        verbose_name = "текст бота"
+        verbose_name_plural = "Тексты бота"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["partner", "language", "key"], name="uniq_bot_text_per_language"
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.language}: {self.text[:60]}"
+
+    def save(self, *args, **kwargs):
+        self.key = text_key(self.msgid)
+        super().save(*args, **kwargs)

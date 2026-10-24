@@ -1,0 +1,37 @@
+# Тексты Botera Shop: uk. Обновлять: python infrastructure/scripts/messages.py update
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: uk\n"
+
+#: apps/users/services.py
+msgid "Этот язык заведение не включило."
+msgstr "Цю мову заклад не увімкнув."
+
+#: bot/handlers/profile.py
+msgid ""
+"<b>Язык бота</b>\n"
+"На каком языке боту с вами говорить?"
+msgstr ""
+"<b>Мова бота</b>\n"
+"Якою мовою боту з вами говорити?"
+
+#: bot/handlers/profile.py
+msgid "Сначала откройте бота командой /start."
+msgstr "Спершу відкрийте бота командою /start."
+
+#: bot/handlers/profile.py
+msgid "Готово, язык бота: {language}."
+msgstr "Готово, мова бота: {language}."
+
+#: bot/keyboards/profile.py
+msgid "🌐 Язык"
+msgstr "🌐 Мова"
+
+#: bot/keyboards/profile.py
+msgid "Автоматически — как в Telegram"
+msgstr "Автоматично — як у Telegram"
+
+#: bot/keyboards/profile.py
+msgid "К профилю"
+msgstr "До профілю"

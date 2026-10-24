@@ -9,7 +9,11 @@ from django.utils.translation import gettext
 
 CYRILLIC = re.compile("[а-яА-ЯёЁ]")
 # Names that stay as they are: brands and technical identifiers.
-ALLOWED = {"Meest", "Polling", "Webhook", "Telegram", "Telegram ID", "@username", "Botera Shop"}
+ALLOWED = {
+    "Meest", "Polling", "Webhook", "Telegram", "Telegram ID", "@username", "Botera Shop",
+    # A language is named in itself (PQ-040).
+    "English",
+}
 
 
 class AdminLanguageTests(SimpleTestCase):

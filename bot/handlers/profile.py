@@ -5,6 +5,7 @@ from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
+from django.utils import translation
 
 from apps.billing.remote_orders import tracking_link
 from apps.billing.services import get_order_refunded_money
@@ -15,11 +16,18 @@ from apps.bonuses.selectors import (
 from apps.orders.models import Order
 from apps.orders.selectors import get_guest_orders
 from apps.orders.services import requested_time_label
+from apps.partners.languages import enabled_languages
 from apps.tables.services import get_active_table_session
-from apps.users.services import get_or_create_guest_profile
+from apps.users.models import GuestProfile
+from apps.users.services import (
+    GuestLanguageError,
+    get_or_create_guest_profile,
+    set_guest_language,
+)
 from bot.filters.content import PartnerButtonFilter
 from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.profile import (
+    build_language_keyboard,
     build_my_order_keyboard,
     build_my_orders_keyboard,
     build_profile_bonuses_keyboard,
@@ -27,8 +35,10 @@ from bot.keyboards.profile import (
 )
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
+from bot.services.language import guest_language_choice, language_context, partner_bot_settings
 from bot.services.navigation import resolve_guest_navigation_state
 from bot.utils.html import escape_html
+from core.i18n import LANGUAGE_NAMES, _
 
 router = Router()
 
@@ -134,6 +144,10 @@ async def _safe_profile_message_edit(message: Message, text: str, *, reply_marku
         raise
 
 
+def _offers_language_choice(partner) -> bool:
+    return len(enabled_languages(partner_bot_settings(partner))) > 1
+
+
 @router.message(PartnerButtonFilter("button_my_profile"))
 async def profile_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
@@ -158,6 +172,7 @@ async def profile_handler(message: Message, bot: Bot) -> None:
         ),
         reply_markup=build_profile_summary_keyboard(
             bonuses_label=content.button_profile_bonuses_label,
+            show_language=await sync_to_async(_offers_language_choice)(partner),
         ),
     )
 
@@ -187,6 +202,7 @@ async def profile_summary_callback(callback: CallbackQuery, bot: Bot) -> None:
         ),
         reply_markup=build_profile_summary_keyboard(
             bonuses_label=content.button_profile_bonuses_label,
+            show_language=await sync_to_async(_offers_language_choice)(partner),
         ),
     )
     if updated:
@@ -379,3 +395,56 @@ async def my_orders_callback(callback: CallbackQuery, bot: Bot) -> None:
         )
     updated = await _safe_profile_message_edit(callback.message, text, reply_markup=markup)
     await callback.answer() if updated else await callback.answer("Без изменений")
+
+
+# Bot language (PQ-040): the guest picks one of the venue's languages or
+# «automatic» (the language of their Telegram when the venue offers it).
+_LANGUAGE_CALLBACK = re.compile(r"^guestlang:(menu|auto|uk|ru|en)$")
+
+
+@router.callback_query(F.data.regexp(_LANGUAGE_CALLBACK))
+async def guest_language_callback(callback: CallbackQuery, bot: Bot) -> None:
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    choice = _LANGUAGE_CALLBACK.match(callback.data).group(1)
+    telegram_id = callback.from_user.id
+    languages = enabled_languages(await sync_to_async(partner_bot_settings)(partner))
+    if choice == "menu":
+        chosen = await sync_to_async(guest_language_choice)(partner.id, telegram_id)
+        await _safe_profile_message_edit(
+            callback.message,
+            _("<b>Язык бота</b>\nНа каком языке боту с вами говорить?"),
+            reply_markup=build_language_keyboard(languages=languages, chosen=chosen),
+        )
+        await callback.answer()
+        return
+    try:
+        await sync_to_async(set_guest_language)(
+            partner_id=partner.id,
+            telegram_id=telegram_id,
+            language="" if choice == "auto" else choice,
+        )
+    except GuestLanguageError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    except GuestProfile.DoesNotExist:
+        await callback.answer(_("Сначала откройте бота командой /start."), show_alert=True)
+        return
+    language, _overrides = await sync_to_async(language_context)(
+        partner, telegram_id, callback.from_user.language_code
+    )
+    with translation.override(language):
+        content = await sync_to_async(BotContent.for_partner)(partner)
+        state = await sync_to_async(resolve_guest_navigation_state)(
+            partner_id=partner.id, telegram_id=telegram_id, content=content
+        )
+        chosen = "" if choice == "auto" else choice
+        await _safe_profile_message_edit(
+            callback.message,
+            _("<b>Язык бота</b>\nНа каком языке боту с вами говорить?"),
+            reply_markup=build_language_keyboard(languages=languages, chosen=chosen),
+        )
+        await callback.message.answer(
+            _("Готово, язык бота: {language}.", language=LANGUAGE_NAMES[language]),
+            reply_markup=build_main_keyboard(content, navigation_state=state),
+        )
+        await callback.answer()
