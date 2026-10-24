@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from uuid import UUID
 
@@ -5,7 +6,7 @@ from aiogram import Bot, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, ForceReply, Message
 from asgiref.sync import sync_to_async
 from django.db.models import Count
 from django.utils import timezone
@@ -26,8 +27,11 @@ from apps.billing.remote_orders import (
     cancel_unpaid_remote_order,
     confirm_transfer,
     map_link,
+    mark_order_shipped,
     record_payment_on_receipt,
     reject_transfer,
+    shipping_cost_label,
+    tracking_link,
 )
 from apps.billing.repositories import (
     BillingOperationsRepository,
@@ -89,6 +93,7 @@ from apps.tables.services import (
 )
 from bot.keyboards.staff import (
     DELIVERY_STATUS_LABELS,
+    SHIPPING_STATUS_LABELS,
     STATUS_LABELS,
     build_staff_adjustment_done_keyboard,
     build_staff_adjustment_reason_keyboard,
@@ -179,17 +184,35 @@ def _order_context_label(order: Order) -> str:
             lines.append(f'<a href="{escape_html(link)}">Открыть на карте</a>')
         lines.append(f"Телефон: {escape_html(phone)}")
         return "\n".join(lines)
+    if order.channel == Order.Channel.SHIPPING:
+        phone = order.guest.phone or "не указан"
+        lines = [
+            f"Отправка: {escape_html(order.get_shipping_carrier_display())}",
+            f"Получатель: {escape_html(order.shipping_destination)}",
+            f"Телефон: {escape_html(phone)}",
+            f"Пересылка: {escape_html(shipping_cost_label(order))}",
+        ]
+        if order.tracking_number:
+            link = tracking_link(order.shipping_carrier, order.tracking_number)
+            number = escape_html(order.tracking_number)
+            lines.append(
+                f'ТТН: <a href="{escape_html(link)}">{number}</a>' if link else f"ТТН: {number}"
+            )
+        return "\n".join(lines)
     if order.table_id is not None:
         return f"Стол: #{order.table.number}"
     return "Сценарий: заказ без привязки к столу"
 
 
 def _order_actions_keyboard(order: Order):
+    is_shipping = order.channel == Order.Channel.SHIPPING
     return build_staff_order_actions_keyboard(
         order_public_id=order.public_id,
         available_statuses=get_available_staff_actions(order.status, channel=order.channel),
         transfer_check_pending=awaits_transfer_check(order),
         receipt_payment_pending=awaits_payment_on_receipt(order),
+        cash_on_delivery=is_shipping,
+        ship_needs_tracking=is_shipping and order.status == Order.Status.READY,
         status_labels=_status_labels(order),
     )
 
@@ -197,6 +220,8 @@ def _order_actions_keyboard(order: Order):
 def _status_labels(order: Order) -> dict[str, str]:
     if order.channel == Order.Channel.DELIVERY:
         return DELIVERY_STATUS_LABELS
+    if order.channel == Order.Channel.SHIPPING:
+        return SHIPPING_STATUS_LABELS
     return STATUS_LABELS
 
 
@@ -217,6 +242,8 @@ def _order_short_context_label(order: Order) -> str:
         return "Самовывоз"
     if order.channel == Order.Channel.DELIVERY:
         return "Доставка"
+    if order.channel == Order.Channel.SHIPPING:
+        return "Почта"
     if order.table_id is not None:
         return f"T{order.table.number}"
     return "Вне стола"
@@ -300,6 +327,10 @@ def _message_text(message: Message | None) -> str:
 def _is_staff_overview_message(message: Message | None, title: str) -> bool:
     text = _message_text(message)
     return text.startswith(f"<b>{title}</b>") or text.startswith(title)
+
+
+# A staff reply to this prompt is the parcel's ТТН (shipping, PQ-034).
+TRACKING_PROMPT = "📦 ТТН для заказа"
 
 
 _STAFF_OPERATIONS_ROLES = frozenset(
@@ -1919,7 +1950,11 @@ async def staff_receipt_payment_callback_handler(callback: CallbackQuery, bot: B
         return
 
     action, _, order_public_id = (callback.data or "").partition(":")
-    methods = {"staffrccash": Payment.Method.CASH, "staffrccard": Payment.Method.TERMINAL}
+    methods = {
+        "staffrccash": Payment.Method.CASH,
+        "staffrccard": Payment.Method.TERMINAL,
+        "staffrccod": Payment.Method.COD,
+    }
     if action not in {*methods, "staffrcno", "staffrcnoy"} or not order_public_id:
         await callback.answer("Неизвестное действие.", show_alert=True)
         return
@@ -1939,8 +1974,12 @@ async def staff_receipt_payment_callback_handler(callback: CallbackQuery, bot: B
         await _safe_edit_message_text(
             callback.message,
             _render_order_card(order)
-            + "\n\n<b>Гость не забрал заказ и не заплатил — отменить заказ?</b> "
-            "Списанные бонусы вернутся гостю.",
+            + (
+                "\n\n<b>Посылку не забрали и деньги не пришли — отменить заказ?</b> "
+                if order.channel == Order.Channel.SHIPPING
+                else "\n\n<b>Гость не забрал заказ и не заплатил — отменить заказ?</b> "
+            )
+            + "Списанные бонусы вернутся гостю.",
             reply_markup=build_staff_receipt_refusal_confirm_keyboard(order.public_id),
         )
         await callback.answer()
@@ -1968,6 +2007,87 @@ async def staff_receipt_payment_callback_handler(callback: CallbackQuery, bot: B
     )
     await callback.answer(
         "Оплата при получении отмечена." if action in methods else "Заказ отменён."
+    )
+
+
+def _is_tracking_answer(message: Message) -> bool:
+    replied = message.reply_to_message
+    return bool(
+        message.text
+        and replied is not None
+        and replied.from_user is not None
+        and replied.from_user.is_bot
+        and (replied.text or "").startswith(TRACKING_PROMPT)
+    )
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffship:"))
+async def staff_ship_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    """Shipping (PQ-034): «Отправлен» — ask for the ТТН in a reply."""
+
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_open_orders_allowed(employee)
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    _, _, order_public_id = (callback.data or "").partition(":")
+    try:
+        order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
+            partner.id,
+            order_public_id,
+        )
+    except Order.DoesNotExist:
+        await callback.answer("Заказ не найден.", show_alert=True)
+        return
+    if order.channel != Order.Channel.SHIPPING or order.status != Order.Status.READY:
+        await callback.answer("Это действие для заказа больше недоступно.", show_alert=True)
+        return
+    await callback.message.answer(
+        f"{TRACKING_PROMPT} #{order.public_id}\n"
+        f"{escape_html(order.get_shipping_carrier_display())}: "
+        f"{escape_html(order.shipping_destination)}\n"
+        "Напишите номер ТТН в ответ на это сообщение.",
+        reply_markup=ForceReply(input_field_placeholder="Номер ТТН"),
+    )
+    await callback.answer()
+
+
+@router.message(_is_tracking_answer)
+async def staff_tracking_number_handler(message: Message, bot: Bot) -> None:
+    """A staff reply to «ТТН для заказа #…»: keep the number, mark it sent."""
+
+    try:
+        partner, employee = await _resolve_staff_employee(message, bot)
+        _ensure_open_orders_allowed(employee)
+    except OrderFlowError as exc:
+        await message.answer(str(exc))
+        return
+    match = re.search(r"#([0-9a-f]+)", message.reply_to_message.text or "")
+    if match is None:
+        await message.answer("Не нашёл номер заказа — нажмите «Отправлен» в карточке ещё раз.")
+        return
+    try:
+        order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
+            partner.id,
+            match.group(1),
+        )
+        order = await sync_to_async(mark_order_shipped)(
+            order=order, actor=employee.user, tracking_number=message.text
+        )
+    except Order.DoesNotExist:
+        await message.answer("Заказ не найден.")
+        return
+    except (RemoteOrderError, OrderFlowError) as exc:
+        await message.answer(str(exc))
+        return
+    refreshed_order = await sync_to_async(OrderRepository.by_public_id_for_partner)(
+        partner.id,
+        order.public_id,
+    )
+    await message.answer(
+        _render_order_card(refreshed_order),
+        reply_markup=_order_actions_keyboard(refreshed_order),
     )
 
 

@@ -75,7 +75,12 @@ class OrderAdmin(ScopedAdminMixin):
         "total_amount",
     )
     list_filter = ("partner", "channel", "status", "payment_timing", "payment_method")
-    search_fields = ("public_id", "guest__telegram_account__username", "partner__name")
+    search_fields = (
+        "public_id",
+        "guest__telegram_account__username",
+        "partner__name",
+        "tracking_number",
+    )
     readonly_fields = (
         "public_id",
         # AA-023: billing context, bonus target and session settlement depend
@@ -88,6 +93,10 @@ class OrderAdmin(ScopedAdminMixin):
         "delivery_address",
         "delivery_latitude",
         "delivery_longitude",
+        "shipping_carrier",
+        "shipping_destination",
+        "shipping_cost",
+        "tracking_number",
         "assigned_employee",
         "status",
         "payment_timing",

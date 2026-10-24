@@ -232,10 +232,26 @@ apps.notifications.tasks` — цикл, разорванный только им
    видят без отдельной логики. У персонала после `ready` — `delivering`
    («🚚 В пути»), затем `completed` («✅ Доставлено»)
    (`orders/services.py:get_available_staff_actions`).
+   **Отправка почтой** (`Order.channel = shipping`, [SHIPPING.md](SHIPPING.md),
+   PQ-034) — тот же путь без времени и часов работы: служба
+   (`Order.Carrier`, включённые в `PartnerBotSettings.shipping_<служба>`) и
+   получатель текстом (`remote_orders.py:save_guest_shipping_carrier`,
+   `save_guest_shipping_destination`; последние — в `GuestProfile.shipping_*`,
+   снимок — в `Order.shipping_*`); пересылка на выбор из включённых
+   (`Order.shipping_cost`: `carrier` — платит получатель на почте, строки нет;
+   `fixed` — строка «Пересылка» `OrderItem.kind = delivery_fee` по
+   `shipping_fee` / `shipping_free_from`), минимальный заказ
+   `shipping_min_order`. Оплата при получении у отправки — только
+   наложенный платёж (`Payment.Method.COD`). После `ready` персонал вводит
+   ТТН ответом на сообщение бота (`remote_orders.py:mark_order_shipped`:
+   блокировка заказа, `Order.tracking_number`, переход в `delivering`;
+   `transition_order_status` не пускает отправку в `delivering` без ТТН);
+   гость получает ТТН, ссылку на отслеживание и кнопку «Получил(а)».
 6. Подтверждение получения гостем (`confirm_order_received_by_guest`)
    блокирует заказ и переводит его в `completed` из любого статуса из
    `GUEST_RECEIPT_CONFIRMABLE_STATUSES` (все нефинальные, включая `new`;
-   решение владельца PQ-029). Это единственный переход по инициативе гостя;
+   решение владельца PQ-029). Без активного стола гость может подтвердить
+   только свою отправку почтой (PQ-034). Это единственный переход по инициативе гостя;
    история записывает его как действие гостя.
 
 ### Счета и расчёт
@@ -397,15 +413,17 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 415 тестов после способов оплаты, зелёные на SQLite и на
-  PostgreSQL 16. Десять выполняются только на PostgreSQL и на SQLite
+- 453 теста после отправки почтой, зелёные на SQLite и на
+  PostgreSQL 16. Одиннадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа
   (`apps/orders/test_concurrency.py`); параллельные сканы QR, два гостя
   сканируют пустой стол, оплата визита во время присоединения гостя
   (`apps/tables/test_concurrency.py`); параллельное распределение по счёту,
   оплата бонусами, последняя оплата, аннулирование против оплаты и отмена
-  против выставления счёта (`apps/billing/test_concurrency.py`). Тест
+  против выставления счёта (`apps/billing/test_concurrency.py`); два
+  сотрудника вводят ТТН одной посылки
+  (`apps/billing/test_shipping_concurrency.py`). Тест
   миграции (`apps/tables/test_visit_migration.py`) прогоняет заполнение
   визитов назад и вперёд.
 - Записанные прогоны — в

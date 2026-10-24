@@ -61,6 +61,8 @@ def build_main_keyboard(
         order_journey_row.append(KeyboardButton(text=content.button_delivery_label))
     if navigation_state.has_action(GuestAction.PICKUP):
         order_journey_row.append(KeyboardButton(text=content.button_pickup_label))
+    if navigation_state.has_action(GuestAction.SHIPPING):
+        order_journey_row.append(KeyboardButton(text=content.button_shipping_label))
     if order_journey_row:
         rows.append(order_journey_row)
 

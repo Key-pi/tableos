@@ -57,6 +57,18 @@ class SeedBaselineDemoTests(TestCase):
         self.assertTrue(cafe_settings.module_delivery_enabled)
         self.assertEqual(cafe_settings.delivery_fee, Decimal("60.00"))
         self.assertFalse(PartnerBotSettings.objects.get(partner=hookah).module_delivery_enabled)
+        # Shipping by post (PQ-034): only the cafe, only its beans and tea.
+        self.assertTrue(cafe_settings.module_shipping_enabled)
+        self.assertFalse(PartnerBotSettings.objects.get(partner=hookah).module_shipping_enabled)
+        shipped = set(
+            MenuItem.objects.filter(partner=cafe, available_for_shipping=True).values_list(
+                "public_id", flat=True
+            )
+        )
+        self.assertEqual(shipped, {"CAFBN001", "CAFBN002", "CAFBN003"})
+        self.assertFalse(
+            MenuItem.objects.filter(partner=hookah, available_for_shipping=True).exists()
+        )
         self.assertIn("доставка: включена, 60 грн, бесплатно от 800 грн", output)
         self.assertFalse(OpeningHours.objects.filter(partner=cafe).exists())
         self.assertFalse(

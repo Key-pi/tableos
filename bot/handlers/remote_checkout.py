@@ -1,5 +1,10 @@
-"""Guest checkout for remote channels (pickup, delivery): phone, address
-(delivery), time, bonuses, how to pay, summary (ADR-0009, PQ-032, PQ-033).
+"""Guest checkout for remote channels (pickup, delivery, shipping by post):
+phone, address (delivery) or carrier and destination (shipping), time or
+postage option, bonuses, how to pay, summary (ADR-0009, PQ-032–PQ-034).
+
+The step after the address carries an "option" in the callback: a time slot
+for pickup and delivery (``now`` / ``30`` / ``60``), the postage option for
+shipping (``c`` — carrier's tariff, ``f`` — fixed price in the order).
 
 Payment options are the module's settings: transfer in advance (requisites,
 "I paid") and/or on receipt; with both on, the guest picks one
@@ -39,12 +44,16 @@ from apps.billing.remote_orders import (
     PREPAID,
     RemoteOrderError,
     available_slots,
+    carrier_title,
     closed_message,
     get_remote_quote,
+    get_shipping_terms,
     place_remote_order,
     save_guest_delivery_address,
     save_guest_delivery_location,
     save_guest_phone,
+    save_guest_shipping_carrier,
+    save_guest_shipping_destination,
 )
 from apps.orders.models import Cart, Order
 from apps.orders.services import requested_time_label
@@ -66,9 +75,22 @@ SHARE_PHONE_LABEL = "📱 Поделиться номером"
 SHARE_LOCATION_LABEL = "📍 Отправить геолокацию"
 # The guest's answer to this prompt is their delivery address (ForceReply).
 ADDRESS_PROMPT = "🏠 Адрес доставки"
+# ... and this one, who receives a parcel by post and where (PQ-034).
+DESTINATION_PROMPT = "📦 Куда отправить"
 
 # One-letter channel codes keep callback_data short.
-CHANNEL_CODES = {"p": Order.Channel.PICKUP, "d": Order.Channel.DELIVERY}
+CHANNEL_CODES = {
+    "p": Order.Channel.PICKUP,
+    "d": Order.Channel.DELIVERY,
+    "s": Order.Channel.SHIPPING,
+}
+CARRIER_CODES = {
+    "np": Order.Carrier.NOVA_POSHTA,
+    "up": Order.Carrier.UKRPOSHTA,
+    "mm": Order.Carrier.MEEST,
+}
+CARRIER_CODE_OF = {carrier: code for code, carrier in CARRIER_CODES.items()}
+SHIPPING_COST_CODES = {"c": Order.ShippingCost.CARRIER, "f": Order.ShippingCost.FIXED}
 CODE_OF = {channel: code for code, channel in CHANNEL_CODES.items()}
 # Payment option codes in callback data; a summary sent before PQ-033 has none
 # and means transfer.
@@ -78,6 +100,7 @@ PAYMENT_CODE_OF = {mode: code for code, mode in PAYMENT_CODES.items()}
 ON_RECEIPT_WHERE = {
     Order.Channel.PICKUP: "на месте",
     Order.Channel.DELIVERY: "курьеру",
+    Order.Channel.SHIPPING: "наложенным платежом",
 }
 TIME_QUESTIONS = {
     Order.Channel.PICKUP: "Когда заберёте заказ?",
@@ -106,7 +129,29 @@ def _supports(content: BotContent, channel: str) -> bool:
         return content.supports_pickup_orders()
     if channel == Order.Channel.DELIVERY:
         return content.supports_delivery_orders()
+    if channel == Order.Channel.SHIPPING:
+        return content.supports_shipping_orders()
     return False
+
+
+def _option_ok(channel: str, option: str) -> bool:
+    if channel == Order.Channel.SHIPPING:
+        return option in SHIPPING_COST_CODES
+    return option in SLOT_LABELS
+
+
+def _shipping_cost(channel: str, option: str) -> str:
+    return SHIPPING_COST_CODES.get(option, "") if channel == Order.Channel.SHIPPING else ""
+
+
+def _quote(partner, telegram_id: int, channel: str, option: str, use_bonuses: bool):
+    return get_remote_quote(
+        partner_id=partner.id,
+        telegram_id=telegram_id,
+        use_bonuses=use_bonuses,
+        channel=channel,
+        shipping_cost=_shipping_cost(channel, option),
+    )
 
 
 def _cart_channel(partner_id, telegram_id: int) -> str | None:
@@ -195,8 +240,152 @@ async def start_remote_checkout(target, bot: Bot, channel: str) -> None:
 async def _after_phone(target, partner, channel: str) -> None:
     if channel == Order.Channel.DELIVERY:
         await _send_address_step(target, partner)
+    elif channel == Order.Channel.SHIPPING:
+        await _send_destination_step(target, partner)
     else:
         await _send_time_step(target, partner, channel)
+
+
+async def _send_destination_step(target, partner, *, edit: bool = False) -> None:
+    """Shipping: offer the remembered carrier and destination, or ask anew."""
+
+    guest = await sync_to_async(_guest)(partner.id, target.from_user.id)
+    terms = await sync_to_async(get_shipping_terms)(partner.id)
+    if guest is None or not guest.shipping_destination or (
+        guest.shipping_carrier not in terms.carriers
+    ):
+        await _send_carrier_step(target, partner, terms, edit=edit)
+        return
+    await _reply(
+        target,
+        "<b>Отправка почтой</b>\nОтправить сюда?\n"
+        f"{escape_html(carrier_title(guest.shipping_carrier))}: "
+        f"{escape_html(guest.shipping_destination)}",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="✅ Отправить сюда", callback_data="rc:s:a:ok")],
+                [InlineKeyboardButton(text="✏️ Другой получатель", callback_data="rc:s:a:new")],
+                _cancel_row(),
+            ]
+        ),
+        edit=edit,
+    )
+
+
+async def _send_carrier_step(target, partner, terms=None, *, edit: bool = False) -> None:
+    terms = terms or await sync_to_async(get_shipping_terms)(partner.id)
+    if len(terms.carriers) == 1:
+        carrier = terms.carriers[0]
+        await sync_to_async(save_guest_shipping_carrier)(
+            partner_id=partner.id, telegram_id=target.from_user.id, carrier=carrier
+        )
+        await _ask_destination(target, carrier)
+        return
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=carrier_title(carrier),
+                callback_data=f"rc:s:c:{CARRIER_CODE_OF[carrier]}",
+            )
+        ]
+        for carrier in terms.carriers
+    ]
+    rows.append(_cancel_row())
+    await _reply(
+        target,
+        "<b>Отправка почтой</b>\nКакой службой отправить?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+        edit=edit,
+    )
+
+
+async def _ask_destination(target, carrier: str) -> None:
+    title = carrier_title(carrier)
+    await message_of(target).answer(
+        f"{DESTINATION_PROMPT}{f' ({escape_html(title)})' if title else ''}\n"
+        "Напишите в ответ на это сообщение: ФИО получателя, город и номер отделения "
+        "или почтомата. Например: Іваненко Іван, Київ, відділення 25.",
+        reply_markup=ForceReply(input_field_placeholder="ФИО, город, отделение"),
+    )
+
+
+def _is_destination_answer(message: Message) -> bool:
+    replied = message.reply_to_message
+    return bool(
+        message.text
+        and replied is not None
+        and replied.from_user is not None
+        and replied.from_user.is_bot
+        and (replied.text or "").startswith(DESTINATION_PROMPT)
+    )
+
+
+async def _send_cost_step(target, partner, *, edit: bool = False) -> None:
+    """Shipping: who pays the postage, when the owner offers both options."""
+
+    terms = await sync_to_async(get_shipping_terms)(partner.id)
+    codes = {cost: code for code, cost in SHIPPING_COST_CODES.items()}
+    if len(terms.cost_options) == 1:
+        await _after_option(
+            target, partner, Order.Channel.SHIPPING, codes[terms.cost_options[0]], edit=edit
+        )
+        return
+    await _reply(
+        target,
+        "<b>Отправка почтой</b>\nКак оплатить пересылку?",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📮 На почте по тарифу перевозчика",
+                        callback_data="rc:s:t:c",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=f"📦 В заказе: {terms.fixed_label()}",
+                        callback_data="rc:s:t:f",
+                    )
+                ],
+                _cancel_row(),
+            ]
+        ),
+        edit=edit,
+    )
+
+
+async def _after_option(target, partner, channel: str, option: str, *, edit: bool) -> None:
+    """After the time slot or postage option: bonuses if any, then the summary."""
+
+    code = CODE_OF[channel]
+    quote = await sync_to_async(_quote)(partner, target.from_user.id, channel, option, False)
+    if quote.bonus_available > 0:
+        await _reply(
+            target,
+            f"<b>{_title(channel)}</b>\nМожно списать {quote.bonus_available} бонусов: "
+            f"к оплате будет {quote.total - quote.bonus_available} грн вместо "
+            f"{quote.total} грн.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=f"Списать {quote.bonus_available} бонусов",
+                            callback_data=f"rc:{code}:b:{option}:1",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            text="Без бонусов",
+                            callback_data=f"rc:{code}:b:{option}:0",
+                        )
+                    ],
+                    _cancel_row(),
+                ]
+            ),
+            edit=edit,
+        )
+    else:
+        await _send_summary(target, partner, channel, option, False)
 
 
 async def _ask_address(target) -> None:
@@ -263,7 +452,21 @@ async def _send_time_step(target, partner, channel: str, *, edit: bool = False) 
 def _summary(
     quote, channel: str, slot: str, use_bonuses: bool, payment: str = PREPAID
 ) -> tuple[str, InlineKeyboardMarkup]:
-    lines = [f"<b>{_title(channel)}</b>", f"Время: {SLOT_LABELS[slot].lower()}"]
+    lines = [f"<b>{_title(channel)}</b>"]
+    if channel == Order.Channel.SHIPPING:
+        lines.append(f"Служба: {escape_html(carrier_title(quote.shipping_carrier))}")
+        lines.append(f"Получатель: {escape_html(quote.shipping_destination)}")
+        lines.append(f"Позиции: {quote.items_total} грн")
+        if quote.shipping_cost == Order.ShippingCost.CARRIER:
+            lines.append("Пересылка: по тарифу перевозчика — оплатите на почте")
+        else:
+            lines.append(
+                f"Пересылка: {quote.delivery_fee} грн"
+                if quote.delivery_fee
+                else "Пересылка: бесплатно"
+            )
+    else:
+        lines.append(f"Время: {SLOT_LABELS[slot].lower()}")
     if channel == Order.Channel.DELIVERY:
         lines.append(f"Адрес: {escape_html(quote.delivery_address)}")
         lines.append(f"Позиции: {quote.items_total} грн")
@@ -274,12 +477,12 @@ def _summary(
     if quote.bonus_to_spend:
         lines.append(f"Бонусами: −{quote.bonus_to_spend} грн")
     if quote.to_pay > 0 and payment == ON_RECEIPT:
-        lines.extend(
-            [
-                f"<b>К оплате при получении: {quote.to_pay} грн</b>",
-                f"Оплатите {ON_RECEIPT_WHERE[channel]} наличными или картой.",
-            ]
+        how = (
+            "Оплатите наложенным платежом при получении на почте."
+            if channel == Order.Channel.SHIPPING
+            else f"Оплатите {ON_RECEIPT_WHERE[channel]} наличными или картой."
         )
+        lines.extend([f"<b>К оплате при получении: {quote.to_pay} грн</b>", how])
         button_text = "✅ Оформить заказ"
     elif quote.to_pay > 0:
         lines.extend(
@@ -320,11 +523,8 @@ async def _send_summary(
 ) -> None:
     """The summary; with several payment options and none chosen, ask first."""
 
-    quote = await sync_to_async(get_remote_quote)(
-        partner_id=partner.id,
-        telegram_id=callback.from_user.id,
-        use_bonuses=use_bonuses,
-        channel=channel,
+    quote = await sync_to_async(_quote)(
+        partner, callback.from_user.id, channel, slot, use_bonuses
     )
     if payment is None:
         if len(quote.payment_modes) > 1 and quote.to_pay > 0:
@@ -428,6 +628,32 @@ async def address_handler(message: Message, bot: Bot) -> None:
     await _send_time_step(message, partner, Order.Channel.DELIVERY)
 
 
+@router.message(_is_destination_answer)
+async def destination_handler(message: Message, bot: Bot) -> None:
+    """The guest answered «Куда отправить»: remember it, go on to the postage."""
+
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    if not _supports(content, Order.Channel.SHIPPING):
+        await message.answer("Отправка почтой сейчас отключена.")
+        return
+    try:
+        await sync_to_async(save_guest_shipping_destination)(
+            partner_id=partner.id,
+            telegram_id=message.from_user.id,
+            text=message.text,
+        )
+    except RemoteOrderError as exc:
+        await message.answer(str(exc))
+        guest = await sync_to_async(_guest)(partner.id, message.from_user.id)
+        await _ask_destination(message, guest.shipping_carrier if guest is not None else "")
+        return
+    try:
+        await _send_cost_step(message, partner)
+    except RemoteOrderError as exc:
+        await message.answer(str(exc))
+
+
 @router.message(F.location)
 async def location_handler(message: Message, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
@@ -472,9 +698,30 @@ async def checkout_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     if channel is None or not _supports(content, channel):
         await callback.answer("Этот способ заказа сейчас отключён.", show_alert=True)
         return
-    code = CODE_OF[channel]
 
     try:
+        if action == "a" and len(parts) == 3 and channel == Order.Channel.SHIPPING:
+            if parts[2] == "ok":
+                await _send_cost_step(callback, partner, edit=True)
+            else:
+                await _send_carrier_step(callback, partner, edit=True)
+            await callback.answer()
+            return
+        if action == "c" and len(parts) == 3 and channel == Order.Channel.SHIPPING:
+            carrier = CARRIER_CODES.get(parts[2])
+            if carrier is None:
+                raise RemoteOrderError("Выберите службу ещё раз.")
+            await sync_to_async(save_guest_shipping_carrier)(
+                partner_id=partner.id, telegram_id=callback.from_user.id, carrier=carrier
+            )
+            await _reply(
+                callback,
+                f"<b>Отправка почтой</b>\nСлужба: {escape_html(carrier_title(carrier))}",
+                edit=True,
+            )
+            await _ask_destination(callback, carrier)
+            await callback.answer()
+            return
         if action == "a" and len(parts) == 3 and channel == Order.Channel.DELIVERY:
             if parts[2] == "ok":
                 await _send_time_step(callback, partner, channel, edit=True)
@@ -483,51 +730,18 @@ async def checkout_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
                 await _ask_address(callback)
             await callback.answer()
             return
-        if action == "t" and len(parts) == 3 and parts[2] in SLOT_LABELS:
-            slot = parts[2]
-            quote = await sync_to_async(get_remote_quote)(
-                partner_id=partner.id,
-                telegram_id=callback.from_user.id,
-                use_bonuses=False,
-                channel=channel,
-            )
-            if quote.bonus_available > 0:
-                await _reply(
-                    callback,
-                    f"<b>{_title(channel)}</b>\nМожно списать {quote.bonus_available} бонусов: "
-                    f"к оплате будет {quote.total - quote.bonus_available} грн вместо "
-                    f"{quote.total} грн.",
-                    reply_markup=InlineKeyboardMarkup(
-                        inline_keyboard=[
-                            [
-                                InlineKeyboardButton(
-                                    text=f"Списать {quote.bonus_available} бонусов",
-                                    callback_data=f"rc:{code}:b:{slot}:1",
-                                )
-                            ],
-                            [
-                                InlineKeyboardButton(
-                                    text="Без бонусов",
-                                    callback_data=f"rc:{code}:b:{slot}:0",
-                                )
-                            ],
-                            _cancel_row(),
-                        ]
-                    ),
-                    edit=True,
-                )
-            else:
-                await _send_summary(callback, partner, channel, slot, False)
+        if action == "t" and len(parts) == 3 and _option_ok(channel, parts[2]):
+            await _after_option(callback, partner, channel, parts[2], edit=True)
             await callback.answer()
             return
-        if action == "b" and len(parts) == 4 and parts[2] in SLOT_LABELS:
+        if action == "b" and len(parts) == 4 and _option_ok(channel, parts[2]):
             await _send_summary(callback, partner, channel, parts[2], parts[3] == "1")
             await callback.answer()
             return
         if (
             action == "m"
             and len(parts) == 5
-            and parts[2] in SLOT_LABELS
+            and _option_ok(channel, parts[2])
             and parts[4] in PAYMENT_CODES
         ):
             await _send_summary(
@@ -538,7 +752,7 @@ async def checkout_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
         if (
             action == "p"
             and len(parts) in (6, 7)
-            and parts[2] in SLOT_LABELS
+            and _option_ok(channel, parts[2])
             and (len(parts) == 6 or parts[6] in PAYMENT_CODES)
         ):
             slot, use_bonuses = parts[2], parts[3] == "1"
@@ -546,7 +760,8 @@ async def checkout_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
             order = await sync_to_async(place_remote_order)(
                 partner_id=partner.id,
                 telegram_id=callback.from_user.id,
-                slot=slot,
+                slot=slot if channel != Order.Channel.SHIPPING else "now",
+                shipping_cost=_shipping_cost(channel, slot),
                 use_bonuses=use_bonuses,
                 expected_total=_from_cents(parts[4]),
                 expected_to_pay=_from_cents(parts[5]),
@@ -578,10 +793,21 @@ async def _send_placed(callback: CallbackQuery, partner, content, order, *, to_p
     title = CHANNEL_TITLES[order.channel]
     if order.channel == Order.Channel.DELIVERY:
         time_label = f"{time_label}, {escape_html(order.delivery_address)}"
+    if order.channel == Order.Channel.SHIPPING:
+        time_label = (
+            f"{escape_html(order.get_shipping_carrier_display())}, "
+            f"{escape_html(order.shipping_destination)}"
+        )
+    work = "собирать" if order.channel == Order.Channel.SHIPPING else "готовить"
     if to_pay > 0 and order.payment_timing == ON_RECEIPT:
+        how = (
+            "наложенным платежом на почте"
+            if order.channel == Order.Channel.SHIPPING
+            else "при получении"
+        )
         text = (
             f"Заказ #{order.public_id} ({title}) оформлен ({time_label}). "
-            f"Оплата при получении: {to_pay} грн. Пришлём сообщение, когда начнём готовить."
+            f"Оплата {how}: {to_pay} грн. Пришлём сообщение, когда начнём {work}."
         )
     elif to_pay <= 0:
         text = (
@@ -591,7 +817,7 @@ async def _send_placed(callback: CallbackQuery, partner, content, order, *, to_p
     else:
         text = (
             f"Заказ #{order.public_id} ({title}) оформлен ({time_label}). "
-            "Как только заведение подтвердит оплату, начнём готовить — пришлём сообщение."
+            f"Как только заведение подтвердит оплату, начнём {work} — пришлём сообщение."
         )
     await _reply(callback, text, edit=True)
     await callback.message.answer(

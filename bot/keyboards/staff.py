@@ -14,6 +14,13 @@ DELIVERY_STATUS_LABELS = {
     "delivering": "🚚 В пути",
     "completed": "✅ Доставлено",
 }
+# Shipping by post (PQ-034): packed, sent with a ТТН, received.
+SHIPPING_STATUS_LABELS = {
+    **STATUS_LABELS,
+    "ready": "📦 Собран",
+    "delivering": "🚚 Отправлен",
+    "completed": "✅ Получен",
+}
 
 
 def build_staff_order_actions_keyboard(
@@ -22,6 +29,8 @@ def build_staff_order_actions_keyboard(
     available_statuses: list[str],
     transfer_check_pending: bool = False,
     receipt_payment_pending: bool = False,
+    cash_on_delivery: bool = False,
+    ship_needs_tracking: bool = False,
     status_labels: dict[str, str] | None = None,
 ) -> InlineKeyboardMarkup | None:
     labels = status_labels or STATUS_LABELS
@@ -29,18 +38,29 @@ def build_staff_order_actions_keyboard(
     if receipt_payment_pending:
         # Paid on receipt (PQ-033): record the money when the guest pays; a
         # refusal replaces the plain cancel, so bonuses come back.
-        keyboard.append(
-            [
-                InlineKeyboardButton(
-                    text="💵 Оплачено наличными",
-                    callback_data=f"staffrccash:{order_public_id}",
-                ),
-                InlineKeyboardButton(
-                    text="💳 Оплачено картой",
-                    callback_data=f"staffrccard:{order_public_id}",
-                ),
-            ]
-        )
+        if cash_on_delivery:
+            # By post the carrier passes the money on later (PQ-034).
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        text="💵 Наложенный платёж получен",
+                        callback_data=f"staffrccod:{order_public_id}",
+                    )
+                ]
+            )
+        else:
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        text="💵 Оплачено наличными",
+                        callback_data=f"staffrccash:{order_public_id}",
+                    ),
+                    InlineKeyboardButton(
+                        text="💳 Оплачено картой",
+                        callback_data=f"staffrccard:{order_public_id}",
+                    ),
+                ]
+            )
         available_statuses = [status for status in available_statuses if status != "canceled"]
     if transfer_check_pending:
         # A prepaid order goes into work only after the transfer is checked.
@@ -60,14 +80,19 @@ def build_staff_order_actions_keyboard(
     status_buttons = [
         InlineKeyboardButton(
             text=labels.get(status, status),
-            callback_data=f"stafforder:{order_public_id}:{status}",
+            # «Отправлен» asks for the ТТН first (PQ-034).
+            callback_data=(
+                f"staffship:{order_public_id}"
+                if ship_needs_tracking and status == "delivering"
+                else f"stafforder:{order_public_id}:{status}"
+            ),
         )
         for status in available_statuses
     ]
     if receipt_payment_pending:
         status_buttons.append(
             InlineKeyboardButton(
-                text="❌ Гость не забрал",
+                text="❌ Посылку не забрали" if cash_on_delivery else "❌ Гость не забрал",
                 callback_data=f"staffrcno:{order_public_id}",
             )
         )

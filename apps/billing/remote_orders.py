@@ -1,9 +1,17 @@
-"""Remote prepaid orders: quote, place, confirm or reject the guest's transfer.
+"""Remote orders: quote, place, take the payment (transfer or on receipt).
 
 One flow for every channel where the guest is not at a table (ADR-0009):
-pickup and delivery. The channel only changes its own details (pickup:
-when; delivery: when, where and the delivery fee) — the order, bill and
-payment are the same models for every channel.
+pickup, delivery and shipping by post. The channel only changes its own
+details (pickup: when; delivery: when, where and the delivery fee; shipping:
+carrier, destination, postage and the ТТН) — the order, bill and payment are
+the same models for every channel.
+
+Shipping (PQ-034, docs/architecture/SHIPPING.md): the owner turns on the
+carriers, the postage options (by the carrier's tariff, paid by the recipient
+at the post office, or a fixed price in the order) and the payment options
+(transfer in advance, cash on delivery); the guest picks among them. There is
+no carrier API: staff send the parcel and enter the ТТН, the guest gets it
+with a tracking link. Orders are accepted at any time (no opening hours).
 
 Delivery (PQ-032, docs/architecture/DELIVERY.md): the guest gives an address
 as text (a Telegram location is optional), the last one is remembered; the
@@ -32,6 +40,7 @@ guest gets the order, or cancel it if the guest refuses.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -68,8 +77,15 @@ TIME_SLOTS = {"now": 0, "30": 30, "60": 60}
 REMOTE_CHANNELS = {
     Order.Channel.PICKUP: "module_pickup_enabled",
     Order.Channel.DELIVERY: "module_delivery_enabled",
+    Order.Channel.SHIPPING: "module_shipping_enabled",
 }
-CHANNEL_TITLES = {Order.Channel.PICKUP: "самовывоз", Order.Channel.DELIVERY: "доставка"}
+CHANNEL_TITLES = {
+    Order.Channel.PICKUP: "самовывоз",
+    Order.Channel.DELIVERY: "доставка",
+    Order.Channel.SHIPPING: "отправка почтой",
+}
+# Channels with a time slot and opening hours; shipping has neither.
+TIMED_CHANNELS = frozenset({Order.Channel.PICKUP, Order.Channel.DELIVERY})
 
 MAX_ADDRESS_LENGTH = 500
 
@@ -82,9 +98,38 @@ PAYMENT_OPTION_FIELDS = {
         PREPAID: "delivery_pay_transfer",
         ON_RECEIPT: "delivery_pay_on_receipt",
     },
+    Order.Channel.SHIPPING: {
+        PREPAID: "shipping_pay_transfer",
+        ON_RECEIPT: "shipping_pay_on_receipt",
+    },
 }
-# How staff take the money on receipt.
-ON_RECEIPT_METHODS = frozenset({Payment.Method.CASH, Payment.Method.TERMINAL})
+# How staff take the money on receipt: cash or card at the venue or to the
+# courier; by post the carrier passes on the cash on delivery.
+ON_RECEIPT_METHODS = {
+    Order.Channel.PICKUP: frozenset({Payment.Method.CASH, Payment.Method.TERMINAL}),
+    Order.Channel.DELIVERY: frozenset({Payment.Method.CASH, Payment.Method.TERMINAL}),
+    Order.Channel.SHIPPING: frozenset({Payment.Method.COD}),
+}
+
+# Shipping (PQ-034): the settings that turn each carrier and postage option on.
+CARRIER_FIELDS = {
+    Order.Carrier.NOVA_POSHTA: "shipping_nova_poshta",
+    Order.Carrier.UKRPOSHTA: "shipping_ukrposhta",
+    Order.Carrier.MEEST: "shipping_meest",
+}
+SHIPPING_COST_FIELDS = {
+    Order.ShippingCost.CARRIER: "shipping_cost_carrier",
+    Order.ShippingCost.FIXED: "shipping_cost_fixed",
+}
+MAX_DESTINATION_LENGTH = 500
+# A ТТН / tracking number: letters and digits (spaces are dropped).
+TRACKING_NUMBER_RE = re.compile(r"^[A-Z0-9]{5,40}$")
+# Public tracking pages that take the number in the URL. Meest has no such
+# link we rely on: the guest gets the number only.
+TRACKING_URLS = {
+    Order.Carrier.NOVA_POSHTA: "https://novaposhta.ua/tracking/?cargo_number={number}",
+    Order.Carrier.UKRPOSHTA: "https://track.ukrposhta.ua/tracking_UA.html?barcode={number}",
+}
 
 # Staff roles that may confirm or reject a guest's transfer.
 PAYMENT_CHECK_ROLES = frozenset({User.Role.OWNER, User.Role.MANAGER, User.Role.CASHIER})
@@ -107,6 +152,10 @@ class RemoteQuote:
     delivery_address: str = ""
     has_delivery_location: bool = False
     payment_modes: tuple[str, ...] = (PREPAID,)
+    shipping_carrier: str = ""
+    shipping_destination: str = ""
+    shipping_cost: str = ""
+    shipping_cost_options: tuple[str, ...] = ()
 
 
 def _money(value) -> Decimal:
@@ -198,16 +247,103 @@ def delivery_fee_for(settings: PartnerBotSettings, items_total: Decimal) -> Deci
     return _money(settings.delivery_fee or 0)
 
 
-def _channel_fee(settings: PartnerBotSettings, channel: str, items_total: Decimal) -> Decimal:
-    if channel != Order.Channel.DELIVERY:
+def shipping_fee_for(settings: PartnerBotSettings, items_total: Decimal, cost: str) -> Decimal:
+    """Postage in the order: none when the recipient pays the carrier."""
+
+    if cost != Order.ShippingCost.FIXED:
         return Decimal("0.00")
-    minimum = _money(settings.delivery_min_order or 0)
+    free_from = settings.shipping_free_from
+    if free_from is not None and _money(items_total) >= _money(free_from):
+        return Decimal("0.00")
+    return _money(settings.shipping_fee or 0)
+
+
+def _channel_fee(
+    settings: PartnerBotSettings,
+    channel: str,
+    items_total: Decimal,
+    shipping_cost: str = "",
+) -> Decimal:
+    if channel == Order.Channel.DELIVERY:
+        minimum, word = _money(settings.delivery_min_order or 0), "доставку"
+    elif channel == Order.Channel.SHIPPING:
+        minimum, word = _money(settings.shipping_min_order or 0), "отправку"
+    else:
+        return Decimal("0.00")
     if _money(items_total) < minimum:
         raise RemoteOrderError(
-            f"Минимальная сумма заказа на доставку — {minimum} грн. Сейчас в корзине "
+            f"Минимальная сумма заказа на {word} — {minimum} грн. Сейчас в корзине "
             f"{_money(items_total)} грн."
         )
+    if channel == Order.Channel.SHIPPING:
+        return shipping_fee_for(settings, items_total, shipping_cost)
     return delivery_fee_for(settings, items_total)
+
+
+def carriers_for(settings: PartnerBotSettings) -> tuple[str, ...]:
+    return tuple(carrier for carrier, field in CARRIER_FIELDS.items() if getattr(settings, field))
+
+
+def shipping_cost_options_for(settings: PartnerBotSettings) -> tuple[str, ...]:
+    return tuple(
+        cost for cost, field in SHIPPING_COST_FIELDS.items() if getattr(settings, field)
+    )
+
+
+def carrier_title(carrier: str) -> str:
+    return Order.Carrier(carrier).label if carrier in Order.Carrier.values else ""
+
+
+@dataclass(frozen=True)
+class ShippingTerms:
+    carriers: tuple[str, ...]
+    cost_options: tuple[str, ...]
+    fee: Decimal
+    free_from: Decimal | None
+    min_order: Decimal
+
+    def fixed_label(self) -> str:
+        """«70 грн, бесплатно от 1000 грн» — the fixed postage option."""
+
+        if self.fee <= 0:
+            return "бесплатно"
+        if self.free_from is not None:
+            return f"{self.fee} грн, бесплатно от {self.free_from} грн"
+        return f"{self.fee} грн"
+
+    def describe(self) -> str:
+        """«Отправляем: Нова Пошта, Укрпошта. Пересылка: …»"""
+
+        carriers = ", ".join(carrier_title(carrier) for carrier in self.carriers)
+        options = []
+        if Order.ShippingCost.CARRIER in self.cost_options:
+            options.append("по тарифу перевозчика, оплата на почте")
+        if Order.ShippingCost.FIXED in self.cost_options:
+            options.append(f"в заказе — {self.fixed_label()}")
+        text = f"Отправляем: {carriers}. Пересылка: {' или '.join(options)}."
+        if self.min_order > 0:
+            text += f" Минимальный заказ {self.min_order} грн."
+        return text
+
+
+def get_shipping_terms(partner_id) -> ShippingTerms:
+    settings = _settings(partner_id, Order.Channel.SHIPPING)
+    return ShippingTerms(
+        carriers=carriers_for(settings),
+        cost_options=shipping_cost_options_for(settings),
+        fee=_money(settings.shipping_fee or 0),
+        free_from=(
+            _money(settings.shipping_free_from)
+            if settings.shipping_free_from is not None
+            else None
+        ),
+        min_order=_money(settings.shipping_min_order or 0),
+    )
+
+
+def tracking_link(carrier: str, number: str) -> str:
+    template = TRACKING_URLS.get(carrier)
+    return template.format(number=number) if template else ""
 
 
 @dataclass(frozen=True)
@@ -269,12 +405,17 @@ def get_remote_quote(
     telegram_id: int,
     use_bonuses: bool,
     channel: str = Order.Channel.PICKUP,
+    shipping_cost: str = "",
 ) -> RemoteQuote:
     settings = _settings(partner_id, channel)
     guest = _guest(partner_id, telegram_id)
     cart = _active_cart(partner_id, guest, channel)
     items_total = _money(cart.total_amount)
-    fee = _channel_fee(settings, channel, items_total)
+    is_shipping = channel == Order.Channel.SHIPPING
+    cost_options = shipping_cost_options_for(settings) if is_shipping else ()
+    if is_shipping and shipping_cost not in cost_options:
+        shipping_cost = cost_options[0] if cost_options else ""
+    fee = _channel_fee(settings, channel, items_total, shipping_cost)
     total = _money(items_total + fee)
     bonus_available = get_redeemable_bonus_amount(
         partner_id=partner_id,
@@ -296,6 +437,10 @@ def get_remote_quote(
             channel == Order.Channel.DELIVERY and guest.delivery_latitude is not None
         ),
         payment_modes=payment_modes_for(settings, channel),
+        shipping_carrier=guest.shipping_carrier if is_shipping else "",
+        shipping_destination=guest.shipping_destination if is_shipping else "",
+        shipping_cost=shipping_cost,
+        shipping_cost_options=cost_options,
     )
 
 
@@ -355,6 +500,32 @@ def save_guest_delivery_location(
     return guest
 
 
+@transaction.atomic
+def save_guest_shipping_carrier(*, partner_id, telegram_id: int, carrier: str) -> GuestProfile:
+    settings = _settings(partner_id, Order.Channel.SHIPPING)
+    if carrier not in carriers_for(settings):
+        raise RemoteOrderError("Эта служба доставки сейчас недоступна — выберите другую.")
+    guest = _guest(partner_id, telegram_id, lock=True)
+    guest.shipping_carrier = carrier
+    guest.save(update_fields=["shipping_carrier", "updated_at"])
+    return guest
+
+
+@transaction.atomic
+def save_guest_shipping_destination(*, partner_id, telegram_id: int, text: str) -> GuestProfile:
+    """Remember who receives the parcel and where: name, city, branch."""
+
+    text = " ".join((text or "").split())
+    if not text:
+        raise RemoteOrderError("Напишите получателя, город и номер отделения или почтомата.")
+    if len(text) > MAX_DESTINATION_LENGTH:
+        raise RemoteOrderError("Слишком длинно — сократите, пожалуйста.")
+    guest = _guest(partner_id, telegram_id, lock=True)
+    guest.shipping_destination = text
+    guest.save(update_fields=["shipping_destination", "updated_at"])
+    return guest
+
+
 def map_link(latitude, longitude) -> str:
     return f"https://maps.google.com/?q={latitude},{longitude}"
 
@@ -370,6 +541,7 @@ def place_remote_order(
     expected_to_pay: Decimal | str,
     channel: str = Order.Channel.PICKUP,
     payment: str = PREPAID,
+    shipping_cost: str = "",
     now: datetime | None = None,
 ) -> Order:
     """Turn the guest's cart into a remote order.
@@ -387,27 +559,36 @@ def place_remote_order(
     partner = settings.partner
     if payment not in payment_modes_for(settings, channel):
         raise RemoteOrderError("Этот способ оплаты сейчас недоступен — выберите другой.")
-    if slot not in TIME_SLOTS:
-        raise RemoteOrderError("Выберите время ещё раз.")
-    if slot not in available_slots(partner, now):
-        raise RemoteOrderError(closed_message(partner))
+    is_delivery = channel == Order.Channel.DELIVERY
+    is_shipping = channel == Order.Channel.SHIPPING
+    if channel in TIMED_CHANNELS:
+        if slot not in TIME_SLOTS:
+            raise RemoteOrderError("Выберите время ещё раз.")
+        if slot not in available_slots(partner, now):
+            raise RemoteOrderError(closed_message(partner))
+    elif shipping_cost not in shipping_cost_options_for(settings):
+        raise RemoteOrderError("Этот вариант оплаты пересылки сейчас недоступен — выберите другой.")
     guest = _guest(partner_id, telegram_id, lock=True)
     if not guest.phone:
         raise RemoteOrderError("Поделитесь номером телефона, чтобы оформить заказ.")
-    is_delivery = channel == Order.Channel.DELIVERY
     if is_delivery and not guest.delivery_address:
         raise RemoteOrderError("Укажите адрес доставки.")
+    if is_shipping:
+        if not guest.shipping_destination:
+            raise RemoteOrderError("Куда отправить? Укажите получателя и отделение.")
+        if guest.shipping_carrier not in carriers_for(settings):
+            raise RemoteOrderError("Эта служба доставки сейчас недоступна — выберите другую.")
     cart = _active_cart(partner_id, guest, channel, lock=True)
     cart_items = list(cart.items.all())
     items_total = _money(
         sum((item.unit_price * item.quantity for item in cart_items), Decimal("0"))
     )
-    fee = _channel_fee(settings, channel, items_total)
+    fee = _channel_fee(settings, channel, items_total, shipping_cost)
     total = _money(items_total + fee)
     if total != _money(expected_total):
         raise RemoteOrderError("Корзина изменилась — проверьте новую сумму.")
 
-    minutes = TIME_SLOTS[slot]
+    minutes = TIME_SLOTS[slot] if channel in TIMED_CHANNELS else 0
     order = create_order(
         partner_id=partner_id,
         guest=guest,
@@ -434,6 +615,16 @@ def place_remote_order(
                 "delivery_fee": fee,
             }
             if is_delivery
+            else {}
+        ),
+        **(
+            {
+                "shipping_carrier": guest.shipping_carrier,
+                "shipping_destination": guest.shipping_destination,
+                "shipping_cost": shipping_cost,
+                "delivery_fee": fee,
+            }
+            if is_shipping
             else {}
         ),
     )
@@ -463,7 +654,12 @@ def place_remote_order(
     if to_pay != _money(expected_to_pay):
         raise RemoteOrderError("Сумма к оплате изменилась — проверьте её ещё раз.")
 
-    if to_pay > 0 and payment == ON_RECEIPT:
+    if to_pay > 0 and payment == ON_RECEIPT and is_shipping:
+        note = (
+            f"Наложенный платёж: {to_pay} грн. Отметьте оплату в карточке заказа, "
+            "когда служба перечислит деньги."
+        )
+    elif to_pay > 0 and payment == ON_RECEIPT:
         note = (
             f"Оплата при получении: {to_pay} грн (наличные или карта). Отметьте оплату "
             "в карточке заказа, когда гость заплатит."
@@ -480,8 +676,31 @@ def place_remote_order(
         contact += f"\nАдрес: {guest.delivery_address}."
         if guest.delivery_latitude is not None:
             contact += f"\nНа карте: {map_link(guest.delivery_latitude, guest.delivery_longitude)}"
+    if is_shipping:
+        contact += (
+            f"\n{carrier_title(guest.shipping_carrier)}: {guest.shipping_destination}."
+            f"\nПересылка: {_shipping_cost_label(shipping_cost, fee)}."
+        )
     notify_staff_about_new_order(order, note=f"{contact}\n{note}")
     return Order.objects.select_related("partner").get(id=order.id)
+
+
+def _shipping_cost_label(cost: str, fee: Decimal) -> str:
+    if cost == Order.ShippingCost.CARRIER:
+        return "по тарифу перевозчика, платит получатель на почте"
+    return f"в заказе, {fee} грн" if fee > 0 else "в заказе, бесплатно"
+
+
+def shipping_cost_label(order: Order) -> str:
+    fee = sum(
+        (
+            item.unit_price * item.quantity
+            for item in order.items.all()
+            if item.kind == item.Kind.DELIVERY_FEE
+        ),
+        Decimal("0.00"),
+    )
+    return _shipping_cost_label(order.shipping_cost, _money(fee))
 
 
 def _order_bill(order: Order) -> Bill:
@@ -602,7 +821,9 @@ def record_payment_on_receipt(*, order: Order, actor, method: str) -> Order:
     """
 
     _check_actor(actor, order.partner_id)
-    if method not in ON_RECEIPT_METHODS:
+    if method not in ON_RECEIPT_METHODS.get(order.channel, ()):
+        if order.channel == Order.Channel.SHIPPING:
+            raise RemoteOrderError("Отправка оплачивается наложенным платежом.")
         raise RemoteOrderError("При получении принимаем наличные или карту — выберите способ.")
     bill = _order_bill(order)
     order = _lock_remote_order(order, ON_RECEIPT)
@@ -645,6 +866,51 @@ def cancel_unpaid_remote_order(*, order: Order, actor, comment: str = "") -> Ord
     )
 
 
+def normalize_tracking_number(raw: str) -> str:
+    number = "".join((raw or "").split()).upper()
+    if not TRACKING_NUMBER_RE.match(number):
+        raise RemoteOrderError(
+            "Не похоже на ТТН: нужны только цифры и латинские буквы, от 5 знаков."
+        )
+    return number
+
+
+@transaction.atomic
+def mark_order_shipped(*, order: Order, actor, tracking_number: str) -> Order:
+    """The parcel is sent: keep its ТТН and mark the order «Отправлен».
+
+    Any active staff member of the partner may do it, as with other status
+    steps. The guest gets the ТТН and a tracking link (notifications).
+    """
+
+    number = normalize_tracking_number(tracking_number)
+    if (
+        actor is None
+        or not actor.is_active
+        or str(actor.partner_id) != str(order.partner_id)
+    ):
+        raise RemoteOrderError("Отмечать отправку может только сотрудник этого заведения.")
+    order = (
+        Order.objects.select_for_update(of=("self",))
+        .select_related("partner")
+        .get(id=order.id, partner_id=order.partner_id)
+    )
+    if order.channel != Order.Channel.SHIPPING:
+        raise RemoteOrderError("ТТН бывает только у отправки почтой.")
+    if order.status != Order.Status.READY:
+        if order.status == Order.Status.DELIVERING:
+            raise RemoteOrderError("Заказ уже отправлен.")
+        raise RemoteOrderError("Сначала отметьте, что заказ собран.")
+    order.tracking_number = number
+    order.save(update_fields=["tracking_number", "updated_at"])
+    return transition_order_status(
+        order=order,
+        to_status=Order.Status.DELIVERING,
+        actor_user=actor,
+        note=f"Отправлен, ТТН {number}.",
+    )
+
+
 __all__ = [
     "CHANNEL_TITLES",
     "REMOTE_CHANNELS",
@@ -662,6 +928,18 @@ __all__ = [
     "awaits_payment_on_receipt",
     "awaits_transfer_check",
     "cancel_unpaid_remote_order",
+    "carrier_title",
+    "carriers_for",
+    "get_shipping_terms",
+    "mark_order_shipped",
+    "normalize_tracking_number",
+    "save_guest_shipping_carrier",
+    "save_guest_shipping_destination",
+    "shipping_cost_label",
+    "shipping_cost_options_for",
+    "shipping_fee_for",
+    "ShippingTerms",
+    "tracking_link",
     "payment_modes_for",
     "record_payment_on_receipt",
     "requested_time_label",

@@ -359,6 +359,21 @@ class Command(BaseCommand):
         settings.pickup_pay_on_receipt = not is_hookah
         settings.delivery_pay_transfer = True
         settings.delivery_pay_on_receipt = not is_hookah
+        # Shipping by post (PQ-034): Riverstone sends coffee beans and tea by
+        # Нова Пошта or Укрпошта; the guest picks the carrier, the postage
+        # (carrier's tariff or 70 грн in the order, free from 1000) and the
+        # payment (transfer or cash on delivery). Night Owl does not ship.
+        settings.module_shipping_enabled = not is_hookah
+        settings.shipping_nova_poshta = True
+        settings.shipping_ukrposhta = True
+        settings.shipping_meest = False
+        settings.shipping_cost_carrier = True
+        settings.shipping_cost_fixed = True
+        settings.shipping_fee = Decimal("70.00")
+        settings.shipping_free_from = Decimal("1000.00")
+        settings.shipping_min_order = Decimal("0.00")
+        settings.shipping_pay_transfer = True
+        settings.shipping_pay_on_receipt = True
         settings.transfer_payment_details = TRANSFER_DETAILS
         settings.button_my_profile = "Мой профиль"
         settings.staff_call_waiter_enabled = True
@@ -535,6 +550,33 @@ class Command(BaseCommand):
                     + f", минимальный заказ {pickup.delivery_min_order:.0f} грн"
                     + f", оплата: {_payment_options(pickup, 'delivery')}"
                 )
+            if pickup is not None and pickup.module_shipping_enabled:
+                carriers = ", ".join(
+                    title
+                    for field, title in (
+                        ("shipping_nova_poshta", "Нова Пошта"),
+                        ("shipping_ukrposhta", "Укрпошта"),
+                        ("shipping_meest", "Meest"),
+                    )
+                    if getattr(pickup, field)
+                )
+                postage = []
+                if pickup.shipping_cost_carrier:
+                    postage.append("по тарифу перевозчика")
+                if pickup.shipping_cost_fixed:
+                    free = pickup.shipping_free_from
+                    postage.append(
+                        f"{pickup.shipping_fee:.0f} грн в заказе"
+                        + (f" (бесплатно от {free:.0f} грн)" if free is not None else "")
+                    )
+                payment = _payment_options(pickup, "shipping").replace(
+                    "при получении", "наложенный платёж"
+                )
+                out(
+                    f"  отправка почтой: включена, {carriers}; пересылка: "
+                    + " или ".join(postage)
+                    + f"; оплата: {payment}; только «Кофе в зёрнах и чай»"
+                )
             if venue["tester"]:
                 out(f"  ваш Telegram: {venue['tester']}")
             sources = TrafficSource.objects.filter(partner=partner, is_active=True)
@@ -674,6 +716,7 @@ class Command(BaseCommand):
         *,
         items: list[MenuItemSeed],
         pickup: bool = True,
+        shipping: bool = False,
     ) -> None:
         for item in items:
             MenuItem.objects.update_or_create(
@@ -690,6 +733,7 @@ class Command(BaseCommand):
                     "available_at_table": True,
                     "available_for_pickup": pickup,
                     "available_for_delivery": pickup,
+                    "available_for_shipping": shipping,
                 },
             )
 
@@ -758,6 +802,8 @@ class Command(BaseCommand):
         desserts = self._ensure_category(partner, "Десерты", 40)
         soft_drinks = self._ensure_category(partner, "Кофе и чай", 50)
         alcohol = self._ensure_category(partner, "Алкоголь", 60)
+        # Goods that travel by post (PQ-034); the rest of the menu does not.
+        beans = self._ensure_category(partner, "Кофе в зёрнах и чай", 70)
 
         self._seed_category_items(
             partner,
@@ -810,6 +856,16 @@ class Command(BaseCommand):
                 MenuItemSeed("CAFAL001", "Mimosa", Decimal("210.00"), 10),
                 MenuItemSeed("CAFAL002", "House White Wine", Decimal("195.00"), 20),
                 MenuItemSeed("CAFAL003", "Craft Beer", Decimal("165.00"), 30),
+            ],
+        )
+        self._seed_category_items(
+            partner,
+            beans,
+            shipping=True,
+            items=[
+                MenuItemSeed("CAFBN001", "Кофе в зёрнах Эфиопия, 250 г", Decimal("320.00"), 10),
+                MenuItemSeed("CAFBN002", "Кофе в зёрнах Бразилия, 250 г", Decimal("290.00"), 20),
+                MenuItemSeed("CAFBN003", "Чай листовой, 100 г", Decimal("180.00"), 30),
             ],
         )
 

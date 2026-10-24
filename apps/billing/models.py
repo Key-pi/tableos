@@ -220,6 +220,8 @@ class Payment(PartnerBoundModel):
         ONLINE = "online", "Online"
         MIXED = "mixed", "Mixed"
         BONUSES = "bonuses", "Bonuses"
+        # Cash on delivery by post (PQ-034): the carrier passes the money on.
+        COD = "cod", "Наложенный платёж"
 
     bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name="payments")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)

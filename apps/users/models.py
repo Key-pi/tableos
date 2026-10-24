@@ -76,6 +76,9 @@ class GuestProfile(PartnerBoundModel):
     delivery_address = models.TextField(blank=True)
     delivery_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     delivery_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # Shipping by post (PQ-034): the last carrier and destination, offered again.
+    shipping_carrier = models.CharField(max_length=16, blank=True)
+    shipping_destination = models.TextField(blank=True)
 
     class Meta:
         constraints = [

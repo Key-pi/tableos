@@ -244,8 +244,11 @@ PostgreSQL. У каждого исправления есть регрессио
 
 B3.2, B4, B5, самовывоз ([PICKUP.md](../architecture/PICKUP.md)),
 упорядочивание каналов (ADR-0009), переименование видимого в Botera Shop и
-источники переходов (PQ-031) и доставка ([DELIVERY.md](../architecture/DELIVERY.md),
-PQ-032) завершены. Дальше (порядок утверждён владельцем,
-`ECOSYSTEM_DIRECTION.md`): отправка почтой. Перед
+источники переходов (PQ-031), доставка ([DELIVERY.md](../architecture/DELIVERY.md),
+PQ-032), способы оплаты по модулю ([PAYMENT_OPTIONS.md](../architecture/PAYMENT_OPTIONS.md),
+PQ-033) и отправка почтой ([SHIPPING.md](../architecture/SHIPPING.md), PQ-034)
+завершены. Дальше (порядок утверждён владельцем, `ECOSYSTEM_DIRECTION.md`):
+интеграция с Partnership, карточка для Discovery, самостоятельное подключение
+бизнеса. Перед
 выкаткой B2–B5 в продакшен: аудиты дублей данных на копии продакшена и полный
 набор тестов на PostgreSQL.

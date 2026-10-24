@@ -291,7 +291,13 @@ async def guest_order_confirm_callback(callback: CallbackQuery, bot: Bot) -> Non
         telegram_id=callback.from_user.id,
     )
     if session is None:
-        await callback.message.edit_text("Активная сессия уже закрыта.")
+        if order.channel == Order.Channel.SHIPPING:
+            # Confirmed from the «отправлен» message (PQ-034), no table.
+            await callback.message.edit_text(
+                f"Получение заказа #{escape_html(order.public_id)} подтверждено. Спасибо!"
+            )
+        else:
+            await callback.message.edit_text("Активная сессия уже закрыта.")
         await callback.answer("Получение подтверждено.")
         return
 

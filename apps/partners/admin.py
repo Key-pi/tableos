@@ -43,11 +43,13 @@ class PartnerBotSettingsInline(admin.StackedInline):
             "Модули · Сценарии заказа",
             {
                 "description": (
-                    "Столы, доставка и самовывоз — независимые сценарии. "
-                    "Можно включить любой набор; для заказов нужен хотя бы один. "
-                    "У самовывоза и доставки включите способы оплаты: переводом "
-                    "заранее (на реквизиты ниже) и/или при получении; если "
-                    "включены оба, гость выбирает. Часы работы — в карточке партнёра."
+                    "Столы, самовывоз, доставка и отправка почтой — независимые "
+                    "сценарии. Можно включить любой набор; для заказов нужен хотя бы "
+                    "один. У каждого удалённого сценария включите способы оплаты: "
+                    "переводом заранее (на реквизиты ниже) и/или при получении; если "
+                    "включены оба, гость выбирает. У отправки так же включаются службы "
+                    "и варианты оплаты пересылки — гость выбирает из включённых. "
+                    "Часы работы (для самовывоза и доставки) — в карточке партнёра."
                 ),
                 "fields": (
                     "module_tables_enabled",
@@ -59,6 +61,13 @@ class PartnerBotSettingsInline(admin.StackedInline):
                     "delivery_fee",
                     "delivery_free_from",
                     "delivery_min_order",
+                    "module_shipping_enabled",
+                    ("shipping_nova_poshta", "shipping_ukrposhta", "shipping_meest"),
+                    ("shipping_pay_transfer", "shipping_pay_on_receipt"),
+                    ("shipping_cost_carrier", "shipping_cost_fixed"),
+                    "shipping_fee",
+                    "shipping_free_from",
+                    "shipping_min_order",
                 ),
             },
         ),
@@ -114,6 +123,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                     "button_checkout_label",
                     "button_delivery_label",
                     "button_pickup_label",
+                    "button_shipping_label",
                     "button_help_label",
                     "button_my_profile",
                     "button_profile_bonuses_label",
@@ -254,6 +264,7 @@ class PartnerBotSettingsAdmin(ScopedAdminMixin):
         "module_menu_enabled",
         "module_delivery_enabled",
         "module_pickup_enabled",
+        "module_shipping_enabled",
         "module_orders_enabled",
         "module_billing_enabled",
         "allow_menu_without_session",
@@ -263,6 +274,7 @@ class PartnerBotSettingsAdmin(ScopedAdminMixin):
         "module_menu_enabled",
         "module_delivery_enabled",
         "module_pickup_enabled",
+        "module_shipping_enabled",
         "module_orders_enabled",
         "module_billing_enabled",
         "module_staff_call_enabled",

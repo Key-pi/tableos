@@ -8,9 +8,11 @@ from apps.billing.remote_orders import (
     available_slots,
     closed_message,
     get_delivery_terms,
+    get_shipping_terms,
 )
 from apps.orders.models import Order
 from apps.orders.services import (
+    CHANNEL_OFF_MESSAGES,
     OrderFlowError,
     change_cart_item_quantity_for_telegram_user,
     checkout_active_cart_for_telegram_user,
@@ -174,12 +176,20 @@ REMOTE_FLOW_INTROS = {
         "«Оформить»: адрес, время и способ оплаты.",
         "не доставляем",
     ),
+    Order.Channel.SHIPPING: (
+        "<b>Отправка почтой</b>",
+        "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
+        "«Оформить»: служба, получатель, пересылка и способ оплаты.",
+        "не отправляем почтой",
+    ),
 }
 
 
 def _remote_flow_supported(content: BotContent, channel: str) -> bool:
     if channel == Order.Channel.PICKUP:
         return content.supports_pickup_orders()
+    if channel == Order.Channel.SHIPPING:
+        return content.supports_shipping_orders()
     return content.supports_delivery_orders()
 
 
@@ -188,12 +198,8 @@ async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
     content = await sync_to_async(BotContent.for_partner)(partner)
     title, how_to, removed_reason = REMOTE_FLOW_INTROS[channel]
     if not (_remote_flow_supported(content, channel) and content.supports_cart()):
-        text = (
-            "Самовывоз сейчас отключён для этого бота."
-            if channel == Order.Channel.PICKUP
-            else "Доставка сейчас отключена для этого бота."
-        )
-    elif not await sync_to_async(available_slots)(partner):
+        text = CHANNEL_OFF_MESSAGES[channel]
+    elif channel != Order.Channel.SHIPPING and not await sync_to_async(available_slots)(partner):
         text = await sync_to_async(closed_message)(partner)
     else:
         try:
@@ -202,11 +208,12 @@ async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
                 telegram_id=message.from_user.id,
                 channel=channel,
             )
-            terms = (
-                (await sync_to_async(get_delivery_terms)(partner.id)).describe()
-                if channel == Order.Channel.DELIVERY
-                else ""
-            )
+            if channel == Order.Channel.DELIVERY:
+                terms = (await sync_to_async(get_delivery_terms)(partner.id)).describe()
+            elif channel == Order.Channel.SHIPPING:
+                terms = (await sync_to_async(get_shipping_terms)(partner.id)).describe()
+            else:
+                terms = ""
         except (OrderFlowError, RemoteOrderError) as exc:
             text = str(exc)
         else:
@@ -241,6 +248,11 @@ async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
 @router.message(PartnerButtonFilter("button_delivery_label"))
 async def delivery_handler(message: Message, bot: Bot) -> None:
     await _choose_remote_flow(message, bot, Order.Channel.DELIVERY)
+
+
+@router.message(PartnerButtonFilter("button_shipping_label"))
+async def shipping_handler(message: Message, bot: Bot) -> None:
+    await _choose_remote_flow(message, bot, Order.Channel.SHIPPING)
 
 
 @router.message(PartnerButtonFilter("button_pickup_label"))

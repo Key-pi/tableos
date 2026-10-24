@@ -41,6 +41,7 @@ class GuestAction:
     CHECKOUT = "checkout"
     DELIVERY = "delivery"
     PICKUP = "pickup"
+    SHIPPING = "shipping"
     PROFILE = "profile"
     HELP = "help"
     CALL_STAFF = "call_staff"
@@ -77,8 +78,8 @@ def resolve_guest_navigation_state(
         if content.supports_menu():
             actions.append(GuestAction.MENU)
         has_pickup_cart = False
-        if content.supports_cart() and content.supports_pickup_orders():
-            # Without a table the cart is a pickup cart.
+        if content.supports_cart() and content.supports_remote_orders():
+            # Without a table the cart is a pickup, delivery or shipping cart.
             actions.append(GuestAction.CART)
             has_pickup_cart = Cart.objects.filter(
                 partner_id=partner_id,
@@ -92,6 +93,8 @@ def resolve_guest_navigation_state(
             actions.append(GuestAction.DELIVERY)
         if content.supports_pickup_orders():
             actions.append(GuestAction.PICKUP)
+        if content.supports_shipping_orders():
+            actions.append(GuestAction.SHIPPING)
         if content.supports_loyalty():
             actions.append(GuestAction.PROFILE)
         if content.supports_help():
@@ -141,6 +144,8 @@ def resolve_guest_navigation_state(
         actions.append(GuestAction.DELIVERY)
     if content.supports_pickup_orders():
         actions.append(GuestAction.PICKUP)
+    if content.supports_shipping_orders():
+        actions.append(GuestAction.SHIPPING)
     if content.supports_loyalty():
         actions.append(GuestAction.PROFILE)
     if content.supports_help():

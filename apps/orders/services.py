@@ -79,7 +79,11 @@ def get_available_staff_actions(current_status: str, channel: str | None = None)
         return [Order.Status.ACCEPTED, Order.Status.CANCELED]
     if current_status in {Order.Status.ACCEPTED, Order.Status.PREPARING}:
         return [Order.Status.READY, Order.Status.CANCELED]
-    if channel == Order.Channel.DELIVERY and current_status == Order.Status.READY:
+    if (
+        channel in {Order.Channel.DELIVERY, Order.Channel.SHIPPING}
+        and current_status == Order.Status.READY
+    ):
+        # Shipping (PQ-034): «Отправлен» asks for the ТТН first (staff bot).
         return [Order.Status.DELIVERING, Order.Status.CANCELED]
     if current_status in {Order.Status.READY, Order.Status.DELIVERING}:
         return [Order.Status.COMPLETED, Order.Status.CANCELED]
@@ -202,6 +206,9 @@ def create_order(
     delivery_longitude=None,
     delivery_fee: Decimal | str | None = None,
     payment_timing: str = "",
+    shipping_carrier: str = "",
+    shipping_destination: str = "",
+    shipping_cost: str = "",
 ) -> Order:
     if not items:
         raise OrderFlowError("Нельзя создать заказ без позиций.")
@@ -216,12 +223,21 @@ def create_order(
     if channel == Order.Channel.TABLE and requested_for is not None:
         raise OrderFlowError("Время получения указывается только для заказов навынос.")
     is_delivery = channel == Order.Channel.DELIVERY
+    is_shipping = channel == Order.Channel.SHIPPING
     if is_delivery and not delivery_address.strip():
         raise OrderFlowError("Для доставки нужен адрес.")
-    if not is_delivery and (
-        delivery_address or delivery_latitude is not None or delivery_fee is not None
+    if not is_delivery and (delivery_address or delivery_latitude is not None):
+        raise OrderFlowError("Адрес доставки бывает только у доставки.")
+    if delivery_fee is not None and not (is_delivery or is_shipping):
+        raise OrderFlowError("Стоимость доставки бывает только у доставки и отправки.")
+    if is_shipping and not (
+        shipping_carrier in Order.Carrier.values
+        and shipping_destination.strip()
+        and shipping_cost in Order.ShippingCost.values
     ):
-        raise OrderFlowError("Адрес и стоимость доставки бывают только у доставки.")
+        raise OrderFlowError("Для отправки нужны служба, получатель и вариант пересылки.")
+    if not is_shipping and (shipping_carrier or shipping_destination or shipping_cost):
+        raise OrderFlowError("Служба и получатель бывают только у отправки.")
     if table_session is not None:
         if table is None:
             table = table_session.table
@@ -245,6 +261,9 @@ def create_order(
         delivery_latitude=delivery_latitude,
         delivery_longitude=delivery_longitude,
         payment_timing=payment_timing,
+        shipping_carrier=shipping_carrier,
+        shipping_destination=shipping_destination.strip(),
+        shipping_cost=shipping_cost,
     )
 
     subtotal = Decimal("0.00")
@@ -265,15 +284,15 @@ def create_order(
     if fee < 0:
         raise OrderFlowError("Стоимость доставки не может быть отрицательной.")
     if fee > 0:
-        # The fee is an ordinary order line (PQ-032), so bills, bonuses and
-        # reports treat it like any other line.
+        # The fee is an ordinary order line (PQ-032; postage by post, PQ-034),
+        # so bills, bonuses and reports treat it like any other line.
         subtotal += fee
         OrderItem.objects.create(
             partner_id=partner_id,
             order=order,
             kind=OrderItem.Kind.DELIVERY_FEE,
             menu_item=None,
-            item_name="Доставка",
+            item_name="Пересылка" if is_shipping else "Доставка",
             unit_price=fee,
             quantity=1,
         )
@@ -330,6 +349,14 @@ def transition_order_status(
         # (apps/billing/remote_orders.py:confirm_transfer). One paid on
         # receipt is accepted as usual (PQ-033).
         raise OrderFlowError("Сначала подтвердите оплату переводом.")
+    if (
+        order.channel == Order.Channel.SHIPPING
+        and to_status == Order.Status.DELIVERING
+        and not order.tracking_number
+    ):
+        # Shipped means the parcel has a ТТН the guest can track
+        # (apps/billing/remote_orders.py:mark_order_shipped).
+        raise OrderFlowError("Сначала введите ТТН отправления.")
     if to_status == Order.Status.CANCELED and BillItem.objects.filter(
         partner_id=order.partner_id,
         order_id=order.id,
@@ -387,17 +414,25 @@ def confirm_order_received_by_guest(
     order_public_id: str,
 ) -> Order:
     table_session = get_active_table_session(partner_id=partner_id, telegram_id=telegram_id)
-    if table_session is None:
-        raise OrderFlowError("Подтвердить получение можно только с активным столом.")
+    if table_session is not None:
+        lookup = {"guest": table_session.guest, "table_session": table_session}
+    else:
+        # A parcel sent by post (PQ-034) is confirmed by its guest from the
+        # «отправлен» message, with no table.
+        lookup = {
+            "guest__telegram_account__telegram_id": telegram_id,
+            "channel": Order.Channel.SHIPPING,
+        }
 
     try:
-        order = Order.objects.select_for_update().get(
+        order = Order.objects.select_for_update(of=("self",)).get(
             partner_id=partner_id,
             public_id=order_public_id,
-            guest=table_session.guest,
-            table_session=table_session,
+            **lookup,
         )
     except Order.DoesNotExist as exc:
+        if table_session is None:
+            raise OrderFlowError("Подтвердить получение можно только с активным столом.") from exc
         raise OrderFlowError("Заказ не найден для этого гостя и стола.") from exc
 
     if not can_guest_confirm_receipt(order):
@@ -453,6 +488,7 @@ def _resolve_actor_employee(*, order: Order, actor_user: User | None) -> Employe
 REMOTE_CART_CHANNELS = {
     Order.Channel.PICKUP: "module_pickup_enabled",
     Order.Channel.DELIVERY: "module_delivery_enabled",
+    Order.Channel.SHIPPING: "module_shipping_enabled",
 }
 
 
@@ -501,10 +537,12 @@ CHANNEL_NAMES = {
     Order.Channel.TABLE: "к столу",
     Order.Channel.PICKUP: "на самовывоз",
     Order.Channel.DELIVERY: "на доставку",
+    Order.Channel.SHIPPING: "на отправку почтой",
 }
 CHANNEL_OFF_MESSAGES = {
     Order.Channel.PICKUP: "Самовывоз сейчас отключён.",
     Order.Channel.DELIVERY: "Доставка сейчас отключена.",
+    Order.Channel.SHIPPING: "Отправка почтой сейчас отключена.",
 }
 
 
@@ -904,6 +942,10 @@ def _order_location_label(order: Order) -> str:
         return f"самовывоз, {requested_time_label(order)}"
     if order.channel == Order.Channel.DELIVERY:
         return f"доставка, {requested_time_label(order)}, {order.delivery_address}"
+    if order.channel == Order.Channel.SHIPPING:
+        return (
+            f"отправка, {order.get_shipping_carrier_display()}, {order.shipping_destination}"
+        )
     if order.table_id is not None:
         return f"стол #{order.table.number}"
     return "заказ без привязки к столу"

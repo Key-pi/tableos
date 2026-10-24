@@ -16,6 +16,7 @@ from aiogram.exceptions import (
     TelegramRetryAfter,
     TelegramServerError,
 )
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from asgiref.sync import async_to_sync, sync_to_async
 from django.db import transaction
 from django.db.models import Count, Max, Q
@@ -83,7 +84,7 @@ def _active_partner_bot(partner_id) -> BotInstance:
 
 async def _send_telegram_messages(
     token: str,
-    messages: list[tuple[int, str]],
+    messages: list[tuple],
     *,
     on_result=None,
 ) -> list[tuple[int, bool, str, bool, bool]]:
@@ -91,6 +92,7 @@ async def _send_telegram_messages(
 
     Each result is ``(chat_id, sent, error, blocked, retryable)``. ``retryable``
     marks failures where Telegram may or may not have delivered the message
+    (a message is ``(chat_id, text)`` or ``(chat_id, text, reply_markup)``)
     (network or server errors): operational notifications retry them, a
     broadcast records them as ``unknown``. ``on_result`` (async) is awaited
     after every message so callers can persist each outcome immediately.
@@ -102,10 +104,14 @@ async def _send_telegram_messages(
     )
     results: list[tuple[int, bool, str, bool, bool]] = []
     try:
-        for chat_id, text in messages:
+        for chat_id, text, *markup in messages:
             while True:
                 try:
-                    await bot.send_message(chat_id=chat_id, text=text)
+                    await bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        reply_markup=markup[0] if markup else None,
+                    )
                 except TelegramRetryAfter as exc:
                     await asyncio.sleep(max(float(exc.retry_after), 1.0))
                     continue
@@ -298,6 +304,11 @@ def _order_delivery_context_label(order) -> str:
             f"Доставка: {requested_time_label(order)}, "
             f"{_escape_html(order.delivery_address)}"
         )
+    if order.channel == order.Channel.SHIPPING:
+        return (
+            f"Отправка: {_escape_html(order.get_shipping_carrier_display())}, "
+            f"{_escape_html(order.shipping_destination)}"
+        )
     if order.table_id is not None:
         return f"Стол: #{order.table.number}"
     return "Сценарий: заказ без привязки к столу"
@@ -311,6 +322,23 @@ def _remote_status_note(order, to_status: str) -> str:
         return "Оплата подтверждена — готовим ваш заказ." if prepaid else "Заказ принят — готовим."
     if to_status == order.Status.READY and order.channel == order.Channel.PICKUP:
         return "Заказ готов — можно забирать."
+    if order.channel == order.Channel.SHIPPING:
+        if to_status == order.Status.READY:
+            return "Заказ собран — скоро отправим."
+        if to_status == order.Status.DELIVERING:
+            from apps.billing.remote_orders import tracking_link
+
+            number = _escape_html(order.tracking_number)
+            text = (
+                f"Заказ отправлен: {_escape_html(order.get_shipping_carrier_display())}, "
+                f"ТТН <code>{number}</code>."
+            )
+            link = tracking_link(order.shipping_carrier, order.tracking_number)
+            if link:
+                text += f'\n<a href="{_escape_html(link)}">Отследить посылку</a>'
+            return text + "\nКогда заберёте посылку, нажмите «Получил(а)»."
+        if to_status == order.Status.COMPLETED:
+            return "Заказ получен. Спасибо!"
     if order.channel == order.Channel.DELIVERY:
         if to_status == order.Status.READY:
             return "Заказ собран — скоро передадим курьеру."
@@ -393,10 +421,26 @@ def send_guest_order_status_update_now(
     if remote_note:
         lines.append(remote_note)
 
-    results = async_to_sync(_send_telegram_messages)(
-        bot_instance.token,
-        [(guest_chat_id, "\n".join(lines))],
-    )
+    message = (guest_chat_id, "\n".join(lines))
+    if (
+        order.channel == order.Channel.SHIPPING
+        and to_status == order.Status.DELIVERING
+        and order.status == order.Status.DELIVERING
+    ):
+        # The guest confirms the parcel is received (PQ-029, PQ-034).
+        message += (
+            InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Получил(а)",
+                            callback_data=f"guestorderconfirm:{order.public_id}",
+                        )
+                    ]
+                ]
+            ),
+        )
+    results = async_to_sync(_send_telegram_messages)(bot_instance.token, [message])
     _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
     if should_mark_blocked:
         order.guest.telegram_account.is_blocked = True

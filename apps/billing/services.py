@@ -758,6 +758,7 @@ def _derive_order_payment_method(
         Payment.Method.TRANSFER: Order.PaymentMethod.TRANSFER,
         Payment.Method.MIXED: Order.PaymentMethod.MIXED,
         Payment.Method.BONUSES: Order.PaymentMethod.BONUSES,
+        Payment.Method.COD: Order.PaymentMethod.COD,
     }
     mapped_methods = {
         method_map[payment.method]

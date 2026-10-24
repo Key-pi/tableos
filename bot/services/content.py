@@ -25,6 +25,7 @@ class BotContent:
     module_tables_enabled: bool
     module_delivery_enabled: bool
     module_pickup_enabled: bool
+    module_shipping_enabled: bool
     module_cart_enabled: bool
     module_orders_enabled: bool
     module_billing_enabled: bool
@@ -40,6 +41,7 @@ class BotContent:
     button_checkout_label: str
     button_delivery_label: str
     button_pickup_label: str
+    button_shipping_label: str
     button_help_label: str
     button_my_profile: str
     button_profile_bonuses_label: str
@@ -85,6 +87,7 @@ class BotContent:
             module_tables_enabled=True,
             module_delivery_enabled=False,
             module_pickup_enabled=False,
+            module_shipping_enabled=False,
             module_cart_enabled=True,
             module_orders_enabled=True,
             module_billing_enabled=False,
@@ -100,6 +103,7 @@ class BotContent:
             button_checkout_label="Оформить заказ",
             button_delivery_label="Заказать доставку",
             button_pickup_label="Самовывоз",
+            button_shipping_label="Отправка почтой",
             button_help_label="Как заказать",
             button_my_profile="Мой профиль",
             button_profile_bonuses_label="Бонусы",
@@ -161,6 +165,7 @@ class BotContent:
             module_tables_enabled=settings.module_tables_enabled,
             module_delivery_enabled=settings.module_delivery_enabled,
             module_pickup_enabled=settings.module_pickup_enabled,
+            module_shipping_enabled=settings.module_shipping_enabled,
             module_cart_enabled=settings.module_cart_enabled,
             module_orders_enabled=settings.module_orders_enabled,
             module_billing_enabled=settings.module_billing_enabled,
@@ -180,6 +185,9 @@ class BotContent:
                 settings.button_delivery_label or defaults.button_delivery_label
             ),
             button_pickup_label=settings.button_pickup_label or defaults.button_pickup_label,
+            button_shipping_label=(
+                settings.button_shipping_label or defaults.button_shipping_label
+            ),
             button_help_label=settings.button_help_label or defaults.button_help_label,
             button_my_profile=settings.button_my_profile or defaults.button_my_profile,
             button_profile_bonuses_label=(
@@ -276,8 +284,7 @@ class BotContent:
             return False
         return (
             self.supports_table_orders()
-            or self.supports_delivery_orders()
-            or self.supports_pickup_orders()
+            or self.supports_remote_orders()
         )
 
     def supports_table_orders(self) -> bool:
@@ -299,6 +306,22 @@ class BotContent:
             self.module_orders_enabled
             and self.module_menu_enabled
             and self.module_pickup_enabled
+        )
+
+    def supports_shipping_orders(self) -> bool:
+        return (
+            self.module_orders_enabled
+            and self.module_menu_enabled
+            and self.module_shipping_enabled
+        )
+
+    def supports_remote_orders(self) -> bool:
+        """Any channel where the guest orders without a table (ADR-0009)."""
+
+        return (
+            self.supports_pickup_orders()
+            or self.supports_delivery_orders()
+            or self.supports_shipping_orders()
         )
 
     def supports_help(self) -> bool:
@@ -395,6 +418,12 @@ class BotContent:
                 f"Для самовывоза нажмите «{escape_html(self.button_pickup_label)}», "
                 "добавьте позиции из меню, затем в корзине «Оформить»: время, бонусы, "
                 "способ оплаты."
+            )
+        if self.supports_shipping_orders():
+            add_step(
+                f"Для отправки почтой нажмите «{escape_html(self.button_shipping_label)}», "
+                "добавьте позиции из меню, затем в корзине «Оформить»: служба, получатель "
+                "и отделение, пересылка, бонусы, способ оплаты."
             )
         if self.supports_cart():
             add_step("Добавьте позиции кнопками из меню.")

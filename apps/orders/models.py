@@ -25,6 +25,7 @@ class Order(PartnerBoundModel):
         TRANSFER = "transfer", "Transfer"
         MIXED = "mixed", "Mixed"
         BONUSES = "bonuses", "Bonuses"
+        COD = "cod", "Наложенный платёж"
 
     class Channel(models.TextChoices):
         # How the guest receives the order (ECOSYSTEM_DIRECTION.md): a table
@@ -32,6 +33,18 @@ class Order(PartnerBoundModel):
         TABLE = "table", "За столом"
         PICKUP = "pickup", "Самовывоз"
         DELIVERY = "delivery", "Доставка"
+        SHIPPING = "shipping", "Отправка почтой"
+
+    class Carrier(models.TextChoices):
+        # Shipping by post (PQ-034); no carrier API, staff enter the ТТН.
+        NOVA_POSHTA = "nova_poshta", "Нова Пошта"
+        UKRPOSHTA = "ukrposhta", "Укрпошта"
+        MEEST = "meest", "Meest"
+
+    class ShippingCost(models.TextChoices):
+        # Who pays the postage, chosen by the guest from the owner's options.
+        CARRIER = "carrier", "По тарифу перевозчика, платит получатель"
+        FIXED = "fixed", "В заказе"
 
     class PaymentTiming(models.TextChoices):
         # Remote orders (PQ-033): the guest pays in advance by transfer, which
@@ -42,7 +55,7 @@ class Order(PartnerBoundModel):
     # Channels where the guest is not at a table (ADR-0009): they go through
     # apps/billing/remote_orders.py. How each order is paid is
     # ``payment_timing``, chosen at checkout from the module's options.
-    REMOTE_CHANNELS = frozenset({Channel.PICKUP, Channel.DELIVERY})
+    REMOTE_CHANNELS = frozenset({Channel.PICKUP, Channel.DELIVERY, Channel.SHIPPING})
     # Old name, kept for existing imports: these channels are no longer
     # always prepaid.
     PREPAID_CHANNELS = REMOTE_CHANNELS
@@ -92,6 +105,15 @@ class Order(PartnerBoundModel):
     delivery_longitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True, verbose_name="Долгота"
     )
+    # Shipping by post (PQ-034): a snapshot taken at checkout, then the ТТН.
+    shipping_carrier = models.CharField(
+        max_length=16, choices=Carrier.choices, blank=True, verbose_name="Служба"
+    )
+    shipping_destination = models.TextField(blank=True, verbose_name="Куда отправить")
+    shipping_cost = models.CharField(
+        max_length=16, choices=ShippingCost.choices, blank=True, verbose_name="Пересылка"
+    )
+    tracking_number = models.CharField(max_length=40, blank=True, verbose_name="ТТН")
     payment_timing = models.CharField(
         max_length=16,
         choices=PaymentTiming.choices,

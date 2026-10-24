@@ -14,6 +14,7 @@ _ROUTED_REPLY_LABEL_FIELDS = (
     "button_checkout_label",
     "button_delivery_label",
     "button_pickup_label",
+    "button_shipping_label",
     "button_help_label",
     "button_my_profile",
     "button_call_staff_label",
@@ -180,6 +181,59 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name="Доставка: оплата курьеру при получении",
         help_text="Гость платит курьеру наличными или картой, заказ сразу идёт в работу.",
     )
+    module_shipping_enabled = models.BooleanField(
+        default=False,
+        verbose_name="Отправка почтой",
+        help_text=(
+            "Сценарий отправки заказа почтовой службой: гость выбирает службу и "
+            "отделение, персонал отправляет и вводит ТТН. Без часов работы."
+        ),
+    )
+    shipping_nova_poshta = models.BooleanField(default=True, verbose_name="Служба: Нова Пошта")
+    shipping_ukrposhta = models.BooleanField(default=False, verbose_name="Служба: Укрпошта")
+    shipping_meest = models.BooleanField(default=False, verbose_name="Служба: Meest")
+    shipping_cost_carrier = models.BooleanField(
+        default=True,
+        verbose_name="Пересылка: по тарифу перевозчика",
+        help_text="Получатель платит за пересылку на почте; в заказе её нет.",
+    )
+    shipping_cost_fixed = models.BooleanField(
+        default=False,
+        verbose_name="Пересылка: фиксированная цена в заказе",
+        help_text="Цена ниже добавляется к заказу строкой «Пересылка».",
+    )
+    shipping_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Цена пересылки, грн",
+        help_text="Для варианта «фиксированная цена в заказе». 0 — бесплатно.",
+    )
+    shipping_free_from = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Бесплатная пересылка от суммы, грн",
+        help_text="Для варианта «фиксированная цена в заказе». Пусто — всегда платная.",
+    )
+    shipping_min_order = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        verbose_name="Минимальная сумма заказа на отправку, грн",
+        help_text="0 — без минимума.",
+    )
+    shipping_pay_transfer = models.BooleanField(
+        default=True,
+        verbose_name="Отправка: оплата переводом заранее",
+        help_text="Гость переводит деньги на реквизиты, персонал подтверждает поступление.",
+    )
+    shipping_pay_on_receipt = models.BooleanField(
+        default=False,
+        verbose_name="Отправка: наложенный платёж",
+        help_text="Гость платит на почте при получении; заказ сразу идёт в работу.",
+    )
     transfer_payment_details = models.TextField(
         blank=True,
         verbose_name="Реквизиты для оплаты переводом",
@@ -261,6 +315,7 @@ class PartnerBotSettings(TimeStampedModel):
     button_checkout_label = models.CharField(max_length=64, default="Оформить заказ")
     button_delivery_label = models.CharField(max_length=64, default="Заказать доставку")
     button_pickup_label = models.CharField(max_length=64, default="Самовывоз")
+    button_shipping_label = models.CharField(max_length=64, default="Отправка почтой")
     button_help_label = models.CharField(max_length=64, default="Как заказать")
     button_my_profile = models.CharField(max_length=64, default="Мой профиль")
     button_profile_bonuses_label = models.CharField(max_length=64, default="Бонусы")
@@ -345,10 +400,11 @@ class PartnerBotSettings(TimeStampedModel):
             self.module_tables_enabled
             or self.module_delivery_enabled
             or self.module_pickup_enabled
+            or self.module_shipping_enabled
         ):
             add_error(
                 "module_orders_enabled",
-                "Orders module requires tables, delivery, or pickup module.",
+                "Orders module requires tables, delivery, pickup or shipping module.",
             )
         for module, title, transfer_field, on_receipt_field in (
             ("module_pickup_enabled", "самовывоза", "pickup_pay_transfer", "pickup_pay_on_receipt"),
@@ -357,6 +413,12 @@ class PartnerBotSettings(TimeStampedModel):
                 "доставки",
                 "delivery_pay_transfer",
                 "delivery_pay_on_receipt",
+            ),
+            (
+                "module_shipping_enabled",
+                "отправки",
+                "shipping_pay_transfer",
+                "shipping_pay_on_receipt",
             ),
         ):
             if not getattr(self, module):
@@ -368,7 +430,22 @@ class PartnerBotSettings(TimeStampedModel):
                     "transfer_payment_details",
                     f"Для {title} с оплатой переводом укажите реквизиты.",
                 )
-        for field in ("delivery_fee", "delivery_free_from", "delivery_min_order"):
+        if self.module_shipping_enabled:
+            if not (self.shipping_nova_poshta or self.shipping_ukrposhta or self.shipping_meest):
+                add_error("shipping_nova_poshta", "Для отправки включите хотя бы одну службу.")
+            if not (self.shipping_cost_carrier or self.shipping_cost_fixed):
+                add_error(
+                    "shipping_cost_carrier",
+                    "Для отправки включите хотя бы один вариант оплаты пересылки.",
+                )
+        for field in (
+            "delivery_fee",
+            "delivery_free_from",
+            "delivery_min_order",
+            "shipping_fee",
+            "shipping_free_from",
+            "shipping_min_order",
+        ):
             value = getattr(self, field)
             if value is not None and value < 0:
                 add_error(field, "Сумма не может быть отрицательной.")

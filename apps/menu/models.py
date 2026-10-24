@@ -52,12 +52,14 @@ class MenuItem(PartnerBoundModel):
     available_at_table = models.BooleanField(default=True, verbose_name="За столом")
     available_for_pickup = models.BooleanField(default=True, verbose_name="Самовывоз")
     available_for_delivery = models.BooleanField(default=True, verbose_name="Доставка")
+    available_for_shipping = models.BooleanField(default=True, verbose_name="Отправка почтой")
     sort_order = models.PositiveIntegerField(default=100)
 
     CHANNEL_FIELDS = {
         "table": "available_at_table",
         "pickup": "available_for_pickup",
         "delivery": "available_for_delivery",
+        "shipping": "available_for_shipping",
     }
 
     class Meta:
