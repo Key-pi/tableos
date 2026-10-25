@@ -201,3 +201,81 @@ class VisitCloseVersusJoinConcurrencyTests(TransactionTestCase):
                 visit__status=TableVisit.Status.CLOSED,
             ).exists()
         )
+
+
+@skipUnless(connection.vendor == "postgresql", "PostgreSQL concurrency test")
+class TableLockVersusForeignKeyCheckTests(TransactionTestCase):
+    """AA-040, deterministic: a guest joining waits for the visit while holding
+    the table; the other transaction holds the visit and, at COMMIT, checks a
+    foreign key to the same table (PostgreSQL takes FOR KEY SHARE on it).
+
+    The table lock must not block that check (FOR NO KEY UPDATE), otherwise
+    PostgreSQL detects a deadlock and aborts one of them.
+    """
+
+    reset_sequences = True
+
+    def setUp(self):
+        self.partner = Partner.objects.create(
+            name="Lock venue", slug="lock-venue", status=Partner.Status.ACTIVE
+        )
+        self.table = Table.objects.create(partner=self.partner, number=1, qr_token="lock-1")
+        first = activate_table_session(
+            partner_id=self.partner.id, telegram_id=980301, payload=self.table.deep_link_payload
+        )
+        self.visit_id = first.visit_id
+
+    def _hold_visit_then_reference_table(self, visit_locked, release):
+        from django.db import transaction
+
+        close_old_connections()
+        try:
+            with transaction.atomic():
+                TableVisit.objects.select_for_update().get(id=self.visit_id)
+                visit_locked.set()
+                release.wait(timeout=10)
+                # A row referencing the table: its foreign key is checked at COMMIT.
+                TableVisit.objects.create(partner=self.partner, table=self.table)
+            return "committed"
+        except Exception as exc:  # noqa: BLE001 — the test reports what happened
+            return type(exc).__name__
+        finally:
+            close_old_connections()
+
+    def _join(self, visit_locked):
+        close_old_connections()
+        try:
+            visit_locked.wait(timeout=10)
+            session = activate_table_session(
+                partner_id=self.partner.id,
+                telegram_id=980302,
+                payload=self.table.deep_link_payload,
+            )
+            return "joined" if session.visit_id else "no visit"
+        except Exception as exc:  # noqa: BLE001
+            return type(exc).__name__
+        finally:
+            close_old_connections()
+
+    def _join_waits_on_the_visit(self) -> bool:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT count(*) FROM pg_stat_activity "
+                "WHERE wait_event_type = 'Lock' AND datname = current_database()"
+            )
+            return cursor.fetchone()[0] > 0
+
+    def test_joining_does_not_deadlock_with_a_foreign_key_check(self):
+        import time
+        from threading import Event
+
+        visit_locked, release = Event(), Event()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            holder = executor.submit(self._hold_visit_then_reference_table, visit_locked, release)
+            joiner = executor.submit(self._join, visit_locked)
+            deadline = time.monotonic() + 10
+            while not self._join_waits_on_the_visit() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            release.set()
+            results = (holder.result(timeout=30), joiner.result(timeout=30))
+        self.assertEqual(results, ("committed", "joined"))

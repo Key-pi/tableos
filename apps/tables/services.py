@@ -119,8 +119,13 @@ def activate_table_session(
         partner_id=partner_id,
     )
     try:
+        # FOR NO KEY UPDATE (AA-040): serialises activations of this table but,
+        # unlike FOR UPDATE, does not block another transaction's foreign-key
+        # check on the table at COMMIT (FOR KEY SHARE). A payment that holds
+        # the visit and references the table would otherwise deadlock with a
+        # guest joining that visit.
         table = (
-            Table.objects.select_for_update(of=("self",))
+            Table.objects.select_for_update(of=("self",), no_key=True)
             .select_related("partner")
             .get(
                 id=table.id,

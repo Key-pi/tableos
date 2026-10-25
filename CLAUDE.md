@@ -122,7 +122,11 @@
 ## Порядок блокировок (не менять без причины)
 
 - Оплата: `Bill → Order → GuestProfile → BillingRequest → TableSession → TableVisit`.
-- Активация стола: `GuestProfile → Table → свои TableSession → TableVisit`.
+- Активация стола: `GuestProfile → Table → свои TableSession → TableVisit`
+  (стол — `select_for_update(no_key=True)`, AA-040).
+- Строку-«родителя», которую блокируют только для очереди (её ключ не
+  меняется), блокировать `no_key=True`: `FOR UPDATE` не пускает проверку
+  внешних ключей других транзакций при `COMMIT` и даёт deadlock.
 - Изменение счёта и возврат: `Bill → BillItem → GuestProfile → Order`.
 - На PostgreSQL `select_for_update` с nullable-join только с `of=("self",)`.
 
