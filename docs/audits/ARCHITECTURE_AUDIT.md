@@ -924,3 +924,22 @@ PostgreSQL 16.
     уведомлений — 0,14 с.
 - **Тесты:** `apps/notifications/test_telegram_connection.py` — без
   исправления две доставки подряд идут через разные сессии и закрывают их.
+
+### AA-045 — открытые заказы и счета искались по всей истории партнёра
+
+- **Доказательство:** после AA-041 на базе за год три запроса экранов
+  персонала читали 1000–1700 страниц на вызов (12–17 мс, растёт с каждым
+  месяцем): открытые заказы (`apps/orders/selectors.py:get_open_orders_for_partner`,
+  `apps/orders/repositories.py:OrderRepository.open_for_partner`,
+  `BillingOperationsRepository.unbilled_open_orders_for_partner`) и открытые
+  счета (`apps/billing/repositories.py:BillRepository.open_for_partner`).
+  Единственный подходящий индекс — `partner_id`, а у партнёра за год 36 тыс.
+  заказов и счетов.
+- **Решено:** частичные индексы только по открытым строкам:
+  `order_open_partner_idx` (`partner`, `created_at`; не отменён и не
+  «завершён и оплачен») и `bill_open_partner_idx` (`partner`, `created_at`;
+  черновик, выставлен, частично оплачен). Условия повторяют фильтры
+  запросов, поэтому PostgreSQL может их использовать. На базе за год индексы
+  создаются за 5 с и занимают 104 КБ и 16 КБ.
+- **Тесты:** `apps/orders/test_open_indexes.py` (только PostgreSQL): план
+  каждого из четырёх запросов использует индекс; без миграций тесты падают.

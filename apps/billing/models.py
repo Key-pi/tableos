@@ -129,6 +129,14 @@ class Bill(PartnerBoundModel):
                 name="unique_bill_public_id_per_partner",
             )
         ]
+        indexes = [
+            # Open bills by partner without walking the history (AA-045).
+            models.Index(
+                fields=["partner", "created_at"],
+                name="bill_open_partner_idx",
+                condition=Q(status__in=["draft", "issued", "partially_paid"]),
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.partner.name} / bill {self.public_id}"

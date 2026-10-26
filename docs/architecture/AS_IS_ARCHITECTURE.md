@@ -489,8 +489,8 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 585 тестов после исправления AA-044, зелёные на SQLite и на
-  PostgreSQL 16. Четырнадцать выполняются только на PostgreSQL и на SQLite
+- 587 тестов после исправления AA-045, зелёные на SQLite и на
+  PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа
   (`apps/orders/test_concurrency.py`); параллельные сканы QR, два гостя
@@ -502,7 +502,9 @@ Admin показывает поля жизненного цикла, произ�
   сотрудника вводят ТТН одной посылки
   (`apps/billing/test_shipping_concurrency.py`); автоотмена против
   подтверждения перевода (`apps/billing/test_unpaid_concurrency.py`); два
-  возврата одной строки (`apps/billing/test_refund_concurrency.py`). Тест
+  возврата одной строки (`apps/billing/test_refund_concurrency.py`); планы
+  запросов открытых заказов и счетов используют частичные индексы (AA-045,
+  `apps/orders/test_open_indexes.py`). Тест
   миграции (`apps/tables/test_visit_migration.py`) прогоняет заполнение
   визитов назад и вперёд.
 - Записанные прогоны — в

@@ -181,6 +181,16 @@ class Order(PartnerBoundModel):
                 name="unique_order_public_id_per_partner",
             )
         ]
+        indexes = [
+            # Staff screens list open orders by partner; without this index
+            # PostgreSQL walked the partner's whole history (AA-045). The
+            # condition mirrors the open-order filters so it can be used.
+            models.Index(
+                fields=["partner", "created_at"],
+                name="order_open_partner_idx",
+                condition=~Q(status="canceled") & ~Q(status="completed", paid_at__isnull=False),
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.partner.name} / order {self.public_id}"
