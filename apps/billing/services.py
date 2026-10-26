@@ -57,6 +57,33 @@ def get_bill_remaining_amount(bill: Bill) -> Decimal:
     return (total_amount - paid_amount).quantize(Decimal("0.01"))
 
 
+def remaining_amount_of_loaded_bill(bill: Bill) -> Decimal:
+    """The unpaid remainder from the bill's already loaded lines and payments.
+
+    For lists that prefetch ``items`` and ``payments`` (Admin, AA-046): no
+    query per row. Same formula as ``_compute_bill_totals``; anything that
+    pays or changes a bill uses ``get_bill_remaining_amount`` instead.
+    """
+
+    subtotal = sum(
+        (item.line_total for item in bill.items.all() if item.is_active),
+        Decimal("0.00"),
+    )
+    paid_amount = sum(
+        (
+            payment.amount
+            for payment in bill.payments.all()
+            if payment.status == Payment.Status.PAID and payment.method != Payment.Method.BONUSES
+        ),
+        Decimal("0.00"),
+    )
+    total_amount = max(
+        Decimal("0.00"),
+        subtotal - bill.discount_amount - bill.bonus_spent_amount,
+    ).quantize(Decimal("0.01"))
+    return (total_amount - paid_amount.quantize(Decimal("0.01"))).quantize(Decimal("0.01"))
+
+
 def get_bill_context_label(bill: Bill) -> str:
     if bill.table_id is not None:
         return _("стол #{number}", number=bill.table.number)

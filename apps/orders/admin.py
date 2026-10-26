@@ -76,6 +76,16 @@ class OrderAdmin(ScopedAdminMixin):
         "total_amount",
     )
     list_filter = ("partner", "channel", "status", "payment_timing", "payment_method")
+    # Row labels read the partner of the table, guest and employee: one query
+    # per page, not per row (AA-046).
+    list_select_related = (
+        "partner",
+        "table__partner",
+        "guest__partner",
+        "guest__telegram_account",
+        "assigned_employee__partner",
+        "assigned_employee__user",
+    )
     search_fields = (
         "public_id",
         "guest__telegram_account__username",

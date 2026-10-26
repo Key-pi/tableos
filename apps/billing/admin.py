@@ -18,6 +18,7 @@ from apps.billing.services import (
     issue_bill,
     record_payment,
     refund_bill_lines,
+    remaining_amount_of_loaded_bill,
     remove_bill_lines,
     void_bill,
 )
@@ -210,6 +211,14 @@ class BillAdmin(ScopedAdminMixin):
         "remaining_amount",
     )
     list_filter = ("partner", "kind", "status", "source")
+    # One query per page, not per row (AA-046): the row labels read the
+    # partner of the table and of the guest.
+    list_select_related = (
+        "partner",
+        "table__partner",
+        "primary_guest__partner",
+        "primary_guest__telegram_account",
+    )
     search_fields = ("public_id", "partner__name", "table__name", "table__number", "label")
     readonly_fields = (
         "public_id",
@@ -271,7 +280,23 @@ class BillAdmin(ScopedAdminMixin):
 
     @admin.display(description=_lazy("Осталось оплатить"))
     def remaining_amount(self, obj: Bill):
+        if getattr(obj, "_prefetched_objects_cache", {}).keys() >= {"items", "payments"}:
+            return remaining_amount_of_loaded_bill(obj)
         return get_bill_remaining_amount(obj)
+
+    def get_changelist(self, request, **kwargs):
+        base = super().get_changelist(request, **kwargs)
+
+        class BillChangeList(base):
+            # Lines and payments of the whole page in two queries (AA-046).
+            def get_queryset(self, request, exclude_parameters=None):
+                return (
+                    super()
+                    .get_queryset(request, exclude_parameters)
+                    .prefetch_related("items", "payments")
+                )
+
+        return BillChangeList
 
     @admin.action(description=_lazy("Выставить счета"))
     def mark_as_issued(self, request, queryset):
