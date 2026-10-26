@@ -112,7 +112,7 @@ services:
     <<: [*app, *after-init]
     command: ["celery", "-A", "core.celery", "worker", "-Q", "default,broadcasts", "--loglevel=info"]
 
-  # Exactly one beat and one bot (two pollers of a token conflict).
+  # Exactly one beat and one bot service (two pollers of a token conflict).
   beat:
     <<: [*app, *after-init]
     command:
@@ -125,7 +125,9 @@ services:
 
   bot:
     <<: [*app, *after-init]
-    command: ["python", "manage.py", "runbot", "--wait"]
+    # BOT_PROCESSES: bots split over N processes, each bot in exactly one
+    # (one process uses one CPU core; docs/engineering/LOAD_TESTING.md).
+    command: ["python", "manage.py", "runbot", "--wait", "--processes", "${BOT_PROCESSES:-1}"]
 
   backup:
     image: postgres:16-alpine

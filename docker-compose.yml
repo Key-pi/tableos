@@ -126,7 +126,9 @@ services:
   # token; after bot changes in Admin run `docker compose restart bot`.
   bot:
     <<: [*app, *after-init]
-    command: ["python", "manage.py", "runbot", "--wait"]
+    # BOT_PROCESSES: bots split over N processes, each bot in exactly one
+    # (one process uses one CPU core; docs/engineering/LOAD_TESTING.md).
+    command: ["python", "manage.py", "runbot", "--wait", "--processes", "${BOT_PROCESSES:-1}"]
 
 volumes:
   postgres_data:

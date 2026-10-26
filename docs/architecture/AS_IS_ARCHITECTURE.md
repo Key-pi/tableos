@@ -36,7 +36,7 @@ flowchart LR
 |---|---|---|---|
 | Django web/Admin | `core/wsgi.py`, `core/asgi.py`, `core/urls.py` | демо-страница, `/admin/`, `/health/` | `core.settings.production` |
 | Management-команды, `runserver` | `manage.py` | миграции, наполнение демо-данными, `runbot`, `ensure_admin` | `core.settings.local` |
-| Telegram-бот | `manage.py runbot` → `bot/main.py:run_polling` | polling всех активных `BotInstance` в одном процессе | `core.settings.local` (через `manage.py`) |
+| Telegram-бот | `manage.py runbot` → `bot/main.py:run_polling` | polling всех активных `BotInstance`: в одном процессе или с `--processes N` в N процессах, каждый бот ровно в одном (`bot/services/runtime.py:configs_for_shard`) | `core.settings.local` (через `manage.py`) |
 | Воркер Celery | `celery -A core.celery worker` → `core/celery.py` | уведомления персонала и гостей, рассылки, обновление метрик | `core.settings.local` |
 | Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `cancel-expired-transfer-orders` (5 мин), `refresh-daily-partner-metrics` (15 мин) | `core.settings.local` |
 | PostgreSQL 16, Redis 7 | `docker-compose.yml` | долговечные данные; брокер и хранилище результатов Celery | — |
@@ -45,12 +45,13 @@ flowchart LR
 `init` (`infrastructure/docker/init.sh`: проверка `BOT_TOKEN_ENCRYPTION_KEY`,
 `migrate`, `seed_baseline_demo --keep-existing`, если `DEMO_SEED` не
 `false`), затем `web` (Django `runserver`), `worker` (очереди
-`default,broadcasts`), `beat` и `bot` (`manage.py runbot --wait`); они
+`default,broadcasts`), `beat` и `bot` (`manage.py runbot --wait --processes ${BOT_PROCESSES:-1}`); они
 стартуют только после успешного `init`. Хосты базы и Redis внутри Docker
 подставляет сам compose (`db`, `redis`), рабочая копия смонтирована в `/app`.
 Наружу открыт только порт web (8000); база и Redis доступны с компьютера
 только с `infrastructure/docker/compose.ports.yml`.
-`beat` и `bot` должны работать ровно в одном экземпляре. Пошаговый запуск —
+`beat` и сервис `bot` должны работать ровно в одном экземпляре (несколько
+процессов бота — только через `--processes` внутри одного сервиса). Пошаговый запуск —
 `docs/engineering/DEVELOPMENT.md`. Все процессы, кроме веба, по умолчанию
 берут `core.settings.local` (`DEBUG=True`), если `DJANGO_SETTINGS_MODULE` не
 задан явно.
@@ -148,6 +149,15 @@ apps.notifications.tasks` — цикл, разорванный только им
    он в этих случаях не выходит, а пишет причину и перепроверяет каждые
    `--wait-interval` секунд (по умолчанию 30). Строится карта токен →
    `BotRuntimeConfig`.
+   С `--processes N` команда запускает N дочерних `runbot --shard-index K
+   --shard-count N` и сама только следит за ними: каждый берёт ботов, у
+   которых `bot_instance_id mod N = K` (`configs_for_shard`), поэтому бот
+   опрашивается ровно одним процессом при любом порядке и составе ботов.
+   Если дочерний процесс завершился сам, команда останавливает остальных и
+   выходит с ошибкой (Docker перезапускает сервис); по `SIGTERM` останавливает
+   всех и выходит нормально. Причина (нагрузочный тест 2026-10-25, AA-043):
+   все обращения бота к базе идут через один поток `sync_to_async`, процесс
+   занимает одно ядро.
 2. На **каждое обновление** `bot/middlewares/partner_runtime.py` вызывает
    `bot/services/context.py:resolve_partner_for_bot_token`, который заново
    загружает `BotInstance` и `Partner`. Обновление отключённого экземпляра
@@ -472,7 +482,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 576 тестов после исправления AA-042, зелёные на SQLite и на
+- 583 теста после исправления AA-043, зелёные на SQLite и на
   PostgreSQL 16. Четырнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

@@ -189,7 +189,8 @@ docker compose logs init        # логины и ссылки на столы �
 `timezone = 'Europe/Kiev'` в `postgresql.conf` не стартует); Celery в тестах
 eager; `docker compose up` поднимает db, redis, разовый init (миграции +
 `seed_baseline_demo --keep-existing`), затем web, worker, beat, bot
-(`runbot --wait`) — beat и bot ровно по одному. Демо-данные берут токены
+(`runbot --wait`) — beat и сервис bot ровно по одному (процессы бота —
+`--processes`/`BOT_PROCESSES` внутри сервиса). Демо-данные берут токены
 ботов и Telegram ID владельца из `.env` (`DEMO_*`).
 
 ## Что дальше (на 2026-10-24)

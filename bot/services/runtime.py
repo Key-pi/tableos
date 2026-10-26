@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 
 from apps.partners.models import BotInstance, Partner
@@ -89,3 +90,23 @@ def get_runtime_config_by_token(bot_token: str) -> BotRuntimeConfig:
         return _ACTIVE_BOT_CONFIGS_BY_TOKEN[bot_token]
     except KeyError as exc:
         raise LookupError("Bot runtime configuration is not registered for this token.") from exc
+
+
+def configs_for_shard(
+    configs: list[BotRuntimeConfig], *, index: int, count: int
+) -> list[BotRuntimeConfig]:
+    """The bots one of ``count`` bot processes polls (``0 <= index < count``).
+
+    A bot belongs to the shard ``bot_instance_id % count``: every process
+    computes the same split on its own, a bot never lands in two processes
+    (Telegram allows one poller per token), and adding or removing other bots
+    does not move it.
+    """
+
+    if count <= 1:
+        return list(configs)
+    return [
+        config
+        for config in configs
+        if uuid.UUID(config.bot_instance_id).int % count == index
+    ]
