@@ -7,6 +7,8 @@ the venue offers it), the venue's main language.
 
 from __future__ import annotations
 
+from django.core.cache import cache
+
 from apps.partners.models import GUEST_LANGUAGE_FIELDS, BotText, PartnerBotSettings
 from core.i18n import LANGUAGES, default_language, normalize_language, texts
 
@@ -50,15 +52,35 @@ def choose_language(
     return enabled[0]
 
 
+# The bot reads the owner's texts on every update (AA-047). Saving or deleting
+# a text drops the entry (apps/partners/signals.py); the lifetime only bounds
+# writes that skip signals, such as data migrations.
+TEXT_OVERRIDES_CACHE_SECONDS = 300
+
+
+def _text_overrides_key(partner_id) -> str:
+    return f"partners:text_overrides:v1:{partner_id}"
+
+
+def forget_text_overrides(partner_id) -> None:
+    cache.delete(_text_overrides_key(partner_id))
+
+
 def text_overrides(partner_id) -> dict[tuple[str, str], str]:
     """The owner's own texts, keyed by (language, catalog text)."""
 
-    return {
+    key = _text_overrides_key(partner_id)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    overrides = {
         (language, msgid): text
         for language, msgid, text in BotText.objects.filter(partner_id=partner_id)
         .exclude(text="")
         .values_list("language", "msgid", "text")
     }
+    cache.set(key, overrides, TEXT_OVERRIDES_CACHE_SECONDS)
+    return overrides
 
 
 def _settings_for(partner_id) -> PartnerBotSettings | None:

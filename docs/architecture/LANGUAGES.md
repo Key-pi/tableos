@@ -36,7 +36,12 @@
   свои тексты живут в `asgiref.local.Local` — у каждого обновления свои, они
   переходят в `sync_to_async` (проверено тестом
   `core/tests_i18n.py:OwnerTextTests.test_concurrent_updates_keep_their_own_language_and_texts`).
-  `data["language"]` доступен обработчикам.
+  `data["language"]` доступен обработчикам. Свои тексты заведения
+  (`apps/partners/languages.py:text_overrides`) берутся из кэша Django (Redis
+  в продакшене) на 300 с; сохранение и удаление `BotText` сбрасывает запись
+  (`apps/partners/signals.py`), поэтому правка в Admin действует со
+  следующего обновления (AA-047). Записи в обход сигналов (миграции данных)
+  видны не позже чем через 300 с.
 - **Ввод гостя.** Подпись кнопки, пришедшая текстом, сравнивается со всеми
   языками: `core.i18n.variants(текст)` (`bot/filters/content.py`). Так же
   узнаются ответы на подсказки ForceReply («🏠 Адрес доставки», «📦 Куда

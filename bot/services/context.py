@@ -1,5 +1,13 @@
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 from apps.partners.models import BotInstance, Partner
 from bot.services.runtime import get_runtime_config_by_token
+
+# The partner checked at the start of the update being handled (AA-047).
+_update_partner: ContextVar[tuple[str, Partner] | None] = ContextVar(
+    "update_partner", default=None
+)
 
 
 class BotRuntimeDisabledError(Exception):
@@ -12,7 +20,25 @@ class PartnerSuspendedError(Exception):
     partner: Partner | None = None
 
 
+@contextmanager
+def partner_for_this_update(bot_token: str, partner: Partner):
+    """Let handlers of this update reuse the partner checked at its start.
+
+    The next update checks the bot and partner again, so a suspension or a
+    disabled bot applies from the next update on, as before.
+    """
+
+    reset = _update_partner.set((bot_token, partner))
+    try:
+        yield
+    finally:
+        _update_partner.reset(reset)
+
+
 def resolve_partner_for_bot_token(bot_token: str) -> Partner:
+    checked = _update_partner.get()
+    if checked is not None and checked[0] == bot_token:
+        return checked[1]
     runtime_config = get_runtime_config_by_token(bot_token)
     try:
         bot_instance = BotInstance.objects.select_related("partner__bot_settings").get(

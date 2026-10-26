@@ -8,3 +8,6 @@ class PartnersConfig(AppConfig):
     name = "apps.partners"
     label = "partners"
     verbose_name = _lazy("Заведения")
+
+    def ready(self):
+        from apps.partners import signals  # noqa: F401  (registers receivers)

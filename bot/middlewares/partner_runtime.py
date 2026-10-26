@@ -8,6 +8,7 @@ from asgiref.sync import sync_to_async
 from bot.services.context import (
     BotRuntimeDisabledError,
     PartnerSuspendedError,
+    partner_for_this_update,
     resolve_partner_for_bot_token,
 )
 from bot.services.language import language_context
@@ -43,7 +44,7 @@ class PartnerRuntimeMiddleware(BaseMiddleware):
             return None
         language, overrides = await self._language(partner, data)
         data["language"] = language
-        with texts(language, overrides):
+        with texts(language, overrides), partner_for_this_update(bot.token, partner):
             return await handler(event, data)
 
     @staticmethod
