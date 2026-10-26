@@ -57,6 +57,12 @@ flowchart LR
 берут `core.settings.local` (`DEBUG=True`), если `DJANGO_SETTINGS_MODULE` не
 задан явно.
 
+Нагрузочный стенд — `infrastructure/loadtest/` (имитатор Telegram Bot API,
+виртуальные гости и персонал, история за год); как запускать и последние
+цифры — `docs/engineering/LOAD_TESTING.md`. В рабочем окружении он не
+участвует: его `site/sitecustomize.py` подключается только через
+`infrastructure/loadtest/env.sh`.
+
 Admin по-русски:
 - подписи моделей, полей и вариантов — `verbose_name` в моделях;
 - разделы — `AppConfig.verbose_name`;

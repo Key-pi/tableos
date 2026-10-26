@@ -50,6 +50,7 @@
 | Бот, callback-и | `docs/architecture/BOT_RUNTIME.md` |
 | Находки аудита и что сделано по батчам | `docs/audits/ARCHITECTURE_AUDIT.md`, `REFACTOR_ROADMAP.md` |
 | Тесты и журнал прогонов | `docs/engineering/TESTING.md` |
+| Нагрузка: сколько партнёров держит сервер, как повторить тест | `docs/engineering/LOAD_TESTING.md`, `infrastructure/loadtest/` |
 
 `TABLEOS_TZ.md` и `PROJECT_CHEATSHEET.md` — исторические, ниже по
 приоритету, чем код и `docs/`.
