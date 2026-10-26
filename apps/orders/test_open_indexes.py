@@ -12,11 +12,15 @@ from unittest import skipUnless
 
 from django.db import connection
 from django.test import TestCase
+from django.utils import timezone
 
+from apps.billing.models import Bill
 from apps.billing.repositories import BillingOperationsRepository, BillRepository
+from apps.orders.models import Order
 from apps.orders.repositories import OrderRepository
 from apps.orders.selectors import get_open_orders_for_partner
 from apps.partners.models import Partner
+from apps.users.models import GuestProfile, TelegramAccount
 
 
 def _plan(queryset) -> str:
@@ -33,7 +37,34 @@ def _plan(queryset) -> str:
 @skipUnless(connection.vendor == "postgresql", "partial indexes and EXPLAIN are PostgreSQL")
 class OpenRowIndexTests(TestCase):
     def setUp(self):
+        # A partner with history: many closed orders and bills, a few open
+        # ones, and fresh statistics, so the planner compares the indexes as
+        # it would on a real database.
         self.partner = Partner.objects.create(name="Index Venue", slug="index-venue")
+        account = TelegramAccount.objects.create(telegram_id=7710001)
+        guest = GuestProfile.objects.create(partner=self.partner, telegram_account=account)
+        now = timezone.now()
+        Order.objects.bulk_create(
+            Order(
+                partner=self.partner,
+                guest=guest,
+                public_id=f"{n:08x}",
+                status=Order.Status.COMPLETED if n >= 3 else Order.Status.NEW,
+                paid_at=now if n >= 3 else None,
+            )
+            for n in range(600)
+        )
+        Bill.objects.bulk_create(
+            Bill(
+                partner=self.partner,
+                public_id=f"{n:08x}",
+                status=Bill.Status.PAID if n >= 2 else Bill.Status.ISSUED,
+            )
+            for n in range(600)
+        )
+        with connection.cursor() as cursor:
+            cursor.execute("ANALYZE orders_order")
+            cursor.execute("ANALYZE billing_bill")
 
     def test_open_orders_use_the_open_order_index(self):
         for queryset in (

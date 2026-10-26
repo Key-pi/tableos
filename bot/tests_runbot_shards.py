@@ -7,6 +7,7 @@ Telegram allows one poller per token, so the split must never give a bot to
 two processes.
 """
 
+import uuid
 from io import StringIO
 from unittest.mock import patch
 
@@ -56,6 +57,9 @@ def _active_bot(n: int) -> BotInstance:
         name=f"Shard Venue {n}", slug=f"shard-venue-{n}", status=Partner.Status.ACTIVE
     )
     bot = BotInstance(
+        # Fixed ids: shard = id mod count is then known (random ids could
+        # leave a shard empty and the command would refuse to start).
+        id=uuid.UUID(int=1000 + n),
         partner=partner,
         display_name=f"Shard Bot {n}",
         username=f"shard_bot_{n}",
