@@ -14,6 +14,7 @@ from datetime import timedelta
 from itertools import groupby
 
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.utils import timezone
 
 from apps.billing.models import Bill, BillingRequest, BillItem
@@ -81,9 +82,13 @@ def get_table_billable_orders(
     visit (sessions closed before visits existed, or orders without session).
     """
 
-    allocated_order_ids = set(
+    # Decided per order inside the database: loading every billed order id of
+    # the partner made this slower with every month of history (load test
+    # 2026-10-25).
+    already_billed = Exists(
         BillItem.objects.filter(
             partner_id=partner_id,
+            order_id=OuterRef("pk"),
             is_active=True,
             bill__status__in=[
                 Bill.Status.DRAFT,
@@ -91,7 +96,7 @@ def get_table_billable_orders(
                 Bill.Status.PARTIALLY_PAID,
                 Bill.Status.PAID,
             ],
-        ).values_list("order_id", flat=True)
+        )
     )
     orders = list(
         Order.objects.select_related("table", "guest", "guest__telegram_account")
@@ -102,7 +107,7 @@ def get_table_billable_orders(
             table_session__visit_id=visit_id,
         )
         .exclude(status=Order.Status.CANCELED)
-        .exclude(id__in=allocated_order_ids)
+        .exclude(already_billed)
         .order_by("guest_id", "created_at")
     )
     if visit_id is None:
@@ -112,7 +117,7 @@ def get_table_billable_orders(
             .prefetch_related("items")
             .filter(partner_id=partner_id, table_id=table_id, table_session__isnull=True)
             .exclude(status=Order.Status.CANCELED)
-            .exclude(id__in=allocated_order_ids)
+            .exclude(already_billed)
             .order_by("guest_id", "created_at")
         )
         orders.sort(key=lambda order: (str(order.guest_id), order.created_at))

@@ -1,3 +1,5 @@
+from django.db.models import Exists, OuterRef
+
 from apps.billing.models import Bill, BillingRequest, BillOrder
 from apps.orders.models import Order
 from apps.tables.models import TableSession
@@ -74,16 +76,19 @@ class BillingOperationsRepository:
 
     @staticmethod
     def unbilled_open_orders_for_partner(partner_id):
-        allocated_order_ids = set(
+        # Decided per order inside the database, not by loading every billed
+        # order id of the partner (load test 2026-10-25).
+        already_billed = Exists(
             BillOrder.objects.filter(
                 partner_id=partner_id,
+                order_id=OuterRef("pk"),
                 bill__status__in=[
                     Bill.Status.DRAFT,
                     Bill.Status.ISSUED,
                     Bill.Status.PARTIALLY_PAID,
                     Bill.Status.PAID,
                 ],
-            ).values_list("order_id", flat=True)
+            )
         )
         return Order.objects.filter(
             partner_id=partner_id,
@@ -91,7 +96,7 @@ class BillingOperationsRepository:
         ).exclude(
             status=Order.Status.CANCELED,
         ).exclude(
-            id__in=allocated_order_ids,
+            already_billed,
         ).select_related(
             "table",
             "guest",

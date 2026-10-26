@@ -930,3 +930,112 @@ class BillingServiceTests(TestCase):
                 bill=bill,
                 created_by=self.manager.user,
             )
+
+
+def _standalone_history_reads(captured_queries, table):
+    """Queries that read ``table`` on their own, outside the orders query.
+
+    Loading every billed order id of a partner into Python makes each bill
+    screen slower with every month of history (load test 2026-10-25).
+    """
+
+    return [
+        query["sql"]
+        for query in captured_queries
+        if query["sql"].startswith("SELECT")
+        and f'FROM "{table}"' in query["sql"]
+        and 'FROM "orders_order"' not in query["sql"]
+    ]
+
+
+class BillableOrdersHistoryTests(TestCase):
+    """Billable-order lookups stay inside the database (no history in Python)."""
+
+    setUp = BillingServiceTests.setUp
+
+    def _new_order(self):
+        return create_order_from_session(
+            partner_id=self.partner.id,
+            table_session=self.session,
+            items=[
+                {
+                    "menu_item_id": self.menu_item.id,
+                    "item_name": self.menu_item.name,
+                    "unit_price": self.menu_item.price,
+                    "quantity": 1,
+                }
+            ],
+        )
+
+    def test_table_billable_orders_exclude_billed_orders_in_the_database(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from apps.billing.table_bills import get_table_billable_orders
+
+        create_bill_from_orders(partner_id=self.partner.id, order_ids=[self.order.id])
+        unbilled = self._new_order()
+
+        with CaptureQueriesContext(connection) as queries:
+            orders = get_table_billable_orders(
+                partner_id=self.partner.id,
+                table_id=self.table.id,
+                visit_id=self.session.visit_id,
+            )
+
+        self.assertEqual([order.id for order in orders], [unbilled.id])
+        self.assertEqual(
+            _standalone_history_reads(queries.captured_queries, "billing_billitem"), []
+        )
+
+    def test_legacy_table_orders_exclude_billed_orders_in_the_database(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from apps.billing.table_bills import get_table_billable_orders
+
+        line = {"menu_item_id": self.menu_item.id, "item_name": "Lemonade",
+                "unit_price": self.menu_item.price, "quantity": 1}
+        billed, unbilled = (
+            create_order(
+                partner_id=self.partner.id,
+                guest=self.session.guest,
+                table=self.table,
+                items=[line],
+                notify_staff=False,
+            )
+            for _unused in range(2)
+        )
+        create_bill_from_orders(partner_id=self.partner.id, order_ids=[billed.id])
+
+        with CaptureQueriesContext(connection) as queries:
+            orders = get_table_billable_orders(
+                partner_id=self.partner.id,
+                table_id=self.table.id,
+                visit_id=None,
+            )
+
+        self.assertIn(unbilled.id, [order.id for order in orders])
+        self.assertNotIn(billed.id, [order.id for order in orders])
+        self.assertEqual(
+            _standalone_history_reads(queries.captured_queries, "billing_billitem"), []
+        )
+
+    def test_staff_unbilled_orders_exclude_billed_orders_in_the_database(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from apps.billing.repositories import BillingOperationsRepository
+
+        create_bill_from_orders(partner_id=self.partner.id, order_ids=[self.order.id])
+        unbilled = self._new_order()
+
+        with CaptureQueriesContext(connection) as queries:
+            orders = list(
+                BillingOperationsRepository.unbilled_open_orders_for_partner(self.partner.id)
+            )
+
+        self.assertEqual([order.id for order in orders], [unbilled.id])
+        self.assertEqual(
+            _standalone_history_reads(queries.captured_queries, "billing_billorder"), []
+        )
