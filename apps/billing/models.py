@@ -135,8 +135,24 @@ class Bill(PartnerBoundModel):
 
     def save(self, *args, **kwargs):
         if not self.public_id:
-            self.public_id = secrets.token_hex(4)
+            self.public_id = self._new_public_id()
         return super().save(*args, **kwargs)
+
+    def _new_public_id(self) -> str:
+        """8 random hex characters, drawn again if the partner already has them.
+
+        A repeat would abort the save on ``unique_bill_public_id_per_partner``
+        (load test 2026-10-25, AA-042).
+        """
+
+        while True:
+            candidate = secrets.token_hex(4)
+            if not self.partner_id:
+                return candidate
+            if not type(self).objects.filter(
+                partner_id=self.partner_id, public_id=candidate
+            ).exists():
+                return candidate
 
 
 class BillingRequest(PartnerBoundModel):
