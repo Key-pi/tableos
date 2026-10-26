@@ -6,9 +6,6 @@ import uuid
 from collections.abc import Callable
 from datetime import timedelta
 
-from aiogram import Bot
-from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode
 from aiogram.exceptions import (
     TelegramAPIError,
     TelegramBadRequest,
@@ -24,6 +21,7 @@ from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from apps.employees.models import EmployeeProfile
+from apps.notifications import telegram_transport
 from apps.notifications.models import BroadcastCampaign, BroadcastDelivery, StaffNotification
 from apps.notifications.repositories import (
     BroadcastCampaignRepository,
@@ -103,41 +101,37 @@ async def _send_telegram_messages(
     after every message so callers can persist each outcome immediately.
     """
 
-    bot = Bot(
-        token=token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-    )
+    # One kept-open connection per worker process (AA-044): no new TLS
+    # connection and no 0.25 s close per delivery.
     results: list[tuple[int, bool, str, bool, bool]] = []
-    try:
-        for chat_id, text, *markup in messages:
-            while True:
-                try:
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text=text,
-                        reply_markup=markup[0] if markup else None,
-                    )
-                except TelegramRetryAfter as exc:
-                    await asyncio.sleep(max(float(exc.retry_after), 1.0))
-                    continue
-                except TelegramForbiddenError as exc:
-                    result = (chat_id, False, str(exc), True, False)
-                except (TelegramNetworkError, TelegramServerError) as exc:
-                    result = (chat_id, False, str(exc), False, True)
-                except TelegramBadRequest as exc:
-                    result = (chat_id, False, str(exc), False, False)
-                except TelegramAPIError as exc:
-                    result = (chat_id, False, str(exc), False, False)
-                except Exception as exc:  # noqa: BLE001
-                    result = (chat_id, False, str(exc), False, True)
-                else:
-                    result = (chat_id, True, "", False, False)
-                break
-            results.append(result)
-            if on_result is not None:
-                await on_result(result)
-    finally:
-        await bot.session.close()
+    for chat_id, text, *markup in messages:
+        while True:
+            try:
+                await telegram_transport.send_message(
+                    token,
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=markup[0] if markup else None,
+                )
+            except TelegramRetryAfter as exc:
+                await asyncio.sleep(max(float(exc.retry_after), 1.0))
+                continue
+            except TelegramForbiddenError as exc:
+                result = (chat_id, False, str(exc), True, False)
+            except (TelegramNetworkError, TelegramServerError) as exc:
+                result = (chat_id, False, str(exc), False, True)
+            except TelegramBadRequest as exc:
+                result = (chat_id, False, str(exc), False, False)
+            except TelegramAPIError as exc:
+                result = (chat_id, False, str(exc), False, False)
+            except Exception as exc:  # noqa: BLE001
+                result = (chat_id, False, str(exc), False, True)
+            else:
+                result = (chat_id, True, "", False, False)
+            break
+        results.append(result)
+        if on_result is not None:
+            await on_result(result)
     return results
 
 

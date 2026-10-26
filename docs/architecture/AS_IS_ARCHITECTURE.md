@@ -44,8 +44,9 @@ flowchart LR
 `docker-compose.yml` объявляет `db`, `redis` (оба с healthcheck), разовый
 `init` (`infrastructure/docker/init.sh`: проверка `BOT_TOKEN_ENCRYPTION_KEY`,
 `migrate`, `seed_baseline_demo --keep-existing`, если `DEMO_SEED` не
-`false`), затем `web` (Django `runserver`), `worker` (очереди
-`default,broadcasts`), `beat` и `bot` (`manage.py runbot --wait --processes ${BOT_PROCESSES:-1}`); они
+`false`), затем `web` (Django `runserver`), `worker` (очередь `default`,
+`WORKER_CONCURRENCY` процессов), `broadcasts` (очередь `broadcasts`, один
+процесс `--pool=solo`), `beat` и `bot` (`manage.py runbot --wait --processes ${BOT_PROCESSES:-1}`); они
 стартуют только после успешного `init`. Хосты базы и Redis внутри Docker
 подставляет сам compose (`db`, `redis`), рабочая копия смонтирована в `/app`.
 Наружу открыт только порт web (8000); база и Redis доступны с компьютера
@@ -82,7 +83,13 @@ whitenoise и кэш в Redis. Сервисы:
 
 Очереди: `default` и `broadcasts`; в `broadcasts` направляется только
 `notifications.send_broadcast_campaign`. Поскольку `CELERY_TASK_QUEUES`
-объявлены, воркер без `-Q` слушает обе очереди.
+объявлены, воркер без `-Q` слушает обе очереди. В Docker их слушают разные
+сервисы (`worker` и `broadcasts`), чтобы рассылка не задерживала рабочие
+уведомления (AA-044). Отправка в Telegram из воркера идёт через одно
+постоянное соединение на процесс
+(`apps/notifications/telegram_transport.py`): бот и HTTP-сессия живут в
+отдельном потоке с собственным циклом событий, доставка лишь передаёт туда
+запрос; ошибки Telegram возвращаются как прежде.
 
 ## Модули приложения и их зона
 
@@ -482,7 +489,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 583 теста после исправления AA-043, зелёные на SQLite и на
+- 585 тестов после исправления AA-044, зелёные на SQLite и на
   PostgreSQL 16. Четырнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

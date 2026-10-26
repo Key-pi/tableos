@@ -39,8 +39,9 @@ B4 на середине без курсора помечается как не�
 повторно.
 
 Нужные процессы, все объявлены в `docker-compose.yml`: `web`, `worker`
-(очереди `default` и `broadcasts`), ровно один `beat`, ровно один `bot`
-(`manage.py runbot --wait`), PostgreSQL и Redis; перед ними разово
+(очередь `default`), `broadcasts` (очередь `broadcasts`, один процесс — с
+2026-10-26, AA-044), ровно один `beat`, ровно один сервис `bot`
+(`manage.py runbot --wait --processes N`), PostgreSQL и Redis; перед ними разово
 выполняется `init` (миграции и демо-данные). Без beat не работают
 запланированные рассылки, восстановление зависших рассылок и метрики дня.
 

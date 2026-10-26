@@ -108,9 +108,34 @@ services:
       timeout: 5s
       retries: 6
 
+  # Staff and guest notifications. WORKER_CONCURRENCY processes; each keeps
+  # one connection to Telegram (apps/notifications/telegram_transport.py).
   worker:
     <<: [*app, *after-init]
-    command: ["celery", "-A", "core.celery", "worker", "-Q", "default,broadcasts", "--loglevel=info"]
+    command:
+      - celery
+      - -A
+      - core.celery
+      - worker
+      - -Q
+      - default
+      - --concurrency=${WORKER_CONCURRENCY:-2}
+      - --loglevel=info
+
+  # Broadcasts in their own single process, so a campaign to thousands of
+  # guests never delays working notifications (docs/engineering/LOAD_TESTING.md).
+  broadcasts:
+    <<: [*app, *after-init]
+    command:
+      - celery
+      - -A
+      - core.celery
+      - worker
+      - -Q
+      - broadcasts
+      - --pool=solo
+      - --hostname=broadcasts@%h
+      - --loglevel=info
 
   # Exactly one beat and one bot service (two pollers of a token conflict).
   beat:
