@@ -408,11 +408,31 @@ def get_delivery_terms(partner_id) -> DeliveryTerms:
     )
 
 
+CLOSED_MESSAGES = {
+    # The way that is closed now, not the whole venue: other ways may be open.
+    Order.Channel.PICKUP: (
+        N_("Самовывоз сейчас закрыт. Часы самовывоза: {hours}."),
+        N_("Самовывоз сейчас закрыт."),
+    ),
+    Order.Channel.DELIVERY: (
+        N_("Доставка сейчас не работает. Часы доставки: {hours}."),
+        N_("Доставка сейчас не работает."),
+    ),
+}
+
+
 def closed_message(partner: Partner, channel: str = "") -> str:
     hours = describe_opening_hours(partner, scope=channel)
+    with_hours, without_hours = CLOSED_MESSAGES.get(
+        channel,
+        (
+            N_("Сейчас заказы не принимаем. Часы работы: {hours}."),
+            N_("Сейчас заказы не принимаем."),
+        ),
+    )
     if hours:
-        return _("Сейчас заказы не принимаем. Часы работы: {hours}.", hours=hours)
-    return _("Сейчас заказы не принимаем.")
+        return _(with_hours, hours=hours)
+    return _(without_hours)
 
 
 def available_slots(

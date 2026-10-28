@@ -1,6 +1,6 @@
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from asgiref.sync import sync_to_async
 
 from apps.billing.remote_orders import (
@@ -13,6 +13,7 @@ from apps.billing.remote_orders import (
 from apps.orders.models import Order
 from apps.orders.services import (
     CHANNEL_OFF_MESSAGES,
+    CHOOSE_WAY_FIRST,
     OrderFlowError,
     change_cart_item_quantity_for_telegram_user,
     checkout_active_cart_for_telegram_user,
@@ -23,7 +24,7 @@ from apps.orders.services import (
 )
 from apps.tables.services import get_active_table_session
 from bot.filters.content import PartnerButtonFilter
-from bot.handlers.menu import send_menu_view
+from bot.handlers.menu import choose_way_buttons, send_menu_view
 from bot.handlers.remote_checkout import start_remote_checkout
 from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.menu import build_cart_keyboard
@@ -41,9 +42,11 @@ def _cart_place(cart) -> str:
         return _("самовывоз")
     if cart.channel == Order.Channel.DELIVERY:
         return _("доставка")
+    if cart.channel == Order.Channel.SHIPPING:
+        return _("отправка почтой")
     if cart.table_session is not None:
         return _("стол #{number}", number=cart.table_session.table.number)
-    return _("за столом")
+    return _("способ не выбран")
 
 
 def _render_cart(cart, *, removed: list[str] | None = None) -> str:
@@ -75,7 +78,7 @@ def _render_cart(cart, *, removed: list[str] | None = None) -> str:
         line_total = item.unit_price * item.quantity
         lines.append(
             _(
-                "{item_name} • {quantity} x {unit_price} = {line_total} грн",
+                "{item_name} × {quantity} — {line_total} грн",
                 item_name=escape_html(item.item_name),
                 quantity=item.quantity,
                 unit_price=item.unit_price,
@@ -88,8 +91,9 @@ def _render_cart(cart, *, removed: list[str] | None = None) -> str:
             _("И ещё позиций: {hidden_items_count}", hidden_items_count=hidden_items_count)
         )
     lines.append("")
-    lines.append(_("Итого: {total_amount} грн", total_amount=cart.total_amount))
-    lines.append(_("Используйте кнопки ниже, чтобы менять количество и оформить заказ."))
+    lines.append(_("Итого: <b>{total_amount} грн</b>", total_amount=cart.total_amount))
+    if cart.channel == Order.Channel.TABLE and cart.table_session is None:
+        lines.append(_("Выберите ниже, как получите заказ."))
     return "\n".join(lines)
 
 
@@ -113,22 +117,27 @@ async def _has_active_session(partner, content: BotContent, telegram_id: int) ->
     return session is not None
 
 
-def _mode_switch(cart, content: BotContent):
-    """A table cart may switch to pickup. There is no way back by button: the
-    table flow starts only from the table's QR code (scanning it again)."""
+def _mode_switch(cart, content: BotContent, *, at_table: bool):
+    """At a table the cart may switch to pickup and back to the table."""
 
-    if cart.channel == Order.Channel.TABLE and content.supports_pickup_orders():
-        return (_("🥡 Взять с собой (самовывоз)"), "cart:mode:pickup")
+    if cart.channel == Order.Channel.TABLE and cart.table_session is not None:
+        if content.supports_pickup_orders():
+            return (_("🥡 Взять с собой (самовывоз)"), "cart:mode:pickup")
+    elif at_table and cart.channel in Order.REMOTE_CHANNELS:
+        return (_("↩ Заказать к столу"), "cart:mode:table")
     return None
 
 
 async def _cart_view(cart, partner, content: BotContent, telegram_id: int, *, removed=None):
+    at_table = await _has_active_session(partner, content, telegram_id)
+    unchosen = cart.channel == Order.Channel.TABLE and cart.table_session is None
     return (
         _render_cart(cart, removed=removed),
         build_cart_keyboard(
             cart=cart,
             supports_cart=content.supports_cart(),
-            mode_switch=_mode_switch(cart, content),
+            mode_switch=_mode_switch(cart, content, at_table=at_table),
+            choose_way=choose_way_buttons(content) if unchosen else (),
         ),
     )
 
@@ -145,6 +154,21 @@ async def _route_checkout(target, bot: Bot, partner, content: BotContent) -> boo
     )
     if cart is not None and cart.channel in Order.PREPAID_CHANNELS:
         await start_remote_checkout(target, bot, cart.channel)
+        return True
+    if cart is not None and cart.table_session_id is None:
+        # The guest left the table: the cart waits for a way of ordering.
+        ways = choose_way_buttons(content)
+        message = target.message if isinstance(target, CallbackQuery) else target
+        await message.answer(
+            _(CHOOSE_WAY_FIRST),
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text=text, callback_data=data)] for text, data in ways
+                ]
+            )
+            if ways
+            else None,
+        )
         return True
     return False
 
@@ -183,30 +207,9 @@ async def _send_navigation_keyboard_message(
 # Remote flows chosen by a main-menu button (ADR-0009): the cart switches to
 # the channel and the menu shows only what is sold there.
 REMOTE_FLOW_INTROS = {
-    Order.Channel.PICKUP: (
-        N_("<b>Самовывоз</b>"),
-        N_(
-            "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
-            "«Оформить»: выберете время и способ оплаты."
-        ),
-        N_("не продаётся на вынос"),
-    ),
-    Order.Channel.DELIVERY: (
-        N_("<b>Доставка</b>"),
-        N_(
-            "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
-            "«Оформить»: адрес, время и способ оплаты."
-        ),
-        N_("не доставляем"),
-    ),
-    Order.Channel.SHIPPING: (
-        N_("<b>Отправка почтой</b>"),
-        N_(
-            "Добавьте позиции из меню ниже, затем откройте корзину и нажмите "
-            "«Оформить»: служба, получатель, пересылка и способ оплаты."
-        ),
-        N_("не отправляем почтой"),
-    ),
+    Order.Channel.PICKUP: (N_("<b>Самовывоз</b>"), N_("не продаётся на вынос")),
+    Order.Channel.DELIVERY: (N_("<b>Доставка</b>"), N_("не доставляем")),
+    Order.Channel.SHIPPING: (N_("<b>Отправка почтой</b>"), N_("не отправляем почтой")),
 }
 
 
@@ -218,10 +221,15 @@ def _remote_flow_supported(content: BotContent, channel: str) -> bool:
     return content.supports_delivery_orders()
 
 
-async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
+async def _choose_remote_flow(message: Message, bot: Bot, channel: str, *, user=None) -> None:
+    """The guest chose pickup, delivery or shipping: a reply-keyboard button
+    (``message`` is theirs) or a ``pick:`` button (``message`` is the bot's,
+    ``user`` is the guest)."""
+
+    user = user or message.from_user
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
-    title, how_to, removed_reason = (_(text) for text in REMOTE_FLOW_INTROS[channel])
+    title, removed_reason = (_(text) for text in REMOTE_FLOW_INTROS[channel])
     if not (_remote_flow_supported(content, channel) and content.supports_cart()):
         text = _(CHANNEL_OFF_MESSAGES[channel])
     elif channel != Order.Channel.SHIPPING and not await sync_to_async(available_slots)(
@@ -232,7 +240,7 @@ async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
         try:
             _cart, removed = await sync_to_async(switch_cart_channel_for_telegram_user)(
                 partner_id=partner.id,
-                telegram_id=message.from_user.id,
+                telegram_id=user.id,
                 channel=channel,
             )
             if channel == Order.Channel.DELIVERY:
@@ -247,7 +255,6 @@ async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
             lines = [title]
             if terms:
                 lines.append(terms)
-            lines.append(how_to)
             if removed:
                 lines.append(
                     _(
@@ -256,21 +263,23 @@ async def _choose_remote_flow(message: Message, bot: Bot, channel: str) -> None:
                         items=escape_html(", ".join(removed)),
                     )
                 )
-            if await _has_active_session(partner, content, message.from_user.id):
-                lines.append(_("Чтобы снова заказывать к столу, отсканируйте QR-код стола."))
-            await _send_navigation_keyboard_message(
-                message=message,
-                partner_id=partner.id,
-                telegram_id=message.from_user.id,
-                content=content,
-                text="\n".join(lines),
-            )
-            await send_menu_view(target=message, bot=bot)
+            if await _has_active_session(partner, content, user.id):
+                lines.append(_("Вернуться к заказу к столу — кнопка в корзине."))
+            if len(lines) > 1:
+                # The menu below names the way itself; a title alone adds nothing.
+                await _send_navigation_keyboard_message(
+                    message=message,
+                    partner_id=partner.id,
+                    telegram_id=user.id,
+                    content=content,
+                    text="\n".join(lines),
+                )
+            await send_menu_view(target=message, bot=bot, user=user)
             return
     await _send_navigation_keyboard_message(
         message=message,
         partner_id=partner.id,
-        telegram_id=message.from_user.id,
+        telegram_id=user.id,
         content=content,
         text=text,
     )
@@ -289,6 +298,25 @@ async def shipping_handler(message: Message, bot: Bot) -> None:
 @router.message(PartnerButtonFilter("button_pickup_label"))
 async def pickup_handler(message: Message, bot: Bot) -> None:
     await _choose_remote_flow(message, bot, Order.Channel.PICKUP)
+
+
+PICK_CHANNELS = {
+    Order.Channel.PICKUP,
+    Order.Channel.DELIVERY,
+    Order.Channel.SHIPPING,
+}
+
+
+@router.callback_query(F.data.startswith("pick:"))
+async def pick_way_callback(callback: CallbackQuery, bot: Bot) -> None:
+    """A way of ordering chosen by a button under the menu or the greeting."""
+
+    channel = (callback.data or "").split(":", 1)[1]
+    if channel not in PICK_CHANNELS:
+        await callback.answer()
+        return
+    await callback.answer()
+    await _choose_remote_flow(callback.message, bot, channel, user=callback.from_user)
 
 
 @router.message(PartnerButtonFilter("button_cart_label"))
@@ -461,13 +489,15 @@ async def cart_checkout_callback(callback: CallbackQuery, bot: Bot) -> None:
     await _checkout_at_table(callback, partner, content)
 
 
-@router.callback_query(F.data == "cart:mode:pickup")
+@router.callback_query(F.data.in_({"cart:mode:pickup", "cart:mode:table"}))
 async def cart_mode_callback(callback: CallbackQuery, bot: Bot) -> None:
-    """Switch a table cart to pickup (to take the order away)."""
+    """At a table: take the order away (pickup) or order to the table again."""
 
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
-    channel = Order.Channel.PICKUP
+    channel = (
+        Order.Channel.PICKUP if callback.data == "cart:mode:pickup" else Order.Channel.TABLE
+    )
     try:
         _ensure_cart_enabled(content)
         cart, removed = await sync_to_async(switch_cart_channel_for_telegram_user)(
@@ -510,6 +540,10 @@ async def _checkout_at_table(callback: CallbackQuery, partner, content) -> None:
         partner_id=partner.id,
         telegram_id=callback.from_user.id,
         content=content,
+        text=_(
+            "Статус заказа — «{button_session_label}».",
+            button_session_label=escape_html(content.button_session_label),
+        ),
     )
     await callback.answer(_("Заказ оформлен."))
 

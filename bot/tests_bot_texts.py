@@ -45,7 +45,7 @@ class ContentLanguageTests(TestCase):
     def test_whole_help_text_only_when_the_owner_wrote_one(self):
         help_key = WHOLE_TEXTS["ordering_help_message_template"]
         with texts("ru"):
-            self.assertIn("Откройте меню", BotContent.defaults().ordering_help_message())
+            self.assertIn("Как заказать", BotContent.defaults().ordering_help_message())
         with texts("ru", {("ru", help_key): "Звоните нам."}):
             self.assertEqual(BotContent.defaults().ordering_help_message(), "Звоните нам.")
 

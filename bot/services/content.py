@@ -9,7 +9,7 @@ from apps.partners.bot_texts import (
 )
 from apps.partners.models import Partner, PartnerBotSettings
 from bot.utils.html import escape_html
-from core.i18n import _, own_text
+from core.i18n import N_, _, own_text
 
 
 def _render_template(template: str, **context) -> str:
@@ -236,23 +236,6 @@ class BotContent:
         value = self.extra_config.get(key, default)
         return value if isinstance(value, bool) else default
 
-    def ordering_entry_lines(self, *, table_number: int) -> list[str]:
-        lines = [self.menu_active_session_hint(table_number=table_number)]
-        actions: list[str] = []
-        if self.supports_menu():
-            actions.append(self.button_menu_label)
-        if self.supports_cart():
-            actions.append(self.button_cart_label)
-            actions.append(self.button_checkout_label)
-        if self.supports_staff_call():
-            actions.append(self.button_call_staff_label)
-        if self.supports_billing_request():
-            actions.append(self.button_request_bill_label)
-        if actions:
-            lines.append(_("Доступные действия:"))
-            lines.extend(f"• {escape_html(action)}" for action in actions)
-        return lines
-
     def supports_staff_call(self) -> bool:
         return (
             self.module_staff_call_enabled
@@ -281,85 +264,87 @@ class BotContent:
         if self.ordering_help_message_template:
             return self.ordering_help_message_template
 
-        lines: list[str] = []
-
-        def add_step(text: str) -> None:
-            lines.append(f"{len(lines) + 1}. {text}")
-
-        if self.supports_menu():
-            add_step(_("Откройте меню и посмотрите доступные позиции."))
-        if self.supports_table_orders():
-            add_step(_("Активируйте стол по QR-коду, чтобы оформить заказ."))
-        if self.supports_delivery_orders():
-            add_step(
-                _(
-                    "Для доставки нажмите «{button_delivery_label}», добавьте позиции из "
-                    "меню, затем в корзине «Оформить»: адрес, время, бонусы, способ оплаты.",
-                    button_delivery_label=escape_html(self.button_delivery_label),
-                )
+        ways: list[str] = []
+        if self.supports_cart() and self.supports_table_orders():
+            table_line = _(
+                "<b>За столом:</b> отсканируйте QR-код на столе, добавьте позиции из меню "
+                "и нажмите «Оформить» в корзине."
             )
-        if self.supports_pickup_orders():
-            add_step(
-                _(
-                    "Для самовывоза нажмите «{button_pickup_label}», добавьте позиции из "
-                    "меню, затем в корзине «Оформить»: время, бонусы, способ оплаты.",
-                    button_pickup_label=escape_html(self.button_pickup_label),
+            if self.supports_staff_call():
+                table_line += " " + _(
+                    "Позвать персонал — «{button}».",
+                    button=escape_html(self.button_call_staff_label),
                 )
-            )
-        if self.supports_shipping_orders():
-            add_step(
-                _(
-                    "Для отправки почтой нажмите «{button_shipping_label}», добавьте "
-                    "позиции из меню, затем в корзине «Оформить»: служба, получатель и "
-                    "отделение, пересылка, бонусы, способ оплаты.",
-                    button_shipping_label=escape_html(self.button_shipping_label),
+            if self.supports_billing_request():
+                table_line += " " + _(
+                    "Оплатить — «{button}».",
+                    button=escape_html(self.button_request_bill_label),
                 )
-            )
+            ways.append(table_line)
+        remote_ways = (
+            (
+                self.supports_pickup_orders(),
+                self.button_pickup_label,
+                N_("<b>{button}:</b> добавьте позиции из меню и нажмите «Оформить» в "
+                   "корзине — выберете время и оплату."),
+            ),
+            (
+                self.supports_delivery_orders(),
+                self.button_delivery_label,
+                N_("<b>{button}:</b> добавьте позиции из меню и нажмите «Оформить» в "
+                   "корзине — адрес, время и оплата."),
+            ),
+            (
+                self.supports_shipping_orders(),
+                self.button_shipping_label,
+                N_("<b>{button}:</b> добавьте позиции из меню и нажмите «Оформить» в "
+                   "корзине — служба доставки, отделение и оплата."),
+            ),
+        )
         if self.supports_cart():
-            add_step(_("Добавьте позиции кнопками из меню."))
-            add_step(_("Проверьте заказ в корзине."))
-            add_step(_("Нажмите «Оформить заказ»."))
-        if self.supports_staff_call():
-            add_step(
-                _(
-                    "После активации стола можно позвать персонал кнопкой "
-                    '"{button_call_staff_label}".',
-                    button_call_staff_label=escape_html(self.button_call_staff_label),
+            for enabled, button, text in remote_ways:
+                if enabled:
+                    ways.append(_(text, button=escape_html(button)))
+
+        if not ways:
+            if self.supports_menu():
+                return _(
+                    "Меню — кнопка «{button_menu_label}». Бонусы — «{button_my_profile}».",
+                    button_menu_label=escape_html(self.button_menu_label),
+                    button_my_profile=escape_html(self.button_my_profile),
                 )
-            )
-        if self.supports_billing_request():
-            add_step(
-                _(
-                    'Когда будете готовы к оплате, используйте "{button_request_bill_label}".',
-                    button_request_bill_label=escape_html(self.button_request_bill_label),
-                )
-            )
-        if not lines:
             return _(
                 "В этом боте сейчас доступен профиль клиента. Откройте его кнопкой "
                 "«{button_my_profile}».",
                 button_my_profile=escape_html(self.button_my_profile),
             )
+        lines = [_("<b>Как заказать</b>"), ""]
+        lines.extend(f"• {line}" for line in ways)
+        lines.append("")
+        lines.append(
+            _(
+                "Бонусы и ваши заказы — «{button_my_profile}».",
+                button_my_profile=escape_html(self.button_my_profile),
+            )
+        )
         return "\n".join(lines)
 
     def welcome_message(self, *, partner_name: str) -> str:
         return _render_template(self.welcome_message_template, partner_name=partner_name)
 
-    def start_hint_lines(self) -> list[str]:
+    def start_hint_lines(self, *, with_ways: bool = False) -> list[str]:
+        """What to do after /start. ``with_ways``: buttons that choose pickup,
+        delivery or shipping follow this text."""
+
         lines: list[str] = []
+        if with_ways:
+            lines.append(_("<b>Как хотите заказать?</b>"))
         if self.supports_tables() and self.supports_table_orders():
-            lines.append(_("Сканируйте QR-код стола, чтобы открыть сессию и оформить заказ."))
-        if self.supports_pickup_orders() and self.supports_cart():
-            lines.append(
-                _(
-                    "Забрать заказ с собой — кнопка «{button_pickup_label}».",
-                    button_pickup_label=escape_html(self.button_pickup_label),
-                )
-            )
+            lines.append(_("За столом — отсканируйте QR-код на столе."))
         if not lines and self.supports_menu():
             lines.append(
                 _(
-                    "Можно открыть меню кнопкой «{button_menu_label}».",
+                    "Меню — кнопка «{button_menu_label}».",
                     button_menu_label=escape_html(self.button_menu_label),
                 )
             )

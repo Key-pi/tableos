@@ -66,7 +66,22 @@ def describe_opening_hours(partner: Partner, scope: str = "") -> str:
         by_day.setdefault(interval.weekday, []).append(
             f"{interval.opens_at:%H:%M}–{interval.closes_at:%H:%M}"
         )
-    parts = [f"{_(_SHORT_DAYS[day])} {', '.join(spans)}" for day, spans in sorted(by_day.items())]
+    days = sorted(by_day)
+    if len(days) == 7 and len({tuple(spans) for spans in by_day.values()}) == 1:
+        return _("ежедневно {hours}", hours=", ".join(by_day[0]))
+    # Neighbouring days with the same hours read as one range: «Пн–Пт 10:00–22:00».
+    groups: list[list[int]] = []
+    for day in days:
+        if groups and groups[-1][-1] == day - 1 and by_day[groups[-1][-1]] == by_day[day]:
+            groups[-1].append(day)
+        else:
+            groups.append([day])
+    parts = []
+    for group in groups:
+        label = _(_SHORT_DAYS[group[0]])
+        if len(group) > 1:
+            label = f"{label}–{_(_SHORT_DAYS[group[-1]])}"
+        parts.append(f"{label} {', '.join(by_day[group[0]])}")
     return "; ".join(parts)
 
 

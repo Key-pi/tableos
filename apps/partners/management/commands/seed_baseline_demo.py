@@ -132,9 +132,15 @@ def _payment_options(settings: PartnerBotSettings, module: str) -> str:
     return " или ".join(options) or "не настроена"
 
 
+BONUS_PROGRAM_NAMES = {
+    "Visit reward": "Бонус за візит",
+    "Cashback 5%": "Кешбек 5%",
+    "Walk-in cashback 5%": "Кешбек 5% на касі",
+    "Every 5th order bonus": "Бонус за кожне 5-те замовлення",
+}
 TRANSFER_DETAILS = (
     "Карта 4149 0000 0000 0000 (демо), получатель ФОП Демо Демо. "
-    "В комментарии к переводу укажите номер заказа."
+    "В комментарии к переводу укажите ваш телефон."
 )
 
 
@@ -721,7 +727,13 @@ class Command(BaseCommand):
             )
 
     @staticmethod
-    def _ensure_category(partner: Partner, name: str, sort_order: int) -> MenuCategory:
+    def _ensure_category(
+        partner: Partner, name: str, sort_order: int, old_name: str = ""
+    ) -> MenuCategory:
+        # Demo data used to be in Russian: rename the old category in place so
+        # a re-run with --keep-existing leaves no empty duplicates.
+        if old_name and not MenuCategory.objects.filter(partner=partner, name=name).exists():
+            MenuCategory.objects.filter(partner=partner, name=old_name).update(name=name)
         category, _ = MenuCategory.objects.get_or_create(
             partner=partner,
             name=name,
@@ -761,9 +773,11 @@ class Command(BaseCommand):
             )
 
     def _seed_smoke_menu(self, partner: Partner) -> None:
-        hookahs = self._ensure_category(partner, "Кальяны", 10)
-        signatures = self._ensure_category(partner, "Фирменные миксы", 20)
-        soft_drinks = self._ensure_category(partner, "Безалкогольные напитки", 30)
+        hookahs = self._ensure_category(partner, "Кальяни", 10, "Кальяны")
+        signatures = self._ensure_category(partner, "Фірмові мікси", 20, "Фирменные миксы")
+        soft_drinks = self._ensure_category(
+            partner, "Безалкогольні напої", 30, "Безалкогольные напитки"
+        )
         alcohol = self._ensure_category(partner, "Алкоголь", 40)
 
         self._seed_category_items(
@@ -771,9 +785,9 @@ class Command(BaseCommand):
             hookahs,
             pickup=False,
             items=[
-                MenuItemSeed("SMKHK001", "Classic Hookah", Decimal("450.00"), 10),
-                MenuItemSeed("SMKHK002", "Premium Hookah", Decimal("650.00"), 20),
-                MenuItemSeed("SMKHK003", "Fruit Bowl Hookah", Decimal("820.00"), 30),
+                MenuItemSeed("SMKHK001", "Класичний кальян", Decimal("450.00"), 10),
+                MenuItemSeed("SMKHK002", "Преміум кальян", Decimal("650.00"), 20),
+                MenuItemSeed("SMKHK003", "Кальян на фрукті", Decimal("820.00"), 30),
             ],
         )
         self._seed_category_items(
@@ -786,14 +800,14 @@ class Command(BaseCommand):
                     "Night Owl Mix",
                     Decimal("720.00"),
                     10,
-                    "Dark leaf, citrus, light spice.",
+                    "Темний лист, цитрус, легкі прянощі.",
                 ),
                 MenuItemSeed(
                     "SMKSG002",
                     "Kyiv Sunset Mix",
                     Decimal("760.00"),
                     20,
-                    "Berry profile with creamy finish.",
+                    "Ягідний смак із вершковим післясмаком.",
                 ),
             ],
         )
@@ -801,9 +815,9 @@ class Command(BaseCommand):
             partner,
             soft_drinks,
             items=[
-                MenuItemSeed("SMKDR001", "Homemade Lemonade", Decimal("150.00"), 10),
-                MenuItemSeed("SMKDR002", "Espresso", Decimal("95.00"), 20),
-                MenuItemSeed("SMKDR003", "Craft Tea Pot", Decimal("180.00"), 30),
+                MenuItemSeed("SMKDR001", "Домашній лимонад", Decimal("150.00"), 10),
+                MenuItemSeed("SMKDR002", "Еспресо", Decimal("95.00"), 20),
+                MenuItemSeed("SMKDR003", "Чайник крафтового чаю", Decimal("180.00"), 30),
             ],
         )
         self._seed_category_items(
@@ -814,61 +828,61 @@ class Command(BaseCommand):
                 MenuItemSeed("SMKAL001", "Aperol Spritz", Decimal("240.00"), 10),
                 MenuItemSeed("SMKAL002", "Negroni", Decimal("250.00"), 20),
                 MenuItemSeed("SMKAL003", "Whiskey Sour", Decimal("260.00"), 30),
-                MenuItemSeed("SMKAL004", "House Wine Glass", Decimal("190.00"), 40),
+                MenuItemSeed("SMKAL004", "Келих домашнього вина", Decimal("190.00"), 40),
             ],
         )
 
     def _seed_cafe_menu(self, partner: Partner) -> None:
-        breakfast = self._ensure_category(partner, "Завтраки", 10)
-        salads = self._ensure_category(partner, "Салаты", 20)
-        mains = self._ensure_category(partner, "Основные блюда", 30)
-        desserts = self._ensure_category(partner, "Десерты", 40)
-        soft_drinks = self._ensure_category(partner, "Кофе и чай", 50)
+        breakfast = self._ensure_category(partner, "Сніданки", 10, "Завтраки")
+        salads = self._ensure_category(partner, "Салати", 20, "Салаты")
+        mains = self._ensure_category(partner, "Основні страви", 30, "Основные блюда")
+        desserts = self._ensure_category(partner, "Десерти", 40, "Десерты")
+        soft_drinks = self._ensure_category(partner, "Кава й чай", 50, "Кофе и чай")
         alcohol = self._ensure_category(partner, "Алкоголь", 60)
         # Goods that travel by post (PQ-034); the rest of the menu does not.
-        beans = self._ensure_category(partner, "Кофе в зёрнах и чай", 70)
+        beans = self._ensure_category(partner, "Кава в зернах і чай", 70, "Кофе в зёрнах и чай")
 
         self._seed_category_items(
             partner,
             breakfast,
             items=[
-                MenuItemSeed("CAFBR001", "Syrniki", Decimal("220.00"), 10),
-                MenuItemSeed("CAFBR002", "Eggs Benedict", Decimal("295.00"), 20),
-                MenuItemSeed("CAFBR003", "Granola Bowl", Decimal("180.00"), 30),
+                MenuItemSeed("CAFBR001", "Сирники", Decimal("220.00"), 10),
+                MenuItemSeed("CAFBR002", "Яйця Бенедикт", Decimal("295.00"), 20),
+                MenuItemSeed("CAFBR003", "Гранола з йогуртом", Decimal("180.00"), 30),
             ],
         )
         self._seed_category_items(
             partner,
             salads,
             items=[
-                MenuItemSeed("CAFSL001", "Caesar with Chicken", Decimal("260.00"), 10),
-                MenuItemSeed("CAFSL002", "Greek Salad", Decimal("210.00"), 20),
+                MenuItemSeed("CAFSL001", "Цезар з куркою", Decimal("260.00"), 10),
+                MenuItemSeed("CAFSL002", "Грецький салат", Decimal("210.00"), 20),
             ],
         )
         self._seed_category_items(
             partner,
             mains,
             items=[
-                MenuItemSeed("CAFMN001", "Chicken Steak", Decimal("340.00"), 10),
-                MenuItemSeed("CAFMN002", "Pasta Carbonara", Decimal("285.00"), 20),
-                MenuItemSeed("CAFMN003", "Salmon with Vegetables", Decimal("420.00"), 30),
+                MenuItemSeed("CAFMN001", "Курячий стейк", Decimal("340.00"), 10),
+                MenuItemSeed("CAFMN002", "Паста карбонара", Decimal("285.00"), 20),
+                MenuItemSeed("CAFMN003", "Лосось з овочами", Decimal("420.00"), 30),
             ],
         )
         self._seed_category_items(
             partner,
             desserts,
             items=[
-                MenuItemSeed("CAFDS001", "Cheesecake", Decimal("170.00"), 10),
-                MenuItemSeed("CAFDS002", "Napoleon", Decimal("165.00"), 20),
+                MenuItemSeed("CAFDS001", "Чизкейк", Decimal("170.00"), 10),
+                MenuItemSeed("CAFDS002", "Наполеон", Decimal("165.00"), 20),
             ],
         )
         self._seed_category_items(
             partner,
             soft_drinks,
             items=[
-                MenuItemSeed("CAFDR001", "Cappuccino", Decimal("110.00"), 10),
-                MenuItemSeed("CAFDR002", "Flat White", Decimal("125.00"), 20),
-                MenuItemSeed("CAFDR003", "Tea Pot", Decimal("140.00"), 30),
+                MenuItemSeed("CAFDR001", "Капучино", Decimal("110.00"), 10),
+                MenuItemSeed("CAFDR002", "Флет вайт", Decimal("125.00"), 20),
+                MenuItemSeed("CAFDR003", "Чайник чаю", Decimal("140.00"), 30),
             ],
         )
         self._seed_category_items(
@@ -876,9 +890,9 @@ class Command(BaseCommand):
             alcohol,
             pickup=False,
             items=[
-                MenuItemSeed("CAFAL001", "Mimosa", Decimal("210.00"), 10),
-                MenuItemSeed("CAFAL002", "House White Wine", Decimal("195.00"), 20),
-                MenuItemSeed("CAFAL003", "Craft Beer", Decimal("165.00"), 30),
+                MenuItemSeed("CAFAL001", "Мімоза", Decimal("210.00"), 10),
+                MenuItemSeed("CAFAL002", "Біле домашнє вино", Decimal("195.00"), 20),
+                MenuItemSeed("CAFAL003", "Крафтове пиво", Decimal("165.00"), 30),
             ],
         )
         self._seed_category_items(
@@ -886,17 +900,21 @@ class Command(BaseCommand):
             beans,
             shipping=True,
             items=[
-                MenuItemSeed("CAFBN001", "Кофе в зёрнах Эфиопия, 250 г", Decimal("320.00"), 10),
-                MenuItemSeed("CAFBN002", "Кофе в зёрнах Бразилия, 250 г", Decimal("290.00"), 20),
-                MenuItemSeed("CAFBN003", "Чай листовой, 100 г", Decimal("180.00"), 30),
+                MenuItemSeed("CAFBN001", "Кава в зернах Ефіопія, 250 г", Decimal("320.00"), 10),
+                MenuItemSeed("CAFBN002", "Кава в зернах Бразилія, 250 г", Decimal("290.00"), 20),
+                MenuItemSeed("CAFBN003", "Чай листовий, 100 г", Decimal("180.00"), 30),
             ],
         )
 
     @staticmethod
     def _seed_bonus_programs(partner: Partner, *, include_milestone: bool) -> None:
+        # Guests see the names in «Бонусы»; rename the old English ones in place.
+        for old_name, new_name in BONUS_PROGRAM_NAMES.items():
+            if not BonusProgram.objects.filter(partner=partner, name=new_name).exists():
+                BonusProgram.objects.filter(partner=partner, name=old_name).update(name=new_name)
         BonusProgram.objects.update_or_create(
             partner=partner,
-            name="Visit reward",
+            name="Бонус за візит",
             defaults={
                 "trigger_event": BonusProgram.TriggerEvent.VISIT,
                 "program_type": BonusProgram.ProgramType.VISIT,
@@ -913,7 +931,7 @@ class Command(BaseCommand):
         )
         BonusProgram.objects.update_or_create(
             partner=partner,
-            name="Cashback 5%",
+            name="Кешбек 5%",
             defaults={
                 "trigger_event": BonusProgram.TriggerEvent.ORDER_COMPLETED,
                 "program_type": BonusProgram.ProgramType.CASHBACK,
@@ -930,7 +948,7 @@ class Command(BaseCommand):
         )
         BonusProgram.objects.update_or_create(
             partner=partner,
-            name="Walk-in cashback 5%",
+            name="Кешбек 5% на касі",
             defaults={
                 "trigger_event": BonusProgram.TriggerEvent.MANUAL_PURCHASE,
                 "program_type": BonusProgram.ProgramType.CASHBACK,
@@ -948,7 +966,7 @@ class Command(BaseCommand):
         if include_milestone:
             BonusProgram.objects.update_or_create(
                 partner=partner,
-                name="Every 5th order bonus",
+                name="Бонус за кожне 5-те замовлення",
                 defaults={
                     "trigger_event": BonusProgram.TriggerEvent.ORDER_COMPLETED,
                     "program_type": BonusProgram.ProgramType.MILESTONE,

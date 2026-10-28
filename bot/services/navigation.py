@@ -140,12 +140,8 @@ def resolve_guest_navigation_state(
         actions.append(GuestAction.CART)
     if has_active_cart and content.supports_cart():
         actions.append(GuestAction.CHECKOUT)
-    if content.supports_delivery_orders():
-        actions.append(GuestAction.DELIVERY)
-    if content.supports_pickup_orders():
-        actions.append(GuestAction.PICKUP)
-    if content.supports_shipping_orders():
-        actions.append(GuestAction.SHIPPING)
+    # At a table the remote ways are not on the keyboard: taking the order
+    # away is a button in the cart (owner's decision, 2026-10-28).
     if content.supports_loyalty():
         actions.append(GuestAction.PROFILE)
     if content.supports_help():

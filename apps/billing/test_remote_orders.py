@@ -126,7 +126,7 @@ class PickupCartTests(PickupFixtureMixin, TestCase):
 
     def test_cart_without_a_table_is_refused_without_pickup(self):
         PartnerBotSettings.objects.filter(id=self.settings.id).update(module_pickup_enabled=False)
-        with self.assertRaisesMessage(OrderFlowError, "QR-кода стола"):
+        with self.assertRaisesMessage(OrderFlowError, "отсканируйте QR-код на столе"):
             self._cart()
 
     def test_pickup_cart_stays_pickup_at_a_table_until_switched(self):
@@ -211,6 +211,20 @@ class OpeningHoursTests(PickupFixtureMixin, TestCase):
         self._hours(0, time(10, 0), time(22, 0))
         self._hours(4, time(18, 0), time(3, 0))
         self.assertEqual(describe_opening_hours(self.partner), "Пн 10:00–22:00; Пт 18:00–03:00")
+
+    def test_description_joins_days_with_the_same_hours(self):
+        for weekday in range(5):
+            self._hours(weekday, time(10, 0), time(22, 0))
+        self._hours(5, time(11, 0), time(23, 0))
+        self._hours(6, time(11, 0), time(23, 0))
+        self.assertEqual(
+            describe_opening_hours(self.partner), "Пн–Пт 10:00–22:00; Сб–Вс 11:00–23:00"
+        )
+
+    def test_description_of_the_same_hours_every_day(self):
+        for weekday in range(7):
+            self._hours(weekday, time(10, 0), time(22, 0))
+        self.assertEqual(describe_opening_hours(self.partner), "ежедневно 10:00–22:00")
 
 
 class PickupPlacementTests(PickupFixtureMixin, TestCase):

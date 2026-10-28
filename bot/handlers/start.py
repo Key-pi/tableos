@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Bot, F, Router
 from aiogram.filters import CommandObject, CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from asgiref.sync import sync_to_async
 
 from apps.analytics.sources import parse_source_payload, record_source_visit
@@ -21,6 +21,7 @@ from apps.tables.services import (
     activate_table_session,
 )
 from apps.users.services import get_or_create_guest_profile_with_created
+from bot.handlers.menu import choose_way_buttons
 from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.session import build_visit_choice_keyboard
 from bot.services.content import BotContent
@@ -87,28 +88,17 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
         )
         return
 
-    start_hint_lines = content.start_hint_lines()
     await message.answer(
         "\n".join(
             [
                 content.welcome_message(partner_name=partner.name),
-                "",
                 _(
-                    "Вы зарегистрированы в программе лояльности {name}.",
-                    name=escape_html(partner.name),
-                ),
-                _(
-                    "Ваш код клиента: <code>{customer_code}</code>",
+                    "Ваш код для бонусов: <code>{customer_code}</code> — назовите его на кассе.",
                     customer_code=guest_profile.customer_code,
                 ),
-                _("Этот код можно назвать на баре или кассе для начисления бонусов."),
             ]
-            + ([""] + start_hint_lines if start_hint_lines else [])
             + (
-                [
-                    "",
-                    _("Если вы сотрудник заведения, откройте рабочий режим командой /staff."),
-                ]
+                [_("Вы сотрудник? Рабочий режим — команда /staff.")]
                 if employee is not None
                 else []
             )
@@ -122,6 +112,22 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
             ),
         ),
     )
+    ways = choose_way_buttons(content)
+    hint_lines = content.start_hint_lines(with_ways=bool(ways))
+    if hint_lines:
+        await message.answer(
+            "\n".join(hint_lines),
+            reply_markup=(
+                InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=text, callback_data=data)]
+                        for text, data in ways
+                    ]
+                )
+                if ways
+                else None
+            ),
+        )
 
 
 async def _activate_and_reply(*, message: Message, user, partner, content, payload, visit_choice):
@@ -173,7 +179,7 @@ async def _activate_and_reply(*, message: Message, user, partner, content, paylo
                 ),
                 "",
                 _(
-                    "Ваш код клиента: <code>{customer_code}</code>",
+                    "Ваш код для бонусов: <code>{customer_code}</code> — назовите его на кассе.",
                     customer_code=guest_profile.customer_code,
                 ),
             ]

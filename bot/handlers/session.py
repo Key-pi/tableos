@@ -71,30 +71,18 @@ def _build_guest_session_view(
     ]
 
     if not visible_orders:
-        lines.extend(
-            [
-                "",
-                _("По вашему столу сейчас нет незавершённых заказов."),
-            ]
-        )
-        lines.extend(content.ordering_entry_lines(table_number=session.table.number))
+        lines.extend(["", _("Заказов пока нет.")])
+        if content.supports_cart():
+            lines.append(
+                _(
+                    "Заказать — кнопка «{button_menu_label}».",
+                    button_menu_label=escape_html(content.button_menu_label),
+                )
+            )
         return "\n".join(lines), []
 
     unpaid_count = sum(1 for order in visible_orders if not is_order_paid(order))
-    unreceived_count = sum(1 for order in visible_orders if not is_order_received(order))
-    lines.extend(
-        [
-            "",
-            _(
-                "Незавершённых заказов: {visible_orders_count}",
-                visible_orders_count=len(visible_orders),
-            ),
-            _("Не оплачено: {unpaid_count}", unpaid_count=unpaid_count),
-            _("Не получено: {unreceived_count}", unreceived_count=unreceived_count),
-            "",
-            _("Ваши заказы:"),
-        ]
-    )
+    lines.extend(["", _("Ваши заказы:")])
     lines.extend(_render_guest_order_line(order) for order in preview_orders)
     hidden_orders_count = len(visible_orders) - len(preview_orders)
     if hidden_orders_count > 0:
@@ -102,15 +90,13 @@ def _build_guest_session_view(
             _("• И ещё заказов: {hidden_orders_count}", hidden_orders_count=hidden_orders_count)
         )
 
-    if unpaid_count:
+    if unpaid_count and content.supports_billing_request():
         lines.extend(
             [
                 "",
-                (
-                    _(
-                        "Если заказ уже у вас, но он ещё не оплачен, запросите счёт "
-                        "кнопкой «Запросить счёт»."
-                    )
+                _(
+                    "Готовы оплатить — кнопка «{button_request_bill_label}».",
+                    button_request_bill_label=escape_html(content.button_request_bill_label),
                 ),
             ]
         )
@@ -125,43 +111,43 @@ def _employee_label(order: Order) -> str:
     return full_name or order.assigned_employee.user.username
 
 
-def _build_guest_order_card_text(order: Order) -> str:
-    payment_label = (
-        _("ещё не зафиксирована") if not is_order_paid(order) else _("уже зафиксирована")
-    )
-    received_label = (
-        _("ещё не подтверждено") if not is_order_received(order) else _("уже подтверждено")
-    )
+def _build_guest_order_card_text(order: Order, content: BotContent | None = None) -> str:
+    content = content or BotContent.defaults()
     lines = [
-        _("<b>Заказ #{public_id}</b>", public_id=order.public_id),
-        _("Стол: #{number}", number=order.table.number),
-        _("Новый статус: {status}", status=order.get_status_display()),
-        _("Оплата: {payment_label}", payment_label=payment_label),
-        _("Получение: {received_label}", received_label=received_label),
-        _(
-            "Заказ взял в работу: {employee_label}",
-            employee_label=escape_html(_employee_label(order)),
-        ),
+        _("<b>Заказ #{public_id}</b> · стол #{number}", public_id=order.public_id,
+          number=order.table.number),
     ]
-    if not is_order_paid(order):
+    items = getattr(order, "items", None)
+    for item in items.all() if items is not None else []:
+        lines.append(
+            _(
+                "{item_name} × {quantity}",
+                item_name=escape_html(item.item_name),
+                quantity=item.quantity,
+            )
+        )
+    lines.extend(
+        [
+            _("Сумма: {total} грн", total=order.total_amount),
+            "",
+            _("Статус: {status}", status=order.get_status_display()),
+            _("Оплачен") if is_order_paid(order) else _("Не оплачен"),
+        ]
+    )
+    if is_order_received(order):
+        lines.append(_("Получен"))
+    if not is_order_paid(order) and content.supports_billing_request():
         lines.extend(
             [
                 "",
-                (
-                    _(
-                        "Если заказ уже у вас, но он ещё не оплачен, запросите счёт "
-                        "кнопкой «Запросить счёт»."
-                    )
+                _(
+                    "Готовы оплатить — кнопка «{button_request_bill_label}».",
+                    button_request_bill_label=escape_html(content.button_request_bill_label),
                 ),
             ]
         )
     if can_guest_confirm_receipt(order):
-        lines.extend(
-            [
-                "",
-                _("Если заказ уже получили, подтвердите это кнопкой ниже."),
-            ]
-        )
+        lines.append(_("Заказ уже у вас? Подтвердите кнопкой ниже."))
     return "\n".join(lines)
 
 
@@ -201,7 +187,7 @@ async def session_handler(message: Message, bot: Bot) -> None:
             content=content,
         )
         await message.answer(
-            _("Активной сессии нет. Сначала отсканируйте QR-код на столе."),
+            _("Вы сейчас не за столом. Отсканируйте QR-код на столе."),
             reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
         )
         return
@@ -226,13 +212,14 @@ async def session_handler(message: Message, bot: Bot) -> None:
 @router.callback_query(F.data.startswith("guestorderopen:"))
 async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
     order_public_id = (callback.data or "").split(":", 1)[1]
     session = await sync_to_async(get_active_table_session)(
         partner_id=partner.id,
         telegram_id=callback.from_user.id,
     )
     if session is None:
-        await callback.answer(_("Активная сессия уже закрыта."), show_alert=True)
+        await callback.answer(_("Визит за этим столом уже закрыт."), show_alert=True)
         return
 
     orders = await sync_to_async(list)(
@@ -246,7 +233,7 @@ async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
 
     updated = await _safe_edit_session_message(
         callback.message,
-        _build_guest_order_card_text(order),
+        _build_guest_order_card_text(order, content),
         reply_markup=build_guest_order_card_keyboard(
             order_public_id=order.public_id,
             can_confirm_received=can_guest_confirm_receipt(order),
@@ -267,7 +254,7 @@ async def guest_session_back_callback(callback: CallbackQuery, bot: Bot) -> None
         telegram_id=callback.from_user.id,
     )
     if session is None:
-        await callback.answer(_("Активная сессия уже закрыта."), show_alert=True)
+        await callback.answer(_("Визит за этим столом уже закрыт."), show_alert=True)
         return
 
     orders = await sync_to_async(list)(
@@ -295,6 +282,7 @@ async def guest_session_back_callback(callback: CallbackQuery, bot: Bot) -> None
 @router.callback_query(F.data.startswith("guestorderconfirm:"))
 async def guest_order_confirm_callback(callback: CallbackQuery, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
     order_public_id = (callback.data or "").split(":", 1)[1]
 
     try:
@@ -321,13 +309,13 @@ async def guest_order_confirm_callback(callback: CallbackQuery, bot: Bot) -> Non
                 )
             )
         else:
-            await callback.message.edit_text(_("Активная сессия уже закрыта."))
+            await callback.message.edit_text(_("Визит за этим столом уже закрыт."))
         await callback.answer(_("Получение подтверждено."))
         return
 
     updated = await _safe_edit_session_message(
         callback.message,
-        _build_guest_order_card_text(order),
+        _build_guest_order_card_text(order, content),
         reply_markup=build_guest_order_card_keyboard(
             order_public_id=order.public_id,
             can_confirm_received=False,

@@ -51,7 +51,7 @@ class SessionRenderingTests(SimpleTestCase):
             content=content,
         )
 
-        self.assertIn("Незавершённых заказов: 8", text)
+        self.assertNotIn("Незавершённых заказов", text)
         self.assertIn("• И ещё заказов: 2", text)
         self.assertEqual(len(shortcuts), 8)
 

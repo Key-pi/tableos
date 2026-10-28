@@ -38,49 +38,34 @@ def build_main_keyboard(
             ),
             has_active_session=bool(has_active_session),
         )
-    rows: list[list[KeyboardButton]] = []
-
-    first_row = []
-    if navigation_state.has_action(GuestAction.MENU):
-        first_row.append(KeyboardButton(text=content.button_menu_label))
-    if navigation_state.has_action(GuestAction.SESSION):
-        first_row.append(KeyboardButton(text=content.button_session_label))
-    if first_row:
-        rows.append(first_row)
-
-    second_row = []
-    if navigation_state.has_action(GuestAction.CART):
-        second_row.append(KeyboardButton(text=content.button_cart_label))
-    if navigation_state.has_action(GuestAction.CHECKOUT):
-        second_row.append(KeyboardButton(text=content.button_checkout_label))
-    if second_row:
-        rows.append(second_row)
-
-    order_journey_row = []
-    if navigation_state.has_action(GuestAction.DELIVERY):
-        order_journey_row.append(KeyboardButton(text=content.button_delivery_label))
-    if navigation_state.has_action(GuestAction.PICKUP):
-        order_journey_row.append(KeyboardButton(text=content.button_pickup_label))
-    if navigation_state.has_action(GuestAction.SHIPPING):
-        order_journey_row.append(KeyboardButton(text=content.button_shipping_label))
-    if order_journey_row:
-        rows.append(order_journey_row)
-
-    third_row = []
-    if navigation_state.has_action(GuestAction.PROFILE):
-        third_row.append(KeyboardButton(text=content.button_my_profile))
-    if navigation_state.has_action(GuestAction.HELP):
-        third_row.append(KeyboardButton(text=content.button_help_label))
-    if third_row:
-        rows.append(third_row)
-
-    fourth_row = []
-    if navigation_state.has_action(GuestAction.CALL_STAFF):
-        fourth_row.append(KeyboardButton(text=content.button_call_staff_label))
-    if navigation_state.has_action(GuestAction.REQUEST_BILL):
-        fourth_row.append(KeyboardButton(text=content.button_request_bill_label))
-    if fourth_row:
-        rows.append(fourth_row)
+    # Most used first: the menu and the cart, then ordering, then the table's
+    # requests, then the guest's own pages.
+    labels = [
+        [
+            (GuestAction.MENU, content.button_menu_label),
+            (GuestAction.CART, content.button_cart_label),
+        ],
+        [(GuestAction.CHECKOUT, content.button_checkout_label)],
+        [
+            (GuestAction.PICKUP, content.button_pickup_label),
+            (GuestAction.DELIVERY, content.button_delivery_label),
+            (GuestAction.SHIPPING, content.button_shipping_label),
+        ],
+        [
+            (GuestAction.CALL_STAFF, content.button_call_staff_label),
+            (GuestAction.REQUEST_BILL, content.button_request_bill_label),
+        ],
+        [
+            (GuestAction.SESSION, content.button_session_label),
+            (GuestAction.PROFILE, content.button_my_profile),
+            (GuestAction.HELP, content.button_help_label),
+        ],
+    ]
+    rows = [
+        [KeyboardButton(text=text) for action, text in row if navigation_state.has_action(action)]
+        for row in labels
+    ]
+    rows = [row for row in rows if row]
 
     return ReplyKeyboardMarkup(
         keyboard=rows,

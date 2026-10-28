@@ -512,16 +512,35 @@ REMOTE_CART_CHANNELS = {
 }
 
 
-def _enabled_remote_channels(partner_id) -> list[str]:
-    settings = PartnerBotSettings.objects.filter(
+def _ordering_settings(partner_id) -> PartnerBotSettings | None:
+    return PartnerBotSettings.objects.filter(
         partner_id=partner_id,
         module_menu_enabled=True,
         module_orders_enabled=True,
         module_cart_enabled=True,
     ).first()
+
+
+def _remote_channels_of(settings: PartnerBotSettings | None) -> list[str]:
     if settings is None:
         return []
     return [channel for channel, flag in REMOTE_CART_CHANNELS.items() if getattr(settings, flag)]
+
+
+def _enabled_remote_channels(partner_id) -> list[str]:
+    return _remote_channels_of(_ordering_settings(partner_id))
+
+
+def _only_way_of_ordering(partner_id) -> str | None:
+    """The way of ordering when there is nothing to choose: tables are off and
+    exactly one remote channel is on. With tables on, a guest without a table
+    may still be about to scan the QR code, so it stays a choice."""
+
+    settings = _ordering_settings(partner_id)
+    channels = _remote_channels_of(settings)
+    if settings is None or settings.module_tables_enabled or len(channels) != 1:
+        return None
+    return channels[0]
 
 
 def _default_remote_channel(partner_id) -> str:
@@ -541,7 +560,7 @@ def _resolve_cart_guest(*, partner_id, telegram_id: int):
         return table_session.guest, table_session
     if not _enabled_remote_channels(partner_id):
         raise OrderFlowError(
-            _("Корзина доступна только после сканирования QR-кода стола. Сначала откройте сессию.")
+            _("Заказать можно за столом: отсканируйте QR-код на столе.")
         )
     guest = (
         GuestProfile.objects.select_related("telegram_account")
@@ -575,8 +594,10 @@ def _align_cart_with_session(cart: Cart, table_session: TableSession | None) -> 
       has items, otherwise moved to the current session;
     - pickup and delivery: never tied to a session, even while the guest
       sits at a table (they ordered to take away);
-    - table channel without a session (the guest left): the cart becomes a
-      pickup cart (or delivery when only delivery is on) and keeps its items.
+    - table channel without a session (the guest left): the cart keeps its
+      items and waits for the guest to choose a way again
+      (``ordering_channel_for_telegram_user`` is ``None``); when there is only
+      one way of ordering left, the cart takes it.
     """
 
     if cart.channel in REMOTE_CART_CHANNELS:
@@ -594,9 +615,11 @@ def _align_cart_with_session(cart: Cart, table_session: TableSession | None) -> 
         cart.table_session = table_session
         cart.save(update_fields=["table_session", "updated_at"])
         return cart
-    cart.table_session = None
-    cart.channel = _default_remote_channel(cart.partner_id)
-    cart.save(update_fields=["table_session", "channel", "updated_at"])
+    channel = _only_way_of_ordering(cart.partner_id) or Order.Channel.TABLE
+    if cart.table_session_id is not None or cart.channel != channel:
+        cart.table_session = None
+        cart.channel = channel
+        cart.save(update_fields=["table_session", "channel", "updated_at"])
     return cart
 
 
@@ -782,6 +805,45 @@ def get_active_cart_for_telegram_user(
         Cart.objects.select_related("table_session__table")
         .prefetch_related("items", "items__menu_item")
         .get(id=cart.id)
+    )
+
+
+CHOOSE_WAY_FIRST = N_("Сначала выберите, как получите заказ.")
+
+
+def ordering_channel_for_telegram_user(*, partner_id: UUID | str, telegram_id: int) -> str | None:
+    """The way of ordering the guest chose (ADR-0009), or ``None`` while they
+    have not chosen: then the menu is only for looking.
+
+    The table QR code chooses the table; a button chooses pickup, delivery or
+    shipping (``switch_cart_channel_for_telegram_user``). Nothing is chosen
+    for the guest, unless there is only one way of ordering at all.
+    """
+
+    cart = get_active_cart_for_telegram_user(partner_id=partner_id, telegram_id=telegram_id)
+    if cart is not None and (
+        cart.channel in REMOTE_CART_CHANNELS or cart.table_session_id is not None
+    ):
+        return cart.channel
+    if get_active_table_session(partner_id=partner_id, telegram_id=telegram_id) is not None:
+        return Order.Channel.TABLE
+    return _only_way_of_ordering(partner_id)
+
+
+def add_menu_item_for_telegram_user(
+    *,
+    partner_id: UUID | str,
+    telegram_id: int,
+    item_public_id: str,
+) -> Cart:
+    """The guest adds one menu item by its button, in the way they chose."""
+
+    if ordering_channel_for_telegram_user(partner_id=partner_id, telegram_id=telegram_id) is None:
+        raise OrderFlowError(_(CHOOSE_WAY_FIRST))
+    return add_items_to_cart_for_telegram_user(
+        partner_id=partner_id,
+        telegram_id=telegram_id,
+        raw_items=f"{item_public_id}x1",
     )
 
 
