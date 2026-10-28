@@ -39,7 +39,8 @@ docker compose up --build -d
 ```
 
 Порядок старта: `db` и `redis` → `init` (проверяет ключ, применяет миграции,
-загружает демо-данные и завершается) → `web`, `worker`, `beat`, `bot`.
+загружает демо-данные и завершается) → `web`, `worker`, `broadcasts`, `beat`,
+`bot`.
 
 | Сервис | Что делает |
 |---|---|
@@ -47,7 +48,8 @@ docker compose up --build -d
 | `redis` | брокер Celery |
 | `init` | разовый: миграции + `seed_baseline_demo --keep-existing` |
 | `web` | Django и Admin: http://localhost:8000/admin/ |
-| `worker` | доставка уведомлений персоналу и гостям, рассылки |
+| `worker` | доставка уведомлений персоналу и гостям |
+| `broadcasts` | рассылки (отдельно, чтобы не задерживать уведомления) |
 | `beat` | запланированные рассылки, восстановление зависших, метрики дня |
 | `bot` | polling всех ботов с настоящим токеном; без них ждёт и пишет подсказку |
 
@@ -125,7 +127,7 @@ docker compose ps                         # что запущено
 docker compose logs -f bot worker         # логи бота и доставки
 docker compose up -d                      # после правки .env: контейнеры пересоздадутся
 docker compose restart bot                # после изменения ботов в Admin
-docker compose restart worker beat bot    # после правки кода (web перезапускается сам)
+docker compose restart worker broadcasts beat bot   # после правки кода (web перезапускается сам)
 docker compose up --build                 # после изменения requirements.lock (зависимости)
 docker compose run --rm web python manage.py seed_baseline_demo   # вернуть демо-данные к исходным
 docker compose run --rm web python manage.py test                 # тесты на PostgreSQL в Docker
@@ -149,7 +151,7 @@ docker compose down -v                    # остановить и удалит
 |---|---|
 | `init` завершился с ошибкой про `BOT_TOKEN_ENCRYPTION_KEY` | сгенерируйте ключ (шаг 1) и впишите в `.env` |
 | `init`: «Telegram не принял токен» | проверьте токен в @BotFather; без интернета задайте `DEMO_*_BOT_USERNAME` |
-| порт 8000 занят | в `.env` задайте `WEB_PORT_ON_HOST` |
+| `ports are not available` / `address already in use` про 8000 | порт уже занят: `docker ps` покажет старый контейнер с `8000` (`docker stop <имя>` или `docker compose down` в его папке); иначе найдите программу (`netstat -ano \| findstr :8000` на Windows, `lsof -nP -iTCP:8000 -sTCP:LISTEN` на macOS/Linux) или задайте в `.env` `WEB_PORT_ON_HOST=8001` |
 | Admin не открывается с телефона или другого компьютера | по умолчанию он доступен только с этого компьютера; в `.env` задайте `WEB_BIND_ON_HOST=0.0.0.0` (только в своей сети: демо-пароль известен) |
 | worker или beat: `Name or service not known` / «имя или сервис неизвестны» про `redis` | контейнер `redis` не запущен: `docker compose ps -a`, `docker compose logs redis`. Остановите старые контейнеры, если они остались: `docker rm -f tableos-redis`, `docker compose -p tableos down`. Затем `docker compose up -d` |
 | бот молчит | `docker compose logs bot`; один токен не должен работать в двух местах (например, ещё и в локальном `runbot`) |
