@@ -1,0 +1,841 @@
+{
+  "meta": {
+    "project": "TableOS",
+    "description": "Многопользовательская hospitality-платформа. Django модульный монолит + aiogram Telegram-бот + Celery + PostgreSQL + Redis.",
+    "version": "audited-2026-07-27",
+    "language": "Python / Django 4.x / aiogram 3.x",
+    "generated_by": "AI architecture analysis"
+  },
+  "nodes": [
+    {
+      "id": "telegram",
+      "label": "Telegram API",
+      "layer": "external",
+      "category": "Внешний сервис",
+      "description": "Внешний сервис Telegram. Единственный канал связи с гостями и сотрудниками через бот.",
+      "technologies": ["Telegram Bot API", "polling", "webhook (не реализован)"],
+      "files": [],
+      "interfaces": {
+        "in": ["updates (polling)"],
+        "out": ["send_message", "send_photo", "edit_message"]
+      }
+    },
+    {
+      "id": "postgres",
+      "label": "PostgreSQL",
+      "layer": "storage",
+      "category": "Хранилище данных",
+      "description": "Основная реляционная БД. Обязательна для production (блокировки, constraint). SQLite только для локальной разработки.",
+      "technologies": ["PostgreSQL 16", "django-orm", "SELECT FOR UPDATE"],
+      "files": ["core/settings/base.py", "core/database/models.py"],
+      "interfaces": {
+        "in": ["Django ORM queries", "Celery results backend"],
+        "out": ["rows", "advisory locks"]
+      }
+    },
+    {
+      "id": "redis",
+      "label": "Redis",
+      "layer": "storage",
+      "category": "Брокер / Кэш",
+      "description": "Celery-брокер (очереди default и broadcasts) и хранилище результатов задач. Redis 7-alpine.",
+      "technologies": ["Redis 7", "Celery BROKER_URL", "RESULT_BACKEND"],
+      "files": ["core/settings/base.py", "core/celery.py"],
+      "interfaces": {
+        "in": ["task.delay()", "celery beat schedule"],
+        "out": ["task messages", "results"]
+      }
+    },
+    {
+      "id": "core-settings",
+      "label": "core/settings",
+      "layer": "core",
+      "category": "Конфигурация",
+      "description": "Конфигурация Django: INSTALLED_APPS, DATABASES, CELERY_TASK_ROUTES (default/broadcasts очереди), CELERY_BEAT_SCHEDULE, security, logging.",
+      "technologies": ["Django settings", "pydantic-settings"],
+      "files": ["core/settings/base.py", "core/settings/local.py"],
+      "interfaces": {}
+    },
+    {
+      "id": "core-db",
+      "label": "core/database/models",
+      "layer": "core",
+      "category": "Базовые модели",
+      "description": "PartnerBoundModel: абстрактная модель с partner FK — все доменные модели наследуют её для tenant-изоляции. TimeStampedModel: created_at/updated_at.",
+      "technologies": ["Django ORM", "abstract models"],
+      "files": ["core/database/models.py"],
+      "interfaces": {
+        "out": ["PartnerBoundModel", "TimeStampedModel"]
+      }
+    },
+    {
+      "id": "core-celery",
+      "label": "core/celery.py",
+      "layer": "core",
+      "category": "Task Queue Init",
+      "description": "Инициализация Celery-приложения. autodiscover_tasks() обнаруживает задачи во всех INSTALLED_APPS. В режиме тестирования CELERY_TASK_ALWAYS_EAGER=True.",
+      "technologies": ["Celery", "autodiscover_tasks"],
+      "files": ["core/celery.py"],
+      "interfaces": {
+        "out": ["app (Celery instance)", "shared_task decorator"]
+      }
+    },
+    {
+      "id": "core-admin",
+      "label": "core/admin_mixins",
+      "layer": "core",
+      "category": "RBAC / Tenant Admin",
+      "description": "Миксины для Django Admin: автоматическая фильтрация queryset по partner, проверка AdminAccessProfile и AdminSectionPermission. Superuser видит всё.",
+      "technologies": ["Django Admin", "ModelAdmin mixins"],
+      "files": ["core/admin_mixins.py"],
+      "interfaces": {
+        "out": ["PartnerScopedMixin", "AdminAccessProfile", "AdminSectionPermission"]
+      }
+    },
+    {
+      "id": "bot-main",
+      "label": "bot/main.py",
+      "layer": "adapter",
+      "category": "Telegram Bot Entry",
+      "description": "Точка входа aiogram-бота. Создаёт Dispatcher, регистрирует роутеры всех handlers, middlewares. Запускается командой manage.py runbot в polling-режиме.",
+      "technologies": ["aiogram 3.x", "Dispatcher", "Router"],
+      "files": ["bot/main.py", "bot/apps.py"],
+      "interfaces": {
+        "in": ["Telegram updates"],
+        "out": ["routed to handlers"]
+      }
+    },
+    {
+      "id": "bot-handlers",
+      "label": "bot/handlers/*",
+      "layer": "adapter",
+      "category": "Telegram Handlers",
+      "description": "8 модулей-обработчиков: start (QR deep link, регистрация гостя), menu, order (корзина, checkout), session (мой стол), profile, billing (запрос счёта), guest_call (вызов персонала), staff (управление заказами сотрудником).",
+      "technologies": ["aiogram Router", "sync_to_async", "CommandStart"],
+      "files": [
+        "bot/handlers/start.py",
+        "bot/handlers/menu.py",
+        "bot/handlers/order.py",
+        "bot/handlers/session.py",
+        "bot/handlers/profile.py",
+        "bot/handlers/billing.py",
+        "bot/handlers/guest_call.py",
+        "bot/handlers/staff.py"
+      ],
+      "interfaces": {
+        "in": ["Message", "CallbackQuery"],
+        "out": ["service calls via sync_to_async", "keyboard renders"]
+      }
+    },
+    {
+      "id": "bot-services",
+      "label": "bot/services/*",
+      "layer": "adapter",
+      "category": "Bot Support Services",
+      "description": "context.py: resolve_partner_for_bot_token (по токену бота → Partner). content.py: BotContent — локализованные метки кнопок партнёра. navigation.py: resolve_guest_navigation_state.",
+      "technologies": ["aiogram", "Django ORM sync"],
+      "files": ["bot/services/context.py", "bot/services/content.py", "bot/services/navigation.py", "bot/services/runtime.py"],
+      "interfaces": {
+        "in": ["bot.token"],
+        "out": ["Partner", "BotContent", "navigation_state"]
+      }
+    },
+    {
+      "id": "bot-keyboards",
+      "label": "bot/keyboards/*",
+      "layer": "adapter",
+      "category": "Клавиатуры",
+      "description": "Строители Reply и Inline клавиатур. Используют BotContent для кастомных надписей кнопок (button_menu_label, button_call_staff_label и т.д.).",
+      "technologies": ["aiogram ReplyKeyboardMarkup", "InlineKeyboardMarkup"],
+      "files": ["bot/keyboards/main.py", "bot/keyboards/guest_call.py"],
+      "interfaces": {
+        "in": ["BotContent", "navigation_state"],
+        "out": ["ReplyKeyboardMarkup", "InlineKeyboardMarkup"]
+      }
+    },
+    {
+      "id": "bot-states",
+      "label": "bot/states/*",
+      "layer": "adapter",
+      "category": "FSM Состояния",
+      "description": "StaffQuickSaleStates — конечный автомат для быстрой продажи (WalkIn) без стола. aiogram StatesGroup.",
+      "technologies": ["aiogram StatesGroup", "FSM"],
+      "files": ["bot/states/staff_sale.py"],
+      "interfaces": {
+        "out": ["StaffQuickSaleStates"]
+      }
+    },
+    {
+      "id": "django-admin",
+      "label": "Django Admin (/admin/)",
+      "layer": "adapter",
+      "category": "Back-office UI",
+      "description": "Tenant-scoped административный интерфейс. Все ModelAdmin используют core/admin_mixins. Superuser видит все данные. Tenant-admin — только своего partner. AdminSectionPermission контролирует доступ к разделам.",
+      "technologies": ["Django Admin", "PartnerScopedMixin"],
+      "files": [
+        "apps/*/admin.py",
+        "core/admin_mixins.py"
+      ],
+      "interfaces": {
+        "in": ["HTTP /admin/"],
+        "out": ["CRUD на доменных моделях"]
+      }
+    },
+    {
+      "id": "mgmt-commands",
+      "label": "manage.py commands",
+      "layer": "adapter",
+      "category": "CLI адаптер",
+      "description": "seed_baseline_demo, seed_demo (быстрый seed заведения с ботом и меню), ensure_admin, runbot. Вызывают owner-services, не реализуют бизнес-логику.",
+      "technologies": ["Django Management Commands"],
+      "files": [
+        "bot/management/commands/runbot.py",
+        "apps/partners/management/",
+        "apps/users/management/"
+      ],
+      "interfaces": {
+        "in": ["CLI args"],
+        "out": ["service calls"]
+      }
+    },
+    {
+      "id": "app-partners",
+      "label": "apps/partners",
+      "layer": "domain",
+      "category": "Модуль: Партнёры",
+      "description": "Partner (tenant): name, slug, timezone, status (draft/active/suspended). BotInstance: зашифрованный токен бота (encrypt/decrypt), mode (polling/webhook), username. Tenant-root для всех доменных данных.",
+      "technologies": ["Django Model", "token encryption"],
+      "files": ["apps/partners/models.py", "apps/partners/services.py", "apps/partners/selectors.py", "apps/partners/admin.py"],
+      "models": ["Partner", "BotInstance"],
+      "interfaces": {
+        "in": ["manage.py seed_demo"],
+        "out": ["Partner FK для всех PartnerBoundModel", "token для BotInstance"]
+      }
+    },
+    {
+      "id": "app-users",
+      "label": "apps/users",
+      "layer": "domain",
+      "category": "Модуль: Пользователи",
+      "description": "User (AbstractUser): staff с role (owner/manager/cashier/waiter/hookah_master). TelegramAccount: нормализованный Telegram ID, shared across partners. GuestProfile: per-partner гость с telegram_account FK. AdminAccessProfile + AdminSectionPermission.",
+      "technologies": ["Django AbstractUser"],
+      "files": ["apps/users/models.py", "apps/users/services.py", "apps/users/selectors.py"],
+      "models": ["User", "TelegramAccount", "GuestProfile", "AdminAccessProfile", "AdminSectionPermission"],
+      "interfaces": {
+        "in": ["get_or_create_guest_profile(partner_id, telegram_id, ...)"],
+        "out": ["GuestProfile", "User", "TelegramAccount"]
+      }
+    },
+    {
+      "id": "app-employees",
+      "label": "apps/employees",
+      "layer": "domain",
+      "category": "Модуль: Сотрудники",
+      "description": "EmployeeProfile: связывает User + TelegramAccount + Partner. Настройки уведомлений: notify_on_order_created, notify_on_guest_calls, notify_on_billing_requests. Ставка, комиссия, is_active.",
+      "technologies": ["Django Model"],
+      "files": ["apps/employees/models.py", "apps/employees/services.py", "apps/employees/selectors.py"],
+      "models": ["EmployeeProfile"],
+      "interfaces": {
+        "in": ["get_staff_employee_by_telegram(partner_id, telegram_id)"],
+        "out": ["EmployeeProfile с telegram_account и настройками уведомлений"]
+      }
+    },
+    {
+      "id": "app-tables",
+      "label": "apps/tables",
+      "layer": "domain",
+      "category": "Модуль: Столы",
+      "description": "Table: физический стол (number, qr_token, deep_link_payload, telegram_start_url). TableSession: активная сессия гостя (active/closed/timed_out). Уникальная активная сессия на гостя × partner.",
+      "technologies": ["Django Model", "unique_constraint"],
+      "files": ["apps/tables/models.py", "apps/tables/services.py", "apps/tables/selectors.py"],
+      "models": ["Table", "TableSession"],
+      "interfaces": {
+        "in": ["activate_table_session(partner_id, telegram_id, payload)", "get_active_table_session(partner_id, telegram_id)"],
+        "out": ["TableSession (active)", "Table с QR deep link"]
+      }
+    },
+    {
+      "id": "app-menu",
+      "label": "apps/menu",
+      "layer": "domain",
+      "category": "Модуль: Меню",
+      "description": "MenuCategory: разделы меню с sort_order. MenuItem: позиция (name, price, description, image_url, is_available, item_type). Все tenant-scoped по partner.",
+      "technologies": ["Django Model"],
+      "files": ["apps/menu/models.py", "apps/menu/services.py", "apps/menu/selectors.py", "apps/menu/admin.py"],
+      "models": ["MenuCategory", "MenuItem"],
+      "interfaces": {
+        "in": ["admin CRUD", "seed_demo"],
+        "out": ["MenuItem list для гостя", "ссылка из Cart/OrderItem"]
+      }
+    },
+    {
+      "id": "app-orders",
+      "layer": "domain",
+      "label": "apps/orders",
+      "category": "Модуль: Заказы",
+      "description": "Cart/CartItem: черновик до оформления. Order: подтверждённый заказ с lifecycle (new→accepted→preparing→ready→delivering→completed/canceled). OrderItem: строка заказа. Денежные поля: subtotal, bonus_spent, discount, total.",
+      "technologies": ["Django Model", "FSM-like status", "DecimalField"],
+      "files": ["apps/orders/models.py", "apps/orders/services.py", "apps/orders/selectors.py", "apps/orders/repositories.py"],
+      "models": ["Order", "OrderItem", "Cart", "CartItem"],
+      "interfaces": {
+        "in": ["add_to_cart", "checkout_cart → Order", "transition_order_status"],
+        "out": ["Order с total_amount, status", "StaffNotification trigger", "Bill source"]
+      }
+    },
+    {
+      "id": "app-billing",
+      "label": "apps/billing",
+      "layer": "domain",
+      "category": "Модуль: Биллинг",
+      "description": "Bill: счёт (draft/issued/partially_paid/paid/canceled), вид (personal/shared/split), источник (internal/POS). BillItem: строки счёта. Payment: фиксирует оплату (amount, method). Синхронизирует Order.paid_at и статус при полной оплате.",
+      "technologies": ["Django Model", "DecimalField", "transaction.atomic"],
+      "files": ["apps/billing/models.py", "apps/billing/services.py", "apps/billing/selectors.py"],
+      "models": ["Bill", "BillItem", "Payment"],
+      "interfaces": {
+        "in": ["create_bill(orders)", "register_payment(bill, amount, method)"],
+        "out": ["Bill.paid_amount", "закрытие Order и TableSession"]
+      }
+    },
+    {
+      "id": "app-bonuses",
+      "label": "apps/bonuses",
+      "layer": "domain",
+      "category": "Модуль: Бонусы / Лояльность",
+      "description": "BonusProgram: программа лояльности (cashback/visit/milestone). BonusTransaction: движения бонусов (начисление/списание). WalkInSale: быстрая продажа без стола. strategies.py: pluggable стратегии начисления.",
+      "technologies": ["Django Model", "strategy pattern"],
+      "files": ["apps/bonuses/models.py", "apps/bonuses/services.py", "apps/bonuses/strategies.py"],
+      "models": ["BonusProgram", "BonusTransaction", "WalkInSale"],
+      "interfaces": {
+        "in": ["accrue_bonuses(order)", "redeem_bonuses(order, amount)"],
+        "out": ["BonusTransaction", "guest bonus balance"]
+      }
+    },
+    {
+      "id": "app-notifications",
+      "label": "apps/notifications",
+      "layer": "domain",
+      "category": "Модуль: Уведомления",
+      "description": "StaffNotification: уведомление сотруднику (order_created, order_status_changed, guest_call, billing_request). BroadcastCampaign: массовая рассылка гостям. NotificationPreference: opt-in настройки гостя. Доставка через Celery (transaction.on_commit).",
+      "technologies": ["Django Model", "Celery shared_task", "retry_backoff"],
+      "files": [
+        "apps/notifications/models.py",
+        "apps/notifications/services.py",
+        "apps/notifications/tasks.py",
+        "apps/notifications/selectors.py"
+      ],
+      "models": ["StaffNotification", "BroadcastCampaign", "NotificationPreference"],
+      "celery_tasks": [
+        "notifications.deliver_staff_notification",
+        "notifications.send_guest_order_status_update",
+        "notifications.send_broadcast_campaign",
+        "notifications.process_scheduled_broadcast_campaigns"
+      ],
+      "interfaces": {
+        "in": ["create StaffNotification → transaction.on_commit(.delay())", "request_staff_assistance"],
+        "out": ["Telegram message via bot", "delivery_status update"]
+      }
+    },
+    {
+      "id": "app-analytics",
+      "label": "apps/analytics",
+      "layer": "domain",
+      "category": "Модуль: Аналитика",
+      "description": "PartnerDailyMetric: ежедневный KPI-снимок (revenue, orders_count, average_check, active_guests, repeat_visits). Агрегируется Celery-задачей или management-командой.",
+      "technologies": ["Django Model", "aggregation"],
+      "files": ["apps/analytics/models.py", "apps/analytics/services.py", "apps/analytics/tasks.py"],
+      "models": ["PartnerDailyMetric"],
+      "interfaces": {
+        "in": ["Celery scheduled task"],
+        "out": ["PartnerDailyMetric per partner per day"]
+      }
+    },
+    {
+      "id": "celery-worker",
+      "label": "Celery Worker",
+      "layer": "infra",
+      "category": "Фоновые задачи",
+      "description": "Воркеры в двух очередях: 'default' (staff/guest уведомления, статусы) и 'broadcasts' (рассылки). autoretry_for=(Exception,) с retry_backoff=True, max_retries=5. Задачи идемпотентны.",
+      "technologies": ["Celery", "Redis broker"],
+      "files": ["apps/notifications/tasks.py"],
+      "queues": {
+        "default": ["deliver_staff_notification", "send_guest_order_status_update"],
+        "broadcasts": ["send_broadcast_campaign", "process_scheduled_broadcast_campaigns"]
+      },
+      "interfaces": {
+        "in": ["Redis queue messages"],
+        "out": ["Telegram API calls", "DB updates (delivery_status)"]
+      }
+    },
+    {
+      "id": "celery-beat",
+      "label": "Celery Beat",
+      "layer": "infra",
+      "category": "Планировщик",
+      "description": "Планировщик периодических задач. CELERY_BEAT_SCHEDULE: process_scheduled_broadcast_campaigns для запланированных рассылок.",
+      "technologies": ["Celery Beat", "CELERY_BEAT_SCHEDULE"],
+      "files": ["core/settings/base.py"],
+      "interfaces": {
+        "out": ["process_scheduled_broadcast_campaigns.delay()"]
+      }
+    },
+    {
+      "id": "docker",
+      "label": "Docker Compose",
+      "layer": "infra",
+      "category": "Оркестрация",
+      "description": "Контейнеры: db (postgres:16-alpine), redis (redis:7-alpine), web (Django runserver 8000), worker (celery worker). Для локальной разработки и staging.",
+      "technologies": ["Docker Compose", "postgres:16-alpine", "redis:7-alpine"],
+      "files": ["docker-compose.yml", "infrastructure/docker/Dockerfile"],
+      "interfaces": {}
+    }
+  ],
+  "edges": [
+    { "from": "telegram", "to": "bot-main", "label": "апдейты (polling)", "type": "async" },
+    { "from": "bot-main", "to": "telegram", "label": "send_message", "type": "async" },
+    { "from": "bot-main", "to": "bot-handlers", "label": "роутинг по фильтрам", "type": "sync" },
+    { "from": "bot-handlers", "to": "bot-services", "label": "resolve context/content", "type": "sync" },
+    { "from": "bot-handlers", "to": "bot-keyboards", "label": "build keyboard", "type": "sync" },
+    { "from": "bot-handlers", "to": "bot-states", "label": "FSM transitions", "type": "sync" },
+    { "from": "bot-handlers", "to": "app-partners", "label": "resolve_partner_for_bot_token", "type": "sync" },
+    { "from": "bot-handlers", "to": "app-users", "label": "get_or_create_guest_profile", "type": "sync" },
+    { "from": "bot-handlers", "to": "app-employees", "label": "get_staff_employee_by_telegram", "type": "sync" },
+    { "from": "bot-handlers", "to": "app-tables", "label": "activate_table_session", "type": "sync" },
+    { "from": "bot-handlers", "to": "app-orders", "label": "add_to_cart / checkout", "type": "sync" },
+    { "from": "bot-handlers", "to": "app-billing", "label": "request_bill / register_payment", "type": "sync" },
+    { "from": "bot-handlers", "to": "app-notifications", "label": "request_staff_assistance", "type": "sync" },
+    { "from": "bot-handlers", "to": "app-bonuses", "label": "quick_sale / WalkInSale", "type": "sync" },
+    { "from": "django-admin", "to": "core-admin", "label": "tenant scoping mixins", "type": "sync" },
+    { "from": "django-admin", "to": "app-partners", "label": "CRUD", "type": "sync" },
+    { "from": "django-admin", "to": "app-users", "label": "CRUD", "type": "sync" },
+    { "from": "django-admin", "to": "app-employees", "label": "CRUD", "type": "sync" },
+    { "from": "django-admin", "to": "app-orders", "label": "read", "type": "sync" },
+    { "from": "django-admin", "to": "app-notifications", "label": "read delivery_status", "type": "sync" },
+    { "from": "core-db", "to": "app-partners", "label": "PartnerBoundModel base", "type": "inheritance" },
+    { "from": "core-db", "to": "app-users", "label": "TimeStampedModel base", "type": "inheritance" },
+    { "from": "core-db", "to": "app-orders", "label": "PartnerBoundModel base", "type": "inheritance" },
+    { "from": "core-db", "to": "app-billing", "label": "PartnerBoundModel base", "type": "inheritance" },
+    { "from": "core-db", "to": "app-notifications", "label": "PartnerBoundModel base", "type": "inheritance" },
+    { "from": "app-orders", "to": "app-notifications", "label": "on_commit → .delay()", "type": "event" },
+    { "from": "app-orders", "to": "app-billing", "label": "Order → Bill source", "type": "data" },
+    { "from": "app-orders", "to": "app-bonuses", "label": "accrue_bonuses after complete", "type": "event" },
+    { "from": "app-billing", "to": "app-orders", "label": "sync paid_at / status", "type": "sync" },
+    { "from": "app-billing", "to": "app-tables", "label": "close_table_session", "type": "sync" },
+    { "from": "app-analytics", "to": "app-orders", "label": "агрегация revenue", "type": "read" },
+    { "from": "app-analytics", "to": "app-billing", "label": "агрегация paid_amount", "type": "read" },
+    { "from": "app-notifications", "to": "core-celery", "label": "deliver_staff_notification.delay()", "type": "event" },
+    { "from": "core-celery", "to": "redis", "label": "enqueue to 'default' / 'broadcasts'", "type": "async" },
+    { "from": "redis", "to": "celery-worker", "label": "consume task", "type": "async" },
+    { "from": "celery-worker", "to": "telegram", "label": "bot.send_message", "type": "async" },
+    { "from": "celery-worker", "to": "postgres", "label": "update delivery_status", "type": "sync" },
+    { "from": "celery-beat", "to": "redis", "label": "schedule task", "type": "async" },
+    { "from": "celery-beat", "to": "app-notifications", "label": "process_scheduled_broadcast_campaigns", "type": "trigger" },
+    { "from": "mgmt-commands", "to": "app-partners", "label": "seed_demo", "type": "sync" },
+    { "from": "mgmt-commands", "to": "app-users", "label": "ensure_admin", "type": "sync" },
+    { "from": "app-partners", "to": "postgres", "label": "ORM", "type": "sync" },
+    { "from": "app-orders", "to": "postgres", "label": "ORM / transaction.atomic", "type": "sync" },
+    { "from": "app-billing", "to": "postgres", "label": "ORM / transaction.atomic", "type": "sync" },
+    { "from": "docker", "to": "postgres", "label": "service: db", "type": "infra" },
+    { "from": "docker", "to": "redis", "label": "service: redis", "type": "infra" }
+  ],
+  "flows": [
+    {
+      "id": "flow-guest-order",
+      "label": "Гостевой поток (заказ)",
+      "description": "Гость сканирует QR-код стола, открывает Telegram-бот, просматривает меню, формирует корзину, оформляет заказ. Сотрудник получает уведомление.",
+      "trigger": "Telegram /start table_N_TOKEN (QR deep link)",
+      "actor": "Гость",
+      "steps": [
+        {
+          "step": 1,
+          "node": "telegram",
+          "action": "Гость сканирует QR-код стола → открывает Telegram deep link",
+          "detail": "URL вида https://t.me/bot_username?start=table_3_abc123"
+        },
+        {
+          "step": 2,
+          "node": "bot-main",
+          "action": "Dispatcher получает CommandStart апдейт",
+          "detail": "Маршрутизирует в start.py Router"
+        },
+        {
+          "step": 3,
+          "node": "bot-services",
+          "action": "resolve_partner_for_bot_token(bot.token) → Partner",
+          "detail": "Определяет партнёра по зашифрованному токену BotInstance"
+        },
+        {
+          "step": 4,
+          "node": "app-users",
+          "action": "get_or_create_guest_profile(partner_id, telegram_id, ...)",
+          "detail": "TelegramAccount upsert + GuestProfile per partner"
+        },
+        {
+          "step": 5,
+          "node": "app-tables",
+          "action": "activate_table_session(partner_id, telegram_id, payload)",
+          "detail": "Парсит table_N_TOKEN, находит Table, создаёт TableSession(status=active)"
+        },
+        {
+          "step": 6,
+          "node": "bot-keyboards",
+          "action": "build_main_keyboard(content, navigation_state)",
+          "detail": "Показывает Reply-клавиатуру с кнопками меню/корзины/вызова"
+        },
+        {
+          "step": 7,
+          "node": "app-menu",
+          "action": "Гость просматривает MenuCategory и MenuItem",
+          "detail": "Фильтрация по partner, is_available=True, sort_order"
+        },
+        {
+          "step": 8,
+          "node": "app-orders",
+          "action": "add_to_cart → CartItem; checkout_cart → Order + OrderItem",
+          "detail": "Cart зафиксирован как черновик. Checkout создаёт Order в статусе new."
+        },
+        {
+          "step": 9,
+          "node": "app-notifications",
+          "action": "create StaffNotification(category=order_created)",
+          "detail": "Выбираются сотрудники с notify_on_order_created=True"
+        },
+        {
+          "step": 10,
+          "node": "core-celery",
+          "action": "transaction.on_commit → deliver_staff_notification.delay(notification_id)",
+          "detail": "Вызов ПОСЛЕ коммита транзакции — гарантия доставки"
+        },
+        {
+          "step": 11,
+          "node": "redis",
+          "action": "Задача помещается в очередь 'default'",
+          "detail": "Celery broker сериализует задачу в JSON"
+        },
+        {
+          "step": 12,
+          "node": "celery-worker",
+          "action": "Worker забирает задачу, вызывает deliver_staff_notification_now",
+          "detail": "Retry до 5 раз с exponential backoff при ошибке Telegram"
+        },
+        {
+          "step": 13,
+          "node": "telegram",
+          "action": "bot.send_message к сотруднику в Telegram",
+          "detail": "Запись delivery_status=sent / failed и delivered_at в StaffNotification"
+        }
+      ],
+      "involved_nodes": ["telegram", "bot-main", "bot-handlers", "bot-services", "bot-keyboards", "app-users", "app-tables", "app-menu", "app-orders", "app-notifications", "core-celery", "redis", "celery-worker"],
+      "involved_edges": [
+        ["telegram", "bot-main"], ["bot-main", "bot-handlers"], ["bot-handlers", "bot-services"],
+        ["bot-handlers", "app-users"], ["bot-handlers", "app-tables"], ["bot-handlers", "app-orders"],
+        ["app-orders", "app-notifications"], ["app-notifications", "core-celery"],
+        ["core-celery", "redis"], ["redis", "celery-worker"], ["celery-worker", "telegram"]
+      ]
+    },
+    {
+      "id": "flow-staff-order",
+      "label": "Стафф-поток (управление заказами)",
+      "description": "Сотрудник видит входящие заказы через Telegram, меняет статусы (new→accepted→...→completed), оформляет счёт и регистрирует оплату.",
+      "trigger": "Кнопка /staff или staff-меню в боте",
+      "actor": "Сотрудник (EmployeeProfile)",
+      "steps": [
+        {
+          "step": 1,
+          "node": "telegram",
+          "action": "Сотрудник открывает бот, нажимает кнопку Staff",
+          "detail": "Кнопка отфильтрована PartnerButtonFilter('button_staff_label')"
+        },
+        {
+          "step": 2,
+          "node": "bot-handlers",
+          "action": "staff.py: staff_home_handler",
+          "detail": "resolve_partner_for_bot_token → проверить EmployeeProfile"
+        },
+        {
+          "step": 3,
+          "node": "app-employees",
+          "action": "get_staff_employee_by_telegram(partner_id, telegram_id)",
+          "detail": "Проверка: is_active=True, совпадение partner, текущая capability"
+        },
+        {
+          "step": 4,
+          "node": "app-orders",
+          "action": "Получить список открытых заказов партнёра",
+          "detail": "Фильтр по partner, status не в (completed, canceled)"
+        },
+        {
+          "step": 5,
+          "node": "app-orders",
+          "action": "transition_order_status(order, new_status, employee)",
+          "detail": "FSM: new→accepted→preparing→ready→delivering→completed. Внутри transaction.atomic."
+        },
+        {
+          "step": 6,
+          "node": "app-notifications",
+          "action": "send_guest_order_status_update.delay(order_id, from_status, to_status)",
+          "detail": "Гость получает обновление статуса своего заказа"
+        },
+        {
+          "step": 7,
+          "node": "app-billing",
+          "action": "create_bill(orders) → Bill + BillItem; register_payment(bill, amount)",
+          "detail": "Payment фиксирует оплату. Bill.paid_amount обновляется."
+        },
+        {
+          "step": 8,
+          "node": "app-bonuses",
+          "action": "accrue_bonuses(order, guest_profile) → BonusTransaction",
+          "detail": "Начисляется по активной BonusProgram партнёра"
+        },
+        {
+          "step": 9,
+          "node": "postgres",
+          "action": "Все изменения сохранены в transaction.atomic",
+          "detail": "Order.paid_at, Bill.status=paid, TableSession.status=closed"
+        }
+      ],
+      "involved_nodes": ["telegram", "bot-main", "bot-handlers", "app-employees", "app-orders", "app-billing", "app-bonuses", "app-notifications", "postgres"],
+      "involved_edges": [
+        ["telegram", "bot-main"], ["bot-main", "bot-handlers"],
+        ["bot-handlers", "app-employees"], ["bot-handlers", "app-orders"],
+        ["app-orders", "app-billing"], ["app-orders", "app-bonuses"],
+        ["app-orders", "app-notifications"], ["app-billing", "postgres"], ["app-orders", "postgres"]
+      ]
+    },
+    {
+      "id": "flow-celery-notification",
+      "label": "Celery-доставка уведомлений",
+      "description": "Безопасный асинхронный паттерн: бизнес-сервис → transaction.on_commit → Celery → Redis → Worker → Telegram API. Внешние вызовы никогда внутри открытой транзакции.",
+      "trigger": "Бизнес-событие (создание заказа, смена статуса, вызов персонала)",
+      "actor": "Система (Celery)",
+      "steps": [
+        {
+          "step": 1,
+          "node": "app-orders",
+          "action": "services.py создаёт StaffNotification в той же транзакции",
+          "detail": "category=order_created / order_status_changed / guest_call / billing_request"
+        },
+        {
+          "step": 2,
+          "node": "app-notifications",
+          "action": "transaction.on_commit(lambda: deliver_staff_notification.delay(notification_id))",
+          "detail": "Celery .delay() вызывается ТОЛЬКО после успешного DB commit"
+        },
+        {
+          "step": 3,
+          "node": "core-celery",
+          "action": "Celery сериализует задачу в JSON",
+          "detail": "task name: 'notifications.deliver_staff_notification', args: [notification_id]"
+        },
+        {
+          "step": 4,
+          "node": "redis",
+          "action": "Задача помещается в очередь 'default'",
+          "detail": "Broadcasts в отдельной очереди, чтобы не блокировать staff-уведомления"
+        },
+        {
+          "step": 5,
+          "node": "celery-worker",
+          "action": "Worker забирает задачу из Redis, выполняет deliver_staff_notification_now(notification)",
+          "detail": "autoretry_for=(Exception,), retry_backoff=True, max_retries=5"
+        },
+        {
+          "step": 6,
+          "node": "app-notifications",
+          "action": "Обновляет StaffNotification: delivery_status=sent/failed, delivered_at",
+          "detail": "При FAILED: delivery_error записывает traceback"
+        },
+        {
+          "step": 7,
+          "node": "telegram",
+          "action": "bot.send_message(chat_id=employee.telegram_account.telegram_id, text=...)",
+          "detail": "Сотрудник получает уведомление в Telegram"
+        }
+      ],
+      "involved_nodes": ["app-orders", "app-notifications", "core-celery", "redis", "celery-worker", "telegram"],
+      "involved_edges": [
+        ["app-orders", "app-notifications"], ["app-notifications", "core-celery"],
+        ["core-celery", "redis"], ["redis", "celery-worker"],
+        ["celery-worker", "app-notifications"], ["celery-worker", "telegram"]
+      ]
+    },
+    {
+      "id": "flow-broadcast",
+      "label": "Broadcast-рассылки",
+      "description": "Celery Beat по расписанию запускает обработку запланированных BroadcastCampaign. Задачи уходят в отдельную очередь broadcasts, чтобы не мешать операционным уведомлениям.",
+      "trigger": "CELERY_BEAT_SCHEDULE (периодически)",
+      "actor": "Система (Celery Beat)",
+      "steps": [
+        {
+          "step": 1,
+          "node": "celery-beat",
+          "action": "CELERY_BEAT_SCHEDULE: process_scheduled_broadcast_campaigns.delay()",
+          "detail": "Запускается по расписанию (например, каждую минуту)"
+        },
+        {
+          "step": 2,
+          "node": "app-notifications",
+          "action": "process_scheduled_broadcast_campaigns(): выбирает BroadcastCampaign к отправке",
+          "detail": "Фильтр: scheduled_at <= now, status=pending"
+        },
+        {
+          "step": 3,
+          "node": "core-celery",
+          "action": "send_broadcast_campaign.delay(campaign_id) для каждой кампании",
+          "detail": "Пачечная отправка: after_guest_id для пагинации"
+        },
+        {
+          "step": 4,
+          "node": "redis",
+          "action": "Задача в очереди 'broadcasts' (отдельный worker)",
+          "detail": "Изоляция от операционных уведомлений"
+        },
+        {
+          "step": 5,
+          "node": "celery-worker",
+          "action": "send_broadcast_campaign_now(campaign): итерирует по GuestProfile",
+          "detail": "Рассылка по batch с after_guest_id пагинацией. Планируемое исключение: I/O внутри транзакции (AA-008)."
+        },
+        {
+          "step": 6,
+          "node": "telegram",
+          "action": "bot.send_message каждому гостю с enabled marketing_enabled=True",
+          "detail": "Учитывает NotificationPreference.marketing_enabled"
+        }
+      ],
+      "involved_nodes": ["celery-beat", "app-notifications", "core-celery", "redis", "celery-worker", "telegram"],
+      "involved_edges": [
+        ["celery-beat", "redis"], ["celery-beat", "app-notifications"],
+        ["app-notifications", "core-celery"], ["core-celery", "redis"],
+        ["redis", "celery-worker"], ["celery-worker", "telegram"]
+      ]
+    },
+    {
+      "id": "flow-billing",
+      "label": "Биллинг и оплата",
+      "description": "Гость запрашивает счёт через бота → сотрудник оформляет Bill из заказов → регистрирует Payment → автоматически обновляются статусы Order и закрывается TableSession.",
+      "trigger": "Кнопка 'Запросить счёт' от гостя или инициатива сотрудника",
+      "actor": "Гость + Сотрудник",
+      "steps": [
+        {
+          "step": 1,
+          "node": "bot-handlers",
+          "action": "billing.py: гость нажимает 'Запросить счёт'",
+          "detail": "PartnerButtonFilter('button_request_bill_label')"
+        },
+        {
+          "step": 2,
+          "node": "app-notifications",
+          "action": "create StaffNotification(category=billing_request) → Celery",
+          "detail": "Сотрудник получает push в Telegram"
+        },
+        {
+          "step": 3,
+          "node": "app-billing",
+          "action": "create_bill(orders=[...]) → Bill + BillItem",
+          "detail": "kind=shared/personal/split. subtotal, discount, total рассчитываются."
+        },
+        {
+          "step": 4,
+          "node": "app-billing",
+          "action": "register_payment(bill, amount, method) → Payment",
+          "detail": "bill.paid_amount += amount. При paid_amount >= total → status=paid."
+        },
+        {
+          "step": 5,
+          "node": "app-orders",
+          "action": "Синхронизация Order.paid_at и Order.status=completed",
+          "detail": "Выполняется в той же transaction.atomic что и Payment"
+        },
+        {
+          "step": 6,
+          "node": "app-tables",
+          "action": "close_table_session(session) → status=closed, closed_at=now",
+          "detail": "Только при полной оплате всех заказов сессии"
+        },
+        {
+          "step": 7,
+          "node": "postgres",
+          "action": "Все изменения в одном transaction.atomic",
+          "detail": "Bill, Payment, Order, TableSession — единая атомарная операция"
+        }
+      ],
+      "involved_nodes": ["bot-handlers", "app-notifications", "app-billing", "app-orders", "app-tables", "postgres"],
+      "involved_edges": [
+        ["bot-handlers", "app-billing"], ["bot-handlers", "app-notifications"],
+        ["app-billing", "app-orders"], ["app-orders", "app-tables"],
+        ["app-billing", "postgres"], ["app-orders", "postgres"]
+      ]
+    },
+    {
+      "id": "flow-quicksale",
+      "label": "Быстрая продажа (WalkIn / Quick Sale)",
+      "description": "Сотрудник оформляет продажу без привязки к столу через FSM-диалог в Telegram. Используется для takeaway или walk-in клиентов.",
+      "trigger": "Кнопка Quick Sale в staff-меню",
+      "actor": "Сотрудник (EmployeeProfile)",
+      "steps": [
+        {
+          "step": 1,
+          "node": "bot-handlers",
+          "action": "staff.py: инициирует QuickSale → устанавливает FSM state",
+          "detail": "Проверка capability у EmployeeProfile"
+        },
+        {
+          "step": 2,
+          "node": "bot-states",
+          "action": "StaffQuickSaleStates: ввод суммы, метода оплаты, комментария",
+          "detail": "Multi-step FSM диалог"
+        },
+        {
+          "step": 3,
+          "node": "app-employees",
+          "action": "Повторная проверка EmployeeProfile и capability перед мутацией",
+          "detail": "Capability может измениться пока карточка рендерилась"
+        },
+        {
+          "step": 4,
+          "node": "app-bonuses",
+          "action": "WalkInSale.create(partner, employee, amount, ...) → BonusTransaction",
+          "detail": "Опциональное начисление бонусов гостю при наличии GuestProfile"
+        },
+        {
+          "step": 5,
+          "node": "app-billing",
+          "action": "Payment зафиксирован (без Order и Bill, напрямую)",
+          "detail": "WalkInSale хранит ref на Payment"
+        },
+        {
+          "step": 6,
+          "node": "postgres",
+          "action": "transaction.atomic: WalkInSale + Payment + BonusTransaction",
+          "detail": "Атомарная запись"
+        }
+      ],
+      "involved_nodes": ["bot-handlers", "bot-states", "app-employees", "app-bonuses", "app-billing", "postgres"],
+      "involved_edges": [
+        ["bot-handlers", "bot-states"], ["bot-handlers", "app-employees"],
+        ["bot-handlers", "app-bonuses"], ["app-bonuses", "app-billing"], ["app-billing", "postgres"]
+      ]
+    }
+  ],
+  "architecture_rules": [
+    "core/ не импортирует доменные приложения — только cross-cutting primitives",
+    "Бизнес-логика только в services.py. Адаптеры (bot, admin, tasks) вызывают сервисы.",
+    "Все мутирующие операции используют transaction.atomic",
+    "Внешние вызовы (Telegram I/O) никогда внутри открытой транзакции — только через Celery on_commit",
+    "Tenant-изоляция: partner_id проверяется в каждом owner-service перед мутацией",
+    "Staff-команда требует: активный User + активный EmployeeProfile + совпадение partner + текущая capability",
+    "selectors.py — только read-only запросы",
+    "Broadcast-задачи в отдельной очереди 'broadcasts' — не блокируют операционные уведомления",
+    "Для aiogram handlers использовать sync_to_async вокруг Django ORM / service calls"
+  ],
+  "not_yet_implemented": [
+    "Публичный REST / API слой",
+    "Telegram WebApp / frontend",
+    "Webhook mode для Telegram",
+    "Bonus expiration фоновая задача",
+    "POS sync интеграция",
+    "Fiscal sync интеграция",
+    "Online payment provider (только модельный задел)"
+  ]
+}

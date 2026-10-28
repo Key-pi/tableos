@@ -1,0 +1,126 @@
+<style>
+:root{--pink:#FF9F43}
+.grad{background:linear-gradient(90deg,#FFB547,#FF6B6B 55%,#2AABEE)}
+.mark{background:linear-gradient(135deg,#FFB547,#FF6B6B 55%,#2AABEE);box-shadow:0 20px 60px rgba(255,140,80,.35)}
+#g1{background:radial-gradient(circle,rgba(255,150,70,.28) 0%,rgba(255,150,70,0) 60%)}
+.tog{display:flex;align-items:center;justify-content:space-between;font-size:29px;font-weight:600;margin-top:20px}
+.sw{width:74px;height:42px;border-radius:999px;background:#3A3150;position:relative}
+.sw i{position:absolute;top:5px;left:5px;width:32px;height:32px;border-radius:50%;background:#fff}
+.qr{position:absolute;left:150px;top:760px;display:flex;align-items:center;gap:26px;background:var(--card);border:2px solid var(--line);border-radius:28px;padding:22px 30px 22px 22px}
+.qr .code{width:150px;height:150px;background:#fff;border-radius:14px;padding:12px;display:grid;grid-template-columns:repeat(13,1fr);gap:0}
+.qr .code b{background:#111}
+.qr .qt{font-size:34px;font-weight:800}.qr .qs{font-size:22px;color:var(--mut);font-weight:600;margin-top:6px}
+.k .pl{float:right;opacity:.8}
+.ord{position:absolute;left:150px;top:230px;width:900px;padding:40px}
+.ord .top{display:flex;align-items:center;gap:18px;font-size:24px;color:var(--mut);font-weight:700}
+.ord .top .ava{width:52px;height:52px;font-size:22px;background:linear-gradient(135deg,#FFB547,#FF6B6B)}
+.ord .tx{font-size:34px;line-height:1.45;margin-top:22px;font-weight:600}
+.ord .tx b{font-weight:800}
+.ob{display:flex;gap:12px;margin-top:30px}
+.ob div{padding:20px 30px;border-radius:16px;font-size:26px;font-weight:700;background:rgba(95,125,160,.28);color:#DDEAF6}
+.ob .on{background:#2AABEE;color:#fff}
+.stps{display:flex;gap:10px;margin-top:30px;align-items:center;font-size:24px;font-weight:700;color:var(--mut)}
+.stp{padding:10px 20px;border-radius:999px;border:2px solid var(--line)}
+.stp.on{border-color:var(--pink);color:#FFE3C8;background:rgba(255,159,67,.14)}
+.home{position:absolute;left:1120px;top:230px;width:650px;padding:40px}
+.home .st{font-size:32px;font-weight:800}.home .ss{font-size:22px;color:var(--mut);font-weight:600;margin-top:6px}
+.hg{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:28px}
+.hg div{padding:24px 18px;border-radius:16px;background:rgba(95,125,160,.22);font-size:24px;font-weight:700;text-align:center;color:#DDEAF6}
+.cc{font-family:"SF Mono",Menlo,monospace;font-size:64px;font-weight:800;letter-spacing:.12em;margin-top:10px;color:#FFE3C8}
+.eco{display:flex;gap:16px;margin-top:40px;align-items:center;font-size:24px;color:var(--mut);font-weight:700}
+</style>
+
+<!-- S1 hook -->
+<div class="scene" id="s1">
+  <div class="wrap">
+    <div class="h a" id="h1">Один бот —</div>
+    <div class="h a" id="h2">для <span class="grad">будь-якого закладу.</span></div>
+  </div>
+  <div id="chips">
+    <div class="chip a">💨 кальянна</div><div class="chip a">бар</div><div class="chip a">кафе</div><div class="chip a">кав'ярня</div><div class="chip a">ресторан</div><div class="chip a">шоурум</div><div class="chip a">магазин</div>
+  </div>
+</div>
+
+<!-- S2 reveal: modules -->
+<div class="scene" id="s2">
+  <div class="left">
+    <div class="logo a" id="s2logo"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5l1.6-5h12.8l1.6 5"/><path d="M4 9.5c0 1.6 1.2 2.6 2.7 2.6S9.3 11.1 9.3 9.5c0 1.6 1.2 2.6 2.7 2.6s2.7-1 2.7-2.6c0 1.6 1.1 2.6 2.6 2.6S20 11.1 20 9.5"/><path d="M5.5 12v8h13v-8"/><path d="M10 20v-4.5h4V20"/></svg></div><div class="word">Botera<b>Market</b></div></div>
+    <div class="h a" id="s2h">Telegram-бот<br><span class="grad">вашого закладу</span></div>
+    <div class="sub a" id="s2s">Вмикаєте лише те, що потрібно.<br>Сервери й хостинг — не ваш клопіт.</div>
+  </div>
+  <div class="panel a" id="botcard">
+    <div class="ptitle"><div class="t">Модулі</div><div class="pill ok" id="po">● Бот активний</div></div>
+    <div class="tog a"><span>📖 Меню</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>🪑 Столи та QR</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>🧾 Замовлення і кошик</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>💳 Рахунки</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>🔔 Виклик персоналу</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>⚡ Швидкий продаж</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>📊 Звіт дня</span><div class="sw"><i></i></div></div>
+  </div>
+</div>
+
+<!-- S3 guest -->
+<div class="scene" id="s3">
+  <div class="left">
+    <div class="kick a" id="s3k">Для гостя</div>
+    <div class="h a" id="s3h">Сканує QR —<br>і замовляє <span class="grad">зі столу</span></div>
+    <div class="sub a" id="s3s">Меню, кошик, рахунок і виклик<br>кальянника — просто в Telegram.</div>
+  </div>
+  <div class="qr a" id="qr"><div class="code" id="qrcode"></div><div><div class="qt">Стіл #7</div><div class="qs">Наведіть камеру</div></div></div>
+  <div id="phone" class="a"><div id="screen">
+    <div class="tghead"><div class="ava" style="background:linear-gradient(135deg,#FFB547,#FF6B6B)">D</div><div><div class="tgn">Demo Lounge</div><div class="tgs">бот</div></div></div>
+    <div id="chat">
+      <div class="mw" data-t="0.3"><div class="mi"><div class="b bot">Ласкаво просимо до Demo Lounge.<br>🪑 Стіл #7 активовано.</div>
+        <div class="kb"><div class="k full" id="k1">Відкрити меню</div><div class="k">Мій стіл</div><div class="k">Кошик</div><div class="k">Покликати персонал</div><div class="k">Запросити рахунок</div></div></div></div>
+      <div class="mw" data-t="1.3"><div class="mi"><div class="b bot"><b>Меню Demo Lounge</b><br>Категорія: Кальяни</div>
+        <div class="kb"><div class="k full">Classic Hookah · 450 грн <span class="pl">＋</span></div><div class="k full" id="k2">Premium Hookah · 650 грн <span class="pl">＋</span></div><div class="k full">Fruit Bowl Hookah · 820 грн <span class="pl">＋</span></div><div class="k full" id="k3">Оформити замовлення</div></div></div></div>
+      <div class="mw" data-t="3.2"><div class="mi"><div class="b bot">✅ <b>Замовлення прийнято: #A1042</b><br>Сума: 650 грн<br>Ми вже передали його персоналу.</div></div></div>
+      <div class="mw" data-t="4.3"><div class="mi"><div class="b bot">🔥 Замовлення #A1042: <b>готуємо</b></div></div></div>
+    </div>
+    <div class="tgin">Повідомлення</div>
+    <div class="ring" id="ring"></div>
+  </div></div>
+</div>
+
+<!-- S4 staff -->
+<div class="scene" id="s4">
+  <div class="title a" id="s4t"><div class="kick">Для персоналу</div><div class="h">Команда бачить усе <span class="grad">у Telegram</span></div></div>
+  <div class="panel ord a" id="ord">
+    <div class="top"><div class="ava">D</div>Demo Lounge · персонал<em style="margin-left:auto;font-style:normal">щойно</em></div>
+    <div class="tx">🔔 <b>Нове замовлення #A1042</b><br>Стіл #7 · Premium Hookah × 1<br>Сума: 650 грн</div>
+    <div class="ob"><div id="take">Взяти в роботу</div><div id="prep">Готуємо</div><div>Готово</div></div>
+    <div class="stps"><div class="stp" id="st1">Нове</div>→<div class="stp" id="st2">Прийнято</div>→<div class="stp" id="st3">Готуємо</div>→<div class="stp">Готово</div></div>
+  </div>
+  <div class="panel home a" id="home">
+    <div class="st">/staff</div><div class="ss">Кальянник · Demo Lounge</div>
+    <div class="hg"><div>Відкриті замовлення</div><div>Сповіщення</div><div>Столи</div><div>Рахунки й оплати</div><div>Швидкий продаж</div><div>Звіт дня</div></div>
+  </div>
+  <svg id="cur" viewBox="0 0 24 24"><path d="M4 2.5l15 9.2-6.6 1.4 3.8 7.2-3 1.5-3.8-7.3L4 19.5z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/></svg>
+</div>
+
+<!-- S5 loyalty -->
+<div class="scene" id="s5">
+  <div class="left">
+    <div class="h a" id="s5h">Гості повертаються — <span class="grad">за бонусами</span></div>
+    <div class="tiles">
+      <div class="tile a"><div class="e">🎁</div><div class="tt">Код клієнта</div><div class="dd">назвіть на касі — бонуси нараховано</div></div>
+      <div class="tile a"><div class="e">⚡</div><div class="tt">Швидкий продаж</div><div class="dd">з кодом клієнта або анонімно</div></div>
+      <div class="tile a"><div class="e">📣</div><div class="tt">Розсилки</div><div class="dd">вашим гостям, за розкладом</div></div>
+      <div class="tile a"><div class="e">📊</div><div class="tt">Звіт дня</div><div class="dd">рахунки, продажі, столи, хвости</div></div>
+    </div>
+  </div>
+  <div class="nt a" id="n1" style="top:250px"><div class="top"><div class="ava" style="background:linear-gradient(135deg,#FFB547,#FF6B6B)">D</div>Demo Lounge · бот<em>зараз</em></div><div class="tx">Ваш код клієнта:</div><div class="cc">E1239A</div></div>
+  <div class="nt a" id="n2" style="top:530px"><div class="top"><div class="ava" style="background:linear-gradient(135deg,#FFB547,#FF6B6B)">D</div>Demo Lounge · бот<em>зараз</em></div><div class="tx">🎁 Бонуси нараховано.<br>1 бонус = 1 грн при оплаті.</div></div>
+</div>
+
+<!-- S6 outro -->
+<div class="scene" id="s6">
+  <div class="wrap">
+    <div class="mark a" id="s6m"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5l1.6-5h12.8l1.6 5"/><path d="M4 9.5c0 1.6 1.2 2.6 2.7 2.6S9.3 11.1 9.3 9.5c0 1.6 1.2 2.6 2.7 2.6s2.7-1 2.7-2.6c0 1.6 1.1 2.6 2.6 2.6S20 11.1 20 9.5"/><path d="M5.5 12v8h13v-8"/><path d="M10 20v-4.5h4V20"/></svg></div>
+    <div class="word a" id="s6w">Botera<b>Market</b></div>
+    <div class="tl a" id="s6t">Від закладу зі столами — до крамниці біля дому.</div>
+    <div id="langs"><div class="chip a">Ваш бот</div><div class="chip a">Ваші гості</div><div class="chip a">Без серверів</div></div>
+    <div class="eco a" id="eco">Частина екосистеми Botera · поруч із BoteraMaster</div>
+  </div>
+</div>

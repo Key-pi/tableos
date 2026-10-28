@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="uk"><head><meta charset="utf-8">
+<style>
+:root{--bg:#110E18;--ink:#F6F1FA;--mut:#A79DB5;--pink:#FF6FA5;--blue:#2AABEE;--card:#1B1625;--card2:#231C30;--line:#30283F;--green:#3DDC97;--amber:#FFB547}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);font-family:-apple-system,"SF Pro Display","Helvetica Neue",sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased}
+#stage{position:absolute;inset:0;overflow:hidden;background:var(--bg)}
+.glow{position:absolute;border-radius:50%;width:1400px;height:1400px;margin:-700px 0 0 -700px}
+#g1{background:radial-gradient(circle,rgba(255,111,165,.30) 0%,rgba(255,111,165,0) 60%)}
+#g2{background:radial-gradient(circle,rgba(42,171,238,.26) 0%,rgba(42,171,238,0) 60%)}
+.scene{position:absolute;inset:0;opacity:0;will-change:transform,opacity}
+.grad{background:linear-gradient(90deg,var(--pink),#C58BFF 55%,var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
+.a{opacity:0;will-change:transform,opacity}
+.kick{font-size:26px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--pink)}
+.h{font-weight:800;letter-spacing:-.025em;line-height:1.04}
+.sub{color:var(--mut);font-size:34px;line-height:1.35;font-weight:500}
+
+/* s1 */
+#s1 .wrap{position:absolute;left:0;right:0;top:300px;text-align:center}
+#s1 .h{font-size:148px}
+#chips{position:absolute;left:0;right:0;top:720px;display:flex;justify-content:center;gap:18px}
+.chip{padding:14px 28px;border-radius:999px;border:2px solid var(--line);background:var(--card);font-size:32px;font-weight:600;color:#E4DAEE}
+
+/* logo */
+.logo{display:flex;align-items:center;gap:22px}
+.mark{width:88px;height:88px;border-radius:26px;background:linear-gradient(135deg,var(--pink),#9C7BFF 55%,var(--blue));display:flex;align-items:center;justify-content:center;box-shadow:0 20px 60px rgba(255,111,165,.35)}
+.mark svg{width:56%;height:56%}
+.word{font-size:56px;font-weight:800;letter-spacing:-.02em}
+.word b{font-weight:800;color:var(--pink)}
+
+/* s2 */
+#s2 .left{position:absolute;left:150px;top:250px;width:860px}
+#s2 .h{font-size:92px;margin-top:56px}
+#s2 .sub{margin-top:36px}
+.panel{position:absolute;background:var(--card);border:2px solid var(--line);border-radius:36px;box-shadow:0 40px 120px rgba(0,0,0,.45)}
+#botcard{left:1080px;top:190px;width:690px;height:700px;padding:44px}
+.ptitle{display:flex;justify-content:space-between;align-items:center}
+.ptitle .t{font-size:40px;font-weight:800}
+.pill{padding:10px 22px;border-radius:999px;font-size:24px;font-weight:700}
+.pill.warn{background:rgba(255,181,71,.14);color:var(--amber)}
+.pill.ok{background:rgba(61,220,151,.15);color:var(--green)}
+.tabs{display:flex;gap:26px;margin-top:26px;font-size:23px;color:var(--mut);font-weight:600;border-bottom:2px solid var(--line);padding-bottom:16px}
+.tabs .on{color:var(--ink)}
+.check{display:flex;align-items:center;gap:18px;font-size:29px;font-weight:600;margin-top:22px}
+.check .c{width:38px;height:38px;border-radius:12px;background:rgba(61,220,151,.16);color:var(--green);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:900}
+.lab{font-size:23px;color:var(--mut);font-weight:600;margin-top:34px}
+.inp{margin-top:12px;height:74px;border-radius:18px;background:#120E19;border:2px solid var(--line);display:flex;align-items:center;padding:0 24px;font-family:"SF Mono",Menlo,monospace;font-size:28px;color:#E9E0F2}
+.caret{display:inline-block;width:3px;height:34px;background:var(--pink);margin-left:3px}
+.btn{margin-top:28px;height:80px;border-radius:20px;background:linear-gradient(90deg,var(--pink),#B07CFF);display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;color:#fff}
+
+/* s3 */
+#s3 .left{position:absolute;left:150px;top:300px;width:960px}
+#s3 .h{font-size:80px;margin-top:22px}
+#s3 .sub{margin-top:34px}
+#phone{position:absolute;left:1150px;top:60px;width:500px;height:960px;border-radius:72px;background:#05040A;padding:16px;box-shadow:0 50px 140px rgba(0,0,0,.6),0 0 0 2px #2A2436}
+#screen{position:relative;width:100%;height:100%;border-radius:58px;overflow:hidden;background:#0E1621}
+.tghead{position:absolute;top:0;left:0;right:0;height:132px;background:#17212B;display:flex;align-items:flex-end;padding:0 24px 18px;gap:16px;z-index:2}
+.ava{width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,var(--pink),#B07CFF);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:26px}
+.tgn{font-size:24px;font-weight:700}.tgs{font-size:19px;color:#6D8196;margin-top:3px}
+#chat{position:absolute;top:132px;bottom:84px;left:0;right:0;display:flex;flex-direction:column;justify-content:flex-end;padding:0 16px 10px;overflow:hidden}
+.mw{overflow:hidden;flex:none}
+.mi{padding-top:10px}
+.b{max-width:380px;padding:14px 18px;border-radius:20px;font-size:21px;line-height:1.35}
+.b.bot{background:#182533;border-bottom-left-radius:6px}
+.b.me{background:#2B5278;margin-left:auto;border-bottom-right-radius:6px;width:max-content}
+.kb{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;max-width:400px}
+.k{flex:1 1 auto;min-width:30%;text-align:center;padding:13px 10px;border-radius:12px;background:rgba(95,125,160,.28);font-size:19px;font-weight:600;color:#DDEAF6}
+.k.full{flex-basis:100%}
+.k.on{background:#2AABEE;color:#fff}
+.tgin{position:absolute;bottom:0;left:0;right:0;height:84px;background:#17212B;display:flex;align-items:center;padding:0 24px;color:#56687A;font-size:21px}
+.ring{position:absolute;width:70px;height:70px;margin:-35px 0 0 -35px;border-radius:50%;border:4px solid rgba(255,255,255,.9);background:rgba(255,255,255,.18);opacity:0;z-index:5;pointer-events:none}
+
+/* s4 */
+#s4 .title{position:absolute;left:150px;top:64px;display:flex;align-items:baseline;gap:28px}
+#s4 .h{font-size:64px}
+#adm{left:150px;top:190px;width:1620px;height:830px;overflow:hidden;display:flex}
+.nav{width:260px;border-right:2px solid var(--line);padding:34px 20px;flex:none}
+.nav .it{font-size:23px;font-weight:600;color:var(--mut);padding:13px 18px;border-radius:14px;margin-bottom:4px}
+.nav .it.on{background:var(--card2);color:var(--ink)}
+.cal{flex:1;padding:30px 36px;position:relative}
+.calh{font-size:34px;font-weight:800;display:flex;justify-content:space-between;align-items:center}
+.calh span{font-size:22px;color:var(--mut);font-weight:600}
+.grid{position:absolute;left:36px;right:36px;top:100px}
+.row{height:84px;border-top:2px solid var(--line);position:relative}
+.row i{position:absolute;left:0;top:8px;font-style:normal;font-size:20px;color:var(--mut);font-weight:600}
+.ap{position:absolute;left:96px;right:10px;border-radius:16px;padding:14px 20px;font-size:23px;font-weight:700;border-left:6px solid}
+.ap small{display:block;font-size:19px;font-weight:600;opacity:.75;margin-top:4px}
+.ap.x{background:rgba(42,171,238,.12);border-color:var(--blue);color:#CFEAFB}
+.ap.n{background:rgba(255,111,165,.16);border-color:var(--pink);color:#FFE1EC}
+.tag{position:absolute;right:18px;top:14px;font-size:18px;font-weight:800;padding:6px 14px;border-radius:999px;background:var(--pink);color:#fff}
+.side{width:430px;border-left:2px solid var(--line);padding:30px 28px;flex:none}
+.side .st{font-size:28px;font-weight:800}
+.req{margin-top:22px;background:var(--card2);border-radius:22px;padding:24px;border:2px solid var(--line)}
+.req .nm{font-size:25px;font-weight:800}
+.req .dt{font-size:21px;color:var(--mut);margin-top:6px;font-weight:600}
+.rb{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+.rb div{padding:12px 16px;border-radius:12px;font-size:19px;font-weight:700;background:rgba(255,255,255,.07)}
+.rb .y{background:var(--green);color:#0B2A1C}
+.done{margin-top:18px;font-size:21px;font-weight:700;color:var(--green)}
+#cur{position:absolute;width:40px;height:40px;z-index:9;left:0;top:0}
+
+/* s5 */
+#s5 .left{position:absolute;left:150px;top:150px;width:1000px}
+#s5 .h{font-size:84px}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:60px}
+.tile{background:var(--card);border:2px solid var(--line);border-radius:28px;padding:32px;height:210px}
+.tile .e{font-size:44px}
+.tile .tt{font-size:34px;font-weight:800;margin-top:16px}
+.tile .dd{font-size:22px;color:var(--mut);font-weight:600;margin-top:8px}
+.nt{position:absolute;left:1240px;width:540px;background:rgba(40,33,54,.92);border:2px solid #3A3150;border-radius:30px;padding:24px 28px;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.nt .top{display:flex;align-items:center;gap:14px;font-size:21px;color:var(--mut);font-weight:700}
+.nt .top .ava{width:40px;height:40px;font-size:18px}
+.nt .top em{margin-left:auto;font-style:normal;font-weight:600}
+.nt .tx{font-size:25px;font-weight:600;margin-top:12px;line-height:1.35}
+
+/* s6 */
+#s6 .wrap{position:absolute;left:0;right:0;top:250px;display:flex;flex-direction:column;align-items:center}
+#s6 .mark{width:150px;height:150px;border-radius:44px}
+#s6 .word{font-size:124px;margin-top:40px}
+#s6 .tl{font-size:50px;font-weight:700;margin-top:26px;color:#E9DFF3}
+#langs{display:flex;gap:16px;margin-top:54px}
+</style></head>
+<body><div id="stage">
+<div class="glow" id="g1"></div><div class="glow" id="g2"></div>
+<style>
+:root{--pink:#FF9F43}
+.grad{background-image:linear-gradient(90deg,#FFB547,#FF6B6B 55%,#2AABEE)}
+.mark{background:linear-gradient(135deg,#FFB547,#FF6B6B 55%,#2AABEE);box-shadow:0 20px 60px rgba(255,140,80,.35)}
+#g1{background:radial-gradient(circle,rgba(255,150,70,.28) 0%,rgba(255,150,70,0) 60%)}
+#s1 .h{font-size:128px}
+#s2 .h{font-size:84px}
+#stage .t2 .h{font-size:60px}
+.t2{position:absolute;left:150px;top:52px}
+.t2 .h{margin-top:10px}
+.soon{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:99px;border:2px dashed rgba(255,181,71,.7);color:#FFC76B;font-size:18px;font-weight:800;white-space:nowrap}
+.ava.ak,.av.ak{background:linear-gradient(135deg,#FFB547,#FF6B6B)}
+.av{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;flex:none}
+/* telegram cards */
+.tgc{position:absolute;background:#0E1621;border-radius:32px;overflow:hidden;box-shadow:0 40px 120px rgba(0,0,0,.5);border:2px solid #1E2C3A}
+.tgc .hd{height:92px;background:#17212B;display:flex;align-items:center;gap:16px;padding:0 26px}
+.tgc .hd .ava{width:54px;height:54px}
+.tgc .tgn{font-size:27px}.tgc .tgs{font-size:20px}
+.tgc .bd{padding:22px 24px}
+.tgc .b{max-width:none;font-size:26px;padding:18px 22px}
+.tgc .kb{max-width:none;gap:8px;margin-top:8px}
+.tgc .k{min-width:45%;font-size:22px;padding:16px 12px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:10px}
+.tgc .k.dim{opacity:.55}
+.rw{margin-top:14px}
+.tgc .b.me{font-size:26px}
+code,.code{font-family:"SF Mono",Menlo,monospace;font-weight:800;color:#FFE3C8;letter-spacing:.06em}
+/* s3 options */
+.opts{position:absolute;left:150px;top:260px;width:1620px;display:grid;grid-template-columns:repeat(3,1fr);gap:30px}
+.opt{background:var(--card);border:2px solid var(--line);border-radius:34px;padding:40px;height:540px;position:relative}
+.opt.live{border-color:rgba(61,220,151,.55)}
+.opt.dev{border-style:dashed;border-color:rgba(255,181,71,.45);background:rgba(27,22,37,.75)}
+.opt .e{font-size:84px}
+.opt .tt{font-size:48px;font-weight:800;margin-top:24px}
+.opt .dd{font-size:27px;color:var(--mut);font-weight:600;margin-top:16px;line-height:1.4}
+.opt .stt{position:absolute;left:40px;bottom:40px}
+.okp{display:inline-flex;padding:10px 18px;border-radius:99px;background:rgba(61,220,151,.15);color:var(--green);font-size:22px;font-weight:800}
+.opt .soon{font-size:22px;padding:10px 18px}
+/* s4 */
+#s4 .left{position:absolute;left:150px;top:290px;width:960px}
+#s4 .h{font-size:72px;margin-top:22px}
+#s4 .sub{margin-top:34px}
+.qrchip{display:inline-flex;align-items:center;gap:14px;margin-top:40px;padding:14px 22px;border-radius:20px;background:var(--card);border:2px solid var(--line);font-size:24px;font-weight:700;color:#E9DFF3}
+.qrchip .q{width:44px;height:44px;border-radius:8px;background:repeating-conic-gradient(#111 0 25%,#fff 0 50%) 0 0/11px 11px;border:4px solid #fff}
+/* s5 staff */
+.ord{position:absolute;left:150px;top:230px;width:900px;padding:40px}
+.ord .top{display:flex;align-items:center;gap:18px;font-size:24px;color:var(--mut);font-weight:700}
+.ord .tx{font-size:34px;line-height:1.45;margin-top:22px;font-weight:600}
+.ob{display:flex;gap:12px;margin-top:30px}
+.ob div{padding:20px 28px;border-radius:16px;font-size:26px;font-weight:700;background:rgba(95,125,160,.28);color:#DDEAF6}
+.ob .on{background:#2AABEE;color:#fff}
+.stps{display:flex;gap:10px;margin-top:30px;align-items:center;font-size:24px;font-weight:700;color:var(--mut)}
+.stp{padding:10px 20px;border-radius:999px;border:2px solid var(--line)}
+.stp.on{border-color:var(--pink);color:#FFE3C8;background:rgba(255,159,67,.14)}
+.home{position:absolute;left:1120px;top:230px;width:650px;padding:36px}
+.home .st{font-size:32px;font-weight:800}.home .ss{font-size:22px;color:var(--mut);font-weight:600;margin-top:6px}
+.hg{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}
+.hg div{padding:22px 16px;border-radius:16px;background:rgba(95,125,160,.22);font-size:23px;font-weight:700;text-align:center;color:#DDEAF6}
+#call{left:1120px;top:700px;width:650px}
+/* tiles */
+.tiles2{position:absolute;left:150px;top:250px;width:1020px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.tile .e{font-size:44px}
+/* modules */
+#mods{left:150px;top:230px;width:800px;padding:36px 40px}
+.tog{display:flex;align-items:center;justify-content:space-between;font-size:27px;font-weight:600;height:58px}
+.sw{width:70px;height:40px;border-radius:999px;background:#3A3150;position:relative}
+.sw i{position:absolute;top:5px;left:5px;width:30px;height:30px;border-radius:50%;background:#fff}
+.tog.dev span:first-child{color:var(--mut)}
+#rep{left:1010px;top:230px;width:760px;padding:40px}
+.rg{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:26px}
+.rg div{padding:26px 18px;border-radius:18px;background:var(--card2);border:2px solid var(--line);font-size:27px;font-weight:800}
+.rg div small{display:block;font-size:20px;color:var(--mut);font-weight:600;margin-top:6px}
+/* eco */
+.eco3{position:absolute;left:150px;top:330px;width:1620px;display:grid;grid-template-columns:repeat(3,1fr);gap:40px}
+.ec{background:var(--card);border:2px solid var(--line);border-radius:32px;padding:40px;text-align:center}
+.ec.me{border-color:rgba(255,159,67,.7);box-shadow:0 0 60px rgba(255,159,67,.2)}
+.ec .mark{width:110px;height:110px;border-radius:32px;margin:0 auto}
+.ec .mark svg{width:56%;height:56%}
+.ec .nn{font-size:40px;font-weight:800;margin-top:26px}
+.ec .dd{font-size:25px;color:var(--mut);font-weight:600;margin-top:10px}
+#ecol{position:absolute;left:150px;top:330px;width:1620px;height:400px}
+#s10 .wrap{position:absolute;left:0;right:0;top:230px;display:flex;flex-direction:column;align-items:center}
+#s10 .mark{width:150px;height:150px;border-radius:44px}
+#s10 .word{font-size:124px;margin-top:40px}
+#s10 .tl{font-size:50px;font-weight:700;margin-top:26px;color:#E9DFF3}
+#s10 .soon{margin-top:44px;font-size:24px;padding:10px 20px}
+#cur{opacity:0}
+</style>
+
+<!-- S1 hook -->
+<div class="scene" id="s1">
+  <div class="wrap">
+    <div class="h a" id="h1">Один бот —</div>
+    <div class="h a" id="h2">для <span class="grad">будь-якого бізнесу.</span></div>
+  </div>
+  <div id="chips">
+    <div class="chip a">☕ кав'ярня</div><div class="chip a">🍔 кафе</div><div class="chip a">🍷 бар</div><div class="chip a">💨 кальянна</div><div class="chip a">🍽 ресторан</div><div class="chip a">🛍 магазин</div><div class="chip a">🏬 шоурум</div>
+  </div>
+</div>
+
+<!-- S2 reveal: bot main menu -->
+<div class="scene" id="s2">
+  <div class="left">
+    <div class="logo a" id="s2logo"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5l1.6-5h12.8l1.6 5"/><path d="M4 9.5c0 1.6 1.2 2.6 2.7 2.6S9.3 11.1 9.3 9.5c0 1.6 1.2 2.6 2.7 2.6s2.7-1 2.7-2.6c0 1.6 1.1 2.6 2.6 2.6S20 11.1 20 9.5"/><path d="M5.5 12v8h13v-8"/><path d="M10 20v-4.5h4V20"/></svg></div><div class="word">Botera<b>Market</b></div></div>
+    <div class="h a" id="s2h">Telegram-бот<br><span class="grad">вашого бізнесу</span></div>
+    <div class="sub a" id="s2s">Меню, замовлення, бонуси й персонал —<br>в одному боті. Без серверів і хостингу.</div>
+  </div>
+  <div class="tgc a" id="s2bot" style="left:1090px;top:200px;width:680px">
+    <div class="hd"><div class="ava ak">D</div><div><div class="tgn">Demo Lounge</div><div class="tgs">бот</div></div></div>
+    <div class="bd">
+      <div class="b bot">Ласкаво просимо до Demo Lounge.<br>Ваш код клієнта: <code>E1239A</code></div>
+      <div class="kb">
+        <div class="k a">📖 Відкрити меню</div><div class="k a">🛒 Кошик</div>
+        <div class="k a">👤 Мій профіль</div><div class="k a">🎁 Бонуси</div>
+        <div class="k a dim">🛵 Доставка <span class="soon">скоро</span></div><div class="k a dim">🥡 Самовивіз <span class="soon">скоро</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- S3 three ordering journeys -->
+<div class="scene" id="s3">
+  <div class="t2 a" id="s3t"><div class="kick">Як гість замовляє</div><div class="h">Три сценарії — <span class="grad">в одному боті</span></div></div>
+  <div class="opts">
+    <div class="opt live a"><div class="e">🪑</div><div class="tt">У закладі</div><div class="dd">QR на столі — і замовлення з телефона. Кілька гостей за столом, у кожного свій кошик.</div><div class="stt"><span class="okp">✓ Вже працює</span></div></div>
+    <div class="opt dev a"><div class="e">🛵</div><div class="tt">Доставка</div><div class="dd">Замовлення з доставкою прямо з бота вашого закладу чи магазину.</div><div class="stt"><span class="soon">🛠 У розробці</span></div></div>
+    <div class="opt dev a"><div class="e">🥡</div><div class="tt">Самовивіз</div><div class="dd">Замовив у боті — забрав сам, без черги на касі.</div><div class="stt"><span class="soon">🛠 У розробці</span></div></div>
+  </div>
+</div>
+
+<!-- S4 guest menu + cart -->
+<div class="scene" id="s4">
+  <div class="left">
+    <div class="kick a" id="s4k">Для гостя</div>
+    <div class="h a" id="s4h">Меню, кошик і замовлення<br><span class="grad">прямо в Telegram</span></div>
+    <div class="sub a" id="s4s">Без застосунків і сайтів.<br>Ціни й назви фіксуються в замовленні.</div>
+    <div class="qrchip a" id="s4q"><div class="q"></div>Стіл #7 · через QR</div>
+  </div>
+  <div id="phone" class="a"><div id="screen">
+    <div class="tghead"><div class="ava ak">D</div><div><div class="tgn">Demo Lounge</div><div class="tgs">бот</div></div></div>
+    <div id="chat">
+      <div class="mw" data-t="0.3"><div class="mi"><div class="b bot"><b>Меню Demo Lounge</b><br>Активний стіл: #7</div>
+        <div class="kb"><div class="k" id="k1">Кальяни</div><div class="k">Напої</div><div class="k">Алкоголь</div></div></div></div>
+      <div class="mw" data-t="1.3"><div class="mi"><div class="b bot">Категорія: Кальяни</div>
+        <div class="kb"><div class="k full" id="k3">Classic Hookah · 450 грн <span class="pl">＋</span></div><div class="k full" id="k2">Premium Hookah · 650 грн <span class="pl">＋</span></div><div class="k full">Fruit Bowl Hookah · 820 грн <span class="pl">＋</span></div><div class="k full" id="k4">Відкрити кошик</div></div></div></div>
+      <div class="mw" data-t="3.3"><div class="mi"><div class="b bot"><b>Кошик</b><br>Premium Hookah × 1 — 650 грн<br>Classic Hookah × 1 — 450 грн<br>Разом: <b>1100 грн</b></div>
+        <div class="kb"><div class="k" id="k5">Оформити</div><div class="k">Очистити</div></div></div></div>
+      <div class="mw" data-t="4.4"><div class="mi"><div class="b bot">✅ <b>Замовлення прийнято: #A1042</b><br>Сума: 1100 грн<br>Ми вже передали його персоналу.</div></div></div>
+    </div>
+    <div class="tgin">Повідомлення</div>
+    <div class="ring" id="ring"></div>
+  </div></div>
+</div>
+
+<!-- S5 staff -->
+<div class="scene" id="s5">
+  <div class="t2 a" id="s5t"><div class="kick">Для персоналу</div><div class="h">Команда бачить усе <span class="grad">у Telegram</span></div></div>
+  <div class="panel ord a" id="ord">
+    <div class="top"><div class="av ak">D</div>Demo Lounge · персонал<em style="margin-left:auto;font-style:normal">щойно</em></div>
+    <div class="tx">🔔 <b>Нове замовлення #A1042</b><br>Стіл #7 · Premium + Classic Hookah<br>Сума: 1100 грн</div>
+    <div class="ob"><div id="bt1">Взяти в роботу</div><div id="bt2">Готуємо</div><div id="bt3">Готово</div></div>
+    <div class="stps"><div class="stp" id="st0">Нове</div>→<div class="stp" id="st1">Прийнято</div>→<div class="stp" id="st2">Готуємо</div>→<div class="stp" id="st3">Готово</div></div>
+  </div>
+  <div class="panel home a" id="home">
+    <div class="st">/staff</div><div class="ss">Персонал · Demo Lounge</div>
+    <div class="hg"><div>Відкриті замовлення</div><div>Сповіщення</div><div>Столи</div><div>Рахунки й оплати</div><div>Швидкий продаж</div><div>Звіт дня</div></div>
+  </div>
+  <div class="tgc a" id="call"><div class="bd"><div class="b bot">🙋 <b>Стіл #7 кличе офіціанта</b><br>Гість натиснув «Покликати персонал»</div></div></div>
+</div>
+
+<!-- S6 quick sale -->
+<div class="scene" id="s6">
+  <div class="t2 a" id="s6t"><div class="kick">Без столів — для каси й магазину</div><div class="h">Швидкий продаж <span class="grad">з кодом клієнта</span></div></div>
+  <div class="tgc a" id="qs" style="left:150px;top:230px;width:900px">
+    <div class="hd"><div class="ava ak">D</div><div><div class="tgn">Demo Lounge · персонал</div><div class="tgs">бот</div></div></div>
+    <div class="bd">
+      <div class="rw a" id="q1"><div class="b bot">⚡ <b>Швидкий продаж</b><br>Введіть код клієнта (наприклад FE231A).</div><div class="kb"><div class="k">Без коду (Анонім)</div></div></div>
+      <div class="rw a" id="q2"><div class="b me"><span class="code">E1239A</span></div></div>
+      <div class="rw a" id="q3"><div class="b bot">Код клієнта: <span class="code">E1239A</span> ✓<br>Premium Hookah × 1 — 650 грн</div><div class="kb"><div class="k">Змінити код</div><div class="k">Коментар</div><div class="k" id="qk">Списати бонуси</div></div></div>
+    </div>
+  </div>
+  <div class="tgc a" id="qg" style="left:1110px;top:300px;width:660px">
+    <div class="hd"><div class="ava ak">D</div><div><div class="tgn">Demo Lounge</div><div class="tgs">бот гостя</div></div></div>
+    <div class="bd"><div class="b bot">👤 <b>Мій профіль</b><br>Код клієнта: <span class="code">E1239A</span><br><span style="color:#8BA3BB">Назвіть його на барі чи касі — для бонусів і швидких продажів.</span></div></div>
+  </div>
+</div>
+
+<!-- S7 bill + loyalty -->
+<div class="scene" id="s7">
+  <div class="t2 a" id="s7t"><div class="kick">Рахунок і лояльність</div><div class="h">Гості повертаються — <span class="grad">за бонусами</span></div></div>
+  <div class="tiles2">
+    <div class="tile a"><div class="e">🎁</div><div class="tt">Код клієнта</div><div class="dd">один код — бонуси за кожну покупку</div></div>
+    <div class="tile a"><div class="e">💳</div><div class="tt">Оплата бонусами</div><div class="dd">1 бонус = 1 грн, решта — готівкою чи карткою</div></div>
+    <div class="tile a"><div class="e">🧾</div><div class="tt">Рахунок</div><div class="dd">свій, на весь стіл або розділити інакше</div></div>
+    <div class="tile a"><div class="e">📣</div><div class="tt">Розсилки</div><div class="dd">вашим гостям, одразу чи за розкладом</div></div>
+  </div>
+  <div class="tgc a" id="bill" style="left:1220px;top:250px;width:550px">
+    <div class="hd"><div class="ava ak">D</div><div><div class="tgn">Demo Lounge</div><div class="tgs">бот</div></div></div>
+    <div class="bd">
+      <div class="b bot" style="font-size:24px">Як ви хочете оформити рахунок?</div>
+      <div class="kb"><div class="k full" id="bk">Тільки мої замовлення</div><div class="k full">Оплатити весь стіл</div><div class="k full">Потрібно розділити інакше</div></div>
+      <div class="rw a" id="bres"><div class="b bot" style="font-size:24px">🧾 Підготували персональний рахунок <b>#B204</b> по столу #7.</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- S8 modules + report -->
+<div class="scene" id="s8">
+  <div class="t2 a" id="s8t"><div class="kick">Для власника</div><div class="h">Вмикаєте лише <span class="grad">потрібне</span></div></div>
+  <div class="panel a" id="mods">
+    <div class="tog a"><span>📖 Меню</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>🧾 Замовлення і кошик</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>🪑 Столи та QR</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>💳 Рахунки</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>🙋 Виклик персоналу</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>⚡ Швидкий продаж</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>📊 Звіт дня</span><div class="sw"><i></i></div></div>
+    <div class="tog a"><span>📣 Розсилки</span><div class="sw"><i></i></div></div>
+    <div class="tog a dev"><span>🛵 Доставка</span><span class="soon">🛠 У розробці</span></div>
+    <div class="tog a dev"><span>🥡 Самовивіз</span><span class="soon">🛠 У розробці</span></div>
+  </div>
+  <div class="panel a" id="rep">
+    <div class="ct" style="font-size:34px;font-weight:800">📊 Звіт дня</div>
+    <div class="cs" style="font-size:23px;color:var(--mut);font-weight:600;margin-top:8px">Операційний день — в одному місці</div>
+    <div class="rg"><div class="a">Рахунки<small>оплачені й відкриті</small></div><div class="a">Швидкі продажі<small>з кодом і анонімні</small></div><div class="a">Столи<small>активні сесії</small></div><div class="a">Хвости<small>що ще не закрито</small></div></div>
+  </div>
+</div>
+
+<!-- S9 ecosystem -->
+<div class="scene" id="s9">
+  <div class="t2 a" id="s9t" style="left:0;right:0;text-align:center;top:120px"><div class="kick">А далі — більше</div><div class="h" style="font-size:72px">Частина екосистеми <span class="grad">Botera</span></div></div>
+  <svg id="ecol" viewBox="0 0 1620 400"><line id="el1" x1="520" y1="200" x2="580" y2="200" stroke="#FF9F43" stroke-width="5"/><line id="el2" x1="1040" y1="200" x2="1100" y2="200" stroke="#FF6FA5" stroke-width="5"/></svg>
+  <div class="eco3">
+    <div class="ec me a"><div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5l1.6-5h12.8l1.6 5"/><path d="M5.5 12v8h13v-8"/><path d="M10 20v-4.5h4V20"/></svg></div><div class="nn">BoteraMarket</div><div class="dd">заклади й магазини</div></div>
+    <div class="ec a"><div class="mark" style="background:linear-gradient(135deg,#FF6FA5,#FFB547 50%,#2AABEE)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><circle cx="6" cy="7" r="2.6"/><circle cx="18" cy="7" r="2.6"/><circle cx="12" cy="18" r="2.6"/><path d="M8.6 7h6.8M7.4 9.3l3.3 6.3M16.6 9.3l-3.3 6.3"/></svg></div><div class="nn">Партнерські програми</div><div class="dd">нагороди між бізнесами</div></div>
+    <div class="ec a"><div class="mark" style="background:linear-gradient(135deg,#FF6FA5,#9C7BFF 55%,#2AABEE)"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="3.5"/><path d="M8 2.5v4M16 2.5v4M3 9.5h18"/><path d="M8.5 14.5l2.4 2.4 4.6-4.6"/></svg></div><div class="nn">BoteraMaster</div><div class="dd">майстри й запис</div></div>
+  </div>
+</div>
+
+<!-- S10 outro -->
+<div class="scene" id="s10">
+  <div class="wrap">
+    <div class="mark a" id="s10m"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5l1.6-5h12.8l1.6 5"/><path d="M4 9.5c0 1.6 1.2 2.6 2.7 2.6S9.3 11.1 9.3 9.5c0 1.6 1.2 2.6 2.7 2.6s2.7-1 2.7-2.6c0 1.6 1.1 2.6 2.6 2.6S20 11.1 20 9.5"/><path d="M5.5 12v8h13v-8"/><path d="M10 20v-4.5h4V20"/></svg></div>
+    <div class="word a" id="s10w">Botera<b>Market</b></div>
+    <div class="tl a" id="s10t">Від кав'ярні до крамниці біля дому — один бот.</div>
+    <div id="langs"><div class="chip a">Ваш бот</div><div class="chip a">Ваші гості</div><div class="chip a">Без серверів</div></div>
+    <div class="soon a" id="s10s">🛵 Доставка й 🥡 самовивіз — у розробці</div>
+  </div>
+</div>
+<svg id="cur" viewBox="0 0 24 24"><path d="M4 2.5l15 9.2-6.6 1.4 3.8 7.2-3 1.5-3.8-7.3L4 19.5z" fill="#fff" stroke="#111" stroke-width="1.2" stroke-linejoin="round"/></svg>
+
+</div>
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const cl=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const p=(t,a,d)=>cl((t-a)/d);
+const eo=x=>1-Math.pow(1-x,3);
+const eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const back=x=>{const c=1.5;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
+const SC=[['s1',0,3.6],['s2',3.6,8.4],['s3',8.4,13.8],['s4',13.8,19.8],['s5',19.8,25.8],['s6',25.8,31.8],['s7',31.8,37.2],['s8',37.2,42],['s9',42,46.2],['s10',46.2,50.4]];
+const FD=.45;
+function rise(el,t,a,d=.55,dy=40){const k=p(t,a,d),e=eo(k);el.style.opacity=k;el.style.transform=`translateY(${(1-e)*dy}px)`;}
+function slide(el,t,a,d=.55,dx=140){const k=p(t,a,d);el.style.opacity=cl(k*1.5);el.style.transform=`translateX(${(1-eo(k))*dx}px)`;}
+function pop(el,t,a,d=.5){const k=p(t,a,d);el.style.opacity=cl(k*2);el.style.transform=`scale(${.85+.15*back(k)})`;}
+function draw(el,k){const L=Math.hypot(el.x2.baseVal.value-el.x1.baseVal.value,el.y2.baseVal.value-el.y1.baseVal.value);el.style.strokeDasharray=L;el.style.strokeDashoffset=L*(1-k);}
+function path(s,wp){if(s<=wp[0][0])return wp[0];
+  for(let i=1;i<wp.length;i++){const [t1,x1,y1]=wp[i],[t0,x0,y0]=wp[i-1];if(s<=t1){const k=eio((s-t0)/(t1-t0));return [s,x0+(x1-x0)*k,y0+(y1-y0)*k];}}
+  return wp[wp.length-1];}
+let H=[],P={};
+function init(){$$('.scene').forEach(e=>e.style.display='block');
+  H=$$('#chat .mw').map(w=>{w.style.height='auto';return w.offsetHeight;});
+  const c=q=>{const b=$(q).getBoundingClientRect();return[b.left+b.width*.5,b.top+b.height*.55]};
+  P.b1=c('#bt1');P.b2=c('#bt2');P.b3=c('#bt3');}
+function tapRing(s,sel,screen){const ring=$('#ring');let shown=false;
+  for(const [q,a] of sel){const k=(s-(a-.08))/.45;if(k>=0&&k<=1){const r=$(q).getBoundingClientRect(),sr=$(screen).getBoundingClientRect();
+    ring.style.left=(r.left-sr.left+r.width/2)+'px';ring.style.top=(r.top-sr.top+r.height/2)+'px';ring.style.opacity=.9*(1-k);ring.style.transform=`scale(${.5+.9*eo(k)})`;shown=true;}}
+  if(!shown)ring.style.opacity=0;}
+function render(t){
+  $('#g1').style.left=(420+120*Math.sin(t*.3))+'px';$('#g1').style.top=(260+80*Math.cos(t*.25))+'px';
+  $('#g2').style.left=(1550+110*Math.cos(t*.24))+'px';$('#g2').style.top=(860+70*Math.sin(t*.28))+'px';
+  let cur=null;
+  for(const [id,a,b] of SC){const el=$('#'+id),last=id==='s10';const vin=p(t,a,FD),vout=last?0:p(t,b-FD,FD);
+    el.style.display=(t>=a-.001&&t<b+.001)?'block':'none';el.style.opacity=vin*(1-vout);el.style.transform=`translateY(${-vout*24}px)`;}
+  if(t<3.7){rise($('#h1'),t,.05,.55,60);rise($('#h2'),t,.45,.55,60);$$('#chips .chip').forEach((c,i)=>pop(c,t,1.1+i*.09));}
+  if(t>3.5&&t<8.5){const s=t-3.6;
+    rise($('#s2logo'),s,.1);rise($('#s2h'),s,.35,.6);rise($('#s2s'),s,1.1);rise($('#s2bot'),s,.3,.6,60);
+    $$('#s2bot .k').forEach((k,i)=>pop(k,s,1.0+i*.13,.4));}
+  if(t>8.3&&t<13.9){const s=t-8.4;
+    rise($('#s3t'),s,.1);$$('#s3 .opt').forEach((o,i)=>rise(o,s,.4+i*.3,.6,50));
+    $$('#s3 .opt.dev .soon').forEach((e,i)=>{e.style.transform=`scale(${1+.06*Math.sin((s-1.5)*5)*p(s,1.5,.3)*(1-p(s,2.8,.3))})`;});}
+  if(t>13.7&&t<19.9){const s=t-13.8;
+    rise($('#s4k'),s,.1);rise($('#s4h'),s,.2,.6);rise($('#s4s'),s,.9);rise($('#s4q'),s,1.3,.5,20);rise($('#phone'),s,.05,.6,80);
+    $$('#chat .mw').forEach((w,i)=>{const a=+w.dataset.t,k=p(s,a,.35);w.style.height=(H[i]*eo(k))+'px';const m=w.firstElementChild;m.style.opacity=cl(k*1.4);m.style.transform=`translateY(${(1-eo(k))*14}px)`;});
+    const sel=[['#k1',1.0],['#k2',2.0],['#k3',2.5],['#k4',3.0],['#k5',4.1]];
+    sel.forEach(([q,a])=>{$(q).classList.toggle('on',s>=a);const pl=$(q).querySelector('.pl');if(pl)pl.textContent=s>=a?'✓ 1':'＋';});
+    tapRing(s,sel,'#screen');}
+  if(t>19.7&&t<25.9){const s=t-19.8;
+    rise($('#s5t'),s,.1);rise($('#ord'),s,.25,.6,50);rise($('#home'),s,.45,.6,50);slide($('#call'),s,4.4,.6);
+    const T=[2.0,3.0,4.0];T.forEach((a,i)=>$('#bt'+(i+1)).classList.toggle('on',s>=a&&(i===2||s<T[i+1]+.6)));
+    const st=s>=4?3:s>=3?2:s>=2?1:0;for(let i=0;i<4;i++)$('#st'+i).classList.toggle('on',i===st);
+    const [,x,y]=path(s,[[1.0,1000,1000],[1.8,...P.b1],[2.2,...P.b1],[2.8,...P.b2],[3.2,...P.b2],[3.8,...P.b3],[4.2,...P.b3],[4.9,P.b3[0]+80,P.b3[1]+260]]);
+    cur=[x,y,p(s,.9,.2)*(1-p(s,4.8,.4)),(s>1.9&&s<2.05)||(s>2.9&&s<3.05)||(s>3.9&&s<4.05)];}
+  if(t>25.7&&t<31.9){const s=t-25.8;
+    rise($('#s6t'),s,.1);rise($('#qs'),s,.25,.6,50);rise($('#q1'),s,.7,.4,14);rise($('#q2'),s,1.6,.4,14);rise($('#q3'),s,2.4,.4,14);
+    $('#qk').classList.toggle('on',s>=3.6);slide($('#qg'),s,3.0,.6);}
+  if(t>31.7&&t<37.3){const s=t-31.8;
+    rise($('#s7t'),s,.1);$$('#s7 .tile').forEach((e,i)=>rise(e,s,.35+i*.15,.5,30));rise($('#bill'),s,.5,.6,50);
+    $('#bk').classList.toggle('on',s>=2.4);rise($('#bres'),s,2.7,.4,14);}
+  if(t>37.1&&t<42.1){const s=t-37.2;
+    rise($('#s8t'),s,.1);rise($('#mods'),s,.2,.6,50);rise($('#rep'),s,.5,.6,50);
+    $$('#mods .tog').forEach((g,i)=>{rise(g,s,.4+i*.06,.35,12);const sw=g.querySelector('.sw');if(sw){const k=eo(p(s,.9+i*.15,.2));sw.querySelector('i').style.transform=`translateX(${k*30}px)`;sw.style.background=k>.5?'#3DDC97':'#3A3150';}});
+    $$('#rep .rg div').forEach((e,i)=>pop(e,s,1.0+i*.12,.4));}
+  if(t>41.9&&t<46.3){const s=t-42;
+    rise($('#s9t'),s,.1);$$('#s9 .ec').forEach((e,i)=>pop(e,s,.4+i*.25,.55));draw($('#el1'),eo(p(s,1.2,.4)));draw($('#el2'),eo(p(s,1.5,.4)));}
+  if(t>46.1){const s=t-46.2;
+    pop($('#s10m'),s,.05,.6);rise($('#s10w'),s,.35,.6,40);rise($('#s10t'),s,.8,.55,30);
+    $$('#langs .chip').forEach((c,i)=>pop(c,s,1.3+i*.12));rise($('#s10s'),s,1.8,.5,16);
+    $('#s10m').style.boxShadow=`0 20px ${60+30*Math.sin(s*2)}px rgba(255,140,80,.4)`;}
+  const c=$('#cur');if(cur){c.style.opacity=cur[2];c.style.transform=`translate(${cur[0]}px,${cur[1]}px) scale(${cur[3]?.85:1})`;}else c.style.opacity=0;
+}
+window.__init=async()=>{await document.fonts.ready;init();render(0);};
+window.__render=render;
+</script>
+</body></html>

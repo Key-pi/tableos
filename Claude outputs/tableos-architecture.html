@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TableOS — Архитектура</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22253a;
+    --border: #2d3250;
+    --accent: #6c7ef8;
+    --accent2: #f89c6c;
+    --accent3: #6cf8c7;
+    --accent4: #f86c8f;
+    --text: #e4e6f1;
+    --text2: #8b8fa8;
+    --text3: #bbbdd4;
+    --shadow: 0 4px 24px rgba(0,0,0,0.5);
+    --highlight: #6c7ef833;
+    --node-r: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  header h1 { font-size: 17px; font-weight: 600; letter-spacing: .02em; }
+  header .badge {
+    font-size: 11px; background: var(--accent); color: #fff;
+    border-radius: 6px; padding: 2px 8px; font-weight: 500;
+  }
+  header .hint { font-size: 12px; color: var(--text2); margin-left: auto; }
+  .workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+  /* ===== CANVAS ===== */
+  #canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  svg#diagram {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    user-select: none;
+  }
+  svg#diagram:active { cursor: grabbing; }
+
+  /* ===== SIDEBAR ===== */
+  #sidebar {
+    width: 300px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #sidebar-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+  #flows-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+  #flows-list::-webkit-scrollbar { width: 4px; }
+  #flows-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .flow-item {
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all .18s ease;
+    background: var(--surface2);
+  }
+  .flow-item:hover { border-color: var(--accent); background: var(--highlight); }
+  .flow-item.active { border-color: var(--accent); background: var(--highlight); }
+  .flow-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .flow-desc { font-size: 11px; color: var(--text2); line-height: 1.5; }
+  .flow-dot {
+    display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; margin-right: 8px; flex-shrink: 0;
+  }
+
+  /* ===== INFO PANEL (node detail) ===== */
+  #info-panel {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    min-height: 0;
+    max-height: 220px;
+    overflow-y: auto;
+    transition: all .2s ease;
+  }
+  #info-panel h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  #info-panel p { font-size: 12px; color: var(--text3); line-height: 1.6; }
+  #info-panel .pill {
+    display: inline-block; font-size: 10px; padding: 2px 8px;
+    background: var(--surface2); border-radius: 20px; margin: 3px 3px 0 0;
+    color: var(--text3); border: 1px solid var(--border);
+  }
+  #info-panel .info-label {
+    font-size: 10px; color: var(--text2); text-transform: uppercase;
+    letter-spacing: .07em; margin-top: 10px; margin-bottom: 4px;
+  }
+
+  /* ===== TOOLTIP ===== */
+  #tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12px;
+    max-width: 220px;
+    box-shadow: var(--shadow);
+    z-index: 100;
+    display: none;
+    line-height: 1.6;
+  }
+  #tooltip .tt-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  #tooltip .tt-body { color: var(--text3); }
+
+  /* ===== NODE STYLES (injected via JS) ===== */
+  .node-group { cursor: pointer; }
+  .node-rect { rx: 12; transition: filter .15s; }
+  .node-group:hover .node-rect { filter: brightness(1.25); }
+  .node-label { font-size: 12px; font-weight: 600; fill: #fff; pointer-events: none; }
+  .node-sublabel { font-size: 10px; fill: rgba(255,255,255,.55); pointer-events: none; }
+  .edge { stroke-width: 1.5; fill: none; marker-end: url(#arrow); opacity: .5; transition: opacity .2s, stroke-width .2s; }
+  .edge.highlighted { opacity: 1; stroke-width: 2.5; }
+  .edge-label { font-size: 9px; fill: var(--text2); pointer-events: none; }
+
+  /* ===== LEGEND ===== */
+  #legend {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-size: 11px;
+    z-index: 5;
+  }
+  #legend .legend-title { color: var(--text2); margin-bottom: 8px; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .05em; }
+  .legend-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+
+  /* ===== ZOOM CONTROLS ===== */
+  #zoom-controls {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 5;
+  }
+  .zoom-btn {
+    width: 32px; height: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .15s;
+  }
+  .zoom-btn:hover { background: var(--surface2); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>TableOS · Архитектура системы</h1>
+  <span class="badge">Django Monolith</span>
+  <span class="hint">Наведите на узел — тултип · Кликните на flow — подсветить путь · Перетащите для навигации</span>
+</header>
+
+<div class="workspace">
+  <div id="canvas-wrap">
+    <svg id="diagram" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#4a5180"/>
+        </marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 z" fill="#6c7ef8"/>
+        </marker>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+          <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g id="diagram-root"></g>
+    </svg>
+    <div id="legend">
+      <div class="legend-title">Слои</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#4a6fa5"></div><span>Инфраструктура</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#4a7a5a"></div><span>Адаптеры</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#7a4a8a"></div><span>Домен (apps/)</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#8a6a3a"></div><span>Core</span></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#4a6a8a"></div><span>Хранилища</span></div>
+    </div>
+    <div id="zoom-controls">
+      <button class="zoom-btn" id="zoom-in">+</button>
+      <button class="zoom-btn" id="zoom-out">−</button>
+      <button class="zoom-btn" id="zoom-reset" title="Сбросить вид" style="font-size:12px">⌖</button>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div id="sidebar-header">Потоки (Flows)</div>
+    <div id="flows-list"></div>
+    <div id="info-panel">
+      <div style="color:var(--text2);font-size:12px">Кликните на узел или поток для подробностей</div>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip">
+  <div class="tt-title" id="tt-title"></div>
+  <div class="tt-body" id="tt-body"></div>
+</div>
+
+<script>
+// ======================================================
+// DATA
+// ======================================================
+const NODES = [
+  // ── Инфраструктура ──
+  { id: "telegram", label: "Telegram API", sub: "Мессенджер", x: 80, y: 120, color: "#2a5fa5", layer: "infra",
+    desc: "Внешний сервис Telegram. Бот получает апдейты через polling (или webhook). Все входящие события от гостей и сотрудников идут через него.", tags: ["polling", "webhook", "Telegram Bot API"] },
+  { id: "postgres", label: "PostgreSQL", sub: "Основная БД", x: 900, y: 380, color: "#33638a", layer: "storage",
+    desc: "Основное хранилище всех доменных данных. Production-only: SQLite используется только локально через DJANGO_USE_SQLITE=true.", tags: ["PostgreSQL 16", "PartnerBound", "транзакции", "блокировки"] },
+  { id: "redis", label: "Redis", sub: "Broker / Backend", x: 900, y: 500, color: "#8a3333", layer: "storage",
+    desc: "Брокер задач для Celery (очереди default и broadcasts) и хранилище результатов. Redis 7-alpine.", tags: ["Redis 7", "Celery broker", "очереди"] },
+  { id: "docker", label: "Docker Compose", sub: "Оркестрация", x: 900, y: 620, color: "#335a8a", layer: "infra",
+    desc: "Контейнеры: db (postgres), redis, web (Django), worker (Celery). Для локальной разработки.", tags: ["docker-compose", "web", "worker", "db", "redis"] },
+
+  // ── Core ──
+  { id: "core-settings", label: "core/settings", sub: "Конфигурация", x: 520, y: 80, color: "#7a6030", layer: "core",
+    desc: "Настройки Django: базы данных, Celery (брокер, очереди, маршруты, beat), Redis URL, безопасность, установленные приложения.", tags: ["base.py", "local.py", "INSTALLED_APPS", "CELERY_TASK_ROUTES"] },
+  { id: "core-admin", label: "core/admin_mixins", sub: "RBAC + Tenancy", x: 700, y: 80, color: "#7a6030", layer: "core",
+    desc: "Tenant-scoped миксины для Django Admin: автофильтрация по partner, проверка AdminAccessProfile и AdminSectionPermission.", tags: ["PartnerScopedAdmin", "AdminAccessProfile", "RBAC"] },
+  { id: "core-db", label: "core/database", sub: "Базовые модели", x: 520, y: 200, color: "#7a6030", layer: "core",
+    desc: "PartnerBoundModel (base с partner FK и изоляцией) и TimeStampedModel (created_at/updated_at).", tags: ["PartnerBoundModel", "TimeStampedModel"] },
+  { id: "core-celery", label: "core/celery.py", sub: "Celery App", x: 700, y: 200, color: "#7a6030", layer: "core",
+    desc: "Инициализация Celery. app.autodiscover_tasks() находит задачи во всех INSTALLED_APPS. CELERY_TASK_ALWAYS_EAGER включается при manage.py test.", tags: ["autodiscover_tasks", "eager mode в тестах"] },
+
+  // ── Адаптеры ──
+  { id: "bot-main", label: "bot/main.py", sub: "aiogram Entry", x: 80, y: 300, color: "#3a6a4a", layer: "adapter",
+    desc: "Точка входа Telegram-бота (aiogram 3.x). Регистрирует все роутеры, middlewares. Запускается через manage.py runbot.", tags: ["aiogram", "Dispatcher", "polling", "runbot"] },
+  { id: "bot-handlers", label: "bot/handlers", sub: "8 модулей", x: 240, y: 240, color: "#3a6a4a", layer: "adapter",
+    desc: "Обработчики: start, menu, order, session, profile, billing, guest_call, staff. Каждый модуль — отдельный Router. Используют sync_to_async для вызова Django ORM/services.", tags: ["start", "menu", "order", "session", "billing", "guest_call", "staff", "profile"] },
+  { id: "bot-keyboards", label: "bot/keyboards", sub: "Клавиатуры", x: 80, y: 430, color: "#3a6a4a", layer: "adapter",
+    desc: "Динамические Reply и Inline клавиатуры, построенные на основе BotContent (кастомизируемые надписи кнопок от партнёра).", tags: ["ReplyKeyboard", "InlineKeyboard", "BotContent"] },
+  { id: "bot-services", label: "bot/services", sub: "context/content/navigation", x: 240, y: 430, color: "#3a6a4a", layer: "adapter",
+    desc: "context.py: resolve_partner_for_bot_token. content.py: BotContent — локализованные строки кнопок партнёра. navigation.py: состояние навигации гостя.", tags: ["BotContent", "resolve_partner_for_bot_token", "navigate"] },
+  { id: "bot-states", label: "bot/states", sub: "FSM", x: 80, y: 550, color: "#3a6a4a", layer: "adapter",
+    desc: "StaffQuickSaleStates — FSM-состояния для быстрой продажи (WalkIn). aiogram StatesGroup.", tags: ["StatesGroup", "StaffQuickSaleStates"] },
+  { id: "django-admin", label: "Django Admin", sub: "/admin/", x: 700, y: 350, color: "#3a6a4a", layer: "adapter",
+    desc: "Tenant-scoped admin: каждый ModelAdmin использует core/admin_mixins. Superuser видит всё, tenant-admin — только свой partner. AdminSectionPermission управляет доступом.", tags: ["AdminSectionPermission", "AdminAccessProfile", "PartnerScopedAdmin"] },
+  { id: "mgmt-commands", label: "manage.py commands", sub: "CLI адаптер", x: 700, y: 480, color: "#3a6a4a", layer: "adapter",
+    desc: "seed_baseline_demo, seed_demo, ensure_admin, runbot. Используют owner-services, не реализуют бизнес-логику напрямую.", tags: ["seed_demo", "ensure_admin", "runbot"] },
+
+  // ── Domain Apps ──
+  { id: "app-partners", label: "partners", sub: "Partner · BotInstance", x: 420, y: 300, color: "#7a4a8a", layer: "domain",
+    desc: "Partner (tenant): name, slug, timezone, status (draft/active/suspended). BotInstance: зашифрованный токен бота, mode (polling/webhook), привязка к партнёру.", tags: ["Partner", "BotInstance", "encrypt/decrypt", "multi-tenant"] },
+  { id: "app-users", label: "users", sub: "User · Guest · TelegramAccount", x: 420, y: 400, color: "#7a4a8a", layer: "domain",
+    desc: "User (AbstractUser): staff-пользователь с role (owner/manager/cashier/waiter). TelegramAccount: нормализованный Telegram ID. GuestProfile: per-partner профиль гостя. AdminAccessProfile + AdminSectionPermission.", tags: ["User", "GuestProfile", "TelegramAccount", "AdminAccessProfile"] },
+  { id: "app-employees", label: "employees", sub: "EmployeeProfile", x: 420, y: 500, color: "#7a4a8a", layer: "domain",
+    desc: "EmployeeProfile: связывает User + TelegramAccount + Partner. Хранит настройки уведомлений (notify_on_order_created, notify_on_guest_calls и т.д.), is_active.", tags: ["EmployeeProfile", "bot_notifications_enabled", "commission_rate"] },
+  { id: "app-tables", label: "tables", sub: "Table · TableSession", x: 560, y: 300, color: "#7a4a8a", layer: "domain",
+    desc: "Table: физический стол с QR-токеном и deep link для Telegram. TableSession: активная сессия гостя (active/closed/timed_out), привязанная к столу и гостю.", tags: ["Table", "TableSession", "QR deep link", "qr_token"] },
+  { id: "app-menu", label: "menu", sub: "MenuCategory · MenuItem", x: 560, y: 400, color: "#7a4a8a", layer: "domain",
+    desc: "MenuCategory: разделы меню с sort_order. MenuItem: позиция (name, price, description, image_url, is_available). Все tenant-scoped.", tags: ["MenuCategory", "MenuItem", "sort_order", "is_available"] },
+  { id: "app-orders", label: "orders", sub: "Order · Cart · OrderItem", x: 560, y: 500, color: "#7a4a8a", layer: "domain",
+    desc: "Cart/CartItem: черновик до оформления. Order/OrderItem: подтверждённый заказ. Статусы: new→accepted→preparing→ready→delivering→completed/canceled. Хранит subtotal, bonus_spent, total.", tags: ["Order", "Cart", "OrderItem", "CartItem", "статусы", "деньги"] },
+  { id: "app-billing", label: "billing", sub: "Bill · Payment", x: 420, y: 600, color: "#7a4a8a", layer: "domain",
+    desc: "Bill: счёт (draft/issued/partially_paid/paid/canceled), объединяет заказы. BillItem: позиции счёта. Payment: фиксирует оплату с суммой и методом. Источник: internal или POS.", tags: ["Bill", "BillItem", "Payment", "paid_amount", "POS"] },
+  { id: "app-bonuses", label: "bonuses", sub: "BonusProgram · Ledger", x: 560, y: 600, color: "#7a4a8a", layer: "domain",
+    desc: "BonusProgram: программа лояльности (cashback/visit/milestone). BonusTransaction: движение бонусов. Стратегии начисления через strategies.py. WalkInSale для быстрых продаж.", tags: ["BonusProgram", "BonusTransaction", "cashback", "WalkInSale"] },
+  { id: "app-notifications", label: "notifications", sub: "StaffNotification · Broadcast", x: 700, y: 600, color: "#7a4a8a", layer: "domain",
+    desc: "StaffNotification: уведомление сотруднику (order_created, guest_call, billing_request). BroadcastCampaign: рассылка гостям. NotificationPreference: настройки гостя.", tags: ["StaffNotification", "BroadcastCampaign", "delivery_status", "on_commit"] },
+  { id: "app-analytics", label: "analytics", sub: "PartnerDailyMetric", x: 700, y: 700, color: "#7a4a8a", layer: "domain",
+    desc: "PartnerDailyMetric: ежедневный снимок KPI партнёра (revenue, orders_count, average_check, active_guests, repeat_visits). Агрегируется Celery задачей.", tags: ["PartnerDailyMetric", "bucket_date", "KPI"] },
+
+  // ── Celery Tasks ──
+  { id: "celery-worker", label: "Celery Worker", sub: "default + broadcasts", x: 900, y: 280, color: "#8a5a3a", layer: "infra",
+    desc: "Воркеры в двух очередях: default (уведомления стаффу, обновления гостей) и broadcasts (рассылки). Retry с backoff (до 5 раз). Идемпотентные задачи.", tags: ["notifications.deliver_staff_notification", "notifications.send_broadcast_campaign", "retry_backoff"] },
+  { id: "celery-beat", label: "Celery Beat", sub: "Планировщик", x: 900, y: 160, color: "#8a5a3a", layer: "infra",
+    desc: "Планировщик периодических задач. Запускает process_scheduled_broadcast_campaigns для запланированных рассылок.", tags: ["beat", "CELERY_BEAT_SCHEDULE", "scheduled broadcasts"] },
+];
+
+const EDGES = [
+  // Telegram ↔ Bot
+  { from: "telegram", to: "bot-main", label: "апдейты (polling)" },
+  { from: "bot-main", to: "telegram", label: "send_message" },
+  // Bot chain
+  { from: "bot-main", to: "bot-handlers", label: "роутинг" },
+  { from: "bot-handlers", to: "bot-keyboards", label: "build keyboard" },
+  { from: "bot-handlers", to: "bot-services", label: "context / content" },
+  { from: "bot-handlers", to: "bot-states", label: "FSM" },
+  // Bot → Domain
+  { from: "bot-handlers", to: "app-partners", label: "resolve partner" },
+  { from: "bot-handlers", to: "app-users", label: "get/create guest" },
+  { from: "bot-handlers", to: "app-tables", label: "activate session" },
+  { from: "bot-handlers", to: "app-orders", label: "cart / checkout" },
+  { from: "bot-handlers", to: "app-billing", label: "request bill" },
+  { from: "bot-handlers", to: "app-notifications", label: "staff assist" },
+  { from: "bot-handlers", to: "app-bonuses", label: "quick sale" },
+  // Admin → Domain
+  { from: "django-admin", to: "core-admin", label: "scoping" },
+  { from: "django-admin", to: "app-partners", label: "управление" },
+  { from: "django-admin", to: "app-users", label: "управление" },
+  { from: "django-admin", to: "app-employees", label: "управление" },
+  { from: "django-admin", to: "app-orders", label: "просмотр" },
+  { from: "django-admin", to: "app-billing", label: "просмотр" },
+  // Core → Apps
+  { from: "core-db", to: "app-partners", label: "PartnerBoundModel" },
+  { from: "core-db", to: "app-users", label: "base" },
+  { from: "core-db", to: "app-orders", label: "base" },
+  { from: "core-db", to: "app-billing", label: "base" },
+  { from: "core-db", to: "app-notifications", label: "base" },
+  // Domain ↔ Domain
+  { from: "app-partners", to: "app-tables", label: "" },
+  { from: "app-partners", to: "app-menu", label: "" },
+  { from: "app-users", to: "app-orders", label: "guest" },
+  { from: "app-employees", to: "app-notifications", label: "получатель" },
+  { from: "app-orders", to: "app-billing", label: "→ bill" },
+  { from: "app-orders", to: "app-bonuses", label: "начисление" },
+  { from: "app-orders", to: "app-notifications", label: "on_commit" },
+  { from: "app-analytics", to: "app-orders", label: "агрегация" },
+  { from: "app-analytics", to: "app-billing", label: "агрегация" },
+  // Notifications → Celery → Redis → Worker → Telegram
+  { from: "app-notifications", to: "core-celery", label: ".delay() on_commit" },
+  { from: "core-celery", to: "redis", label: "enqueue" },
+  { from: "redis", to: "celery-worker", label: "consume" },
+  { from: "celery-worker", to: "telegram", label: "send_message" },
+  // Beat
+  { from: "celery-beat", to: "redis", label: "schedule" },
+  { from: "celery-beat", to: "app-notifications", label: "broadcast" },
+  // Storage
+  { from: "app-partners", to: "postgres", label: "" },
+  { from: "app-orders", to: "postgres", label: "" },
+  { from: "app-billing", to: "postgres", label: "" },
+  { from: "celery-worker", to: "postgres", label: "delivery_status" },
+  { from: "mgmt-commands", to: "app-partners", label: "seed" },
+  { from: "mgmt-commands", to: "app-users", label: "seed" },
+  // Docker
+  { from: "docker", to: "postgres", label: "" },
+  { from: "docker", to: "redis", label: "" },
+];
+
+const FLOWS = [
+  {
+    id: "f-guest",
+    label: "Гостевой поток",
+    color: "#6cf8c7",
+    desc: "Гость сканирует QR → открывает Telegram-бот → просматривает меню → оформляет заказ → получает статус обновления",
+    steps: [
+      { node: "telegram", note: "Гость открывает бот по QR deep link" },
+      { node: "bot-main", note: "Принимает /start table_N_TOKEN" },
+      { node: "bot-handlers", note: "start_handler: регистрирует гостя, создаёт TableSession" },
+      { node: "bot-services", note: "resolve_partner_for_bot_token → BotContent" },
+      { node: "app-users", note: "get_or_create_guest_profile" },
+      { node: "app-tables", note: "activate_table_session" },
+      { node: "app-menu", note: "Гость просматривает MenuCategory / MenuItem" },
+      { node: "app-orders", note: "Добавляет в Cart → CartItem; Checkout → Order" },
+      { node: "app-notifications", note: "create StaffNotification → transaction.on_commit" },
+      { node: "core-celery", note: "deliver_staff_notification.delay()" },
+      { node: "redis", note: "Задача помещается в очередь default" },
+      { node: "celery-worker", note: "Worker забирает задачу" },
+      { node: "telegram", note: "Отправляет уведомление сотруднику" },
+    ],
+    edges: [
+      ["telegram","bot-main"],["bot-main","bot-handlers"],["bot-handlers","bot-services"],
+      ["bot-handlers","app-users"],["bot-handlers","app-tables"],["bot-handlers","app-orders"],
+      ["bot-handlers","app-notifications"],["app-notifications","core-celery"],
+      ["core-celery","redis"],["redis","celery-worker"],["celery-worker","telegram"],
+    ]
+  },
+  {
+    id: "f-staff",
+    label: "Стафф-поток (заказы)",
+    color: "#f89c6c",
+    desc: "Сотрудник управляет заказами: видит входящие заказы, меняет статусы, оформляет счёт и регистрирует оплату",
+    steps: [
+      { node: "telegram", note: "/staff или кнопка → staff_handler" },
+      { node: "bot-handlers", note: "staff.py: показывает список открытых заказов" },
+      { node: "app-employees", note: "get_staff_employee_by_telegram → EmployeeProfile" },
+      { node: "app-orders", note: "transition_order_status: new→accepted→preparing→ready→delivering→completed" },
+      { node: "app-notifications", note: "StaffNotification → on_commit → Celery" },
+      { node: "app-billing", note: "create Bill → BillItem → Payment" },
+      { node: "app-bonuses", note: "Начисление бонусов после оплаты" },
+      { node: "postgres", note: "Все мутации сохраняются в БД" },
+    ],
+    edges: [
+      ["telegram","bot-main"],["bot-main","bot-handlers"],
+      ["bot-handlers","app-employees"],["bot-handlers","app-orders"],
+      ["app-orders","app-billing"],["app-orders","app-bonuses"],
+      ["app-orders","app-notifications"],["app-orders","postgres"],["app-billing","postgres"],
+    ]
+  },
+  {
+    id: "f-notify",
+    label: "Celery-доставка уведомлений",
+    color: "#6c7ef8",
+    desc: "Безопасная асинхронная доставка: бизнес-сервис → on_commit → Celery → Redis → Worker → Telegram API",
+    steps: [
+      { node: "app-orders", note: "services.py: бизнес-логика создаёт StaffNotification" },
+      { node: "app-notifications", note: "transaction.on_commit(deliver_staff_notification.delay)" },
+      { node: "core-celery", note: "Celery получает .delay() вызов" },
+      { node: "redis", note: "Задача помещается в очередь default (не broadcasts)" },
+      { node: "celery-worker", note: "Worker забирает задачу, retry 5 раз с backoff" },
+      { node: "app-notifications", note: "deliver_staff_notification_now → запись delivery_status" },
+      { node: "telegram", note: "bot.send_message к сотруднику" },
+    ],
+    edges: [
+      ["app-orders","app-notifications"],["app-notifications","core-celery"],
+      ["core-celery","redis"],["redis","celery-worker"],
+      ["celery-worker","app-notifications"],["celery-worker","telegram"],
+    ]
+  },
+  {
+    id: "f-broadcast",
+    label: "Broadcast-рассылки",
+    color: "#f86c8f",
+    desc: "Запланированные рекламные рассылки гостям через Celery Beat → отдельная очередь broadcasts",
+    steps: [
+      { node: "celery-beat", note: "CELERY_BEAT_SCHEDULE: process_scheduled_broadcasts" },
+      { node: "app-notifications", note: "BroadcastCampaign: запланированная рассылка" },
+      { node: "core-celery", note: "send_broadcast_campaign.delay(campaign_id)" },
+      { node: "redis", note: "Задача в очереди broadcasts (отдельный worker)" },
+      { node: "celery-worker", note: "Итерирует по гостям, отправляет пачками" },
+      { node: "telegram", note: "Рассылка сообщений гостям" },
+    ],
+    edges: [
+      ["celery-beat","redis"],["celery-beat","app-notifications"],
+      ["app-notifications","core-celery"],["core-celery","redis"],
+      ["redis","celery-worker"],["celery-worker","telegram"],
+    ]
+  },
+  {
+    id: "f-billing",
+    label: "Биллинг и оплата",
+    color: "#f8e46c",
+    desc: "Группировка заказов в счёт → фиксация оплаты → обновление статусов → закрытие сессии",
+    steps: [
+      { node: "bot-handlers", note: "billing.py: гость запрашивает счёт (request_bill)" },
+      { node: "app-notifications", note: "BillingRequest StaffNotification → Celery" },
+      { node: "app-billing", note: "create_bill: Order → Bill + BillItem" },
+      { node: "app-billing", note: "register_payment: Payment → paid_amount" },
+      { node: "app-orders", note: "sync paid_at, статус completed" },
+      { node: "app-tables", note: "close_table_session при полной оплате" },
+      { node: "postgres", note: "Всё в одном transaction.atomic" },
+    ],
+    edges: [
+      ["bot-handlers","app-billing"],["bot-handlers","app-notifications"],
+      ["app-billing","app-orders"],["app-orders","app-tables"],
+      ["app-billing","postgres"],["app-orders","postgres"],
+    ]
+  },
+  {
+    id: "f-quicksale",
+    label: "Быстрая продажа (Quick Sale)",
+    color: "#c86cf8",
+    desc: "Сотрудник оформляет продажу без стола через FSM StaffQuickSaleStates и WalkInSale",
+    steps: [
+      { node: "bot-handlers", note: "staff.py: инициирует Quick Sale" },
+      { node: "bot-states", note: "StaffQuickSaleStates FSM" },
+      { node: "app-employees", note: "Проверка EmployeeProfile и capability" },
+      { node: "app-bonuses", note: "WalkInSale: бонусная транзакция без заказа" },
+      { node: "app-billing", note: "Payment зафиксирован" },
+      { node: "postgres", note: "Сохранение в БД" },
+    ],
+    edges: [
+      ["bot-handlers","bot-states"],["bot-handlers","app-employees"],
+      ["bot-handlers","app-bonuses"],["app-bonuses","app-billing"],["app-billing","postgres"],
+    ]
+  },
+];
+
+// ======================================================
+// RENDER
+// ======================================================
+const svg = document.getElementById("diagram");
+const root = document.getElementById("diagram-root");
+let viewBox = { x: -50, y: -20, w: 1050, h: 800 };
+let dragging = false, lastMx = 0, lastMy = 0;
+let activeFlow = null;
+
+// ── Build edge map for quick lookup
+const edgeIndex = {};
+EDGES.forEach(e => { edgeIndex[`${e.from}->${e.to}`] = e; });
+
+// ── Render edges
+function getNodeCenter(id) {
+  const n = NODES.find(x => x.id === id);
+  return n ? { x: n.x + 70, y: n.y + 28 } : { x: 0, y: 0 };
+}
+
+function renderEdges(highlightSet) {
+  const g = document.getElementById("edges-layer") || document.createElementNS("http://www.w3.org/2000/svg", "g");
+  g.id = "edges-layer";
+  g.innerHTML = "";
+  EDGES.forEach(e => {
+    const from = getNodeCenter(e.from);
+    const to = getNodeCenter(e.to);
+    const isHl = highlightSet && highlightSet.has(`${e.from}->${e.to}`);
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const mx = from.x + dx * 0.5, my = from.y + dy * 0.5;
+    const cx1 = from.x + dx * 0.3, cy1 = from.y;
+    const cx2 = to.x - dx * 0.3, cy2 = to.y;
+
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", `M${from.x},${from.y} C${cx1},${cy1} ${cx2},${cy2} ${to.x},${to.y}`);
+    path.setAttribute("class", "edge" + (isHl ? " highlighted" : ""));
+    path.setAttribute("stroke", isHl ? "#6c7ef8" : "#3a3f60");
+    path.setAttribute("marker-end", isHl ? "url(#arrow-accent)" : "url(#arrow)");
+    g.appendChild(path);
+
+    if (e.label && isHl) {
+      const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      text.setAttribute("x", mx); text.setAttribute("y", my - 4);
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("class", "edge-label");
+      text.textContent = e.label;
+      g.appendChild(text);
+    }
+  });
+  root.insertBefore(g, root.firstChild);
+}
+
+// ── Render nodes
+function renderNodes(highlightSet) {
+  let ng = document.getElementById("nodes-layer");
+  if (ng) ng.remove();
+  ng = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  ng.id = "nodes-layer";
+  NODES.forEach(n => {
+    const isHl = highlightSet && highlightSet.has(n.id);
+    const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+    g.setAttribute("class", "node-group");
+    g.setAttribute("data-id", n.id);
+
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", n.x); rect.setAttribute("y", n.y);
+    rect.setAttribute("width", 140); rect.setAttribute("height", 56);
+    rect.setAttribute("rx", 12);
+    rect.setAttribute("class", "node-rect");
+    rect.setAttribute("fill", isHl ? lighten(n.color, 30) : n.color);
+    rect.setAttribute("stroke", isHl ? "#6c7ef8" : "rgba(255,255,255,.1)");
+    rect.setAttribute("stroke-width", isHl ? 2.5 : 1);
+    if (isHl) rect.setAttribute("filter", "url(#glow)");
+    g.appendChild(rect);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", n.x + 70); label.setAttribute("y", n.y + 24);
+    label.setAttribute("text-anchor", "middle"); label.setAttribute("class", "node-label");
+    label.textContent = n.label;
+    g.appendChild(label);
+
+    const sub = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    sub.setAttribute("x", n.x + 70); sub.setAttribute("y", n.y + 40);
+    sub.setAttribute("text-anchor", "middle"); sub.setAttribute("class", "node-sublabel");
+    sub.textContent = n.sub;
+    g.appendChild(sub);
+
+    g.addEventListener("mouseenter", (evt) => showTooltip(evt, n));
+    g.addEventListener("mousemove", (evt) => moveTooltip(evt));
+    g.addEventListener("mouseleave", hideTooltip);
+    g.addEventListener("click", () => selectNode(n));
+    ng.appendChild(g);
+  });
+  root.appendChild(ng);
+}
+
+function lighten(hex, amt) {
+  let r = parseInt(hex.slice(1,3),16);
+  let g = parseInt(hex.slice(3,5),16);
+  let b = parseInt(hex.slice(5,7),16);
+  r = Math.min(255, r + amt); g = Math.min(255, g + amt); b = Math.min(255, b + amt);
+  return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+}
+
+function applyViewBox() {
+  svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+}
+
+function render(flowEdges, flowNodes) {
+  renderEdges(flowEdges);
+  renderNodes(flowNodes);
+  applyViewBox();
+}
+
+// ── Tooltip
+const tooltip = document.getElementById("tooltip");
+function showTooltip(evt, node) {
+  document.getElementById("tt-title").textContent = node.label + (node.sub ? ` — ${node.sub}` : "");
+  document.getElementById("tt-body").textContent = node.desc;
+  tooltip.style.display = "block";
+  moveTooltip(evt);
+}
+function moveTooltip(evt) {
+  let x = evt.clientX + 14, y = evt.clientY - 10;
+  if (x + 230 > window.innerWidth) x = evt.clientX - 240;
+  tooltip.style.left = x + "px"; tooltip.style.top = y + "px";
+}
+function hideTooltip() { tooltip.style.display = "none"; }
+
+// ── Node selection → info panel
+function selectNode(node) {
+  const panel = document.getElementById("info-panel");
+  panel.innerHTML = `
+    <h3>${node.label}</h3>
+    <p>${node.desc}</p>
+    <div class="info-label">Теги</div>
+    <div>${(node.tags||[]).map(t=>`<span class="pill">${t}</span>`).join("")}</div>
+  `;
+}
+
+// ── Flow selection
+function buildFlowsList() {
+  const list = document.getElementById("flows-list");
+  list.innerHTML = "";
+  FLOWS.forEach(flow => {
+    const div = document.createElement("div");
+    div.className = "flow-item";
+    div.dataset.id = flow.id;
+    div.innerHTML = `
+      <div class="flow-title">
+        <span class="flow-dot" style="background:${flow.color}"></span>${flow.label}
+      </div>
+      <div class="flow-desc">${flow.desc}</div>
+    `;
+    div.addEventListener("click", () => selectFlow(flow, div));
+    list.appendChild(div);
+  });
+}
+
+function selectFlow(flow, el) {
+  document.querySelectorAll(".flow-item").forEach(x => x.classList.remove("active"));
+  if (activeFlow === flow.id) {
+    activeFlow = null;
+    render(null, null);
+    const panel = document.getElementById("info-panel");
+    panel.innerHTML = `<div style="color:var(--text2);font-size:12px">Кликните на узел или поток для подробностей</div>`;
+    return;
+  }
+  el.classList.add("active");
+  activeFlow = flow.id;
+
+  const flowEdges = new Set(flow.edges.map(([a,b]) => `${a}->${b}`));
+  const flowNodes = new Set(flow.steps.map(s => s.node));
+
+  render(flowEdges, flowNodes);
+
+  // Info panel: steps list
+  const panel = document.getElementById("info-panel");
+  panel.innerHTML = `
+    <h3 style="color:${flow.color}">${flow.label}</h3>
+    <p style="margin-bottom:8px">${flow.desc}</p>
+    <div class="info-label">Шаги</div>
+    ${flow.steps.map((s,i) => {
+      const node = NODES.find(n => n.id === s.node);
+      return `<div style="font-size:11px;margin-bottom:4px;display:flex;gap:6px">
+        <span style="color:${flow.color};font-weight:600">${i+1}.</span>
+        <span><strong>${node ? node.label : s.node}</strong> — ${s.note}</span>
+      </div>`;
+    }).join("")}
+  `;
+}
+
+// ── Pan
+svg.addEventListener("mousedown", e => {
+  if (e.target.closest(".node-group")) return;
+  dragging = true; lastMx = e.clientX; lastMy = e.clientY;
+});
+window.addEventListener("mousemove", e => {
+  if (!dragging) return;
+  const dx = (e.clientX - lastMx) * (viewBox.w / svg.clientWidth);
+  const dy = (e.clientY - lastMy) * (viewBox.h / svg.clientHeight);
+  viewBox.x -= dx; viewBox.y -= dy;
+  lastMx = e.clientX; lastMy = e.clientY;
+  applyViewBox();
+});
+window.addEventListener("mouseup", () => { dragging = false; });
+
+// ── Zoom via scroll
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const factor = e.deltaY > 0 ? 1.12 : 0.89;
+  const rect = svg.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) / rect.width;
+  const my = (e.clientY - rect.top) / rect.height;
+  const ox = viewBox.x + viewBox.w * mx;
+  const oy = viewBox.y + viewBox.h * my;
+  viewBox.w *= factor; viewBox.h *= factor;
+  viewBox.x = ox - viewBox.w * mx;
+  viewBox.y = oy - viewBox.h * my;
+  applyViewBox();
+}, { passive: false });
+
+document.getElementById("zoom-in").onclick = () => {
+  viewBox.x += viewBox.w * 0.1; viewBox.y += viewBox.h * 0.1;
+  viewBox.w *= 0.8; viewBox.h *= 0.8; applyViewBox();
+};
+document.getElementById("zoom-out").onclick = () => {
+  viewBox.x -= viewBox.w * 0.125; viewBox.y -= viewBox.h * 0.125;
+  viewBox.w *= 1.25; viewBox.h *= 1.25; applyViewBox();
+};
+document.getElementById("zoom-reset").onclick = () => {
+  viewBox = { x: -50, y: -20, w: 1050, h: 800 }; applyViewBox();
+};
+
+// ── Init
+buildFlowsList();
+render(null, null);
+</script>
+</body>
+</html>
