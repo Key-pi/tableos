@@ -106,8 +106,19 @@ class OwnerFacingAdminTests(TestCase):
         self.assertNotIn("webhook_url", form.fields)
         self.assertEqual(
             model_admin.get_list_display(request),
-            ("display_name", "username", "token_status", "is_active", "created_at"),
+            ("display_name", "username", "token_status", "runtime_status", "is_active"),
         )
+
+    def test_owner_sees_why_a_bot_does_not_run(self):
+        # PQ-041: the bot service writes the state; Admin shows it in words.
+        model_admin = BotInstanceAdmin(BotInstance, admin.site)
+        self.bot_instance.is_active = True
+        self.assertEqual(model_admin.runtime_status(self.bot_instance), "Ещё не проверен")
+        self.bot_instance.runtime_state = BotInstance.RuntimeState.TOKEN_REJECTED
+        self.assertIn("@BotFather", model_admin.runtime_status(self.bot_instance))
+        self.bot_instance.is_active = False
+        self.assertEqual(model_admin.runtime_status(self.bot_instance), "Выключен")
+        self.assertIn("runtime_status", model_admin.get_readonly_fields(self._build_request()))
 
     def test_tenant_admin_does_not_receive_global_partner_list_filter(self):
         request = self._build_request()

@@ -1,5 +1,5 @@
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from apps.partners.models import BotInstance, Partner
 
@@ -19,65 +19,94 @@ class BotRuntimeConfig:
 _ACTIVE_BOT_CONFIGS_BY_TOKEN: dict[str, BotRuntimeConfig] = {}
 
 
-def load_active_bot_configs() -> list[BotRuntimeConfig]:
-    active_instances = list(
-        BotInstance.objects.filter(is_active=True).select_related("partner")
-    )
-    errors: list[str] = []
-    seen_tokens: dict[str, str] = {}
-    configs: list[BotRuntimeConfig] = []
+State = BotInstance.RuntimeState
 
-    for instance in active_instances:
-        if instance.partner.status != Partner.Status.ACTIVE:
-            errors.append(
-                f"@{instance.username}: partner `{instance.partner.slug}` is not active."
-            )
-            continue
+
+@dataclass(slots=True)
+class BotScan:
+    """Every active bot checked: the runnable ones and why the rest are not."""
+
+    configs: list[BotRuntimeConfig] = field(default_factory=list)
+    # bot instance id -> the state it runs in or why it does not
+    states: dict[str, str] = field(default_factory=dict)
+    # bot instance id -> human-readable reason for the server log
+    problems: dict[str, str] = field(default_factory=dict)
+
+
+def scan_bot_configs() -> BotScan:
+    """Check every active bot on its own (PQ-041): a broken one is skipped
+    with its reason, it never stops the others.
+
+    A bot of a suspended partner keeps running: it answers that the work is
+    suspended (PQ-013). Of two bots with one token the first one runs.
+    """
+
+    scan = BotScan()
+    seen_tokens: dict[str, str] = {}
+    instances = (
+        BotInstance.objects.filter(is_active=True)
+        .select_related("partner")
+        .order_by("created_at", "id")
+    )
+    for instance in instances:
+        instance_id = str(instance.id)
+
+        def skip(state: str, reason: str, *, instance=instance, instance_id=instance_id) -> None:
+            scan.states[instance_id] = state
+            scan.problems[instance_id] = f"@{instance.username}: {reason}"
 
         if instance.mode != BotInstance.Mode.POLLING:
-            errors.append(
-                f"@{instance.username}: webhook mode is not supported by `runbot`."
-            )
+            skip(State.WEBHOOK, "webhook mode is not supported by `runbot`.")
             continue
-
         try:
             token = instance.token
-        except Exception as exc:
-            errors.append(
-                f"@{instance.username}: token cannot be decrypted "
-                f"({type(exc).__name__})."
-            )
+        except Exception as exc:  # noqa: BLE001 - any decryption failure is the same problem
+            skip(State.UNREADABLE_TOKEN, f"token cannot be decrypted ({type(exc).__name__}).")
             continue
-
         if BotInstance.is_placeholder_token(token):
-            errors.append(f"@{instance.username}: replace the seed placeholder token first.")
+            skip(State.PLACEHOLDER_TOKEN, "replace the seed placeholder token first.")
             continue
-
         if not BotInstance.looks_like_valid_token(token):
-            errors.append(f"@{instance.username}: token format looks invalid.")
+            skip(State.INVALID_TOKEN, "token format looks invalid.")
             continue
-
         duplicate_username = seen_tokens.get(token)
         if duplicate_username is not None:
-            errors.append(
-                f"@{instance.username}: token is duplicated with @{duplicate_username}."
-            )
+            skip(State.DUPLICATE_TOKEN, f"token is duplicated with @{duplicate_username}.")
             continue
         seen_tokens[token] = instance.username
-
-        configs.append(
+        scan.configs.append(
             BotRuntimeConfig(
                 partner_id=str(instance.partner_id),
-                bot_instance_id=str(instance.id),
+                bot_instance_id=instance_id,
                 username=instance.username,
                 token=token,
             )
         )
+        scan.states[instance_id] = (
+            State.RUNNING
+            if instance.partner.status == Partner.Status.ACTIVE
+            else State.RUNNING_SUSPENDED
+        )
+    return scan
 
+
+def load_active_bot_configs() -> list[BotRuntimeConfig]:
+    """All active bots, or an error if any of them cannot run.
+
+    The strict check for tools that need every bot (the load-test stand);
+    the bot service itself runs through ``scan_bot_configs``.
+    """
+
+    scan = scan_bot_configs()
+    errors = list(scan.problems.values())
+    errors.extend(
+        f"@{config.username}: partner is not active."
+        for config in scan.configs
+        if scan.states[config.bot_instance_id] == State.RUNNING_SUSPENDED
+    )
     if errors:
         raise BotRuntimeConfigError("\n".join(errors))
-
-    return configs
+    return scan.configs
 
 
 def register_runtime_configs(configs: list[BotRuntimeConfig]) -> None:

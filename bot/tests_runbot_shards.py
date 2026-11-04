@@ -9,7 +9,7 @@ two processes.
 
 import uuid
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase
@@ -71,31 +71,33 @@ def _active_bot(n: int) -> BotInstance:
     return bot
 
 
-@patch("bot.management.commands.runbot.close_old_connections", lambda: None)
 class RunbotShardTests(TestCase):
-    def test_shard_polls_only_its_own_bots(self):
+    """Which bots a process polls is the supervisor's job
+    (``bot/tests_supervisor.py``); the command passes its shard on."""
+
+    def _supervisor_kwargs(self, *args):
+        with patch("bot.management.commands.runbot.BotSupervisor") as supervisor:
+            supervisor.return_value.run = AsyncMock()
+            call_command("runbot", *args, stdout=StringIO(), stderr=StringIO())
+        return supervisor.call_args.kwargs
+
+    def test_shard_options_go_to_the_supervisor(self):
         for n in range(6):
             _active_bot(n)
-        polled: list[set[str]] = []
-        with patch("bot.management.commands.runbot.run_polling") as run_polling:
-            run_polling.return_value = None
-            for k in range(2):
-                call_command(
-                    "runbot", "--shard-index", str(k), "--shard-count", "2",
-                    stdout=StringIO(), stderr=StringIO(),
-                )
-                polled.append({c.username for c in run_polling.call_args.args[0]})
+        for k in range(2):
+            kwargs = self._supervisor_kwargs("--shard-index", str(k), "--shard-count", "2")
+            self.assertEqual((kwargs["shard_index"], kwargs["shard_count"]), (k, 2))
 
-        self.assertEqual(polled[0] | polled[1], {f"shard_bot_{n}" for n in range(6)})
-        self.assertEqual(polled[0] & polled[1], set())
-
-    def test_without_shard_options_every_bot_is_polled(self):
+    def test_without_shard_options_one_supervisor_polls_every_bot(self):
         for n in range(3):
             _active_bot(n)
-        with patch("bot.management.commands.runbot.run_polling") as run_polling:
-            run_polling.return_value = None
-            call_command("runbot", stdout=StringIO(), stderr=StringIO())
-        self.assertEqual(len(run_polling.call_args.args[0]), 3)
+        kwargs = self._supervisor_kwargs()
+        self.assertEqual((kwargs["shard_index"], kwargs["shard_count"]), (0, 1))
+
+    def test_a_shard_without_bots_is_an_error_without_wait(self):
+        _active_bot(0)  # id 1000: shard 0 of 2
+        with self.assertRaisesMessage(CommandError, "No active bot instances"):
+            self._supervisor_kwargs("--shard-index", "1", "--shard-count", "2")
 
     def test_shard_index_must_be_below_count(self):
         with self.assertRaisesMessage(CommandError, "--shard-index"):
@@ -114,7 +116,7 @@ class RunbotShardTests(TestCase):
         ):
             popen.return_value.poll.return_value = 1
             call_command(
-                "runbot", "--processes", "3", "--wait",
+                "runbot", "--processes", "3", "--wait", "--reload-interval", "20",
                 stdout=StringIO(), stderr=StringIO(),
             )
 
@@ -127,3 +129,4 @@ class RunbotShardTests(TestCase):
             )
             self.assertEqual(command[command.index("--shard-count") + 1], "3")
             self.assertIn("--wait", command)
+            self.assertEqual(command[command.index("--reload-interval") + 1], "20")

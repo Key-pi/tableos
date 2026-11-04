@@ -2878,6 +2878,10 @@ msgstr "Гість бачить мову свого Telegram, якщо її вв
 msgid "Токен"
 msgstr "Токен"
 
+#: apps/partners/admin.py apps/partners/models.py
+msgid "Состояние"
+msgstr "Стан"
+
 #: apps/partners/admin.py apps/partners/forms.py apps/partners/models.py
 msgid "Текст в каталоге"
 msgstr "Текст у каталозі"
@@ -3153,12 +3157,56 @@ msgid "Включён"
 msgstr "Увімкнено"
 
 #: apps/partners/models.py
+msgid "Ещё не проверен"
+msgstr "Ще не перевірено"
+
+#: apps/partners/models.py
+msgid "Работает: заведение приостановлено — бот отвечает, что работа приостановлена"
+msgstr "Працює: заклад призупинено — бот відповідає, що роботу призупинено"
+
+#: apps/partners/models.py
+msgid "Не запущен: демо-токен — вставьте настоящий токен из @BotFather"
+msgstr "Не запущено: демо-токен — вставте справжній токен з @BotFather"
+
+#: apps/partners/models.py
+msgid "Не запущен: токен с ошибкой — скопируйте его из @BotFather целиком"
+msgstr "Не запущено: токен з помилкою — скопіюйте його з @BotFather повністю"
+
+#: apps/partners/models.py
+msgid "Не запущен: токен не расшифровывается — сохраните его заново"
+msgstr "Не запущено: токен не розшифровується — збережіть його заново"
+
+#: apps/partners/models.py
+msgid "Не запущен: этот токен уже у другого бота"
+msgstr "Не запущено: цей токен уже в іншого бота"
+
+#: apps/partners/models.py
+msgid "Не запущен: Telegram не принимает токен — выпустите новый в @BotFather"
+msgstr "Не запущено: Telegram не приймає токен — випустіть новий у @BotFather"
+
+#: apps/partners/models.py
+msgid "Сбой: этот токен опрашивает ещё одна программа — остановите её"
+msgstr "Збій: цей токен опитує ще одна програма — зупиніть її"
+
+#: apps/partners/models.py
+msgid "Не запущен: режим webhook пока не поддерживается"
+msgstr "Не запущено: режим webhook поки не підтримується"
+
+#: apps/partners/models.py
+msgid "Состояние с"
+msgstr "Стан із"
+
+#: apps/partners/models.py
 msgid "бот"
 msgstr "бот"
 
 #: apps/partners/models.py apps/users/constants.py
 msgid "Боты"
 msgstr "Боти"
+
+#: apps/partners/models.py
+msgid "Выключен"
+msgstr "Вимкнено"
 
 #: apps/partners/models.py
 msgid "Категории и позиции. Нужен для заказов и быстрых продаж."
