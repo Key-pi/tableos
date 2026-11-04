@@ -396,7 +396,7 @@ msgstr "Гість рахунку"
 msgid "Визит"
 msgstr "Візит"
 
-#: apps/billing/models.py apps/notifications/models.py apps/orders/models.py apps/partners/models.py apps/tables/models.py apps/users/admin.py
+#: apps/billing/models.py apps/employees/models.py apps/notifications/models.py apps/orders/models.py apps/partners/models.py apps/tables/models.py apps/users/admin.py
 msgid "Статус"
 msgstr "Статус"
 
@@ -1720,6 +1720,38 @@ msgstr "Які робочі сповіщення працівник отриму
 msgid "Не привязан"
 msgstr "Не прив'язано"
 
+#: apps/employees/admin.py apps/employees/models.py apps/users/models.py
+msgid "Роль"
+msgstr "Роль"
+
+#: apps/employees/admin.py apps/employees/models.py
+msgid "Кто нажал"
+msgstr "Хто натиснув"
+
+#: apps/employees/admin.py
+msgid "Ссылка для сотрудника"
+msgstr "Посилання для працівника"
+
+#: apps/employees/admin.py
+msgid "Сначала добавьте бота в «Боты»."
+msgstr "Спершу додайте бота в «Боти»."
+
+#: apps/employees/admin.py
+msgid "Готово: {count}."
+msgstr "Готово: {count}."
+
+#: apps/employees/admin.py
+msgid "Подтвердить сотрудника"
+msgstr "Підтвердити працівника"
+
+#: apps/employees/admin.py
+msgid "Отклонить"
+msgstr "Відхилити"
+
+#: apps/employees/admin.py
+msgid "Отменить ссылку"
+msgstr "Скасувати посилання"
+
 #: apps/employees/apps.py apps/employees/models.py apps/users/constants.py
 msgid "Сотрудники"
 msgstr "Працівники"
@@ -1743,6 +1775,50 @@ msgstr "Лише суперкористувач може змінювати гл
 #: apps/employees/forms.py
 msgid "Для уведомлений в боте нужен Telegram ID."
 msgstr "Для сповіщень у боті потрібен Telegram ID."
+
+#: apps/employees/invites.py
+msgid "Нет права приглашать сотрудника с этой ролью."
+msgstr "Немає права запрошувати працівника з цією роллю."
+
+#: apps/employees/invites.py
+msgid "Ссылка-приглашение не найдена."
+msgstr "Посилання-запрошення не знайдено."
+
+#: apps/employees/invites.py
+msgid "Это приглашение отменено. Попросите новую ссылку."
+msgstr "Це запрошення скасовано. Попросіть нове посилання."
+
+#: apps/employees/invites.py
+msgid "Эта ссылка уже использована. Попросите новую."
+msgstr "Це посилання вже використано. Попросіть нове."
+
+#: apps/employees/invites.py
+msgid "Вы уже сотрудник этого заведения."
+msgstr "Ви вже працівник цього закладу."
+
+#: apps/employees/invites.py
+msgid "Ссылка устарела. Попросите новую."
+msgstr "Посилання застаріло. Попросіть нове."
+
+#: apps/employees/invites.py
+msgid "По этому приглашению уже решено."
+msgstr "Щодо цього запрошення вже вирішено."
+
+#: apps/employees/invites.py
+msgid "По этой ссылке ещё никто не пришёл."
+msgstr "За цим посиланням ще ніхто не прийшов."
+
+#: apps/employees/invites.py
+msgid "Подтвердить может тот, кто выдал ссылку, или владелец."
+msgstr "Підтвердити може той, хто видав посилання, або власник."
+
+#: apps/employees/invites.py
+msgid "Это бывший владелец: восстановите его в Admin."
+msgstr "Це колишній власник: відновіть його в Admin."
+
+#: apps/employees/invites.py
+msgid "Отменить может тот, кто выдал ссылку, или владелец."
+msgstr "Скасувати може той, хто видав посилання, або власник."
 
 #: apps/employees/models.py apps/users/models.py
 msgid "Пользователь"
@@ -1803,6 +1879,62 @@ msgstr "Прибирати позиції, скасовувати замовле
 #: apps/employees/models.py
 msgid "сотрудник"
 msgstr "працівник"
+
+#: apps/employees/models.py
+msgid "Ждёт нажатия ссылки"
+msgstr "Чекає натискання посилання"
+
+#: apps/employees/models.py
+msgid "Ждёт подтверждения"
+msgstr "Чекає підтвердження"
+
+#: apps/employees/models.py
+msgid "Принято"
+msgstr "Прийнято"
+
+#: apps/employees/models.py
+msgid "Отклонено"
+msgstr "Відхилено"
+
+#: apps/employees/models.py bot/handlers/staff.py
+msgid "Отменено"
+msgstr "Скасовано"
+
+#: apps/employees/models.py
+msgid "Код"
+msgstr "Код"
+
+#: apps/employees/models.py
+msgid "Выдал"
+msgstr "Видав"
+
+#: apps/employees/models.py
+msgid "Действует до"
+msgstr "Діє до"
+
+#: apps/employees/models.py
+msgid "Нажал"
+msgstr "Натиснув"
+
+#: apps/employees/models.py
+msgid "Решил"
+msgstr "Вирішив"
+
+#: apps/employees/models.py
+msgid "Решено"
+msgstr "Вирішено"
+
+#: apps/employees/models.py apps/notifications/models.py
+msgid "Сотрудник"
+msgstr "Працівник"
+
+#: apps/employees/models.py
+msgid "приглашение сотрудника"
+msgstr "запрошення працівника"
+
+#: apps/employees/models.py
+msgid "Приглашения сотрудников"
+msgstr "Запрошення працівників"
 
 #: apps/menu/apps.py apps/partners/models.py apps/users/constants.py
 msgid "Меню"
@@ -1955,10 +2087,6 @@ msgstr "Надіслано"
 #: apps/notifications/models.py
 msgid "Не доставлено"
 msgstr "Не доставлено"
-
-#: apps/notifications/models.py
-msgid "Сотрудник"
-msgstr "Працівник"
 
 #: apps/notifications/models.py
 msgid "Тема"
@@ -3989,10 +4117,6 @@ msgid "Контент-менеджер"
 msgstr "Контент-менеджер"
 
 #: apps/users/models.py
-msgid "Роль"
-msgstr "Роль"
-
-#: apps/users/models.py
 msgid "Язык бота персонала и Admin для этого пользователя. Пусто — по умолчанию."
 msgstr "Мова бота персоналу й Admin для цього користувача. Порожньо — за замовчуванням."
 
@@ -5885,10 +6009,6 @@ msgid "Черновик быстрой продажи отменён."
 msgstr "Чернетку швидкого продажу скасовано."
 
 #: bot/handlers/staff.py
-msgid "Отменено"
-msgstr "Скасовано"
-
-#: bot/handlers/staff.py
 msgid "Позиции очищены"
 msgstr "Позиції очищено"
 
@@ -5936,7 +6056,7 @@ msgstr "Позицій: {items_count}"
 msgid "➕ Новая продажа"
 msgstr "➕ Новий продаж"
 
-#: bot/handlers/staff.py bot/keyboards/staff.py
+#: bot/handlers/staff.py bot/handlers/staff_invites.py bot/keyboards/staff.py
 msgid "← Рабочий режим"
 msgstr "← Робочий режим"
 
@@ -6021,6 +6141,82 @@ msgstr "Напишіть коментар до зміни рахунку одн�
 #: bot/handlers/staff.py
 msgid "Комментарий сохранён в истории счёта."
 msgstr "Коментар збережено в історії рахунку."
+
+#: bot/handlers/staff_invites.py
+msgid "Приглашать сотрудников может владелец или менеджер."
+msgstr "Запрошувати працівників може власник або менеджер."
+
+#: bot/handlers/staff_invites.py
+msgid ""
+"<b>Пригласить сотрудника</b>\n"
+"С какой ролью? Ссылка будет одноразовой и проработает 24 часа."
+msgstr ""
+"<b>Запросити працівника</b>\n"
+"З якою роллю? Посилання буде одноразовим і діятиме 24 години."
+
+#: bot/handlers/staff_invites.py
+msgid "Приглашение в команду «{partner_name}»"
+msgstr "Запрошення в команду «{partner_name}»"
+
+#: bot/handlers/staff_invites.py
+msgid ""
+"<b>Приглашение: {role}</b>\n"
+"Отправьте эту ссылку сотруднику:\n"
+"{link}\n"
+"\n"
+"Ссылка одноразовая и действует 24 часа. Когда сотрудник нажмёт «Start», я пришлю вам кнопки «Подтвердить» и «Отклонить»."
+msgstr ""
+"<b>Запрошення: {role}</b>\n"
+"Надішліть це посилання працівнику:\n"
+"{link}\n"
+"\n"
+"Посилання одноразове й діє 24 години. Коли працівник натисне «Start», я надішлю вам кнопки «Підтвердити» і «Відхилити»."
+
+#: bot/handlers/staff_invites.py
+msgid "📤 Переслать ссылку"
+msgstr "📤 Переслати посилання"
+
+#: bot/handlers/staff_invites.py
+msgid ""
+"👥 <b>Новый сотрудник</b>\n"
+"{person} хочет в команду: {role}.\n"
+"Подтвердить? Без подтверждения рабочего режима не будет."
+msgstr ""
+"👥 <b>Новий працівник</b>\n"
+"{person} хоче в команду: {role}.\n"
+"Підтвердити? Без підтвердження робочого режиму не буде."
+
+#: bot/handlers/staff_invites.py
+msgid "✅ Подтвердить"
+msgstr "✅ Підтвердити"
+
+#: bot/handlers/staff_invites.py
+msgid "✖ Отклонить"
+msgstr "✖ Відхилити"
+
+#: bot/handlers/staff_invites.py
+msgid "Заявка отправлена: {role} в «{partner_name}». Как только её подтвердят, я напишу здесь, и внизу появится кнопка рабочего режима."
+msgstr "Заявку надіслано: {role} у «{partner_name}». Щойно її підтвердять, я напишу тут, і внизу з’явиться кнопка робочого режиму."
+
+#: bot/handlers/staff_invites.py
+msgid ""
+"Готово: вы в команде «{partner_name}» — {role}.\n"
+"Рабочий режим — кнопка «{button_staff_label}» внизу."
+msgstr ""
+"Готово: ви в команді «{partner_name}» — {role}.\n"
+"Робочий режим — кнопка «{button_staff_label}» внизу."
+
+#: bot/handlers/staff_invites.py
+msgid "Заявку в команду «{partner_name}» отклонили."
+msgstr "Заявку в команду «{partner_name}» відхилили."
+
+#: bot/handlers/staff_invites.py
+msgid "✅ {person} теперь в команде: {role}."
+msgstr "✅ {person} тепер у команді: {role}."
+
+#: bot/handlers/staff_invites.py
+msgid "✖ Заявка {person} отклонена."
+msgstr "✖ Заявку {person} відхилено."
 
 #: bot/handlers/staff_refunds.py
 msgid "<b>Возврат по заказу #{public_id}</b>"
@@ -6323,6 +6519,10 @@ msgstr "← До сповіщень"
 #: bot/keyboards/staff.py
 msgid "Открытые заказы"
 msgstr "Відкриті замовлення"
+
+#: bot/keyboards/staff.py
+msgid "👥 Пригласить сотрудника"
+msgstr "👥 Запросити працівника"
 
 #: bot/keyboards/staff.py
 msgid "Обновить сводку"

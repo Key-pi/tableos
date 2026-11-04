@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from asgiref.sync import sync_to_async
 
 from apps.analytics.sources import parse_source_payload, record_source_visit
+from apps.employees.invites import parse_invite_payload
 from apps.employees.models import EmployeeProfile
 from apps.employees.selectors import get_staff_employee_by_telegram
 from apps.orders.models import Order
@@ -22,6 +23,7 @@ from apps.tables.services import (
 )
 from apps.users.services import get_or_create_guest_profile_with_created
 from bot.handlers.menu import choose_way_buttons
+from bot.handlers.staff_invites import handle_invite_start
 from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.session import build_visit_choice_keyboard
 from bot.services.content import BotContent
@@ -46,6 +48,11 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
         language_code=message.from_user.language_code or "",
     )
     payload = (command.args or "").strip()
+    invite_code = parse_invite_payload(payload)
+    if invite_code is not None:
+        # A staff invite link (`inv_<code>`, PQ-046) instead of a greeting.
+        await handle_invite_start(message, bot, partner, invite_code)
+        return
     if parse_source_payload(payload) is not None:
         # A traffic-source link (`src_<code>`): count it and greet as usual.
         await sync_to_async(record_source_visit)(
