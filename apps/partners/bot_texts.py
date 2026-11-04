@@ -33,6 +33,8 @@ BUTTON_TEXTS = {
     "button_my_profile": N_("Мой профиль"),
     "button_call_staff_label": N_("Позвать персонал"),
     "button_request_bill_label": N_("Запросить счёт"),
+    # Only employees of the venue see it: opens the work mode (/staff).
+    "button_staff_label": N_("🧑‍🍳 Рабочий режим"),
 }
 # Inline buttons: may repeat a reply button, never empty.
 INLINE_BUTTON_TEXTS = {

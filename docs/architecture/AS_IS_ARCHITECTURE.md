@@ -206,6 +206,19 @@ apps.notifications.tasks` — цикл, разорванный только им
    проверяет нужное право (`_can_manage_billing`, `_can_view_tables`,
    `_ensure_open_orders_allowed`, `_ensure_quick_sale_allowed`). Права
    сочетают `User.role` с флагами модулей партнёра.
+6. Экраны персонала (PQ-044): в рабочий режим ведут `/staff` и кнопка
+   «🧑‍🍳 Рабочий режим» на клавиатуре (`GuestAction.STAFF` — только
+   активному сотруднику заведения, `bot/services/navigation.py`). Каждый
+   раздел — одно сообщение, которое меняется на месте: список заказов,
+   уведомлений, столов, счетов по 8 строк со страницами
+   (`bot/keyboards/staff.py:page_slice`, `pager_row`, callback
+   `<раздел>:p:<n>`), карточка открывается по нажатию и ведёт назад
+   («← К заказам», «← К счетам», `staffhome`). Гость в карточках —
+   `GuestProfile.staff_label` (имя, @username, код), не Telegram ID. У
+   нового заказа с переводом заранее в списке «💳 Проверить оплату», а не
+   «Взять в работу». Уведомление о смене статуса не приходит сотруднику,
+   который её сделал (`_create_staff_notifications_for_status_change`,
+   `actor_user`).
 
 Все сообщения бота отправляются в `ParseMode.HTML` (свойства бота по
 умолчанию в `bot/main.py` и `notifications/services.py:_send_telegram_messages`).
@@ -505,7 +518,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 625 тестов после пути гостя (AA-049), зелёные на SQLite и на
+- 643 теста после экранов персонала (AA-050), зелёные на SQLite и на
   PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

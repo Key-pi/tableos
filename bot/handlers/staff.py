@@ -1,13 +1,21 @@
 import re
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from aiogram import Bot, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, ForceReply, Message
+from aiogram.types import (
+    CallbackQuery,
+    ForceReply,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 from asgiref.sync import sync_to_async
+from django.core.exceptions import ValidationError
 from django.db.models import Count
 from django.utils import timezone
 
@@ -91,6 +99,7 @@ from apps.tables.services import (
     close_table_session_if_settled,
     close_table_visit,
 )
+from bot.filters.content import PartnerButtonFilter
 from bot.keyboards.staff import (
     DELIVERY_STATUS_LABELS,
     SHIPPING_STATUS_LABELS,
@@ -116,6 +125,7 @@ from bot.keyboards.staff import (
     build_staff_table_actions_keyboard,
     build_staff_tables_overview_keyboard,
     build_staff_transfer_reject_confirm_keyboard,
+    page_slice,
 )
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
@@ -141,25 +151,29 @@ async def _safe_edit_message_text(
     return True
 
 
-def _render_open_orders_summary(orders) -> str:
+def _render_open_orders_summary(orders, *, page: int = 0, pages: int = 1) -> str:
     if not orders:
-        return _("Открытых заказов сейчас нет.")
+        return _("<b>Открытые заказы</b>\nСейчас открытых заказов нет.")
 
     total_amount = sum(order.total_amount for order in orders)
     new_orders_count = sum(1 for order in orders if order.status == Order.Status.NEW)
-    in_progress_count = len(orders) - new_orders_count
     unpaid_count = sum(1 for order in orders if not is_order_paid(order))
-    unreceived_count = sum(1 for order in orders if not is_order_received(order))
     lines = [
-        _("<b>Открытые заказы</b>"),
-        _("Всего заказов: {count}", count=len(orders)),
-        _("Сумма в работе: {total_amount} грн", total_amount=total_amount),
-        _("Новых: {new_orders_count}", new_orders_count=new_orders_count),
-        _("В работе: {in_progress_count}", in_progress_count=in_progress_count),
-        _("Не оплачено: {unpaid_count}", unpaid_count=unpaid_count),
-        _("Не получено: {unreceived_count}", unreceived_count=unreceived_count),
-        _("Выберите заказ кнопками ниже."),
+        _(
+            "<b>Открытые заказы</b> · {count} на {total_amount} грн",
+            count=len(orders),
+            total_amount=total_amount,
+        ),
+        _(
+            "Новых: {new_orders_count} · в работе: {in_progress_count} · не оплачено: "
+            "{unpaid_count}",
+            new_orders_count=new_orders_count,
+            in_progress_count=len(orders) - new_orders_count,
+            unpaid_count=unpaid_count,
+        ),
     ]
+    if pages > 1:
+        lines.append(_("Страница {page} из {pages}", page=page + 1, pages=pages))
     return "\n".join(lines)
 
 
@@ -225,15 +239,22 @@ def _order_context_label(order: Order) -> str:
 
 def _order_actions_keyboard(order: Order):
     is_shipping = order.channel == Order.Channel.SHIPPING
+    unpaid_on_receipt = awaits_payment_on_receipt(order)
+    # A delivery is paid to the courier (PQ-044): payment and «гость не забрал»
+    # appear from «В пути» on; before that «Отменить» still returns bonuses.
+    courier_has_it = (
+        order.channel != Order.Channel.DELIVERY or order.status == Order.Status.DELIVERING
+    )
     return build_staff_order_actions_keyboard(
         order_public_id=order.public_id,
         available_statuses=get_available_staff_actions(order.status, channel=order.channel),
         transfer_check_pending=awaits_transfer_check(order),
-        receipt_payment_pending=awaits_payment_on_receipt(order),
+        receipt_payment_pending=unpaid_on_receipt and courier_has_it,
         cash_on_delivery=is_shipping,
         ship_needs_tracking=is_shipping and order.status == Order.Status.READY,
         status_labels=_status_labels(order),
         can_refund=order.paid_at is not None and order.status != Order.Status.CANCELED,
+        cancel_unpaid=unpaid_on_receipt and not courier_has_it,
     )
 
 
@@ -275,46 +296,47 @@ def _order_short_context_label(order: Order) -> str:
     if order.channel == Order.Channel.SHIPPING:
         return _("Почта")
     if order.table_id is not None:
-        return f"T{order.table.number}"
+        return _("Стол {number}", number=order.table.number)
     return _("Вне стола")
 
 
 def _render_order_card(order: Order) -> str:
-    items_text = ", ".join(
-        f"{escape_html(item.item_name)} x{item.quantity}" for item in order.items.all()
-    )
-    guest_label = order.guest.telegram_account.username or order.guest.telegram_account.telegram_id
-    comment_text = order.comment or _("Без комментария")
-    assignee_label = _employee_label(order.assigned_employee) or _("Пока не назначен")
-    payment_label = _order_payment_label(order)
-    received_label = _("Получен") if is_order_received(order) else _("Не получен")
-    return (
+    lines = [
         _(
-            "<b>Заказ #{public_id}</b>\n"
-            "{order_context}\n"
-            "Гость: {guest}\n"
-            "Ответственный: {assignee}\n"
-            "Статус: {status}\n"
-            "Оплата: {payment}\n"
-            "Получение: {received}\n"
-            "Сумма: {total_amount} грн\n"
-            "Позиции: {items_text}\n"
-            "Комментарий: {comment_text}",
+            "<b>Заказ #{public_id}</b> · {status}",
             public_id=order.public_id,
-            order_context=_order_context_label(order),
-            guest=escape_html(guest_label),
-            assignee=escape_html(assignee_label),
             status=order.get_status_display(),
-            payment=payment_label,
-            received=received_label,
+        ),
+        _order_context_label(order),
+        _("Гость: {guest}", guest=escape_html(order.guest.staff_label())),
+        "",
+    ]
+    lines.extend(
+        _(
+            "• {item_name} × {quantity}",
+            item_name=escape_html(item.item_name),
+            quantity=item.quantity,
+        )
+        for item in order.items.all()
+    )
+    lines.append(
+        _(
+            "Сумма: <b>{total_amount} грн</b> · оплата: {payment}",
             total_amount=order.total_amount,
-            items_text=items_text or '-',
-            comment_text=escape_html(comment_text),
+            payment=_order_payment_label(order),
         )
     )
+    if order.comment:
+        lines.append(_("Комментарий: {comment}", comment=escape_html(order.comment)))
+    assignee = _employee_label(order.assigned_employee)
+    if assignee:
+        lines.append(_("Взял в работу: {assignee}", assignee=escape_html(assignee)))
+    if is_order_received(order) and order.status != Order.Status.COMPLETED:
+        lines.append(_("Гость подтвердил получение"))
+    return "\n".join(lines)
 
 
-def _build_order_shortcuts(orders: list[Order]) -> list[tuple[str, str, bool]]:
+def _build_order_shortcuts(orders: list[Order]) -> list[tuple[str, str, str]]:
     short_status_labels = {
         Order.Status.NEW: _("Новый"),
         Order.Status.ACCEPTED: _("В работе"),
@@ -323,48 +345,83 @@ def _build_order_shortcuts(orders: list[Order]) -> list[tuple[str, str, bool]]:
         Order.Status.DELIVERING: _("Несут"),
         Order.Status.COMPLETED: _("Получен"),
     }
-    shortcuts: list[tuple[str, str, bool]] = []
-    for order in orders[:8]:
+    shortcuts: list[tuple[str, str, str]] = []
+    for order in orders:
         payment_badge = _("не опл.") if not is_order_paid(order) else _("опл.")
         label = (
             f"#{order.public_id} • {_order_short_context_label(order)} • "
             f"{short_status_labels.get(order.status, order.get_status_display())} • {payment_badge}"
         )
-        shortcuts.append(
-            (
-                order.public_id,
-                label,
-                order.status == Order.Status.NEW,
-            )
-        )
+        action = ""
+        if order.status == Order.Status.NEW:
+            # A prepaid order goes into work only after the transfer is checked.
+            action = "check" if awaits_transfer_check(order) else "accept"
+        shortcuts.append((order.public_id, label, action))
     return shortcuts
 
 
-def _render_staff_notifications(notifications) -> str:
-    if not notifications:
-        return _("Новых внутренних уведомлений нет.")
+NOTIFICATION_ICONS = {
+    StaffNotification.Category.ORDER_CREATED: "🆕",
+    StaffNotification.Category.ORDER_STATUS_CHANGED: "🔄",
+    StaffNotification.Category.GUEST_CALL: "🙋",
+    StaffNotification.Category.BILLING_REQUEST: "🧾",
+    StaffNotification.Category.TABLE_VISIT: "🪑",
+    StaffNotification.Category.SECURITY: "🔒",
+}
 
-    return (
+
+def _render_staff_notifications(notifications, *, page: int = 0, pages: int = 1) -> str:
+    if not notifications:
+        return _("<b>Уведомления персоналу</b>\nНовых уведомлений нет.")
+    lines = [
         _(
-            "<b>Уведомления персоналу</b>\n"
-            "Новых уведомлений: {count}\n"
-            "Карточки уведомлений отправлены ниже.",
+            "<b>Уведомления персоналу</b> · непрочитанных: {count}",
             count=len(notifications),
-        )
-    )
+        ),
+        _("Нажмите на уведомление, чтобы открыть его."),
+    ]
+    if pages > 1:
+        lines.append(_("Страница {page} из {pages}", page=page + 1, pages=pages))
+    return "\n".join(lines)
+
+
+def _notification_row_label(notification) -> str:
+    icon = NOTIFICATION_ICONS.get(notification.category, "•")
+    local = timezone.localtime(notification.created_at, ZoneInfo(notification.partner.timezone))
+    return f"{icon} {local:%H:%M} {notification.title}"
 
 
 def _render_staff_notification_card(notification) -> str:
-    order_label = f"#{notification.order.public_id}" if notification.order_id else "-"
-    return (
-        _(
-            "<b>{title}</b>\n"
-            "{message}\n"
-            "Заказ: {order}",
-            title=escape_html(notification.title),
-            message=escape_html(notification.message),
-            order=order_label,
-        )
+    return _(
+        "<b>{title}</b>\n{message}",
+        title=escape_html(notification.title),
+        message=escape_html(notification.message),
+    )
+
+
+def _notification_order_action(notification) -> str:
+    """What a new-order notification offers: take it into work, check the
+    transfer first, or nothing once the order has moved on."""
+
+    if not notification.order_id or notification.order.status != Order.Status.NEW:
+        return ""
+    return "check" if awaits_transfer_check(notification.order) else "accept"
+
+
+def _notification_item_keyboard(notification, *, page: int | None = None):
+    action = _notification_order_action(notification)
+    return build_staff_notification_item_keyboard(
+        notification_id=str(notification.id),
+        category=(
+            notification.category
+            if action
+            else StaffNotification.Category.ORDER_STATUS_CHANGED
+            if notification.order_id
+            else notification.category
+        ),
+        order_public_id=notification.order.public_id if notification.order_id else None,
+        page=page,
+        order_action=action,
     )
 
 
@@ -497,17 +554,19 @@ def _render_day_report(report) -> str:
                     revenue=item['revenue'],
                 )
             )
-    lines.extend(["", _("<b>Методы оплаты</b>")])
+    method_lines = []
     for method, amount in report.payment_method_totals.items():
         count = report.payment_method_counts.get(method, 0)
         if amount <= 0 and count == 0:
             continue
-        lines.append(_(
+        method_lines.append(_(
             "• {method}: {amount} грн ({count})",
             method=method,
             amount=amount,
             count=count,
         ))
+    if method_lines:
+        lines.extend(["", _("<b>Методы оплаты</b>"), *method_lines])
 
     if report.staff_breakdown:
         lines.extend(["", _("<b>По сотрудникам</b>")])
@@ -530,7 +589,7 @@ def _render_report_section(page_result) -> str:
         "bills": _("Счета дня"),
         "walkins": _("Быстрые продажи"),
         "tables": _("Столы за день"),
-        "tails": _("Хвосты"),
+        "tails": _("Не закрыто"),
     }
     lines = [
         f"<b>{titles.get(page_result.section, _('Журнал дня'))}</b>",
@@ -715,28 +774,34 @@ def _render_report_table_detail(detail) -> str:
 
 
 def _guest_label(guest) -> str:
-    telegram_account = getattr(guest, "telegram_account", None)
-    if telegram_account and telegram_account.username:
-        return f"@{telegram_account.username}"
-    if telegram_account:
-        return str(telegram_account.telegram_id)
-    return guest.customer_code
+    return guest.staff_label()
 
 
-def _render_billing_overview(requests, bills, unbilled_orders) -> str:
-    off_table_unbilled_count = sum(1 for order in unbilled_orders if order.table_id is None)
+def _bill_place_label(bill: Bill) -> str:
+    """Where the bill is from: a table, or the remote order it pays."""
+
+    if bill.table_id is not None:
+        return _("стол {number}", number=bill.table.number)
+    if bill.label:
+        return bill.label
+    return get_bill_context_label(bill)
+
+
+def _render_billing_overview(requests, bills, unbilled_orders, *, page=0, pages=1) -> str:
+    if not (requests or bills or unbilled_orders):
+        return _("<b>Счета и оплаты</b>\nОткрытых счетов и запросов нет.")
     lines = [
         _("<b>Счета и оплаты</b>"),
-        _("Открытых запросов счёта: {count}", count=len(requests)),
-        _("Открытых счетов: {count}", count=len(bills)),
-        _("Неоплаченных заказов без счёта: {count}", count=len(unbilled_orders)),
+        _(
+            "Запросов счёта: {requests} · открытых счетов: {bills} · заказов без счёта: "
+            "{unbilled}",
+            requests=len(requests),
+            bills=len(bills),
+            unbilled=len(unbilled_orders),
+        ),
     ]
-    if off_table_unbilled_count:
-        lines.append(_(
-            "Из них без привязки к столу: {off_table_unbilled_count}",
-            off_table_unbilled_count=off_table_unbilled_count,
-        ))
-    lines.append(_("Ниже заказы без счёта и карточки для работы."))
+    if pages > 1:
+        lines.append(_("Страница {page} из {pages}", page=page + 1, pages=pages))
     return "\n".join(lines)
 
 
@@ -783,16 +848,20 @@ def _build_active_table_shortcuts(
             (
                 # ⚠: several open visits at one table need staff attention (ADR-0007).
                 _(
-                    "{value}Стол {table_number} • гостей {count} • без счёта {unbilled_orders}",
+                    "{value}Стол {table_number} • гостей {count}",
                     value='⚠ ' if (visit_counts or {}).get(table_id, (0, 0))[1] > 1 else '',
                     table_number=data['table_number'],
                     count=len(data['guest_ids']),
-                    unbilled_orders=data['unbilled_orders'],
+                )
+                + (
+                    _(" • без счёта {unbilled_orders}", unbilled_orders=data['unbilled_orders'])
+                    if data['unbilled_orders']
+                    else ""
                 )
             ),
         )
         for table_id, data in sorted(tables_map.items(), key=lambda item: item[1]["table_number"])
-    ][:8]
+    ]
 
 
 def _build_unbilled_order_shortcuts(orders: list[Order]) -> list[tuple[str, str, str | None]]:
@@ -803,7 +872,7 @@ def _build_unbilled_order_shortcuts(orders: list[Order]) -> list[tuple[str, str,
         if order.status in {Order.Status.READY, Order.Status.DELIVERING, Order.Status.COMPLETED}
     ]
     source_orders = prioritized_orders or orders
-    for order in source_orders[:8]:
+    for order in source_orders:
         short_status_label = (
             _("Получен")
             if order.status == Order.Status.COMPLETED
@@ -848,9 +917,13 @@ def _render_table_card(
     if active_sessions:
         guest_lines = []
         for session in active_sessions[:4]:
+            started = timezone.localtime(session.started_at, ZoneInfo(table.partner.timezone))
             guest_lines.append(
-                f"• {escape_html(_guest_label(session.guest))} c "
-                f"{session.started_at.strftime('%H:%M')}"
+                _(
+                    "• {guest} — с {started:%H:%M}",
+                    guest=escape_html(_guest_label(session.guest)),
+                    started=started,
+                )
             )
         lines.extend(["", _("Гости:")] + guest_lines)
     if visits:
@@ -876,10 +949,7 @@ def _render_tables_overview(active_sessions, unbilled_orders) -> str:
     table_shortcuts = _build_active_table_shortcuts(active_sessions, unbilled_orders)
     return (
         _(
-            "<b>Активные столы</b>\n"
-            "Столов в работе: {count}\n"
-            "Активных гостей: {count2}\n"
-            "Выберите стол кнопками ниже.",
+            "<b>Столы</b> · занято: {count}, гостей: {count2}",
             count=len(table_shortcuts),
             count2=len(active_sessions),
         )
@@ -890,9 +960,9 @@ def _build_session_close_actions(active_sessions) -> list[tuple[str, str]]:
     actions: list[tuple[str, str]] = []
     for session in active_sessions[:6]:
         can_close, _reason = can_close_table_session(session)
-        label = _("Закрыть {guest}", guest=_guest_label(session.guest))
+        label = _("Гость ушёл: {guest}", guest=_guest_label(session.guest))
         if not can_close:
-            label = _("Проверить {guest}", guest=_guest_label(session.guest))
+            label = _("Гость ушёл? {guest} — не рассчитан", guest=_guest_label(session.guest))
         actions.append((str(session.id), label))
     return actions
 
@@ -903,32 +973,28 @@ def _render_billing_request_card(billing_request: BillingRequest) -> str:
         BillingRequest.RequestType.SHARED: _("Счёт на весь стол"),
         BillingRequest.RequestType.CUSTOM_SPLIT: _("Нестандартное разделение"),
     }
-    request_type_label = request_type_labels.get(
-        billing_request.request_type,
-        billing_request.request_type,
-    )
-    linked_bill = (
-        f"#{billing_request.bill.public_id}"
-        if billing_request.bill_id and billing_request.bill
-        else _("ещё не подготовлен")
-    )
-    return (
+    lines = [
+        _("<b>Стол #{number} просит счёт</b>", number=billing_request.table.number),
+        _("Гость: {guest}", guest=escape_html(_guest_label(billing_request.guest))),
         _(
-            "<b>Запрос счёта</b>\n"
-            "Стол: #{number}\n"
-            "Гость: {guest}\n"
-            "Тип: {request_type}\n"
-            "Статус: {status}\n"
-            "Счёт: {linked_bill}\n"
-            "Комментарий: {note}",
-            number=billing_request.table.number,
-            guest=escape_html(_guest_label(billing_request.guest)),
-            request_type=request_type_label,
+            "{request_type} · {status}",
+            request_type=request_type_labels.get(
+                billing_request.request_type, billing_request.request_type
+            ),
             status=billing_request.get_status_display(),
-            linked_bill=linked_bill,
-            note=escape_html(billing_request.note) or _('без комментария'),
+        ),
+    ]
+    if billing_request.bill_id and billing_request.bill:
+        lines.append(
+            _(
+                "Счёт #{public_id} на {total} грн — откройте его, чтобы принять оплату.",
+                public_id=billing_request.bill.public_id,
+                total=billing_request.bill.total_amount,
+            )
         )
-    )
+    if billing_request.note:
+        lines.append(_("Комментарий: {note}", note=escape_html(billing_request.note)))
+    return "\n".join(lines)
 
 
 def _render_bill_card(bill: Bill) -> str:
@@ -941,25 +1007,55 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
     guest_label = _guest_label(bill.primary_guest) if bill.primary_guest_id else _(
         "несколько гостей",
     )
-    bonus_hint = ""
-    can_pay_with_bonuses = False
+    is_open = bill.status not in {Bill.Status.CANCELED, Bill.Status.PAID}
     active_items = [item for item in bill.items.all() if item.is_active]
     removed_count = sum(1 for item in bill.items.all() if not item.is_active)
-    item_lines = [
+    lines = [
         _(
-            "• {item_name} x{quantity} = {line_total} грн",
+            "<b>Счёт #{public_id}</b> · {place}",
+            public_id=bill.public_id,
+            place=escape_html(_bill_place_label(bill)),
+        ),
+        _(
+            "{status} · {kind} · гость: {guest}",
+            status=bill.get_status_display(),
+            kind=bill.get_kind_display().lower(),
+            guest=escape_html(guest_label),
+        ),
+        "",
+    ]
+    lines.extend(
+        _(
+            "• {item_name} × {quantity} — {line_total} грн",
             item_name=escape_html(item.item_name),
             quantity=item.quantity,
             line_total=item.line_total,
         )
         for item in active_items[:8]
-    ]
+    )
+    if len(active_items) > 8:
+        lines.append(_("… и ещё позиций: {count}", count=len(active_items) - 8))
     if removed_count:
-        item_lines.append(_(
-            "Убрано позиций: {removed_count} (см. историю счёта)",
-            removed_count=removed_count,
-        ))
-    if bill.primary_guest_id:
+        lines.append(
+            _("Убрано позиций: {removed_count} (см. историю счёта)", removed_count=removed_count)
+        )
+    lines.append("")
+    lines.append(_("Сумма: <b>{total_amount} грн</b>", total_amount=bill.total_amount))
+    if bill.paid_amount:
+        lines.append(_("Оплачено: {paid_amount} грн", paid_amount=bill.paid_amount))
+    if bill.bonus_spent_amount:
+        lines.append(
+            _(
+                "Из них бонусами: {bonus_spent_amount} грн",
+                bonus_spent_amount=bill.bonus_spent_amount,
+            )
+        )
+    if is_open:
+        lines.append(
+            _("К оплате: <b>{remaining_amount} грн</b>", remaining_amount=remaining_amount)
+        )
+    can_pay_with_bonuses = False
+    if bill.primary_guest_id and is_open and not bill.bonus_spent_amount and not bill.paid_amount:
         redeemable_amount = (
             get_redeemable_bonus_amount(
                 partner_id=bill.partner_id,
@@ -970,61 +1066,18 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
             else Decimal("0.00")
         )
         can_pay_with_bonuses = redeemable_amount > 0
-        bonus_hint = (
-            _(
-                "\n"
-                "Оплачено бонусами: {bonus_spent_amount} грн",
-                bonus_spent_amount=bill.bonus_spent_amount,
-            )
-            + (
+        if can_pay_with_bonuses:
+            lines.append(
                 _(
-                    "\n"
-                    "Можно оплатить бонусами: {redeemable_amount} грн",
+                    "У гостя {loyalty_balance} бонусов — можно списать до {redeemable_amount} "
+                    "грн (1 бонус = 1 грн).",
+                    loyalty_balance=bill.primary_guest.loyalty_balance,
                     redeemable_amount=redeemable_amount,
                 )
-                if bill.bonus_spent_amount == 0
-                else ""
             )
-            + _(
-                "\n"
-                "Баланс гостя: {loyalty_balance} бонусов (1 бонус = 1 грн)",
-                loyalty_balance=bill.primary_guest.loyalty_balance,
-            )
-        )
-    if bill.bonus_spent_amount > 0 or bill.paid_amount > 0:
-        can_pay_with_bonuses = False
-    if bill.status in {Bill.Status.CANCELED, Bill.Status.PAID}:
-        can_pay_with_bonuses = False
-
-    bill_text = (
-        _(
-            "<b>Счёт #{public_id}</b>\n"
-            "Контекст: {bill_context}\n"
-            "Гость: {guest}\n"
-            "Тип: {kind}\n"
-            "Статус: {status}\n"
-            "Заказов в счёте: {count}\n"
-            "Сумма: {total_amount} грн\n"
-            "Оплачено: {paid_amount} грн\n"
-            "Остаток: {remaining_amount} грн\n"
-            "Комментарий: {label}\n"
-            "Позиции:\n"
-            "{item_lines}{bonus_hint}",
-            public_id=bill.public_id,
-            bill_context=escape_html(get_bill_context_label(bill)),
-            guest=escape_html(guest_label),
-            kind=bill.get_kind_display(),
-            status=bill.get_status_display(),
-            count=bill.bill_orders.count(),
-            total_amount=bill.total_amount,
-            paid_amount=bill.paid_amount,
-            remaining_amount=remaining_amount,
-            label=escape_html(bill.label) or _('без комментария'),
-            item_lines=chr(10).join(item_lines) if item_lines else '—',
-            bonus_hint=bonus_hint,
-        )
-    )
-    return can_pay_with_bonuses, bill_text
+    if bill.label:
+        lines.append(_("Подпись: {label}", label=escape_html(bill.label)))
+    return can_pay_with_bonuses, "\n".join(lines)
 
 
 _OPEN_BILL_STATUSES = frozenset(
@@ -1204,12 +1257,6 @@ def _compose_staff_sale_view(
             "",
         ]
     else:
-        telegram_account = guest_preview.guest.telegram_account
-        guest_identity = (
-            f"@{telegram_account.username}"
-            if telegram_account.username
-            else str(telegram_account.telegram_id)
-        )
         first_visit = (
             guest_preview.guest.first_visit_at.strftime("%d.%m.%Y")
             if guest_preview.guest.first_visit_at
@@ -1223,8 +1270,7 @@ def _compose_staff_sale_view(
 
         lines = [
             _("<b>Быстрая продажа</b>"),
-            _("Код клиента: {customer_code}", customer_code=guest_preview.guest.customer_code),
-            f"Telegram: {escape_html(guest_identity)}",
+            _("Гость: {guest}", guest=escape_html(guest_preview.guest.staff_label())),
             _(
                 "Текущий баланс: {loyalty_balance} бонусов",
                 loyalty_balance=guest_preview.guest.loyalty_balance,
@@ -1312,6 +1358,49 @@ async def _resolve_staff_employee_from_callback(callback: CallbackQuery, bot: Bo
     return await _resolve_staff_employee_by_telegram_id(callback.from_user.id, bot)
 
 
+BILL_STATUS_SHORT = {
+    Bill.Status.DRAFT: N_("черновик"),
+    Bill.Status.ISSUED: N_("выдан"),
+    Bill.Status.PARTIALLY_PAID: N_("частично оплачен"),
+}
+
+
+def _billing_rows(requests, bills, unbilled_orders) -> list[tuple[str, str]]:
+    """Rows of the bills list: (callback data, label), the most urgent first."""
+
+    rows = [
+        (
+            f"staffbillreqrefresh:{billing_request.id}",
+            _(
+                "🙋 Стол {number} просит счёт · {guest}",
+                number=billing_request.table.number,
+                guest=billing_request.guest.staff_label(),
+            ),
+        )
+        for billing_request in requests
+    ]
+    rows.extend(
+        (
+            f"staffbillopen:{bill.public_id}",
+            _(
+                "🧾 #{public_id} · {context} · {remaining} грн · {status}",
+                public_id=bill.public_id,
+                context=_bill_place_label(bill),
+                remaining=(bill.total_amount - bill.paid_amount).quantize(Decimal("0.01")),
+                status=_(BILL_STATUS_SHORT[bill.status])
+                if bill.status in BILL_STATUS_SHORT
+                else bill.get_status_display(),
+            ),
+        )
+        for bill in bills
+    )
+    rows.extend(
+        (f"stafforderopen:{public_id}", label)
+        for public_id, label, _table_id in _build_unbilled_order_shortcuts(unbilled_orders)
+    )
+    return rows
+
+
 async def _send_billing_feed(
     message: Message,
     *,
@@ -1319,44 +1408,22 @@ async def _send_billing_feed(
     can_quick_sale: bool,
     can_view_day_report: bool,
     actor_user=None,
+    page: int = 0,
+    edit: bool = True,
 ) -> None:
+    """Bill requests, open bills and unbilled orders in one paged list; a
+    card opens on tap (owner's decision 2026-11-04)."""
+
     requests, bills, unbilled_orders = await sync_to_async(
         _load_billing_feed_data
     )(partner_id)
-    is_refreshing_existing_overview = _is_staff_overview_message(message, _("Счета и оплаты"))
-    overview_text = _render_billing_overview(requests, bills, unbilled_orders)
-    overview_markup = build_staff_billing_overview_keyboard(
-        unbilled_order_shortcuts=_build_unbilled_order_shortcuts(unbilled_orders),
-        can_quick_sale=can_quick_sale,
-        can_view_day_report=can_view_day_report,
-    )
-    if is_refreshing_existing_overview:
-        await _safe_edit_message_text(
-            message,
-            overview_text,
-            reply_markup=overview_markup,
-        )
+    rows, page, pages = page_slice(_billing_rows(requests, bills, unbilled_orders), page)
+    text = _render_billing_overview(requests, bills, unbilled_orders, page=page, pages=pages)
+    markup = build_staff_billing_overview_keyboard(rows=rows, page=page, pages=pages)
+    if edit:
+        await _safe_edit_message_text(message, text, reply_markup=markup)
     else:
-        await message.answer(
-            overview_text,
-            reply_markup=overview_markup,
-        )
-    if is_refreshing_existing_overview:
-        return
-    for billing_request in requests:
-        await message.answer(
-            _render_billing_request_card(billing_request),
-            reply_markup=build_staff_billing_request_actions_keyboard(
-                request_id=str(billing_request.id),
-                bill_public_id=billing_request.bill.public_id if billing_request.bill_id else None,
-                can_process_request=(
-                    billing_request.request_type == BillingRequest.RequestType.CUSTOM_SPLIT
-                ),
-            ),
-        )
-    for bill in bills:
-        bill_text, bill_markup = await sync_to_async(_build_bill_card_message)(bill, actor_user)
-        await message.answer(bill_text, reply_markup=bill_markup)
+        await message.answer(text, reply_markup=markup)
 
 
 def _load_billing_feed_data(partner_id):
@@ -1373,20 +1440,19 @@ async def _send_tables_feed(
     partner_id,
     can_quick_sale: bool,
     can_view_day_report: bool,
+    page: int = 0,
 ) -> None:
     active_sessions, unbilled_orders, visit_counts = await sync_to_async(
         _load_tables_feed_data
     )(partner_id)
-    await message.answer(
+    shortcuts, page, pages = page_slice(
+        _build_active_table_shortcuts(active_sessions, unbilled_orders, visit_counts), page
+    )
+    await _safe_edit_message_text(
+        message,
         _render_tables_overview(active_sessions, unbilled_orders),
         reply_markup=build_staff_tables_overview_keyboard(
-            table_shortcuts=_build_active_table_shortcuts(
-                active_sessions,
-                unbilled_orders,
-                visit_counts,
-            ),
-            can_quick_sale=can_quick_sale,
-            can_view_day_report=can_view_day_report,
+            table_shortcuts=shortcuts, page=page, pages=pages
         ),
     )
 
@@ -1407,7 +1473,7 @@ def _load_tables_feed_data(partner_id):
 
 
 def _build_table_ops_view(*, partner_id, table_id):
-    table = Table.objects.get(partner_id=partner_id, id=table_id)
+    table = Table.objects.select_related("partner").get(partner_id=partner_id, id=table_id)
     active_sessions = list(
         BillingOperationsRepository.active_sessions_for_partner(partner_id).filter(table_id=table_id)
     )
@@ -1518,76 +1584,87 @@ async def _render_staff_sale_message(
         raise
 
 
-async def _render_notifications_message(callback_or_message, partner_id, employee_id) -> None:
-    notifications = await sync_to_async(list)(
-        StaffNotificationRepository.unread_for_employee(employee_id)[:10]
-    )
-    markup = build_staff_notifications_keyboard() if notifications else None
-    text = _render_staff_notifications(notifications)
-    should_send_cards = True
+# Unread notifications shown in the list at most; older ones stay unread.
+NOTIFICATIONS_LIST_LIMIT = 200
 
-    if isinstance(callback_or_message, CallbackQuery):
-        should_send_cards = not _is_staff_overview_message(
-            callback_or_message.message,
-            _("Уведомления персоналу"),
-        )
-        await _safe_edit_message_text(
-            callback_or_message.message,
-            text,
-            reply_markup=markup,
-        )
-    else:
-        await callback_or_message.answer(text, reply_markup=markup)
-    if not should_send_cards:
-        return
-    for notification in notifications:
-        target = (
-            callback_or_message.message
-            if isinstance(callback_or_message, CallbackQuery)
-            else callback_or_message
-        )
-        await target.answer(
-            _render_staff_notification_card(notification),
-            reply_markup=build_staff_notification_item_keyboard(
-                notification_id=str(notification.id),
-                category=(
-                    notification.category
-                    if not notification.order_id or notification.order.status == Order.Status.NEW
-                    else StaffNotification.Category.ORDER_STATUS_CHANGED
-                ),
-                order_public_id=notification.order.public_id if notification.order_id else None,
-            ),
-        )
+
+async def _render_notifications_message(
+    callback: CallbackQuery, partner_id, employee_id, *, page: int = 0
+) -> None:
+    """Unread notifications as one paged list (owner's decision 2026-11-04)."""
+
+    notifications = await sync_to_async(list)(
+        StaffNotificationRepository.unread_for_employee(employee_id).order_by("-created_at")[
+            :NOTIFICATIONS_LIST_LIMIT
+        ]
+    )
+    shown, page, pages = page_slice(notifications, page)
+    text = _render_staff_notifications(notifications, page=page, pages=pages)
+    markup = build_staff_notifications_keyboard(
+        [(str(n.id), _notification_row_label(n)) for n in shown], page=page, pages=pages
+    )
+    await _safe_edit_message_text(callback.message, text, reply_markup=markup)
+
+
+def _staff_home_text(partner, employee) -> str:
+    return _(
+        "<b>Рабочий режим</b> · {partner_name}\n{employee_name}, выберите раздел.",
+        partner_name=escape_html(partner.name),
+        employee_name=escape_html(_employee_label(employee)),
+    )
+
+
+def _staff_home_keyboard(employee):
+    return build_staff_home_keyboard(
+        can_quick_sale=_can_use_quick_sale(employee),
+        can_view_day_report=_can_view_day_report(employee),
+        can_manage_billing=_can_manage_billing(employee),
+        can_view_orders=_can_view_open_orders(employee),
+        can_view_tables=_can_view_tables(employee),
+    )
 
 
 @router.message(Command("staff"))
+@router.message(PartnerButtonFilter("button_staff_label"))
 async def staff_help_handler(message: Message, bot: Bot) -> None:
     try:
-        _partner, employee = await _resolve_staff_employee(message, bot)
+        partner, employee = await _resolve_staff_employee(message, bot)
     except OrderFlowError:
         # Guests are not staff: stay completely silent so /staff reveals nothing.
         return
 
     await message.answer(
-        (
-            _(
-                "<b>Режим персонала активирован</b>\n"
-                "Выберите действие кнопками ниже.\n"
-                "Команды можно использовать как резервный вариант, но основной режим уже "
-                "кнопочный.",
-            )
-        ),
-        reply_markup=build_staff_home_keyboard(
-            can_quick_sale=_can_use_quick_sale(employee),
-            can_view_day_report=_can_view_day_report(employee),
-            can_manage_billing=_can_manage_billing(employee),
-            can_view_orders=_can_view_open_orders(employee),
-            can_view_tables=_can_view_tables(employee),
-        ),
+        _staff_home_text(partner, employee), reply_markup=_staff_home_keyboard(employee)
     )
 
 
-@router.callback_query(lambda c: c.data == "stafforders:refresh")
+@router.callback_query(lambda c: c.data == "staffhome")
+async def staff_home_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await _safe_edit_message_text(
+        callback.message,
+        _staff_home_text(partner, employee),
+        reply_markup=_staff_home_keyboard(employee),
+    )
+    await callback.answer()
+
+
+def _list_page(data: str | None) -> int:
+    """The page of a list callback: ``<list>:p:<n>``; anything else is page 0."""
+
+    parts = (data or "").split(":")
+    if len(parts) == 3 and parts[1] == "p" and parts[2].isdigit():
+        return int(parts[2])
+    return 0
+
+
+@router.callback_query(
+    lambda c: c.data == "stafforders:refresh" or (c.data or "").startswith("stafforders:p:")
+)
 async def staff_orders_refresh_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
@@ -1597,15 +1674,16 @@ async def staff_orders_refresh_callback_handler(callback: CallbackQuery, bot: Bo
         return
 
     orders = await sync_to_async(list)(get_open_orders_for_partner(partner.id))
+    shortcuts, page, pages = page_slice(
+        _build_order_shortcuts(orders), _list_page(callback.data)
+    )
     updated = await _safe_edit_message_text(
         callback.message,
-        _render_open_orders_summary(orders),
+        _render_open_orders_summary(orders, page=page, pages=pages),
         reply_markup=build_staff_orders_overview_keyboard(
-            order_shortcuts=_build_order_shortcuts(orders),
-            can_quick_sale=_can_use_quick_sale(employee),
-            can_view_day_report=_can_view_day_report(employee),
-            can_manage_billing=_can_manage_billing(employee),
-            can_view_tables=_can_view_tables(employee),
+            order_shortcuts=shortcuts,
+            page=page,
+            pages=pages,
         ),
     )
     await callback.answer(_("Список обновлён") if updated else _("Без изменений"))
@@ -1630,14 +1708,18 @@ async def staff_order_open_callback_handler(callback: CallbackQuery, bot: Bot) -
         await callback.answer(_("Заказ не найден."), show_alert=True)
         return
 
-    await callback.message.answer(
+    # The list turns into the card; «← К заказам» turns it back.
+    await _safe_edit_message_text(
+        callback.message,
         _render_order_card(order),
         reply_markup=_order_actions_keyboard(order),
     )
-    await callback.answer(_("Открываю заказ"))
+    await callback.answer()
 
 
-@router.callback_query(lambda c: c.data == "staffbill:list")
+@router.callback_query(
+    lambda c: c.data == "staffbill:list" or (c.data or "").startswith("staffbill:p:")
+)
 async def staff_billing_refresh_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
@@ -1655,11 +1737,14 @@ async def staff_billing_refresh_callback_handler(callback: CallbackQuery, bot: B
         can_quick_sale=_can_use_quick_sale(employee),
         can_view_day_report=_can_view_day_report(employee),
         actor_user=employee.user,
+        page=_list_page(callback.data),
     )
-    await callback.answer(_("Счета обновлены"))
+    await callback.answer()
 
 
-@router.callback_query(lambda c: c.data == "stafftables:refresh")
+@router.callback_query(
+    lambda c: c.data == "stafftables:refresh" or (c.data or "").startswith("stafftables:p:")
+)
 async def staff_tables_refresh_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
@@ -1679,8 +1764,9 @@ async def staff_tables_refresh_callback_handler(callback: CallbackQuery, bot: Bo
         partner_id=partner.id,
         can_quick_sale=_can_use_quick_sale(employee),
         can_view_day_report=_can_view_day_report(employee),
+        page=_list_page(callback.data),
     )
-    await callback.answer(_("Столы обновлены"))
+    await callback.answer()
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("stafftableopen:"))
@@ -1706,8 +1792,8 @@ async def staff_table_open_callback_handler(callback: CallbackQuery, bot: Bot) -
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await callback.message.answer(text, reply_markup=keyboard)
-    await callback.answer(_("Открываю стол"))
+    await _safe_edit_message_text(callback.message, text, reply_markup=keyboard)
+    await callback.answer()
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("staffsessionclose:"))
@@ -2074,10 +2160,7 @@ async def staff_order_status_callback_handler(callback: CallbackQuery, bot: Bot)
         _render_order_card(refreshed_order),
         reply_markup=_order_actions_keyboard(refreshed_order),
     )
-    labels = _status_labels(refreshed_order)
-    await callback.answer(
-        _("Статус: {status}", status=_(labels[to_status]) if to_status in labels else to_status)
-    )
+    await callback.answer(_("Статус: {status}", status=refreshed_order.get_status_display()))
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("stafforderrefresh:"))
@@ -2211,6 +2294,9 @@ async def staff_receipt_payment_callback_handler(callback: CallbackQuery, bot: B
             + (
                 _("\n\n<b>Посылку не забрали и деньги не пришли — отменить заказ?</b> ")
                 if order.channel == Order.Channel.SHIPPING
+                else _("\n\n<b>Отменить заказ?</b> ")
+                if order.channel == Order.Channel.DELIVERY
+                and order.status != Order.Status.DELIVERING
                 else _("\n\n<b>Гость не забрал заказ и не заплатил — отменить заказ?</b> ")
             )
             + _("Списанные бонусы вернутся гостю."),
@@ -2330,7 +2416,9 @@ async def staff_tracking_number_handler(message: Message, bot: Bot) -> None:
     )
 
 
-@router.callback_query(lambda c: c.data == "staffnotif:refresh")
+@router.callback_query(
+    lambda c: c.data == "staffnotif:refresh" or (c.data or "").startswith("staffnotif:p:")
+)
 async def staff_notifications_refresh_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
@@ -2338,8 +2426,33 @@ async def staff_notifications_refresh_callback_handler(callback: CallbackQuery, 
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await _render_notifications_message(callback, partner.id, employee.id)
-    await callback.answer(_("Уведомления обновлены"))
+    await _render_notifications_message(
+        callback, partner.id, employee.id, page=_list_page(callback.data)
+    )
+    await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffnotifopen:"))
+async def staff_notification_open_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    """A notification opened from the list: the list turns into its card."""
+
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _unused, notification_id, raw_page = (callback.data or "").split(":", 2)
+        notification = await sync_to_async(StaffNotificationRepository.by_id_for_employee)(
+            notification_id, employee_id=employee.id, partner_id=partner.id
+        )
+    except (OrderFlowError, ValueError, StaffNotification.DoesNotExist, ValidationError):
+        await callback.answer(_("Уведомление не найдено."), show_alert=True)
+        return
+
+    page = int(raw_page) if raw_page.isdigit() else 0
+    await _safe_edit_message_text(
+        callback.message,
+        _render_staff_notification_card(notification),
+        reply_markup=await sync_to_async(_notification_item_keyboard)(notification, page=page),
+    )
+    await callback.answer()
 
 
 @router.callback_query(lambda c: c.data == "staffnotif:readall")
@@ -2368,7 +2481,7 @@ async def staff_notification_read_one_callback_handler(
 ) -> None:
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
-        _unused, notification_id = (callback.data or "").split(":", 1)
+        _unused, notification_id, *rest = (callback.data or "").split(":")
         updated = await sync_to_async(mark_staff_notification_read)(
             notification_id=notification_id,
             employee_id=employee.id,
@@ -2378,6 +2491,11 @@ async def staff_notification_read_one_callback_handler(
         await callback.answer(str(exc), show_alert=True)
         return
 
+    if rest and rest[0].isdigit():
+        # Opened from the list: back to the same page of it.
+        await _render_notifications_message(callback, partner.id, employee.id, page=int(rest[0]))
+        await callback.answer(_("Уведомление отмечено"))
+        return
     if updated:
         updated = await _safe_edit_message_text(
             callback.message,
@@ -2414,11 +2532,12 @@ async def staff_notification_open_order_callback_handler(
         await callback.answer(str(exc), show_alert=True)
         return
 
-    await callback.message.answer(
+    await _safe_edit_message_text(
+        callback.message,
         _render_order_card(order),
         reply_markup=_order_actions_keyboard(order),
     )
-    await callback.answer(_("Открываю заказ"))
+    await callback.answer()
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("staffnotifaccept:"))
@@ -2451,14 +2570,15 @@ async def staff_notification_accept_order_callback_handler(
             partner.id,
             order.public_id,
         )
-        await callback.message.answer(
+        await _safe_edit_message_text(
+            callback.message,
             _render_order_card(refreshed_order),
             reply_markup=_order_actions_keyboard(refreshed_order),
         )
         await callback.answer(_("Заказ уже в работе, показываю актуальную карточку"))
         return
 
-    updated = await sync_to_async(mark_staff_notification_read)(
+    await sync_to_async(mark_staff_notification_read)(
         notification_id=notification_id,
         employee_id=employee.id,
         partner_id=partner.id,
@@ -2480,7 +2600,8 @@ async def staff_notification_accept_order_callback_handler(
             partner.id,
             order.public_id,
         )
-        await callback.message.answer(
+        await _safe_edit_message_text(
+            callback.message,
             _render_order_card(refreshed_order),
             reply_markup=_order_actions_keyboard(refreshed_order),
         )
@@ -2491,16 +2612,12 @@ async def staff_notification_accept_order_callback_handler(
         partner.id,
         order.public_id,
     )
-    await callback.message.answer(
+    # The notification card turns into the order card.
+    await _safe_edit_message_text(
+        callback.message,
         _render_order_card(refreshed_order),
         reply_markup=_order_actions_keyboard(refreshed_order),
     )
-    if updated:
-        await _safe_edit_message_text(
-            callback.message,
-            _("{html_text}\n\n<i>Заказ взят в работу.</i>", html_text=callback.message.html_text),
-            reply_markup=None,
-        )
     await callback.answer(_("Заказ взят в работу"))
 
 
@@ -2867,7 +2984,7 @@ async def staff_sale_comment_prompt_handler(
     await callback.message.answer(
         _(
             "Отправьте комментарий к продаже одним сообщением. Чтобы очистить комментарий, "
-            "отправьте символ `-`.",
+            "отправьте символ <code>-</code>.",
         ),
     )
     await callback.answer()
@@ -3136,17 +3253,30 @@ async def staff_sale_confirm_handler(
             bonus_spent_amount=sale.bonus_spent_amount,
         ))
         result_lines.append(_("К оплате: {net_amount} грн", net_amount=sale.net_amount))
-    result_lines.extend(
-        [
+    if sale.bonus_awarded_amount:
+        result_lines.append(
             _(
                 "Начислено бонусов: +{bonus_awarded_amount}",
                 bonus_awarded_amount=sale.bonus_awarded_amount,
-            ),
-            _("Позиций: {items_count}", items_count=items_count),
-            _("Комментарий: {comment}", comment=escape_html(sale.comment) or _('без комментария')),
-        ]
+            )
+        )
+    result_lines.append(_("Позиций: {items_count}", items_count=items_count))
+    if sale.comment:
+        result_lines.append(_("Комментарий: {comment}", comment=escape_html(sale.comment)))
+    await _safe_edit_message_text(
+        callback.message,
+        "\n".join(result_lines),
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=_("➕ Новая продажа"), callback_data="staffsale:start"
+                    ),
+                    InlineKeyboardButton(text=_("← Рабочий режим"), callback_data="staffhome"),
+                ]
+            ]
+        ),
     )
-    await _safe_edit_message_text(callback.message, "\n".join(result_lines))
     await callback.answer(_("Продажа сохранена"))
 
 

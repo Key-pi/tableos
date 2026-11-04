@@ -925,6 +925,9 @@ def record_payment_on_receipt(*, order: Order, actor, method: str) -> Order:
     order = _lock_remote_order(order, ON_RECEIPT)
     if bill.status == Bill.Status.PAID or order.paid_at is not None:
         raise RemoteOrderError(_("Заказ уже оплачен."))
+    if order.channel == Order.Channel.DELIVERY and order.status != Order.Status.DELIVERING:
+        # The courier takes the money (PQ-044): recorded from «В пути» on.
+        raise RemoteOrderError(_("Оплату доставки отмечают, когда заказ в пути."))
     record_payment(
         bill=bill,
         amount=_money(bill.total_amount - bill.paid_amount),
@@ -948,17 +951,26 @@ def cancel_unpaid_remote_order(*, order: Order, actor, comment: str = "") -> Ord
         method=Payment.Method.BONUSES
     ).filter(status=Payment.Status.PAID).exists():
         raise RemoteOrderError(_("По заказу уже есть оплата — отменить его так нельзя."))
+    # A delivery not with the courier yet is simply cancelled (PQ-044).
+    with_courier = (
+        order.channel != Order.Channel.DELIVERY or order.status == Order.Status.DELIVERING
+    )
+    reason = BillAdjustment.ReasonCode
     _void_locked_bill(
         bill=bill,
         actor=actor,
-        reason_code=BillAdjustment.ReasonCode.GUEST_REFUSED,
+        reason_code=reason.GUEST_REFUSED if with_courier else reason.OTHER,
         reason_text=comment,
     )
     return transition_order_status(
         order=order,
         to_status=Order.Status.CANCELED,
         actor_user=actor,
-        note=_("Гость не забрал заказ."),
+        note=(
+            _("Гость не забрал заказ.")
+            if with_courier
+            else _("Заказ отменён до передачи курьеру.")
+        ),
     )
 
 

@@ -97,8 +97,8 @@ class NotificationLanguageTests(TestCase):
                 category=StaffNotification.Category.GUEST_CALL
             ).values_list("employee_id", "title")
         )
-        self.assertEqual(titles[self.employee.id], "Call: Waiter")
-        self.assertEqual(titles[ukrainian.id], "Виклик: Офіціант")
+        self.assertEqual(titles[self.employee.id], "Table #1 calls: Waiter")
+        self.assertEqual(titles[ukrainian.id], "Стіл #1 кличе: Офіціант")
         # The same call pressed again in another language is still a repeat.
         with self.assertRaises(GuestCallError):
             request_staff_assistance(
@@ -142,9 +142,9 @@ class NotificationLanguageTests(TestCase):
 class StaffBotTextTests(TestCase):
     def test_staff_texts_follow_the_language(self):
         expected = {
-            "uk": "Відкритих замовлень зараз немає.",
-            "ru": "Открытых заказов сейчас нет.",
-            "en": "No open orders right now.",
+            "uk": "<b>Відкриті замовлення</b>\nЗараз відкритих замовлень немає.",
+            "ru": "<b>Открытые заказы</b>\nСейчас открытых заказов нет.",
+            "en": "<b>Open orders</b>\nNo open orders right now.",
         }
         for language, text in expected.items():
             with self.subTest(language=language), texts(language):

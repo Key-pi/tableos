@@ -34,7 +34,8 @@ class StaffKeyboardVisibilityTests(SimpleTestCase):
         ]
         self.assertNotIn("Быстрая продажа", button_texts)
 
-    def test_orders_overview_keyboard_shows_quick_sale_when_allowed(self):
+    def test_orders_overview_keyboard_leads_back_to_the_work_mode(self):
+        # Sections live on the work-mode screen; a list only leads back to it.
         keyboard = build_staff_orders_overview_keyboard(can_quick_sale=True)
 
         button_texts = [
@@ -42,13 +43,14 @@ class StaffKeyboardVisibilityTests(SimpleTestCase):
             for row in keyboard.inline_keyboard
             for button in row
         ]
-        self.assertIn("Быстрая продажа", button_texts)
+        self.assertIn("← Рабочий режим", button_texts)
+        self.assertNotIn("Быстрая продажа", button_texts)
 
     def test_orders_overview_keyboard_shows_order_shortcuts(self):
         keyboard = build_staff_orders_overview_keyboard(
             order_shortcuts=[
-                ("abcd1234", "#abcd1234 • T2 • Новый • не опл.", True),
-                ("efgh5678", "#efgh5678 • T6 • Готовим • опл.", False),
+                ("abcd1234", "#abcd1234 • Стол 2 • Новый • не опл.", True),
+                ("efgh5678", "#efgh5678 • Стол 6 • Готовим • опл.", False),
             ]
         )
 
@@ -57,9 +59,9 @@ class StaffKeyboardVisibilityTests(SimpleTestCase):
             for row in keyboard.inline_keyboard
             for button in row
         ]
-        self.assertIn("#abcd1234 • T2 • Новый • не опл.", button_texts)
+        self.assertIn("#abcd1234 • Стол 2 • Новый • не опл.", button_texts)
         self.assertIn("Взять в работу", button_texts)
-        self.assertIn("#efgh5678 • T6 • Готовим • опл.", button_texts)
+        self.assertIn("#efgh5678 • Стол 6 • Готовим • опл.", button_texts)
 
     def test_home_keyboard_shows_billing_button_when_allowed(self):
         keyboard = build_staff_home_keyboard(can_manage_billing=True)
@@ -142,7 +144,7 @@ class StaffKeyboardVisibilityTests(SimpleTestCase):
         self.assertIn("Счета", button_texts)
         self.assertIn("Быстрые продажи", button_texts)
         self.assertIn("Столы", button_texts)
-        self.assertIn("Хвосты", button_texts)
+        self.assertIn("Не закрыто", button_texts)
 
     def test_report_section_keyboard_supports_item_shortcuts_and_back(self):
         keyboard = build_staff_report_section_keyboard(
@@ -178,7 +180,10 @@ class StaffOrderRenderingTests(SimpleTestCase):
         guest = type(
             "Guest",
             (),
-            {"telegram_account": type("Telegram", (), {"username": "guest_one", "telegram_id": 1})()},
+            {
+                "telegram_account": type("Telegram", (), {"username": "guest_one", "telegram_id": 1})(),
+                "staff_label": lambda self: "@guest_one · ABC123",
+            },
         )()
         table = None
         table_id = None
@@ -215,6 +220,9 @@ class StaffOrderRenderingTests(SimpleTestCase):
 
         self.assertIn("Сценарий: заказ без привязки к столу", text)
         self.assertIn("Заказ #abcd1234", text)
+        # Staff see who the guest is, never the Telegram ID (2026-11-04).
+        self.assertIn("Гость: @guest_one · ABC123", text)
+        self.assertNotIn("Комментарий", text)
 
     def test_build_order_shortcuts_marks_order_without_table(self):
         order = self._build_order_stub(table_number=None)
@@ -283,7 +291,7 @@ class StaffBillingHelperTests(SimpleTestCase):
         )
 
         labels = [label for _public_id, label, _table_id in shortcuts]
-        self.assertTrue(any("T4" in label for label in labels))
+        self.assertTrue(any("Стол 4" in label for label in labels))
         self.assertTrue(any("Вне стола" in label for label in labels))
 
     def test_render_billing_overview_mentions_off_table_unbilled_orders(self):
@@ -296,8 +304,7 @@ class StaffBillingHelperTests(SimpleTestCase):
             ],
         )
 
-        self.assertIn("Неоплаченных заказов без счёта: 2", text)
-        self.assertIn("Из них без привязки к столу: 1", text)
+        self.assertIn("заказов без счёта: 2", text)
 
 
 class StaffOverviewMessageTests(SimpleTestCase):

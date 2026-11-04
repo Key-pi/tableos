@@ -632,10 +632,7 @@ def request_staff_assistance(
             _("Сейчас нет сотрудников с подключёнными Telegram-уведомлениями для этого вызова.")
         )
 
-    guest_identity = (
-        table_session.guest.telegram_account.username
-        or str(table_session.guest.telegram_account.telegram_id)
-    )
+    guest_identity = table_session.guest.staff_label()
     label_text = CALL_TARGET_TEXTS.get(call_target)
     queued_count = 0
     for employee in recipients:
@@ -646,19 +643,12 @@ def request_staff_assistance(
                 employee=employee,
                 category=StaffNotification.Category.GUEST_CALL,
                 dedupe_key=dedupe_key,
-                title=_("Вызов: {call_target}", call_target=target),
-                message=_(
-                    "Нужен: {call_target}\n"
-                    "Заведение: {name}\n"
-                    "Стол: #{table_number}\n"
-                    "Гость: {guest_identity}\n"
-                    "Код клиента: {customer_code}",
-                    call_target=target,
-                    name=table_session.partner.name,
+                title=_(
+                    "Стол #{table_number} зовёт: {call_target}",
                     table_number=table_number,
-                    guest_identity=guest_identity,
-                    customer_code=table_session.guest.customer_code,
+                    call_target=target,
                 ),
+                message=_("Гость: {guest_identity}", guest_identity=guest_identity),
             )
         deliver_staff_notification(notification)
         queued_count += 1
@@ -777,10 +767,7 @@ def notify_staff_about_billing_request(billing_request) -> int:
     if not recipients:
         return 0
 
-    guest_identity = (
-        billing_request.guest.telegram_account.username
-        or str(billing_request.guest.telegram_account.telegram_id)
-    )
+    guest_identity = billing_request.guest.staff_label()
     queued_count = 0
     for employee in recipients:
         with speaking_to_employee(employee):
@@ -788,21 +775,20 @@ def notify_staff_about_billing_request(billing_request) -> int:
                 _("Тип: {request_type}", request_type=billing_request.get_request_type_display()),
                 _("Стол: #{number}", number=billing_request.table.number),
                 _("Гость: {guest_identity}", guest_identity=guest_identity),
-                _(
-                    "Код клиента: {customer_code}",
-                    customer_code=billing_request.guest.customer_code,
-                ),
             ]
             if billing_request.bill_id:
                 lines.append(
-                    _("Подготовлен счёт: #{public_id}", public_id=billing_request.bill.public_id)
+                    _(
+                        "Подготовлен счёт #{public_id} на {total} грн",
+                        public_id=billing_request.bill.public_id,
+                        total=billing_request.bill.total_amount,
+                    )
                 )
-            lines.append(_("Запрос: #{id}", id=billing_request.id))
             notification = StaffNotification.objects.create(
                 partner_id=billing_request.partner_id,
                 employee=employee,
                 category=StaffNotification.Category.BILLING_REQUEST,
-                title=_("Запрос счёта"),
+                title=_("Стол #{number} просит счёт", number=billing_request.table.number),
                 message="\n".join(lines),
             )
         deliver_staff_notification(notification)

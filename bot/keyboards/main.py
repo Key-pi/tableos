@@ -60,6 +60,7 @@ def build_main_keyboard(
             (GuestAction.PROFILE, content.button_my_profile),
             (GuestAction.HELP, content.button_help_label),
         ],
+        [(GuestAction.STAFF, content.button_staff_label)],
     ]
     rows = [
         [KeyboardButton(text=text) for action, text in row if navigation_state.has_action(action)]

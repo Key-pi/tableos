@@ -125,6 +125,28 @@ class StaffNotificationPreferenceTests(TestCase):
         self.assertEqual(status_notifications.count(), 1)
         self.assertEqual(status_notifications.first().employee_id, self.manager_profile.id)
 
+    def test_the_employee_who_changed_the_status_is_not_told_about_it(self):
+        order = create_order_from_session(
+            partner_id=self.partner.id,
+            table_session=self.session,
+            items=[
+                {
+                    "menu_item_id": self.menu_item.id,
+                    "item_name": self.menu_item.name,
+                    "unit_price": Decimal("150.00"),
+                    "quantity": 1,
+                }
+            ],
+        )
+
+        transition_order_status(
+            order=order, to_status=Order.Status.ACCEPTED, actor_user=self.manager_user
+        )
+
+        self.assertFalse(
+            order.staff_notifications.filter(category="order_status_changed").exists()
+        )
+
     def test_order_notifications_exclude_inactive_django_users(self):
         self.manager_user.is_active = False
         self.manager_user.save(update_fields=["is_active"])

@@ -415,6 +415,7 @@ def transition_order_status(
         order=order,
         from_status=from_status,
         to_status=to_status,
+        actor_user=actor_user,
     )
     send_guest_order_status_update(
         order=order,
@@ -1120,11 +1121,14 @@ def _create_staff_notifications_for_status_change(
     order: Order,
     from_status: str,
     to_status: str,
+    actor_user=None,
 ) -> None:
+    recipients = _staff_notification_recipients(order).filter(notify_on_order_status_changed=True)
+    if actor_user is not None:
+        # The employee who pressed the button already sees the new status.
+        recipients = recipients.exclude(user_id=actor_user.pk)
     notifications = []
-    for employee in _staff_notification_recipients(order).filter(
-        notify_on_order_status_changed=True,
-    ).select_related("user", "telegram_account"):
+    for employee in recipients.select_related("user", "telegram_account"):
         with speaking_to_employee(employee):
             from_label = _status_label(from_status) if from_status else "-"
             to_label = _status_label(to_status)

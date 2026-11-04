@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from apps.billing.models import Bill
+from apps.employees.models import EmployeeProfile
 from apps.orders.models import Cart, Order
 from apps.tables.services import get_active_table_session
 
@@ -46,6 +47,8 @@ class GuestAction:
     HELP = "help"
     CALL_STAFF = "call_staff"
     REQUEST_BILL = "request_bill"
+    # An employee of the venue: the button that opens the work mode.
+    STAFF = "staff"
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +67,31 @@ class GuestNavigationState:
         return action in self.available_actions
 
 
+def _is_venue_employee(partner_id, telegram_id: int) -> bool:
+    return EmployeeProfile.objects.filter(
+        partner_id=partner_id,
+        telegram_account__telegram_id=telegram_id,
+        is_active=True,
+        user__is_active=True,
+        user__partner_id=partner_id,
+    ).exists()
+
+
 def resolve_guest_navigation_state(
+    *,
+    partner_id,
+    telegram_id: int,
+    content,
+) -> GuestNavigationState:
+    state = _resolve_guest_navigation_state(
+        partner_id=partner_id, telegram_id=telegram_id, content=content
+    )
+    if _is_venue_employee(partner_id, telegram_id):
+        return replace(state, available_actions=(*state.available_actions, GuestAction.STAFF))
+    return state
+
+
+def _resolve_guest_navigation_state(
     *,
     partner_id,
     telegram_id: int,
