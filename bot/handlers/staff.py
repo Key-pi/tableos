@@ -511,6 +511,11 @@ def _can_view_tables(employee: EmployeeProfile) -> bool:
     )
 
 
+def _can_invite(employee: EmployeeProfile) -> bool:
+    # The button only; apps/employees/invites.py checks the right again (PQ-046).
+    return employee.is_active and employee.user.role in ("owner", "manager")
+
+
 def _build_staff_home_markup(employee: EmployeeProfile | None):
     if employee is None:
         return None
@@ -520,6 +525,7 @@ def _build_staff_home_markup(employee: EmployeeProfile | None):
         can_manage_billing=_can_manage_billing(employee),
         can_view_orders=_can_view_open_orders(employee),
         can_view_tables=_can_view_tables(employee),
+        can_invite=_can_invite(employee),
     )
 
 
@@ -1626,6 +1632,7 @@ def _staff_home_keyboard(employee):
         can_manage_billing=_can_manage_billing(employee),
         can_view_orders=_can_view_open_orders(employee),
         can_view_tables=_can_view_tables(employee),
+        can_invite=_can_invite(employee),
     )
 
 

@@ -90,3 +90,67 @@ class EmployeeProfile(PartnerBoundModel):
 
     def __str__(self) -> str:
         return f"{self.partner.name} / {self.user}"
+
+
+class StaffInvite(PartnerBoundModel):
+    """A one-time link that adds a staff member (PQ-046): the owner or a
+    manager issues it for a role, the person presses Start, the issuer
+    confirms. ``apps/employees/invites.py`` owns every change."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", _lazy("Ждёт нажатия ссылки")
+        CLAIMED = "claimed", _lazy("Ждёт подтверждения")
+        ACCEPTED = "accepted", _lazy("Принято")
+        REJECTED = "rejected", _lazy("Отклонено")
+        REVOKED = "revoked", _lazy("Отменено")
+
+    code = models.CharField(max_length=32, unique=True, editable=False, verbose_name=_lazy("Код"))
+    role = models.CharField(max_length=32, verbose_name=_lazy("Роль"))
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        verbose_name=_lazy("Статус"),
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="staff_invites_issued",
+        verbose_name=_lazy("Выдал"),
+    )
+    expires_at = models.DateTimeField(verbose_name=_lazy("Действует до"))
+    claimed_by = models.ForeignKey(
+        "users.TelegramAccount",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="staff_invites",
+        verbose_name=_lazy("Кто нажал"),
+    )
+    claimed_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Нажал"))
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="staff_invites_decided",
+        verbose_name=_lazy("Решил"),
+    )
+    decided_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Решено"))
+    employee = models.ForeignKey(
+        EmployeeProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="invites",
+        verbose_name=_lazy("Сотрудник"),
+    )
+
+    class Meta:
+        verbose_name = _lazy("приглашение сотрудника")
+        verbose_name_plural = _lazy("Приглашения сотрудников")
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.partner} / {self.role} / {self.status}"

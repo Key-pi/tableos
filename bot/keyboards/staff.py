@@ -395,6 +395,7 @@ def build_staff_home_keyboard(
     can_manage_billing: bool = False,
     can_view_orders: bool = True,
     can_view_tables: bool = False,
+    can_invite: bool = False,
 ) -> InlineKeyboardMarkup:
     first_row = []
     if can_view_orders:
@@ -445,6 +446,11 @@ def build_staff_home_keyboard(
                     callback_data="staffreport:today",
                 )
             ]
+        )
+    if can_invite:
+        # Staff invite links (PQ-046): bot/handlers/staff_invites.py.
+        inline_keyboard.append(
+            [InlineKeyboardButton(text=_("👥 Пригласить сотрудника"), callback_data="staffinv")]
         )
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
