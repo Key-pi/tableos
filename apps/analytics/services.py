@@ -326,6 +326,7 @@ def refresh_partner_daily_metric(*, partner_id, bucket_date=None) -> PartnerDail
         defaults={
             "revenue": report.total_revenue,
             "orders_count": report.created_orders_count,
+            "sales_count": sales_count,
             "average_check": average_check,
             "active_guests": len(active_guest_ids),
             "repeat_visits": repeat_visits,

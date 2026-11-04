@@ -15,6 +15,23 @@ LANGUAGE_CHOICES = [(code, LANGUAGE_NAMES[code]) for code in LANGUAGES]
 GUEST_LANGUAGE_FIELDS = {code: f"language_{code}" for code in LANGUAGES}
 
 
+class Network(TimeStampedModel):
+    """Several venues of one business (PQ-047). A venue stays a partner with
+    its own menu, tables, orders and staff; the network only shares what
+    the owner's decisions say (one Admin login now; one bot and bonuses in
+    later stages). A venue without a network is a network of one."""
+
+    name = models.CharField(max_length=255, verbose_name=_lazy("Название сети"))
+
+    class Meta:
+        verbose_name = _lazy("сеть заведений")
+        verbose_name_plural = _lazy("Сети заведений")
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class Partner(TimeStampedModel):
     """Venue or business account that owns isolated data inside the platform."""
 
@@ -39,6 +56,15 @@ class Partner(TimeStampedModel):
         choices=Status.choices,
         default=Status.DRAFT,
         verbose_name=_lazy("Статус"),
+    )
+    network = models.ForeignKey(
+        Network,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="points",
+        verbose_name=_lazy("Сеть"),
+        help_text=_lazy("Точки одной сети: один вход владельца в Admin и отчёт по сети."),
     )
 
     class Meta:

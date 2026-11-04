@@ -12,11 +12,11 @@ msgstr "Період"
 msgid "Сегодня и вчера"
 msgstr "Сьогодні й учора"
 
-#: apps/analytics/admin.py
+#: apps/analytics/admin.py apps/partners/admin.py
 msgid "7 дней"
 msgstr "7 днів"
 
-#: apps/analytics/admin.py
+#: apps/analytics/admin.py apps/partners/admin.py
 msgid "30 дней"
 msgstr "30 днів"
 
@@ -56,15 +56,19 @@ msgstr "Аналітика"
 msgid "День"
 msgstr "День"
 
-#: apps/analytics/models.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
 msgid "Выручка"
 msgstr "Виручка"
 
-#: apps/analytics/models.py core/urls.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html core/urls.py
 msgid "Заказов"
 msgstr "Замовлень"
 
-#: apps/analytics/models.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
+msgid "Продаж"
+msgstr "Продажів"
+
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
 msgid "Средний чек"
 msgstr "Середній чек"
 
@@ -3022,6 +3026,22 @@ msgstr "Свій текст"
 msgid "Каталог текстов бота"
 msgstr "Каталог текстів бота"
 
+#: apps/partners/admin.py
+msgid "Точек"
+msgstr "Точок"
+
+#: apps/partners/admin.py
+msgid "Отчёт"
+msgstr "Звіт"
+
+#: apps/partners/admin.py
+msgid "Отчёт по сети"
+msgstr "Звіт по мережі"
+
+#: apps/partners/admin.py
+msgid "Сегодня"
+msgstr "Сьогодні"
+
 #: apps/partners/apps.py apps/partners/models.py
 msgid "Заведения"
 msgstr "Заклади"
@@ -3229,6 +3249,18 @@ msgid "Для этого текста и языка уже есть свой в�
 msgstr "Для цього тексту й мови вже є свій варіант — змініть його."
 
 #: apps/partners/models.py
+msgid "Название сети"
+msgstr "Назва мережі"
+
+#: apps/partners/models.py
+msgid "сеть заведений"
+msgstr "мережа закладів"
+
+#: apps/partners/models.py
+msgid "Сети заведений"
+msgstr "Мережі закладів"
+
+#: apps/partners/models.py
 msgid "Приостановлен"
 msgstr "Призупинено"
 
@@ -3251,6 +3283,14 @@ msgstr "Часовий пояс"
 #: apps/partners/models.py
 msgid "Контактный телефон"
 msgstr "Контактний телефон"
+
+#: apps/partners/models.py
+msgid "Сеть"
+msgstr "Мережа"
+
+#: apps/partners/models.py
+msgid "Точки одной сети: один вход владельца в Admin и отчёт по сети."
+msgstr "Точки однієї мережі: один вхід власника в Admin і звіт по мережі."
 
 #: apps/partners/models.py
 msgid "заведение"
@@ -3784,6 +3824,18 @@ msgstr "Далі →"
 msgid "Каталог текстов"
 msgstr "Каталог текстів"
 
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Цифры обновляются каждые 15 минут. Продажи — оплаченные счета и быстрые продажи, средний чек — на продажу. Видны только точки, которые вам доступны."
+msgstr "Цифри оновлюються кожні 15 хвилин. Продажі — оплачені рахунки та швидкі продажі, середній чек — на продаж. Видно лише точки, доступні вам."
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Точка"
+msgstr "Точка"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Вся сеть"
+msgstr "Уся мережа"
+
 #: apps/tables/admin.py
 msgid "Работа стола"
 msgstr "Робота столу"
@@ -4183,6 +4235,14 @@ msgstr "Набір прав"
 #: apps/users/models.py
 msgid "Владелец заведения"
 msgstr "Власник закладу"
+
+#: apps/users/models.py
+msgid "Ещё точки сети"
+msgstr "Інші точки мережі"
+
+#: apps/users/models.py
+msgid "Другие точки той же сети, где у пользователя те же права. Владельцу сети не нужно: он видит все точки."
+msgstr "Інші точки тієї ж мережі, де в користувача ті самі права. Власнику мережі не потрібно: він бачить усі точки."
 
 #: apps/users/models.py
 msgid "Вход в Admin"

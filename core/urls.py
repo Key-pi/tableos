@@ -4,6 +4,7 @@ from django.http import HttpRequest, HttpResponse
 from django.urls import path
 
 from apps.orders.models import Order
+from apps.partners.admin_network import switch_admin_point
 from apps.partners.models import BotInstance, Partner
 from apps.tables.models import Table
 from apps.users.views import set_admin_language
@@ -98,6 +99,8 @@ urlpatterns = [
     path("admin/login/", throttle_login(admin.site.login), name="admin-login-throttled"),
     # PQ-040: the language switch in the Admin header saves the user's language.
     path("admin/language/", set_admin_language, name="admin-language"),
+    # PQ-047: the venue switch of a network's Admin user.
+    path("admin/point/<str:partner_hex>/", switch_admin_point, name="admin-point"),
     path("admin/", admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
 ]

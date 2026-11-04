@@ -4,8 +4,28 @@ from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 
 from apps.partners.models import Partner
+from apps.partners.networks import admin_partner_ids
 from apps.users.models import AdminAccessProfile, User
 from core.i18n import _
+
+# The venue an Admin user of a network works with now (PQ-047).
+ADMIN_POINT_SESSION_KEY = "admin_partner_id"
+
+
+def current_admin_partner_id(request):
+    """The venue Admin shows: the one chosen in the header if this person
+    may still open it, else their own venue. Checked on every request."""
+
+    cached = getattr(request, "_admin_partner_scope", None)
+    if cached is not None:
+        return cached[0]
+    points = admin_partner_ids(request.user)
+    chosen = request.session.get(ADMIN_POINT_SESSION_KEY) if hasattr(request, "session") else None
+    scope = next((point for point in points if str(point) == chosen), None)
+    if scope is None and points:
+        scope = points[0]
+    request._admin_partner_scope = (scope,)
+    return scope
 
 
 def get_admin_access_profile(user) -> AdminAccessProfile | None:
@@ -66,8 +86,7 @@ class ScopedAdminMixin(admin.ModelAdmin):
     def get_partner_scope_id(self, request):
         if self.is_platform_admin(request):
             return None
-        profile = get_admin_access_profile(request.user)
-        return profile.partner_id if profile is not None else None
+        return current_admin_partner_id(request)
 
     def has_module_permission(self, request):
         if self.platform_only:

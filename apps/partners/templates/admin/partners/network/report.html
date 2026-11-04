@@ -1,0 +1,34 @@
+{% extends "admin/base_site.html" %}
+{% load botera_i18n %}
+{% block content %}
+<div class="px-4">
+  <p style="margin-bottom: 12px;">{% tr "Цифры обновляются каждые 15 минут. Продажи — оплаченные счета и быстрые продажи, средний чек — на продажу. Видны только точки, которые вам доступны." %}</p>
+  <p style="margin-bottom: 12px; display: flex; gap: 12px;">
+    {% for value, label in periods %}
+      {% if value == days %}<strong>{{ label }}</strong>{% else %}<a href="?days={{ value }}">{{ label }}</a>{% endif %}
+    {% endfor %}
+  </p>
+  <table style="width: 100%;">
+    <thead>
+      <tr>
+        <th style="text-align: left;">{% tr "Точка" %}</th>
+        <th style="text-align: right;">{% tr "Выручка" %}</th>
+        <th style="text-align: right;">{% tr "Продаж" %}</th>
+        <th style="text-align: right;">{% tr "Средний чек" %}</th>
+        <th style="text-align: right;">{% tr "Заказов" %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr style="border-top: 1px solid rgba(128,128,128,.25);">
+          <td style="padding: 6px 8px 6px 0;">{% if row.partner %}{{ row.partner.name }}{% else %}<strong>{% tr "Вся сеть" %}</strong>{% endif %}</td>
+          <td style="padding: 6px 8px; text-align: right;">{{ row.revenue }}</td>
+          <td style="padding: 6px 8px; text-align: right;">{{ row.sales }}</td>
+          <td style="padding: 6px 8px; text-align: right;">{{ row.average_check }}</td>
+          <td style="padding: 6px 8px; text-align: right;">{{ row.orders }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

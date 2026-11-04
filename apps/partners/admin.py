@@ -5,7 +5,9 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils.html import format_html
 
+from apps.analytics.selectors import network_summary
 from apps.notifications.services import notify_owners_about_transfer_details_change
 from apps.partners.bot_texts import GROUP_LABELS, editable_texts
 from apps.partners.forms import BotInstanceAdminForm, BotTextForm, _short
@@ -13,11 +15,13 @@ from apps.partners.languages import enabled_languages, text_overrides
 from apps.partners.models import (
     BotInstance,
     BotText,
+    Network,
     OpeningHours,
     Partner,
     PartnerBotSettings,
     text_key,
 )
+from apps.partners.networks import admin_partner_ids
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 from core.i18n import LANGUAGE_NAMES, _, texts
@@ -166,8 +170,8 @@ class PartnerAdmin(ScopedAdminMixin):
     scope_partner_field = None
     allow_partner_add = False
     allow_partner_delete = False
-    platform_only_fields = ("slug", "status")
-    list_display = ("name", "slug", "status", "timezone", "created_at")
+    platform_only_fields = ("slug", "status", "network")
+    list_display = ("name", "slug", "status", "network", "timezone", "created_at")
     list_filter = ("status", "timezone")
     search_fields = ("name", "slug", "contact_phone")
     prepopulated_fields = {"slug": ("name",)}
@@ -435,3 +439,82 @@ class BotTextAdmin(ScopedAdminMixin):
             "partner_id": str(partner_id or ""),
         }
         return TemplateResponse(request, "admin/partners/bottext/catalog.html", context)
+
+
+@admin.register(Network)
+class NetworkAdmin(admin.ModelAdmin):
+    """Networks of venues (PQ-047). The platform creates them and puts
+    venues in (Partner.network); an owner or manager of several venues sees
+    the network report here."""
+
+    list_display = ("name", "points_count", "report_link")
+    search_fields = ("name",)
+
+    @staticmethod
+    def _points(request) -> list:
+        return admin_partner_ids(request.user)
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or len(self._points(request)) > 1
+
+    def has_view_permission(self, request, obj=None):
+        return self.has_module_permission(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    @admin.display(description=_lazy("Точек"))
+    def points_count(self, obj: Network) -> int:
+        return obj.points.count()
+
+    @admin.display(description=_lazy("Отчёт"))
+    def report_link(self, obj: Network):
+        url = reverse("admin:partners_network_report") + "?" + urlencode({"network": obj.id})
+        return format_html('<a href="{}">{}</a>', url, _("Отчёт по сети"))
+
+    def get_urls(self):
+        report = path(
+            "report/",
+            self.admin_site.admin_view(self.report_view),
+            name="partners_network_report",
+        )
+        return [report, *super().get_urls()]
+
+    def changelist_view(self, request, extra_context=None):
+        if not request.user.is_superuser:
+            return self.report_view(request)
+        return super().changelist_view(request, extra_context)
+
+    REPORT_PERIODS = ((1, _lazy("Сегодня")), (7, _lazy("7 дней")), (30, _lazy("30 дней")))
+
+    def report_view(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        if request.user.is_superuser:
+            points = list(
+                Partner.objects.filter(network_id=request.GET.get("network") or None)
+                .values_list("id", flat=True)
+            )
+        else:
+            # Only the venues this person may open.
+            points = self._points(request)
+        try:
+            days = int(request.GET.get("days", 7))
+        except ValueError:
+            days = 7
+        if days not in {value for value, _label in self.REPORT_PERIODS}:
+            days = 7
+        context = {
+            **self.admin_site.each_context(request),
+            "title": _("Отчёт по сети"),
+            "rows": network_summary(points, days=days),
+            "days": days,
+            "periods": self.REPORT_PERIODS,
+        }
+        return TemplateResponse(request, "admin/partners/network/report.html", context)

@@ -67,6 +67,7 @@ from apps.orders.services import (
     transition_order_status,
 )
 from apps.partners.models import Partner, PartnerBotSettings
+from apps.partners.networks import acts_for_partner
 from apps.partners.opening_hours import describe_opening_hours, intervals_for, is_open_at
 from apps.users.models import GuestProfile, User
 from core.i18n import N_, _
@@ -819,7 +820,7 @@ def _check_actor(actor, partner_id) -> None:
     if (
         actor is None
         or not actor.is_active
-        or str(actor.partner_id) != str(partner_id)
+        or not acts_for_partner(actor, partner_id)
         or actor.role not in PAYMENT_CHECK_ROLES
     ):
         raise RemoteOrderError(_("Подтверждать оплату может владелец, менеджер или кассир."))
@@ -1077,7 +1078,7 @@ def mark_order_shipped(*, order: Order, actor, tracking_number: str) -> Order:
     if (
         actor is None
         or not actor.is_active
-        or str(actor.partner_id) != str(order.partner_id)
+        or not acts_for_partner(actor, order.partner_id)
     ):
         raise RemoteOrderError(_("Отмечать отправку может только сотрудник этого заведения."))
     order = (

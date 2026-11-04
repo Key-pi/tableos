@@ -18,6 +18,8 @@ class PartnerDailyMetric(PartnerBoundModel):
         verbose_name=_lazy("Выручка"),
     )
     orders_count = models.PositiveIntegerField(default=0, verbose_name=_lazy("Заказов"))
+    # Paid bills and quick sales: what the average check is counted over.
+    sales_count = models.PositiveIntegerField(default=0, verbose_name=_lazy("Продаж"))
     average_check = models.DecimalField(
         max_digits=10,
         decimal_places=2,

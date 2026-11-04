@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.core.exceptions import ValidationError
 
+from apps.partners.models import Partner
 from apps.users.constants import (
     ADMIN_ACCESS_PRESET_TEMPLATES,
     AdminAccessPreset,
@@ -326,11 +327,27 @@ class AdminAccessProfileAdmin(ScopedAdminMixin):
                     "is_partner_owner",
                     "can_access_admin",
                     "is_active",
+                    "extra_partners",
                     "permission_summary",
                 )
             },
         ),
     )
+    # PQ-047: which other venues of the network a person runs — the owner's call.
+    owner_only_fields = ("extra_partners",)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "extra_partners" and not self.is_platform_admin(request):
+            # The other venues of the network now open in Admin.
+            scope = Partner.objects.filter(id=self.get_partner_scope_id(request)).first()
+            network_id = scope.network_id if scope is not None else None
+            kwargs["queryset"] = (
+                Partner.objects.filter(network_id=network_id).exclude(id=scope.id)
+                if network_id is not None
+                else Partner.objects.none()
+            )
+            return admin.ModelAdmin.formfield_for_manytomany(self, db_field, request, **kwargs)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def has_change_permission(self, request, obj=None):
         if obj is not None and not self._may_touch(request, obj):
