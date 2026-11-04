@@ -3082,6 +3082,10 @@ msgstr "Попросити рахунок"
 msgid "🧑‍🍳 Рабочий режим"
 msgstr "🧑‍🍳 Робочий режим"
 
+#: apps/partners/bot_texts.py
+msgid "📍 Заведение"
+msgstr "📍 Заклад"
+
 #: apps/partners/bot_texts.py apps/users/constants.py apps/users/models.py
 msgid "Официант"
 msgstr "Офіціант"
@@ -3293,6 +3297,14 @@ msgid "Точки одной сети: один вход владельца в A
 msgstr "Точки однієї мережі: один вхід власника в Admin і звіт по мережі."
 
 #: apps/partners/models.py
+msgid "Адрес"
+msgstr "Адреса"
+
+#: apps/partners/models.py
+msgid "Гость сети видит его, когда выбирает заведение."
+msgstr "Гість мережі бачить її, коли обирає заклад."
+
+#: apps/partners/models.py
 msgid "заведение"
 msgstr "заклад"
 
@@ -3323,6 +3335,14 @@ msgstr "Адреса webhook"
 #: apps/partners/models.py
 msgid "Включён"
 msgstr "Увімкнено"
+
+#: apps/partners/models.py
+msgid "Бот всей сети"
+msgstr "Бот усієї мережі"
+
+#: apps/partners/models.py
+msgid "Один бот на все точки сети: гость выбирает заведение после /start, QR стола выбирает его сам. Работает, если заведение в сети."
+msgstr "Один бот на всі точки мережі: гість обирає заклад після /start, QR стола обирає його сам. Працює, якщо заклад у мережі."
 
 #: apps/partners/models.py
 msgid "Ещё не проверен"
@@ -3751,6 +3771,34 @@ msgstr "Такого тексту немає в каталозі бота."
 #: apps/partners/models.py
 msgid "Такая подпись уже у другой кнопки: бот их спутает."
 msgstr "Такий підпис уже має інша кнопка: бот їх сплутає."
+
+#: apps/partners/models.py
+msgid "выбор заведения гостем"
+msgstr "вибір закладу гостем"
+
+#: apps/partners/models.py
+msgid "Выбор заведения гостями"
+msgstr "Вибір закладу гостями"
+
+#: apps/partners/models.py
+msgid "Бот"
+msgstr "Бот"
+
+#: apps/partners/models.py
+msgid "Чат"
+msgstr "Чат"
+
+#: apps/partners/models.py
+msgid "Сообщение"
+msgstr "Повідомлення"
+
+#: apps/partners/models.py
+msgid "сообщение бота сети"
+msgstr "повідомлення бота мережі"
+
+#: apps/partners/models.py
+msgid "Сообщения бота сети"
+msgstr "Повідомлення бота мережі"
 
 #: apps/partners/opening_hours.py
 msgid "Пн"
@@ -4495,6 +4543,10 @@ msgstr "Кошик оновлено."
 #: bot/handlers/order.py
 msgid "Позиция удалена."
 msgstr "Позицію видалено."
+
+#: bot/handlers/points.py
+msgid "📍 {partner_name}"
+msgstr "📍 {partner_name}"
 
 #: bot/handlers/profile.py
 msgid "<b>Мой профиль</b> · {partner_name}"
@@ -6763,6 +6815,10 @@ msgstr "Стіл активовано. Тепер можна відкрити м
 #: bot/services/content.py
 msgid "Стол активирован."
 msgstr "Стіл активовано."
+
+#: bot/services/network.py
+msgid "📍 В какое заведение? Выбор запомнится, сменить можно кнопкой «{button_point_label}»."
+msgstr "📍 У який заклад? Вибір запам’ятається, змінити можна кнопкою «{button_point_label}»."
 
 #: core/admin_mixins.py
 msgid "Запись принадлежит другому заведению."

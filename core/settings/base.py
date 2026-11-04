@@ -148,6 +148,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "billing.cancel_expired_transfer_orders",
         "schedule": timedelta(minutes=5),
     },
+    "forget-old-network-message-points": {
+        "task": "partners.forget_old_message_points",
+        "schedule": timedelta(days=1),
+    },
     "refresh-daily-partner-metrics": {
         "task": "analytics.refresh_daily_partner_metrics",
         "schedule": timedelta(minutes=15),

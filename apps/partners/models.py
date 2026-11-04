@@ -66,6 +66,12 @@ class Partner(TimeStampedModel):
         verbose_name=_lazy("Сеть"),
         help_text=_lazy("Точки одной сети: один вход владельца в Admin и отчёт по сети."),
     )
+    address = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=_lazy("Адрес"),
+        help_text=_lazy("Гость сети видит его, когда выбирает заведение."),
+    )
 
     class Meta:
         verbose_name = _lazy("заведение")
@@ -113,6 +119,16 @@ class BotInstance(TimeStampedModel):
     )
     webhook_url = models.URLField(blank=True, verbose_name=_lazy("Адрес webhook"))
     is_active = models.BooleanField(default=True, verbose_name=_lazy("Включён"))
+    # PQ-047, stage 2: one bot for every venue of the network; the guest
+    # picks the venue after /start (apps/partners/networks.py).
+    serves_network = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Бот всей сети"),
+        help_text=_lazy(
+            "Один бот на все точки сети: гость выбирает заведение после /start, QR стола "
+            "выбирает его сам. Работает, если заведение в сети.",
+        ),
+    )
 
     class RuntimeState(models.TextChoices):
         # Written by the bot service (bot/supervisor.py) on every check:
@@ -702,3 +718,54 @@ class BotText(TimeStampedModel):
     def save(self, *args, **kwargs):
         self.key = text_key(self.msgid)
         super().save(*args, **kwargs)
+
+
+class NetworkGuestChoice(TimeStampedModel):
+    """The venue a guest chose in the network's bot (PQ-047, stage 2)."""
+
+    network = models.ForeignKey(
+        Network, on_delete=models.CASCADE, related_name="guest_choices",
+        verbose_name=_lazy("Сеть"),
+    )
+    telegram_account = models.ForeignKey(
+        "users.TelegramAccount", on_delete=models.CASCADE, related_name="network_choices",
+        verbose_name="Telegram",
+    )
+    partner = models.ForeignKey(
+        Partner, on_delete=models.CASCADE, related_name="network_guest_choices",
+        verbose_name=_lazy("Заведение"),
+    )
+
+    class Meta:
+        verbose_name = _lazy("выбор заведения гостем")
+        verbose_name_plural = _lazy("Выбор заведения гостями")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["network", "telegram_account"], name="unique_network_guest_choice"
+            )
+        ]
+
+
+class BotMessagePoint(TimeStampedModel):
+    """Which venue a message of a network's bot was sent for, so a button
+    pressed on it later acts for that venue (PQ-047, stage 2)."""
+
+    bot_instance = models.ForeignKey(
+        BotInstance, on_delete=models.CASCADE, related_name="+", verbose_name=_lazy("Бот")
+    )
+    chat_id = models.BigIntegerField(verbose_name=_lazy("Чат"))
+    message_id = models.BigIntegerField(verbose_name=_lazy("Сообщение"))
+    partner = models.ForeignKey(
+        Partner, on_delete=models.CASCADE, related_name="+", verbose_name=_lazy("Заведение")
+    )
+
+    class Meta:
+        verbose_name = _lazy("сообщение бота сети")
+        verbose_name_plural = _lazy("Сообщения бота сети")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bot_instance", "chat_id", "message_id"],
+                name="unique_bot_message_point",
+            )
+        ]
+        indexes = [models.Index(fields=["created_at"])]

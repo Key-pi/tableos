@@ -36,6 +36,7 @@ from django.db import close_old_connections
 from apps.partners.models import BotInstance
 from apps.partners.services import record_bot_runtime_states
 from bot.main import create_dispatcher
+from bot.middlewares.message_points import MessagePointMiddleware
 from bot.services.runtime import (
     BotRuntimeConfig,
     BotScan,
@@ -58,7 +59,10 @@ def shared_dispatcher():
 
 
 def make_bot(token: str) -> Bot:
-    return Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = Bot(token=token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    # A network's bot remembers the venue of each message it sends (PQ-047).
+    bot.session.middleware(MessagePointMiddleware())
+    return bot
 
 
 @dataclass(slots=True)

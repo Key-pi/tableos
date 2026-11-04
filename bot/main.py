@@ -8,6 +8,7 @@ from bot.handlers.billing import router as billing_router
 from bot.handlers.guest_call import router as guest_call_router
 from bot.handlers.menu import router as menu_router
 from bot.handlers.order import router as order_router
+from bot.handlers.points import router as points_router
 from bot.handlers.profile import router as profile_router
 from bot.handlers.remote_checkout import router as remote_checkout_router
 from bot.handlers.session import router as session_router
@@ -15,6 +16,7 @@ from bot.handlers.staff import router as staff_router
 from bot.handlers.staff_invites import router as staff_invites_router
 from bot.handlers.staff_refunds import router as staff_refunds_router
 from bot.handlers.start import router as start_router
+from bot.middlewares.message_points import MessagePointMiddleware
 from bot.middlewares.partner_runtime import PartnerRuntimeMiddleware
 from bot.services.runtime import BotRuntimeConfig, register_runtime_configs
 
@@ -23,6 +25,7 @@ def create_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher()
     dispatcher.update.outer_middleware(PartnerRuntimeMiddleware())
     dispatcher.include_router(start_router)
+    dispatcher.include_router(points_router)
     dispatcher.include_router(session_router)
     dispatcher.include_router(menu_router)
     dispatcher.include_router(order_router)
@@ -46,6 +49,8 @@ async def run_polling(configs: Sequence[BotRuntimeConfig]) -> None:
         )
         for config in configs
     ]
+    for bot in bots:
+        bot.session.middleware(MessagePointMiddleware())
     try:
         await dispatcher.start_polling(
             *bots,

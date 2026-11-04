@@ -16,6 +16,7 @@ Autodiscovery Celery регистрирует такие собственные 
 | `notifications.recover_stalled_broadcast_campaigns` | `apps/notifications/tasks.py` | `default` | beat, каждые 5 минут | нет | просроченные захваты (30 мин) → `unknown`; кампании в `sending` с ожидающими строками и без свежего захвата ставятся заново; законченные — завершаются |
 | `billing.cancel_expired_transfer_orders` | `apps/billing/tasks.py` | `default` | beat, каждые 5 минут | нет (повтор безопасен) | удалённые заказы с переводом заранее, оплату которых никто не подтвердил за `PartnerBotSettings.transfer_wait_minutes`, отменяются (`remote_orders.py:expire_unconfirmed_transfer`: блокировки `Bill → Order`, перепроверка, счёт аннулируется с `payment_not_received`, бонусы возвращаются); приостановленные партнёры не трогаются (PQ-036) |
 | `analytics.refresh_daily_partner_metrics` | `apps/analytics/tasks.py` | `default` | beat, каждые 15 минут | нет | `update_or_create` на партнёра и день; текущий день и один раз предыдущий — после полуночи по времени заведения |
+| `partners.forget_old_message_points` | `apps/partners/tasks.py` | `default` | beat, раз в сутки | нет (повтор безопасен) | удаляет отметки «сообщение бота сети → точка» старше 90 дней (`BotMessagePoint`, PQ-047); кнопка такого сообщения потом действует для выбранной гостем точки |
 
 `_send_telegram_messages` относит каждый результат к одному из видов:
 отправлено; точная ошибка (`Forbidden` к тому же помечает аккаунт

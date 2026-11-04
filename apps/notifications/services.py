@@ -35,6 +35,7 @@ from apps.notifications.repositories import (
 from apps.partners.bot_texts import INLINE_BUTTON_TEXTS
 from apps.partners.languages import speaking_to_employee, speaking_to_guest
 from apps.partners.models import BotInstance, Partner
+from apps.partners.networks import bot_for_partner, remember_message_point
 from apps.tables.services import get_active_table_session
 from apps.users.models import TelegramAccount
 from core.i18n import _
@@ -71,19 +72,12 @@ def _escape_html(value) -> str:
 
 
 def _active_partner_bot(partner_id) -> BotInstance:
-    bot_instance = (
-        BotInstance.objects.filter(
-            partner_id=partner_id,
-            is_active=True,
-            mode=BotInstance.Mode.POLLING,
-        )
-        .select_related("partner")
-        .order_by("created_at")
-        .first()
-    )
-    if bot_instance is None:
+    # The venue's own bot, else its network's bot (PQ-047).
+    bot_instance = bot_for_partner(partner_id)
+    if bot_instance is None or bot_instance.mode != BotInstance.Mode.POLLING:
         raise NotificationDeliveryError(_("У заведения нет включённого бота."))
-    if bot_instance.partner.status != Partner.Status.ACTIVE:
+    status = Partner.objects.filter(id=partner_id).values_list("status", flat=True).first()
+    if status != Partner.Status.ACTIVE:
         raise NotificationDeliveryError(_("Заведение приостановлено — сообщения не отправляются."))
     if not bot_instance.has_usable_token:
         raise NotificationDeliveryError(_("Токен бота заведения не задан или неверный."))
@@ -139,6 +133,17 @@ async def _send_telegram_messages(
         if on_result is not None:
             await on_result(result)
     return results
+
+
+def _remember_points(bot_instance, partner_id, results) -> None:
+    """In a network's bot, a button of this message acts for this venue
+    later, whichever venue the reader has open (PQ-047)."""
+
+    if not bot_instance.serves_network:
+        return
+    for result in results:
+        if len(result) > 5 and result[1] and result[5] is not None:
+            remember_message_point(bot_instance.id, result[0], result[5], partner_id)
 
 
 def _unpack_delivery_result(result) -> tuple[int, bool, str, bool]:
@@ -253,10 +258,16 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
         bot_instance = _active_partner_bot(notification.partner_id)
         with speaking_to_employee(employee):
             markup = _staff_notification_markup(notification)
-        message = (employee.telegram_account.telegram_id, staff_notification_text(notification))
+        message = (
+            employee.telegram_account.telegram_id,
+            staff_notification_text(
+                notification, venue_name=_venue_name(bot_instance, notification.partner_id)
+            ),
+        )
         results = async_to_sync(_send_telegram_messages)(
             bot_instance.token, [(*message, markup) if markup is not None else message]
         )
+        _remember_points(bot_instance, notification.partner_id, results)
     except NotificationDeliveryError as exc:
         notification.delivery_status = StaffNotification.DeliveryStatus.FAILED
         notification.delivery_error = str(exc)
@@ -289,10 +300,23 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
     return notification
 
 
-def staff_notification_text(notification: StaffNotification) -> str:
+def staff_notification_text(notification: StaffNotification, *, venue_name: str = "") -> str:
     # Title and message are plain text built from venue and guest data; only
-    # the <b> wrapper is markup (AA-024).
-    return f"<b>{_escape_html(notification.title)}</b>\n{_escape_html(notification.message)}"
+    # the <b> wrapper is markup (AA-024). ``venue_name``: in a network's bot
+    # the reader may work in several venues (PQ-047).
+    venue = f"📍 {_escape_html(venue_name)}\n" if venue_name else ""
+    return (
+        f"{venue}<b>{_escape_html(notification.title)}</b>\n"
+        f"{_escape_html(notification.message)}"
+    )
+
+
+def _venue_name(bot_instance, partner_id) -> str:
+    """The venue named in a staff message of a network's bot, else ""."""
+
+    if not bot_instance.serves_network:
+        return ""
+    return Partner.objects.filter(id=partner_id).values_list("name", flat=True).first() or ""
 
 
 def _staff_notification_markup(notification: StaffNotification):
@@ -516,6 +540,7 @@ def send_guest_order_status_update_now(
                 ),
             )
     results = async_to_sync(_send_telegram_messages)(bot_instance.token, [message])
+    _remember_points(bot_instance, order.partner_id, results)
     _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
     if should_mark_blocked:
         order.guest.telegram_account.is_blocked = True
@@ -599,6 +624,7 @@ def send_guest_refund_notice_now(refund_id: str) -> bool:
         bot_instance.token,
         [(guest.telegram_account.telegram_id, text)],
     )
+    _remember_points(bot_instance, refund.partner_id, results)
     _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
     if should_mark_blocked:
         guest.telegram_account.is_blocked = True
@@ -783,6 +809,7 @@ def announce_guest_call_taken_now(*, call_id) -> None:
         results = async_to_sync(_send_telegram_messages)(
             bot_instance.token, [(guest.telegram_account.telegram_id, text)]
         )
+        _remember_points(bot_instance, call.partner_id, results)
         _chat_id, is_sent, error_message, _blocked = _unpack_delivery_result(results[0])
         if is_sent:
             GuestCall.objects.filter(id=call.id, guest_told_at__isnull=True).update(
@@ -797,12 +824,13 @@ def announce_guest_call_taken_now(*, call_id) -> None:
         .exclude(employee_id=call.taken_by_id)
     )
     name = _employee_name(call.taken_by)
+    venue_name = _venue_name(bot_instance, call.partner_id)
     for notification in others:
         employee = notification.employee
         if employee is None or employee.telegram_account_id is None:
             continue
         with speaking_to_employee(employee):
-            text = staff_notification_text(notification) + "\n" + _(
+            text = staff_notification_text(notification, venue_name=venue_name) + "\n" + _(
                 "✓ Идёт: {name}", name=_escape_html(name)
             )
         try:

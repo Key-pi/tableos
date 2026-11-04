@@ -132,6 +132,7 @@ from bot.keyboards.staff import (
 )
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
+from bot.services.network import update_points_count
 from bot.states.staff_sale import StaffBillStates, StaffQuickSaleStates
 from bot.utils.html import escape_html
 from core.i18n import N_, _, variants
@@ -2494,7 +2495,10 @@ async def staff_call_take_callback_handler(callback: CallbackQuery, bot: Bot) ->
             callback.message,
             _(
                 "{html_text}\n✓ Идёте вы",
-                html_text=staff_notification_text(notification),
+                # In a network's bot the message names the venue (PQ-047).
+                html_text=staff_notification_text(
+                    notification, venue_name=partner.name if update_points_count() else ""
+                ),
             ),
             reply_markup=None,
         )

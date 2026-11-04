@@ -34,6 +34,7 @@ class BotInstanceAdminForm(forms.ModelForm):
             "mode",
             "webhook_url",
             "is_active",
+            "serves_network",
         )
 
     def clean_username(self) -> str:

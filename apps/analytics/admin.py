@@ -6,7 +6,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.analytics.models import PartnerDailyMetric, SourceVisit, TrafficSource
-from apps.partners.models import BotInstance
+from apps.partners.networks import bot_for_partner
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 from core.i18n import _
@@ -106,11 +106,7 @@ class TrafficSourceAdmin(ScopedAdminMixin):
     def link(self, obj):
         if obj is None or not obj.pk:
             return _("появится после сохранения")
-        bot = (
-            BotInstance.objects.filter(partner_id=obj.partner_id, is_active=True)
-            .order_by("created_at")
-            .first()
-        )
+        bot = bot_for_partner(obj.partner_id)  # own, else the network's (PQ-047)
         if bot is None:
             return _(
                 "/start {deep_link_payload} (у заведения нет активного бота)",

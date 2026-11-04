@@ -232,6 +232,8 @@ class PartnerAdmin(ScopedAdminMixin):
 class BotInstanceAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BOT_INSTANCES
     platform_only_fields = ("mode", "webhook_url")
+    # One bot for every venue of the network (PQ-047): the owner's call.
+    owner_only_fields = ("serves_network",)
     form = BotInstanceAdminForm
     list_display = (
         "display_name",

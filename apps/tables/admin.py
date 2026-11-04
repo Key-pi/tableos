@@ -11,6 +11,7 @@ from apps.billing.table_bills import (
     create_shared_bill_for_table,
 )
 from apps.orders.models import Order
+from apps.partners.networks import bot_for_partner
 from apps.tables.models import Table, TableSession, TableVisit
 from apps.tables.services import (
     TableSessionError,
@@ -99,6 +100,10 @@ class TableAdmin(ScopedAdminMixin):
         ]
         if active_usernames:
             return active_usernames
+        # A venue without its own bot: the network's bot (PQ-047).
+        network_bot = bot_for_partner(obj.partner_id)
+        if network_bot is not None and network_bot.username:
+            return [network_bot.username]
 
         # Fallback to any configured username so admin still shows the final
         # URL shape even if the bot was temporarily marked inactive.

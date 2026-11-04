@@ -35,6 +35,8 @@ BUTTON_TEXTS = {
     "button_request_bill_label": N_("Запросить счёт"),
     # Only employees of the venue see it: opens the work mode (/staff).
     "button_staff_label": N_("🧑‍🍳 Рабочий режим"),
+    # Only in a network's bot with several venues (PQ-047): pick the venue.
+    "button_point_label": N_("📍 Заведение"),
 }
 # Inline buttons: may repeat a reply button, never empty.
 INLINE_BUTTON_TEXTS = {

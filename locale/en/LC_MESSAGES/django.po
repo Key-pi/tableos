@@ -3082,6 +3082,10 @@ msgstr "Request the bill"
 msgid "🧑‍🍳 Рабочий режим"
 msgstr "🧑‍🍳 Work mode"
 
+#: apps/partners/bot_texts.py
+msgid "📍 Заведение"
+msgstr "📍 Venue"
+
 #: apps/partners/bot_texts.py apps/users/constants.py apps/users/models.py
 msgid "Официант"
 msgstr "Waiter"
@@ -3293,6 +3297,14 @@ msgid "Точки одной сети: один вход владельца в A
 msgstr "Venues of one network: one owner login to Admin and a network report."
 
 #: apps/partners/models.py
+msgid "Адрес"
+msgstr "Address"
+
+#: apps/partners/models.py
+msgid "Гость сети видит его, когда выбирает заведение."
+msgstr "Guests of the network see it when they pick a venue."
+
+#: apps/partners/models.py
 msgid "заведение"
 msgstr "venue"
 
@@ -3323,6 +3335,14 @@ msgstr "Webhook URL"
 #: apps/partners/models.py
 msgid "Включён"
 msgstr "Enabled"
+
+#: apps/partners/models.py
+msgid "Бот всей сети"
+msgstr "Bot of the whole network"
+
+#: apps/partners/models.py
+msgid "Один бот на все точки сети: гость выбирает заведение после /start, QR стола выбирает его сам. Работает, если заведение в сети."
+msgstr "One bot for every venue of the network: the guest picks the venue after /start, a table QR picks it itself. Works when the venue is in a network."
 
 #: apps/partners/models.py
 msgid "Ещё не проверен"
@@ -3751,6 +3771,34 @@ msgstr "There is no such text in the bot catalog."
 #: apps/partners/models.py
 msgid "Такая подпись уже у другой кнопки: бот их спутает."
 msgstr "Another button already has this label: the bot would mix them up."
+
+#: apps/partners/models.py
+msgid "выбор заведения гостем"
+msgstr "guest's venue choice"
+
+#: apps/partners/models.py
+msgid "Выбор заведения гостями"
+msgstr "Guests' venue choices"
+
+#: apps/partners/models.py
+msgid "Бот"
+msgstr "Bot"
+
+#: apps/partners/models.py
+msgid "Чат"
+msgstr "Chat"
+
+#: apps/partners/models.py
+msgid "Сообщение"
+msgstr "Message"
+
+#: apps/partners/models.py
+msgid "сообщение бота сети"
+msgstr "network bot message"
+
+#: apps/partners/models.py
+msgid "Сообщения бота сети"
+msgstr "Network bot messages"
 
 #: apps/partners/opening_hours.py
 msgid "Пн"
@@ -4495,6 +4543,10 @@ msgstr "Cart updated."
 #: bot/handlers/order.py
 msgid "Позиция удалена."
 msgstr "Item removed."
+
+#: bot/handlers/points.py
+msgid "📍 {partner_name}"
+msgstr "📍 {partner_name}"
 
 #: bot/handlers/profile.py
 msgid "<b>Мой профиль</b> · {partner_name}"
@@ -6763,6 +6815,10 @@ msgstr "Your table is active. Now you can open the menu."
 #: bot/services/content.py
 msgid "Стол активирован."
 msgstr "Your table is active."
+
+#: bot/services/network.py
+msgid "📍 В какое заведение? Выбор запомнится, сменить можно кнопкой «{button_point_label}»."
+msgstr "📍 Which venue? The choice is remembered; change it with the «{button_point_label}» button."
 
 #: core/admin_mixins.py
 msgid "Запись принадлежит другому заведению."

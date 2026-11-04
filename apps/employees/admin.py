@@ -12,7 +12,7 @@ from apps.employees.invites import (
     roles_invitable_by,
 )
 from apps.employees.models import EmployeeProfile, StaffInvite
-from apps.partners.models import BotInstance
+from apps.partners.networks import bot_for_partner
 from apps.users.admin import is_owner_user
 from apps.users.constants import AdminSection
 from apps.users.models import User
@@ -227,13 +227,8 @@ class StaffInviteAdmin(ScopedAdminMixin):
     def link(self, obj: StaffInvite) -> str:
         if obj.status != StaffInvite.Status.PENDING:
             return "—"
-        bot = (
-            BotInstance.objects.filter(partner_id=obj.partner_id, is_active=True)
-            .exclude(username="")
-            .order_by("created_at")
-            .first()
-        )
-        if bot is None:
+        bot = bot_for_partner(obj.partner_id)  # own, else the network's (PQ-047)
+        if bot is None or not bot.username:
             return _("Сначала добавьте бота в «Боты».")
         return invite_link(obj.code, bot.username)
 
