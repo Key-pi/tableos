@@ -88,6 +88,47 @@ class BotInstance(TimeStampedModel):
     webhook_url = models.URLField(blank=True, verbose_name=_lazy("Адрес webhook"))
     is_active = models.BooleanField(default=True, verbose_name=_lazy("Включён"))
 
+    class RuntimeState(models.TextChoices):
+        # Written by the bot service (bot/supervisor.py) on every check:
+        # a broken bot is skipped and shown here, the others keep working
+        # (PQ-041).
+        UNKNOWN = "", _lazy("Ещё не проверен")
+        RUNNING = "running", _lazy("Работает")
+        RUNNING_SUSPENDED = "running_suspended", _lazy(
+            "Работает: заведение приостановлено — бот отвечает, что работа приостановлена"
+        )
+        PLACEHOLDER_TOKEN = "placeholder_token", _lazy(
+            "Не запущен: демо-токен — вставьте настоящий токен из @BotFather"
+        )
+        INVALID_TOKEN = "invalid_token", _lazy(
+            "Не запущен: токен с ошибкой — скопируйте его из @BotFather целиком"
+        )
+        UNREADABLE_TOKEN = "unreadable_token", _lazy(
+            "Не запущен: токен не расшифровывается — сохраните его заново"
+        )
+        DUPLICATE_TOKEN = "duplicate_token", _lazy(
+            "Не запущен: этот токен уже у другого бота"
+        )
+        TOKEN_REJECTED = "token_rejected", _lazy(
+            "Не запущен: Telegram не принимает токен — выпустите новый в @BotFather"
+        )
+        CONFLICT = "conflict", _lazy(
+            "Сбой: этот токен опрашивает ещё одна программа — остановите её"
+        )
+        WEBHOOK = "webhook", _lazy("Не запущен: режим webhook пока не поддерживается")
+
+    runtime_state = models.CharField(
+        max_length=32,
+        choices=RuntimeState.choices,
+        default=RuntimeState.UNKNOWN,
+        blank=True,
+        editable=False,
+        verbose_name=_lazy("Состояние"),
+    )
+    runtime_checked_at = models.DateTimeField(
+        null=True, blank=True, editable=False, verbose_name=_lazy("Состояние с")
+    )
+
     class Meta:
         verbose_name = _lazy("бот")
         verbose_name_plural = _lazy("Боты")
@@ -132,6 +173,14 @@ class BotInstance(TimeStampedModel):
         except ImproperlyConfigured:
             return False
         return self.looks_like_valid_token(raw_token) and not self.is_placeholder_token(raw_token)
+
+    @property
+    def runtime_state_label(self) -> str:
+        """What the bot service found (PQ-041), in the reader's language."""
+
+        if not self.is_active:
+            return str(_lazy("Выключен"))
+        return str(self.RuntimeState(self.runtime_state).label)
 
     @property
     def token_status_label(self) -> str:

@@ -6,14 +6,9 @@ import time
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db import close_old_connections
 
-from bot.main import run_polling
-from bot.services.runtime import (
-    BotRuntimeConfigError,
-    configs_for_shard,
-    load_active_bot_configs,
-)
+from bot.services.runtime import configs_for_shard, scan_bot_configs
+from bot.supervisor import BotSupervisor
 
 
 class Command(BaseCommand):
@@ -29,7 +24,21 @@ class Command(BaseCommand):
                 "где бота добавляют в Admin после запуска."
             ),
         )
-        parser.add_argument("--wait-interval", type=int, default=30)
+        parser.add_argument(
+            "--wait-interval",
+            type=int,
+            default=30,
+            help="Оставлен для совместимости; ботов перечитывает --reload-interval.",
+        )
+        parser.add_argument(
+            "--reload-interval",
+            type=int,
+            default=60,
+            help=(
+                "Раз в столько секунд перечитывать список ботов: новые запускаются, "
+                "выключенные останавливаются, со сменённым токеном — перезапускаются (PQ-042)."
+            ),
+        )
         parser.add_argument(
             "--processes",
             type=int,
@@ -56,37 +65,26 @@ class Command(BaseCommand):
             raise CommandError("--shard-index должен быть от 0 до --shard-count минус 1.")
         shard = f" (процесс {shard_index + 1} из {shard_count})" if shard_count > 1 else ""
 
-        wait = options["wait"]
-        interval = max(1, options["wait_interval"])
-        while True:
-            problem = ""
-            configs = []
-            try:
-                configs = configs_for_shard(
-                    load_active_bot_configs(), index=shard_index, count=shard_count
+        if not options["wait"]:
+            # Without --wait the command still refuses to start with nothing to
+            # run; a broken bot next to working ones no longer stops them (PQ-041).
+            scan = scan_bot_configs()
+            mine = configs_for_shard(scan.configs, index=shard_index, count=shard_count)
+            if not mine:
+                problems = "\n".join(scan.problems.values())
+                raise CommandError(
+                    f"No active bot instances configured{shard}."
+                    + (f"\nBot runtime configuration is invalid:\n{problems}" if problems else "")
                 )
-            except BotRuntimeConfigError as exc:
-                if not wait:
-                    raise CommandError(f"Bot runtime configuration is invalid:\n{exc}") from exc
-                problem = f"Настройка ботов некорректна:\n{exc}"
-            if configs:
-                break
-            if not wait:
-                raise CommandError(f"No active bot instances configured{shard}.")
-            if not problem:
-                problem = (
-                    f"Нет активных ботов с настоящим токеном{shard}. Добавьте токен в .env "
-                    "(DEMO_*_BOT_TOKEN) или в Admin → Partners → Bot instances."
-                )
-            self.stderr.write(f"{problem}\nПовторная проверка через {interval} с.")
-            # The waiting process holds no transaction; drop the connection so a
-            # long wait does not keep a stale one.
-            close_old_connections()
-            time.sleep(interval)
-
-        names = ", ".join(f"@{config.username}" for config in configs)
-        self.stdout.write(f"Запускаю polling{shard}: {names}")
-        asyncio.run(run_polling(configs))
+        interval = max(1, options["reload_interval"])
+        self.stdout.write(
+            f"Запускаю ботов{shard}; список перечитывается каждые {interval} с."
+        )
+        asyncio.run(
+            BotSupervisor(
+                shard_index=shard_index, shard_count=shard_count, interval=interval
+            ).run()
+        )
 
     def _run_processes(self, options) -> None:
         """Start one ``runbot`` per shard and stop them all when one stops.
@@ -101,7 +99,8 @@ class Command(BaseCommand):
             "--shard-count", str(count),
         ]
         if options["wait"]:
-            base += ["--wait", "--wait-interval", str(options["wait_interval"])]
+            base += ["--wait"]
+        base += ["--reload-interval", str(options["reload_interval"])]
         children = [
             subprocess.Popen(base + ["--shard-index", str(index)]) for index in range(count)
         ]

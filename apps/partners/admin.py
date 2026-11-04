@@ -235,17 +235,18 @@ class BotInstanceAdmin(ScopedAdminMixin):
         "partner",
         "mode",
         "token_status",
+        "runtime_status",
         "is_active",
         "created_at",
     )
-    list_filter = ("mode", "is_active")
+    list_filter = ("mode", "is_active", "runtime_state")
     search_fields = ("display_name", "username", "partner__name")
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("runtime_status", "runtime_checked_at", "created_at", "updated_at")
 
     def get_list_display(self, request):
         if request.user.is_superuser:
             return self.list_display
-        return ("display_name", "username", "token_status", "is_active", "created_at")
+        return ("display_name", "username", "token_status", "runtime_status", "is_active")
 
     def get_list_filter(self, request):
         if request.user.is_superuser:
@@ -260,6 +261,11 @@ class BotInstanceAdmin(ScopedAdminMixin):
     @admin.display(description=_lazy("Токен"))
     def token_status(self, obj: BotInstance) -> str:
         return obj.token_status_label
+
+    @admin.display(description=_lazy("Состояние"), ordering="runtime_state")
+    def runtime_status(self, obj: BotInstance) -> str:
+        # Written by the bot service at its check every minute (PQ-041, PQ-042).
+        return obj.runtime_state_label
 
 
 def _alert_owners_if_transfer_details_changed(form, obj, actor) -> None:

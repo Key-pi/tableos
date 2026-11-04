@@ -2878,6 +2878,10 @@ msgstr "Guests see their Telegram language if it is turned on, otherwise the mai
 msgid "Токен"
 msgstr "Token"
 
+#: apps/partners/admin.py apps/partners/models.py
+msgid "Состояние"
+msgstr "State"
+
 #: apps/partners/admin.py apps/partners/forms.py apps/partners/models.py
 msgid "Текст в каталоге"
 msgstr "Catalog text"
@@ -3153,12 +3157,56 @@ msgid "Включён"
 msgstr "Enabled"
 
 #: apps/partners/models.py
+msgid "Ещё не проверен"
+msgstr "Not checked yet"
+
+#: apps/partners/models.py
+msgid "Работает: заведение приостановлено — бот отвечает, что работа приостановлена"
+msgstr "Running: the venue is suspended — the bot replies that work is suspended"
+
+#: apps/partners/models.py
+msgid "Не запущен: демо-токен — вставьте настоящий токен из @BotFather"
+msgstr "Not started: demo token — paste a real token from @BotFather"
+
+#: apps/partners/models.py
+msgid "Не запущен: токен с ошибкой — скопируйте его из @BotFather целиком"
+msgstr "Not started: the token has a mistake — copy it from @BotFather in full"
+
+#: apps/partners/models.py
+msgid "Не запущен: токен не расшифровывается — сохраните его заново"
+msgstr "Not started: the token cannot be decrypted — save it again"
+
+#: apps/partners/models.py
+msgid "Не запущен: этот токен уже у другого бота"
+msgstr "Not started: another bot already has this token"
+
+#: apps/partners/models.py
+msgid "Не запущен: Telegram не принимает токен — выпустите новый в @BotFather"
+msgstr "Not started: Telegram refuses the token — issue a new one in @BotFather"
+
+#: apps/partners/models.py
+msgid "Сбой: этот токен опрашивает ещё одна программа — остановите её"
+msgstr "Failure: another program polls this token — stop it"
+
+#: apps/partners/models.py
+msgid "Не запущен: режим webhook пока не поддерживается"
+msgstr "Not started: webhook mode is not supported yet"
+
+#: apps/partners/models.py
+msgid "Состояние с"
+msgstr "State since"
+
+#: apps/partners/models.py
 msgid "бот"
 msgstr "bot"
 
 #: apps/partners/models.py apps/users/constants.py
 msgid "Боты"
 msgstr "Bots"
+
+#: apps/partners/models.py
+msgid "Выключен"
+msgstr "Switched off"
 
 #: apps/partners/models.py
 msgid "Категории и позиции. Нужен для заказов и быстрых продаж."

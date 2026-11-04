@@ -147,8 +147,9 @@ services:
       - --schedule=/tmp/celerybeat-schedule
 
   # Telegram polling for every active partner bot. Exactly one: two pollers of
-  # the same token conflict. Waits instead of exiting while no bot has a real
-  # token; after bot changes in Admin run `docker compose restart bot`.
+  # the same token conflict. Re-reads the bots every minute: a bot added,
+  # switched off or given a new token in Admin needs no restart (PQ-042);
+  # a broken bot is skipped and its state shown in Admin (PQ-041).
   bot:
     <<: [*app, *after-init]
     # BOT_PROCESSES: bots split over N processes, each bot in exactly one

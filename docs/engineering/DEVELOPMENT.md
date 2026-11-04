@@ -126,7 +126,6 @@ Employee profiles привяжите его Telegram-аккаунт (появи�
 docker compose ps                         # что запущено
 docker compose logs -f bot worker         # логи бота и доставки
 docker compose up -d                      # после правки .env: контейнеры пересоздадутся
-docker compose restart bot                # после изменения ботов в Admin
 docker compose restart worker broadcasts beat bot   # после правки кода (web перезапускается сам)
 docker compose up --build                 # после изменения requirements.lock (зависимости)
 docker compose run --rm web python manage.py seed_baseline_demo   # вернуть демо-данные к исходным
@@ -156,7 +155,7 @@ docker compose down -v                    # остановить и удалит
 | worker или beat: `Name or service not known` / «имя или сервис неизвестны» про `redis` | контейнер `redis` не запущен: `docker compose ps -a`, `docker compose logs redis`. Остановите старые контейнеры, если они остались: `docker rm -f tableos-redis`, `docker compose -p tableos down`. Затем `docker compose up -d` |
 | бот молчит | `docker compose logs bot`; один токен не должен работать в двух местах (например, ещё и в локальном `runbot`) |
 | не приходят уведомления | нажали «Start» в боте? `DEMO_TELEGRAM_ID` указан? Admin → Notifications → Staff notifications: статус и ошибка доставки; `docker compose logs worker` |
-| изменили бота в Admin, а он не отвечает | `docker compose restart bot` |
+| изменили бота в Admin, а он не отвечает | подождите минуту: сервис `bot` перечитывает ботов сам; причину покажет Admin → Боты, колонка «Состояние», и `docker compose logs bot` |
 
 ## Запуск без Docker
 
