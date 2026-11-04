@@ -85,9 +85,10 @@ class StaffTableVisitHandlerTests(TestCase):
 
         self._run(staff.staff_table_open_callback_handler, callback)
 
-        text = callback.message.answer.call_args.args[0]
+        # The table card replaces the list in the same message (PQ-044).
+        text = callback.message.edit_text.call_args.args[0]
         self.assertIn("⚠ За столом несколько визитов", text)
-        markup = callback.message.answer.call_args.kwargs["reply_markup"]
+        markup = callback.message.edit_text.call_args.kwargs["reply_markup"]
         data = [button.callback_data for row in markup.inline_keyboard for button in row]
         old_hex = str(self.old_party.visit_id).replace("-", "")
         self.assertIn(f"stafftvshared:{old_hex}", data)

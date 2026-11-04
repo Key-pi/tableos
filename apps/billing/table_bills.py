@@ -145,11 +145,10 @@ def create_shared_bill_for_table(
     if not orders:
         raise BillingServiceError(_("На этом столе нет заказов, доступных для нового счёта."))
 
-    table = orders[0].table
     return create_bill_from_orders(
         partner_id=partner_id,
         order_ids=[str(order.id) for order in orders],
-        label=label or f"Table #{table.number} shared bill",
+        label=label,
         kind=Bill.Kind.SHARED,
     )
 
@@ -177,13 +176,11 @@ def create_personal_bills_for_table(
     bills: list[Bill] = []
     for _guest_id, guest_orders_iter in groupby(orders, key=lambda order: order.guest_id):
         guest_orders = list(guest_orders_iter)
-        guest = guest_orders[0].guest
-        guest_label = guest.telegram_account.username or guest.customer_code
         bills.append(
             create_bill_from_orders(
                 partner_id=partner_id,
                 order_ids=[str(order.id) for order in guest_orders],
-                label=f"Table #{guest_orders[0].table.number} / {guest_label}",
+                label="",
                 kind=Bill.Kind.PERSONAL,
             )
         )
@@ -226,12 +223,10 @@ def get_or_create_personal_bill_for_guest_table(
     if not guest_orders:
         raise BillingServiceError(_("У этого гостя нет новых заказов для персонального счёта."))
 
-    guest = guest_orders[0].guest
-    guest_label = guest.telegram_account.username or guest.customer_code
     return create_bill_from_orders(
         partner_id=partner_id,
         order_ids=[str(order.id) for order in guest_orders],
-        label=f"Table #{guest_orders[0].table.number} / {guest_label}",
+        label="",
         kind=Bill.Kind.PERSONAL,
     )
 
@@ -268,7 +263,7 @@ def get_or_create_shared_bill_for_table(
     return create_bill_from_orders(
         partner_id=partner_id,
         order_ids=[str(order.id) for order in orders],
-        label=f"Table #{orders[0].table.number} shared bill",
+        label="",
         kind=Bill.Kind.SHARED,
     )
 
@@ -312,7 +307,7 @@ def create_billing_request_for_telegram_user(
             visit_id=table_session.visit_id,
         )
         status = BillingRequest.Status.AUTO_PREPARED
-        note = "Personal draft bill prepared automatically."
+        note = ""
     elif request_type == BillingRequest.RequestType.SHARED:
         bill = get_or_create_shared_bill_for_table(
             partner_id=partner_id,
@@ -320,7 +315,7 @@ def create_billing_request_for_telegram_user(
             visit_id=table_session.visit_id,
         )
         status = BillingRequest.Status.AUTO_PREPARED
-        note = "Shared draft bill prepared automatically."
+        note = ""
     elif request_type != BillingRequest.RequestType.CUSTOM_SPLIT:
         raise BillingServiceError(_("Неизвестный тип запроса счёта."))
 

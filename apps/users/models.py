@@ -149,6 +149,18 @@ class GuestProfile(PartnerBoundModel):
         identity = self.telegram_account.username or self.telegram_account.telegram_id
         return f"{self.partner.name} / {identity}"
 
+    def staff_label(self) -> str:
+        """How staff see the guest: name and @username, then the bonus code.
+
+        Never the Telegram ID: it means nothing to a waiter.
+        """
+
+        account = self.telegram_account
+        name = " ".join(part for part in (account.first_name, account.last_name) if part)
+        username = f"@{account.username}" if account.username else ""
+        who = " ".join(part for part in (name, username) if part)
+        return f"{who} · {self.customer_code}" if who else self.customer_code
+
     def save(self, *args, **kwargs):
         if not self.customer_code:
             self.customer_code = self._generate_customer_code()

@@ -8,10 +8,10 @@ from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 
 from apps.analytics.models import TrafficSource
-from apps.bonuses.models import BonusTransaction
+from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import get_bonus_ledger_balance
 from apps.employees.models import EmployeeProfile
-from apps.menu.models import MenuItem
+from apps.menu.models import MenuCategory, MenuItem
 from apps.partners.models import BotInstance, OpeningHours, Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.users.models import GuestProfile, TelegramAccount, User
@@ -40,6 +40,24 @@ def _seed(**options) -> str:
 # The seed hashes a password for every demo user; a fast hasher keeps this quick.
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
 class SeedBaselineDemoTests(TestCase):
+    def test_demo_menu_is_ukrainian_and_old_names_are_renamed_in_place(self):
+        _seed()
+        cafe = Partner.objects.get(slug="riverstone-cafe")
+        MenuCategory.objects.filter(partner=cafe, name="Сніданки").update(name="Завтраки")
+        BonusProgram.objects.filter(partner=cafe, name="Кешбек 5%").update(name="Cashback 5%")
+
+        _seed()
+
+        self.assertFalse(MenuCategory.objects.filter(partner=cafe, name="Завтраки").exists())
+        breakfast = MenuCategory.objects.get(partner=cafe, name="Сніданки")
+        self.assertIn("Сирники", breakfast.items.values_list("name", flat=True))
+        self.assertEqual(
+            BonusProgram.objects.filter(partner=cafe, name__in=["Кешбек 5%", "Cashback 5%"])
+            .values_list("name", flat=True)
+            .get(),
+            "Кешбек 5%",
+        )
+
     def test_fresh_seed_builds_both_venues_with_pickup_and_inactive_bots(self):
         output = _seed()
 

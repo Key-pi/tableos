@@ -76,6 +76,7 @@ SLOT_LABELS = {
 }
 SHARE_PHONE_LABEL = N_("📱 Поделиться номером")
 SHARE_LOCATION_LABEL = N_("📍 Отправить геолокацию")
+SKIP_LOCATION_LABEL = N_("Без геолокации")
 # The guest's answer to this prompt is their delivery address (ForceReply);
 # the prompt is recognized in any language.
 ADDRESS_PROMPT = N_("🏠 Адрес доставки")
@@ -668,12 +669,31 @@ async def address_handler(message: Message, bot: Bot) -> None:
             "ниже (по желанию)."
         ),
         reply_markup=ReplyKeyboardMarkup(
-            keyboard=[[KeyboardButton(text=_(SHARE_LOCATION_LABEL), request_location=True)]],
+            keyboard=[
+                [KeyboardButton(text=_(SHARE_LOCATION_LABEL), request_location=True)],
+                [KeyboardButton(text=_(SKIP_LOCATION_LABEL))],
+            ],
             resize_keyboard=True,
             one_time_keyboard=True,
         ),
     )
     await _send_time_step(message, partner, Order.Channel.DELIVERY)
+
+
+def _is_skip_location(message: Message) -> bool:
+    return bool(message.text) and message.text in variants(SKIP_LOCATION_LABEL)
+
+
+@router.message(_is_skip_location)
+async def skip_location_handler(message: Message, bot: Bot) -> None:
+    """The guest does not send a location: bring the main keyboard back."""
+
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    await message.answer(
+        _("Хорошо, без точки на карте. Выберите время доставки выше."),
+        reply_markup=await _main_keyboard(partner, content, message.from_user.id),
+    )
 
 
 @router.message(_is_destination_answer)
@@ -885,7 +905,10 @@ async def _send_placed(callback: CallbackQuery, partner, content, order, *, to_p
         )
     await _reply(callback, text, edit=True)
     await callback.message.answer(
-        "⁠",
+        _(
+            "Статус заказа — «{button_my_profile}» → «📋 Мои заказы».",
+            button_my_profile=escape_html(content.button_my_profile),
+        ),
         reply_markup=await _main_keyboard(partner, content, callback.from_user.id),
     )
     await callback.answer(_("Заказ оформлен."))

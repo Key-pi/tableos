@@ -58,28 +58,23 @@ def _render_profile_summary(
     guest_profile,
     active_session,
 ) -> str:
-    telegram_username = guest_profile.telegram_account.username
-    identity_line = f"@{telegram_username}" if telegram_username else str(
-        guest_profile.telegram_account.telegram_id
-    )
     lines = [
-        _("<b>Мой профиль</b>"),
-        _("Заведение: {partner_name}", partner_name=escape_html(partner_name)),
-        f"Telegram: {identity_line}",
-        _("Код клиента: <code>{customer_code}</code>", customer_code=guest_profile.customer_code),
-        _("Баланс: {loyalty_balance} бонусов", loyalty_balance=guest_profile.loyalty_balance),
-        "",
-        _("<b>Статус</b>"),
-        (
-            _("Активный стол: #{number}", number=active_session.table.number)
-            if active_session is not None
-            else _("Активного стола сейчас нет.")
+        _("<b>Мой профиль</b> · {partner_name}", partner_name=escape_html(partner_name)),
+        _(
+            "Код для бонусов: <code>{customer_code}</code> — назовите его на кассе.",
+            customer_code=guest_profile.customer_code,
         ),
-        _("Первый визит: {date}", date=_format_dt(guest_profile.first_visit_at)),
-        _("Последний визит: {date}", date=_format_dt(guest_profile.last_visit_at)),
-        "",
-        _("Код клиента можно назвать на баре или кассе для бонусов и быстрых продаж."),
+        _(
+            "Бонусов на счёте: <b>{loyalty_balance}</b>",
+            loyalty_balance=guest_profile.loyalty_balance,
+        ),
     ]
+    if active_session is not None:
+        lines.append(_("Ваш стол: #{number}", number=active_session.table.number))
+    if guest_profile.last_visit_at:
+        lines.append(
+            _("Последний визит: {date}", date=_format_dt(guest_profile.last_visit_at))
+        )
     return "\n".join(lines)
 
 

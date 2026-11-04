@@ -47,7 +47,10 @@ class ModuleHoursTests(TestCase):
         self.assertFalse(is_open_at(self.partner, EVENING, scope=DELIVERY))
         self.assertEqual(available_slots(self.partner, EVENING, channel=DELIVERY), ())
         self.assertNotEqual(available_slots(self.partner, EVENING, channel=PICKUP), ())
-        self.assertIn("11:00–15:00", closed_message(self.partner, channel=DELIVERY))
+        message = closed_message(self.partner, channel=DELIVERY)
+        self.assertIn("11:00–15:00", message)
+        # Only delivery is closed: the message must not say the venue is.
+        self.assertTrue(message.startswith("Доставка сейчас не работает."), message)
 
     def test_own_pickup_hours_without_common_ones(self):
         self._hours(PICKUP, time(8), time(12))

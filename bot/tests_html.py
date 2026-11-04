@@ -70,7 +70,10 @@ class GuestAndStaffRenderingTests(SimpleTestCase):
             payment_timing="",
             table_id=1,
             table=SimpleNamespace(number=4),
-            guest=SimpleNamespace(telegram_account=SimpleNamespace(username="", telegram_id=42)),
+            guest=SimpleNamespace(
+                telegram_account=SimpleNamespace(username="", telegram_id=42),
+                staff_label=lambda: "Tom & <Jerry> · ABC123",
+            ),
             assigned_employee=SimpleNamespace(
                 user=SimpleNamespace(get_full_name=lambda: "Ann & <Bob>", username="ann")
             ),

@@ -77,6 +77,11 @@ def gettext(message: str, /, **params: object) -> str:
             except (KeyError, ValueError, IndexError):
                 # Сломанная подмена не должна ломать ответ гостю.
                 pass
+    if active_language() == RU:
+        # Русский — сам текст в коде. Через каталог нельзя: недостающий
+        # перевод Django берёт из LANGUAGE_CODE, и при `uk` на сервере
+        # русский становился украинским.
+        return _format(message, params)
     return _format(translation.gettext(message), params)
 
 

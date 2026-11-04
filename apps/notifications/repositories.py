@@ -70,11 +70,11 @@ class StaffNotificationRepository:
         return StaffNotification.objects.filter(
             employee_id=employee_id,
             is_read=False,
-        ).select_related("order", "partner")
+        ).select_related("order", "partner", "guest_call")
 
     @staticmethod
     def by_id_for_employee(notification_id, *, employee_id, partner_id):
-        return StaffNotification.objects.select_related("order", "partner").get(
+        return StaffNotification.objects.select_related("order", "partner", "guest_call").get(
             id=notification_id,
             employee_id=employee_id,
             partner_id=partner_id,

@@ -83,7 +83,7 @@ class MenuKeyboardTests(SimpleTestCase):
         button_texts = [button.text for row in keyboard.inline_keyboard for button in row]
         self.assertNotIn("Оформить", button_texts)
         self.assertNotIn("Очистить", button_texts)
-        self.assertIn("Обновить корзину", button_texts)
+        self.assertIn("← К меню", button_texts)
 
 
 class CartRenderingTests(SimpleTestCase):

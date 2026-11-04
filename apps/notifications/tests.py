@@ -25,12 +25,12 @@ from apps.users.models import GuestProfile, TelegramAccount, User
 
 
 async def _successful_send(_token, messages, **_kwargs):
-    return [(chat_id, True, "") for chat_id, _text in messages]
+    return [(chat_id, True, "") for chat_id, _text, *_markup in messages]
 
 
 async def _partially_failed_send(_token, messages, **_kwargs):
     results = []
-    for index, (chat_id, _text) in enumerate(messages):
+    for index, (chat_id, _text, *_markup) in enumerate(messages):
         if index == 0:
             results.append((chat_id, True, ""))
         else:
@@ -39,7 +39,7 @@ async def _partially_failed_send(_token, messages, **_kwargs):
 
 
 async def _blocked_send(_token, messages, **_kwargs):
-    return [(chat_id, False, "bot was blocked by the user", True) for chat_id, _text in messages]
+    return [(chat_id, False, "bot was blocked by the user", True) for chat_id, _text, *_markup in messages]
 
 
 class NotificationDeliveryTests(TestCase):
@@ -120,7 +120,7 @@ class NotificationDeliveryTests(TestCase):
 
         async def _capturing_send(_token, messages, **_kwargs):
             sent_texts.extend(text for _chat_id, text in messages)
-            return [(chat_id, True, "") for chat_id, _text in messages]
+            return [(chat_id, True, "") for chat_id, _text, *_markup in messages]
 
         with patch("apps.notifications.services._send_telegram_messages", new=_capturing_send):
             with self.captureOnCommitCallbacks(execute=True):

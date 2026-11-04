@@ -347,3 +347,55 @@ class OrderItemKindTests(DeliveryFixtureMixin, TestCase):
                 item_name="Доставка",
                 unit_price="1.00",
             )
+
+
+class DeliveryPaymentOnReceiptTests(DeliveryFixtureMixin, TestCase):
+    """Owner's decision 2026-11-04 (PQ-044): the money of a delivery paid on
+    receipt is recorded when the courier is there — from «В пути» on."""
+
+    def setUp(self):
+        super().setUp()
+        PartnerBotSettings.objects.filter(id=self.settings.id).update(
+            delivery_pay_transfer=False, delivery_pay_on_receipt=True
+        )
+        self._ready_guest()
+        self._cart()
+        self.order = place_remote_order(
+            partner_id=self.partner.id,
+            telegram_id=TG,
+            slot="now",
+            use_bonuses=False,
+            expected_total="460.00",
+            expected_to_pay="460.00",
+            channel=D,
+            payment=Order.PaymentTiming.ON_RECEIPT,
+            now=NOON,
+        )
+
+    def _to(self, *statuses):
+        for status in statuses:
+            self.order = transition_order_status(
+                order=self.order, to_status=status, actor_user=self.cashier
+            )
+
+    def test_payment_before_the_courier_left_is_refused(self):
+        from apps.billing.models import Payment
+        from apps.billing.remote_orders import RemoteOrderError, record_payment_on_receipt
+
+        for statuses in ((), (Order.Status.ACCEPTED,), (Order.Status.READY,)):
+            self._to(*statuses)
+            with self.assertRaisesMessage(RemoteOrderError, "в пути"):
+                record_payment_on_receipt(
+                    order=self.order, actor=self.cashier, method=Payment.Method.CASH
+                )
+        self._to(Order.Status.DELIVERING)
+        order = record_payment_on_receipt(
+            order=self.order, actor=self.cashier, method=Payment.Method.CASH
+        )
+        self.assertIsNotNone(order.paid_at)
+
+    def test_the_order_can_still_be_cancelled_before_the_courier_left(self):
+        from apps.billing.remote_orders import cancel_unpaid_remote_order
+
+        order = cancel_unpaid_remote_order(order=self.order, actor=self.cashier)
+        self.assertEqual(order.status, Order.Status.CANCELED)

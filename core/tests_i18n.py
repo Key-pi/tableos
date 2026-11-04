@@ -18,6 +18,37 @@ class CatalogTests(SimpleTestCase):
         self.assertEqual(gettext_in("uk", LANGUAGE), "🌐 Мова")
         self.assertEqual(gettext_in("en", LANGUAGE), "🌐 Language")
 
+    @staticmethod
+    def _with_server_language(language):
+        # Django keeps loaded catalogs across LANGUAGE_CODE changes, and the
+        # fallback language is fixed when a catalog loads: drop them.
+        from django.utils.translation import trans_real
+
+        trans_real._translations = {}
+        return override_settings(LANGUAGE_CODE=language)
+
+    def tearDown(self):
+        from django.utils.translation import trans_real
+
+        trans_real._translations = {}
+
+    def test_russian_stays_russian_when_the_platform_language_is_ukrainian(self):
+        with self._with_server_language("uk"):
+            self._check_russian_stays_russian()
+
+    def _check_russian_stays_russian(self):
+        # The server runs with LANGUAGE_CODE=uk; Django fills a missing text of
+        # a language from the default language, so Russian became Ukrainian.
+        self.assertEqual(gettext_in("ru", "Корзина"), "Корзина")
+        self.assertEqual(gettext_in("ru", DONE, language="Русский"), "Готово, язык бота: Русский.")
+        with texts("ru"):
+            self.assertEqual(_("Корзина"), "Корзина")
+        self.assertEqual(gettext_in("uk", "Корзина"), "Кошик")
+
+    def test_owner_text_still_wins_in_russian(self):
+        with self._with_server_language("uk"), texts("ru", {("ru", "Корзина"): "Ваш заказ"}):
+            self.assertEqual(_("Корзина"), "Ваш заказ")
+
     def test_values_are_put_in_after_translation(self):
         with translation.override("uk"):
             self.assertEqual(_(DONE, language="English"), "Готово, мова бота: English.")

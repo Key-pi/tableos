@@ -169,11 +169,12 @@ class StartWithSourceTests(TestCase):
             answer=AsyncMock(),
         )
         async_to_sync(start_handler)(message, SimpleNamespace(args=args), self.bot)
-        return message.answer.await_args.args[0]
+        # The greeting with the bonus code comes first, then the ways to order.
+        return message.answer.await_args_list[0].args[0]
 
     def test_source_link_welcomes_the_guest_and_records_the_visit(self):
         text = self._start(620001, "src_insta")
-        self.assertIn("Ваш код клиента", text)
+        self.assertIn("Ваш код для бонусов", text)
         visit = SourceVisit.objects.get()
         self.assertTrue(visit.is_new_guest)
         self.assertEqual(visit.source, self.source)
@@ -188,7 +189,7 @@ class StartWithSourceTests(TestCase):
 
     def test_unknown_source_link_still_gets_a_normal_welcome(self):
         text = self._start(620003, "src_unknown")
-        self.assertIn("Ваш код клиента", text)
+        self.assertIn("Ваш код для бонусов", text)
         self.assertFalse(SourceVisit.objects.exists())
 
 

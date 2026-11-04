@@ -42,7 +42,7 @@ async def call_staff_handler(message: Message, bot: Bot) -> None:
     )
     if session is None:
         await message.answer(
-            _("Позвать персонал можно после активации стола по QR-коду."),
+            _("Позвать персонал можно за столом: отсканируйте QR-код на столе."),
             reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
         )
         return
@@ -75,7 +75,7 @@ async def guest_call_request_callback(callback: CallbackQuery, bot: Bot) -> None
         return
 
     try:
-        table_number, queued_count = await sync_to_async(request_staff_assistance)(
+        table_number, _queued_count = await sync_to_async(request_staff_assistance)(
             partner_id=partner.id,
             telegram_id=callback.from_user.id,
             call_target=call_target,
@@ -87,15 +87,10 @@ async def guest_call_request_callback(callback: CallbackQuery, bot: Bot) -> None
         return
 
     await callback.message.edit_text(
-        "\n".join(
-            [
-                content.staff_call_success_message(
-                    partner_name=partner.name,
-                    table_number=table_number,
-                    call_target_label=call_target_label,
-                ),
-                _("Уведомления поставлены в очередь: {queued_count}", queued_count=queued_count),
-            ]
+        content.staff_call_success_message(
+            partner_name=partner.name,
+            table_number=table_number,
+            call_target_label=call_target_label,
         )
     )
     await callback.answer(_("Запрос отправлен."))

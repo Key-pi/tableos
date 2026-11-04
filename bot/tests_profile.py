@@ -40,7 +40,8 @@ class ProfileRenderingTests(SimpleTestCase):
         )
 
         self.assertIn("<b>Мой профиль</b>", text)
-        self.assertIn("Код клиента: <code>ABC123</code>", text)
+        self.assertIn("Код для бонусов: <code>ABC123</code>", text)
+        self.assertNotIn("Telegram", text)
         self.assertNotIn("Активные программы", text)
         self.assertNotIn("Последние движения", text)
 

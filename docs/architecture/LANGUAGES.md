@@ -12,7 +12,10 @@
   вызывающий (`escape_html`), как и раньше.
 - **Каталог.** Переводы на украинский и английский —
   `locale/uk/LC_MESSAGES/django.po` и `locale/en/LC_MESSAGES/django.po`;
-  русский — сам текст в коде. Строки темы Admin (django-unfold, английские
+  русский — сам текст в коде: для `ru` `core/i18n.py:gettext` возвращает
+  текст кода, не заглядывая в каталог (иначе Django подставлял бы
+  недостающий перевод из `LANGUAGE_CODE`, и при `uk` на сервере русский
+  гость и русская Admin видели украинский). Строки темы Admin (django-unfold, английские
   msgid) — отдельно, в `theme.po` того же каталога. Оба файла собираются в
   `django.mo` скриптом `infrastructure/scripts/messages.py` (без GNU gettext):
 
@@ -165,7 +168,10 @@ Admin (модели, формы), в каталог для замены не в�
 ## Тесты
 
 Набор тестов читает тексты так, как они написаны в коде: тестовый запуск
-работает с `LANGUAGE_CODE = "ru"` (`core/test_runner.py`). Другие языки
+работает с `LANGUAGE_CODE = "ru"` (`core/test_runner.py`). Русский при
+`LANGUAGE_CODE = "uk"`, как на сервере, проверяет
+`core/tests_i18n.py:CatalogTests` (каталоги Django при этом сбрасываются:
+язык замены фиксируется при загрузке каталога). Другие языки
 проверяются явно: `core/tests_i18n.py`, `bot/tests_language.py`,
 `apps/partners/test_languages.py`.
 

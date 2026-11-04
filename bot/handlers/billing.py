@@ -44,7 +44,7 @@ async def request_bill_handler(message: Message, bot: Bot) -> None:
     )
     if session is None:
         await message.answer(
-            _("Запросить счёт можно после активации стола по QR-коду."),
+            _("Запросить счёт можно за столом: отсканируйте QR-код на столе."),
             reply_markup=build_main_keyboard(content, navigation_state=navigation_state),
         )
         return
@@ -102,14 +102,11 @@ async def request_bill_callback(callback: CallbackQuery, bot: Bot) -> None:
             table_number=result.request.table.number,
         )
 
-    if result.notified_count:
-        text = _(
-            "{text}\nУведомления поставлены в очередь: {notified_count}",
-            text=text,
-            notified_count=result.notified_count,
-        )
-    else:
-        text = _("{text}\nПерсонал увидит этот запрос в рабочем интерфейсе.", text=text)
+    lines = [text]
+    if result.bill is not None:
+        lines.append(_("К оплате: <b>{total} грн</b>.", total=result.bill.total_amount))
+    lines.append(_("Персонал уже знает и подойдёт к столу."))
+    text = "\n".join(lines)
 
     await callback.message.edit_text(text)
     await callback.answer(_("Запрос счёта отправлен."))
