@@ -78,8 +78,11 @@ from apps.menu.repositories import MenuItemRepository
 from apps.notifications.models import StaffNotification
 from apps.notifications.repositories import StaffNotificationRepository
 from apps.notifications.services import (
+    GuestCallError,
     mark_staff_notification_read,
     mark_staff_notifications_read,
+    staff_notification_text,
+    take_guest_call,
 )
 from apps.orders.models import Order
 from apps.orders.repositories import OrderRepository
@@ -410,7 +413,9 @@ def _notification_order_action(notification) -> str:
 
 def _notification_item_keyboard(notification, *, page: int | None = None):
     action = _notification_order_action(notification)
+    call = notification.guest_call if notification.guest_call_id else None
     return build_staff_notification_item_keyboard(
+        can_take_call=call is not None and call.taken_by_id is None,
         notification_id=str(notification.id),
         category=(
             notification.category
@@ -2453,6 +2458,40 @@ async def staff_notification_open_callback_handler(callback: CallbackQuery, bot:
         reply_markup=await sync_to_async(_notification_item_keyboard)(notification, page=page),
     )
     await callback.answer()
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("staffcalltake:"))
+async def staff_call_take_callback_handler(callback: CallbackQuery, bot: Bot) -> None:
+    """«🏃 Иду» on a staff call (PQ-044): the first employee takes it."""
+
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _unused, notification_id, *rest = (callback.data or "").split(":")
+        await sync_to_async(take_guest_call)(
+            partner_id=partner.id, notification_id=notification_id, employee=employee
+        )
+    except (OrderFlowError, GuestCallError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    except (ValueError, ValidationError):
+        await callback.answer(_("Этот вызов уже нельзя принять."), show_alert=True)
+        return
+
+    if rest and rest[0].isdigit():
+        await _render_notifications_message(callback, partner.id, employee.id, page=int(rest[0]))
+    else:
+        notification = await sync_to_async(StaffNotificationRepository.by_id_for_employee)(
+            notification_id, employee_id=employee.id, partner_id=partner.id
+        )
+        await _safe_edit_message_text(
+            callback.message,
+            _(
+                "{html_text}\n✓ Идёте вы",
+                html_text=staff_notification_text(notification),
+            ),
+            reply_markup=None,
+        )
+    await callback.answer(_("Гостю сообщили, что вы идёте."))
 
 
 @router.callback_query(lambda c: c.data == "staffnotif:readall")

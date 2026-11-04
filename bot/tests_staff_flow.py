@@ -352,3 +352,42 @@ class DeliveryCardTests(StaffFlowFixture):
         self.assertIn(f"staffrccash:{self.order.public_id}", data)
         self.assertIn(f"staffrccard:{self.order.public_id}", data)
         self.assertIn(f"staffrcno:{self.order.public_id}", data)
+
+
+class StaffCallTakeTests(StaffFlowFixture):
+    def test_take_from_the_pushed_message_and_from_the_list(self):
+        from unittest.mock import patch
+
+        from apps.notifications.models import GuestCall
+        from apps.notifications.services import request_staff_assistance
+
+        from apps.partners.models import BotInstance
+
+        bot_instance = BotInstance.objects.get(partner=self.partner)
+        bot_instance.set_token("323456789:ABCDEFGHIJKLMNOPQRST_uv-wxyz")
+        bot_instance.is_active = True
+        bot_instance.save()
+        self._table_orders(1)
+        with patch("apps.notifications.services._send_telegram_messages",
+                   new=AsyncMock(return_value=[(0, True, "", False, False, 1)])):
+            request_staff_assistance(
+                partner_id=self.partner.id,
+                telegram_id=GUEST,
+                call_target="waiter",
+                call_target_label="Официант",
+            )
+        notification = StaffNotification.objects.get(
+            employee=self.owner, category=StaffNotification.Category.GUEST_CALL
+        )
+        _text, markup = self._screen(
+            self._press(staff.staff_notification_open_callback_handler,
+                        f"staffnotifopen:{notification.id.hex}:0")
+        )
+        self.assertIn(f"staffcalltake:{notification.id.hex}:0", _data(markup))
+
+        with patch("apps.notifications.services.announce_guest_call_taken_now"):
+            callback = self._press(staff.staff_call_take_callback_handler,
+                                   f"staffcalltake:{notification.id.hex}")
+        self.assertIn("вы идёте", callback.answer.call_args.args[0])
+        self.assertIn("✓ Идёте вы", callback.message.edit_text.call_args.args[0])
+        self.assertEqual(GuestCall.objects.get().taken_by_id, self.owner.id)

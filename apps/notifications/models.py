@@ -30,6 +30,51 @@ class NotificationPreference(PartnerBoundModel):
         return f"{self.partner.name} / preferences / {self.guest_id}"
 
 
+class GuestCall(PartnerBoundModel):
+    """One press of «Позвать персонал» at a table (PQ-044).
+
+    Every recipient's notification points here; the first employee who
+    presses «🏃 Иду» takes the call (``taken_by``), the guest is told and the
+    other employees see who went. Locked alone: ``take_guest_call``.
+    """
+
+    table_session = models.ForeignKey(
+        "tables.TableSession",
+        on_delete=models.CASCADE,
+        related_name="guest_calls",
+        verbose_name=_lazy("Сессия стола"),
+    )
+    guest = models.ForeignKey(
+        "users.GuestProfile",
+        on_delete=models.CASCADE,
+        related_name="guest_calls",
+        verbose_name=_lazy("Гость"),
+    )
+    table_number = models.PositiveIntegerField(verbose_name=_lazy("Стол"))
+    call_target = models.CharField(max_length=16, verbose_name=_lazy("Кого зовут"))
+    taken_by = models.ForeignKey(
+        "employees.EmployeeProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="taken_guest_calls",
+        verbose_name=_lazy("Пошёл"),
+    )
+    taken_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Пошёл в"))
+    # Set once the guest got «… идёт к вам»: a retried task does not repeat it.
+    guest_told_at = models.DateTimeField(
+        null=True, blank=True, verbose_name=_lazy("Гостю сообщили")
+    )
+
+    class Meta:
+        verbose_name = _lazy("вызов персонала")
+        verbose_name_plural = _lazy("Вызовы персонала")
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.partner.name} / #{self.table_number} / {self.call_target}"
+
+
 class StaffNotification(PartnerBoundModel):
     """Internal notification delivered to partner staff about operational events."""
 
@@ -67,6 +112,19 @@ class StaffNotification(PartnerBoundModel):
     title = models.CharField(max_length=255, verbose_name=_lazy("Заголовок"))
     message = models.TextField(verbose_name=_lazy("Текст"))
     # The same event in any language (e.g. a repeated staff call), PQ-040.
+    guest_call = models.ForeignKey(
+        GuestCall,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="notifications",
+        verbose_name=_lazy("Вызов"),
+    )
+    # The Telegram message the notification was delivered as: a taken call
+    # edits it to say who went.
+    telegram_message_id = models.BigIntegerField(
+        null=True, blank=True, verbose_name=_lazy("Сообщение в Telegram")
+    )
     dedupe_key = models.CharField(
         max_length=120, blank=True, db_index=True, verbose_name=_lazy("Ключ повтора")
     )

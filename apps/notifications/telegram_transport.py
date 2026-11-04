@@ -65,3 +65,15 @@ async def send_message(token: str, *, chat_id: int, text: str, reply_markup=None
 
     future = asyncio.run_coroutine_threadsafe(on_sender_loop(), _sender_loop())
     return await asyncio.wrap_future(future)
+
+
+async def edit_message_text(token: str, *, chat_id: int, message_id: int, text: str):
+    """``Bot.edit_message_text`` over the same connection; the keyboard goes."""
+
+    async def on_sender_loop():
+        return await _bot(token).edit_message_text(
+            chat_id=chat_id, message_id=message_id, text=text, reply_markup=None
+        )
+
+    future = asyncio.run_coroutine_threadsafe(on_sender_loop(), _sender_loop())
+    return await asyncio.wrap_future(future)

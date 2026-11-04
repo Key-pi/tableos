@@ -98,7 +98,12 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
                 ),
             ]
             + (
-                [_("Вы сотрудник? Рабочий режим — команда /staff.")]
+                [
+                    _(
+                        "Вы сотрудник? Рабочий режим — кнопка «{button_staff_label}» внизу.",
+                        button_staff_label=escape_html(content.button_staff_label),
+                    )
+                ]
                 if employee is not None
                 else []
             )

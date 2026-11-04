@@ -218,7 +218,12 @@ apps.notifications.tasks` — цикл, разорванный только им
    нового заказа с переводом заранее в списке «💳 Проверить оплату», а не
    «Взять в работу». Уведомление о смене статуса не приходит сотруднику,
    который её сделал (`_create_staff_notifications_for_status_change`,
-   `actor_user`).
+   `actor_user`). Вызов персонала — `notifications.GuestCall` (одна строка на
+   нажатие гостя, уведомления сотрудников ссылаются на неё): под
+   уведомлением «🏃 Иду» (`staffcalltake:`), первый нажавший берёт вызов,
+   гостю — «… идёт к вам», у остальных их сообщение дописывается «✓ Идёт:
+   <имя>» (`StaffNotification.telegram_message_id`, задача
+   `notifications.announce_guest_call_taken`).
 
 Все сообщения бота отправляются в `ParseMode.HTML` (свойства бота по
 умолчанию в `bot/main.py` и `notifications/services.py:_send_telegram_messages`).
@@ -419,6 +424,10 @@ apps.notifications.tasks` — цикл, разорванный только им
 Фактический порядок блокировок оплаты:
 `Bill → Order → GuestProfile → BillingRequest → TableSession → TableVisit`.
 Изменение счёта: `Bill → BillItem → GuestProfile → Order`.
+Принятие вызова персонала («🏃 Иду»): только строка `GuestCall`
+(`notifications/services.py:take_guest_call`); кто взял — читается после
+блокировки, не присоединённым (после ожидания PostgreSQL перечитывает только
+заблокированную строку).
 
 ### Лояльность и быстрая продажа
 
@@ -518,7 +527,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 643 теста после экранов персонала (AA-050), зелёные на SQLite и на
+- 649 тестов после «Иду» на вызове персонала, зелёные на SQLite и на
   PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа

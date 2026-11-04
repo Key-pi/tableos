@@ -22,7 +22,12 @@ from django.utils import timezone
 
 from apps.employees.models import EmployeeProfile
 from apps.notifications import telegram_transport
-from apps.notifications.models import BroadcastCampaign, BroadcastDelivery, StaffNotification
+from apps.notifications.models import (
+    BroadcastCampaign,
+    BroadcastDelivery,
+    GuestCall,
+    StaffNotification,
+)
 from apps.notifications.repositories import (
     BroadcastCampaignRepository,
     NotificationPreferenceRepository,
@@ -93,7 +98,7 @@ async def _send_telegram_messages(
 ) -> list[tuple[int, bool, str, bool, bool]]:
     """Send messages one by one; never call this inside a database transaction.
 
-    Each result is ``(chat_id, sent, error, blocked, retryable)``. ``retryable``
+    Each result is ``(chat_id, sent, error, blocked, retryable[, message_id])``. ``retryable``
     marks failures where Telegram may or may not have delivered the message
     (a message is ``(chat_id, text)`` or ``(chat_id, text, reply_markup)``)
     (network or server errors): operational notifications retry them, a
@@ -107,7 +112,7 @@ async def _send_telegram_messages(
     for chat_id, text, *markup in messages:
         while True:
             try:
-                await telegram_transport.send_message(
+                sent = await telegram_transport.send_message(
                     token,
                     chat_id=chat_id,
                     text=text,
@@ -127,7 +132,8 @@ async def _send_telegram_messages(
             except Exception as exc:  # noqa: BLE001
                 result = (chat_id, False, str(exc), False, True)
             else:
-                result = (chat_id, True, "", False, False)
+                # The sixth value is the message id (a taken call edits it).
+                result = (chat_id, True, "", False, False, getattr(sent, "message_id", None))
             break
         results.append(result)
         if on_result is not None:
@@ -145,6 +151,10 @@ def _unpack_delivery_result(result) -> tuple[int, bool, str, bool]:
 
 def _is_retryable_result(result) -> bool:
     return bool(result[4]) if len(result) > 4 else False
+
+
+def _sent_message_id(result):
+    return result[5] if len(result) > 5 else None
 
 
 @transaction.atomic
@@ -204,6 +214,7 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
         StaffNotification.objects.select_related(
             "employee__telegram_account",
             "employee__user",
+            "guest_call",
         )
         .filter(id=notification.id)
         .first()
@@ -240,17 +251,11 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
 
     try:
         bot_instance = _active_partner_bot(notification.partner_id)
+        with speaking_to_employee(employee):
+            markup = _staff_notification_markup(notification)
+        message = (employee.telegram_account.telegram_id, staff_notification_text(notification))
         results = async_to_sync(_send_telegram_messages)(
-            bot_instance.token,
-            [
-                (
-                    employee.telegram_account.telegram_id,
-                    # Title and message are plain text built from venue and
-                    # guest data; only the <b> wrapper is markup (AA-024).
-                    f"<b>{_escape_html(notification.title)}</b>\n"
-                    f"{_escape_html(notification.message)}",
-                )
-            ],
+            bot_instance.token, [(*message, markup) if markup is not None else message]
         )
     except NotificationDeliveryError as exc:
         notification.delivery_status = StaffNotification.DeliveryStatus.FAILED
@@ -266,6 +271,7 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
     )
     notification.delivered_at = timezone.now() if is_sent else None
     notification.delivery_error = error_message
+    notification.telegram_message_id = _sent_message_id(results[0]) if is_sent else None
     if should_mark_blocked:
         employee.telegram_account.is_blocked = True
         employee.telegram_account.save(update_fields=["is_blocked", "updated_at"])
@@ -274,12 +280,37 @@ def deliver_staff_notification_now(notification: StaffNotification) -> StaffNoti
             "delivery_status",
             "delivered_at",
             "delivery_error",
+            "telegram_message_id",
             "updated_at",
         ]
     )
     if not is_sent and _is_retryable_result(results[0]):
         raise RetryableDeliveryError(error_message or "Transient Telegram delivery failure.")
     return notification
+
+
+def staff_notification_text(notification: StaffNotification) -> str:
+    # Title and message are plain text built from venue and guest data; only
+    # the <b> wrapper is markup (AA-024).
+    return f"<b>{_escape_html(notification.title)}</b>\n{_escape_html(notification.message)}"
+
+
+def _staff_notification_markup(notification: StaffNotification):
+    """«🏃 Иду» under a call nobody has taken yet (PQ-044)."""
+
+    call = notification.guest_call
+    if call is None or call.taken_by_id is not None:
+        return None
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_("🏃 Иду"),
+                    callback_data=f"staffcalltake:{notification.id.hex}",
+                )
+            ]
+        ]
+    )
 
 
 # The staff call names, translated for each employee (PQ-040).
@@ -634,6 +665,13 @@ def request_staff_assistance(
 
     guest_identity = table_session.guest.staff_label()
     label_text = CALL_TARGET_TEXTS.get(call_target)
+    call = GuestCall.objects.create(
+        partner_id=partner_id,
+        table_session=table_session,
+        guest=table_session.guest,
+        table_number=table_number,
+        call_target=call_target,
+    )
     queued_count = 0
     for employee in recipients:
         with speaking_to_employee(employee):
@@ -642,6 +680,7 @@ def request_staff_assistance(
                 partner_id=partner_id,
                 employee=employee,
                 category=StaffNotification.Category.GUEST_CALL,
+                guest_call=call,
                 dedupe_key=dedupe_key,
                 title=_(
                     "Стол #{table_number} зовёт: {call_target}",
@@ -654,6 +693,128 @@ def request_staff_assistance(
         queued_count += 1
 
     return table_number, queued_count
+
+
+ANNOUNCE_GUEST_CALL_TAKEN_TASK = "notifications.announce_guest_call_taken"
+
+
+def _employee_name(employee: EmployeeProfile) -> str:
+    return employee.user.get_full_name().strip() or employee.user.username
+
+
+@transaction.atomic
+def take_guest_call(*, partner_id, notification_id, employee: EmployeeProfile) -> GuestCall:
+    """An employee pressed «🏃 Иду» on a call (PQ-044): the first one takes it.
+
+    Locks only the ``GuestCall`` row, so two presses at once take it once; a
+    repeated press by the same employee is harmless. After commit the guest
+    is told and the other employees' messages say who went.
+    """
+
+    if not (
+        employee.is_active
+        and employee.partner_id == partner_id
+        and employee.user.is_active
+        and employee.user.partner_id == partner_id
+    ):
+        raise GuestCallError(_("Принять вызов может только сотрудник этого заведения."))
+    notification = (
+        StaffNotification.objects.filter(
+            id=notification_id,
+            partner_id=partner_id,
+            employee_id=employee.id,
+            category=StaffNotification.Category.GUEST_CALL,
+        )
+        .only("guest_call_id")
+        .first()
+    )
+    if notification is None or notification.guest_call_id is None:
+        raise GuestCallError(_("Этот вызов уже нельзя принять."))
+    # Lock the call row alone: after waiting for the lock PostgreSQL re-reads
+    # only that row, so who took it is loaded after the lock, not joined.
+    call = GuestCall.objects.select_for_update().get(
+        id=notification.guest_call_id, partner_id=partner_id
+    )
+    if call.taken_by_id == employee.id:
+        return call
+    if call.taken_by_id is not None:
+        taken_by = EmployeeProfile.objects.select_related("user").get(id=call.taken_by_id)
+        raise GuestCallError(_("Уже идёт: {name}", name=_employee_name(taken_by)))
+    now = timezone.now()
+    call.taken_by = employee
+    call.taken_at = now
+    call.save(update_fields=["taken_by", "taken_at", "updated_at"])
+    StaffNotification.objects.filter(guest_call=call, is_read=False).update(
+        is_read=True, read_at=now, updated_at=now
+    )
+    transaction.on_commit(lambda: _queue_guest_call_taken(str(call.id)))
+    return call
+
+
+def _queue_guest_call_taken(call_id: str) -> None:
+    from apps.notifications.tasks import announce_guest_call_taken_task
+
+    announce_guest_call_taken_task.delay(call_id)
+
+
+def announce_guest_call_taken_now(*, call_id) -> None:
+    """Tell the guest someone is coming and mark the call in the other
+    employees' messages. Telegram is called outside any transaction."""
+
+    call = (
+        GuestCall.objects.select_related(
+            "guest__telegram_account", "taken_by__user", "partner"
+        )
+        .filter(id=call_id, taken_by__isnull=False)
+        .first()
+    )
+    if call is None:
+        return
+    bot_instance = _active_partner_bot(call.partner_id)
+    if call.guest_told_at is None:
+        guest = call.guest
+        with speaking_to_guest(guest):
+            label = CALL_TARGET_TEXTS.get(call.call_target)
+            text = _(
+                "{call_target} идёт к вам, стол #{table_number}.",
+                call_target=_(label) if label else call.call_target,
+                table_number=call.table_number,
+            )
+        results = async_to_sync(_send_telegram_messages)(
+            bot_instance.token, [(guest.telegram_account.telegram_id, text)]
+        )
+        _chat_id, is_sent, error_message, _blocked = _unpack_delivery_result(results[0])
+        if is_sent:
+            GuestCall.objects.filter(id=call.id, guest_told_at__isnull=True).update(
+                guest_told_at=timezone.now()
+            )
+        elif _is_retryable_result(results[0]):
+            raise RetryableDeliveryError(error_message or "Transient Telegram delivery failure.")
+
+    others = (
+        StaffNotification.objects.select_related("employee__telegram_account", "employee__user")
+        .filter(guest_call=call, telegram_message_id__isnull=False)
+        .exclude(employee_id=call.taken_by_id)
+    )
+    name = _employee_name(call.taken_by)
+    for notification in others:
+        employee = notification.employee
+        if employee is None or employee.telegram_account_id is None:
+            continue
+        with speaking_to_employee(employee):
+            text = staff_notification_text(notification) + "\n" + _(
+                "✓ Идёт: {name}", name=_escape_html(name)
+            )
+        try:
+            async_to_sync(telegram_transport.edit_message_text)(
+                bot_instance.token,
+                chat_id=employee.telegram_account.telegram_id,
+                message_id=notification.telegram_message_id,
+                text=text,
+            )
+        except TelegramAPIError:
+            # An old or deleted message cannot be edited; the call is taken anyway.
+            continue
 
 
 def notify_staff_about_parallel_visit(visit) -> int:

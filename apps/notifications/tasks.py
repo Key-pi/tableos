@@ -2,12 +2,14 @@ from celery import shared_task
 
 from apps.notifications.models import BroadcastCampaign, StaffNotification
 from apps.notifications.services import (
+    ANNOUNCE_GUEST_CALL_TAKEN_TASK,
     DELIVER_STAFF_NOTIFICATION_TASK,
     PROCESS_SCHEDULED_BROADCAST_CAMPAIGNS_TASK,
     RECOVER_STALLED_BROADCASTS_TASK,
     SEND_BROADCAST_CAMPAIGN_TASK,
     SEND_GUEST_ORDER_STATUS_UPDATE_TASK,
     SEND_GUEST_REFUND_NOTICE_TASK,
+    announce_guest_call_taken_now,
     deliver_staff_notification_now,
     process_scheduled_broadcast_campaigns,
     recover_stalled_broadcast_campaigns,
@@ -110,3 +112,19 @@ def recover_stalled_broadcast_campaigns_task(self) -> int:
 )
 def send_guest_refund_notice_task(self, refund_id: str) -> None:
     send_guest_refund_notice_now(refund_id)
+
+
+@shared_task(
+    bind=True,
+    name=ANNOUNCE_GUEST_CALL_TAKEN_TASK,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 5},
+    # At least once (ADR-0008); ``GuestCall.guest_told_at`` keeps a retry
+    # from telling the guest twice once the message went out.
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def announce_guest_call_taken_task(self, call_id: str) -> None:
+    announce_guest_call_taken_now(call_id=call_id)
