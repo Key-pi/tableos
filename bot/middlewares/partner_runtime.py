@@ -82,6 +82,8 @@ class PartnerRuntimeMiddleware(BaseMiddleware):
                 await self._ask_point(bot, event, point.points)
                 return None
             data["language"] = language
+            # A /start link that waited for the pick (bot/handlers/points.py).
+            data["pending_start"] = point.pending_start
             with partner_for_this_update(bot.token, point.partner):
                 return await handler(event, data)
 

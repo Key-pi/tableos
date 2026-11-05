@@ -42,6 +42,8 @@ class BroadcastCampaignAdmin(ScopedAdminMixin):
     )
     list_filter = ("partner", "status")
     search_fields = ("name", "message", "partner__name")
+    # To every venue of the network (PQ-047): the owner's call.
+    owner_only_fields = ("whole_network",)
     readonly_fields = (
         "delivered_count",
         "failed_count",

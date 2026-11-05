@@ -14,6 +14,7 @@ import re
 from django.db import IntegrityError, transaction
 
 from apps.analytics.models import SourceVisit, TrafficSource
+from apps.partners.models import Partner
 from apps.users.models import GuestProfile
 
 _CODE_RE = re.compile(TrafficSource.CODE_PATTERN)
@@ -47,6 +48,16 @@ def record_source_visit(
     if not code:
         return None
     source = TrafficSource.objects.filter(partner_id=partner_id, code=code, is_active=True).first()
+    if source is None:
+        # A network-wide source of the venue's network (PQ-047): the visit
+        # counts at the venue the guest picked.
+        network_id = (
+            Partner.objects.filter(id=partner_id).values_list("network_id", flat=True).first()
+        )
+        if network_id is not None:
+            source = TrafficSource.objects.filter(
+                partner__network_id=network_id, whole_network=True, code=code, is_active=True
+            ).first()
     if source is None:
         return None
     guest = GuestProfile.objects.get(partner_id=partner_id, id=guest_id)

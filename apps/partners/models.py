@@ -744,9 +744,14 @@ class NetworkGuestChoice(TimeStampedModel):
         "users.TelegramAccount", on_delete=models.CASCADE, related_name="network_choices",
         verbose_name="Telegram",
     )
+    # Empty until the guest picks; a /start link that did not name a venue
+    # waits in ``pending_start`` and is handled once they pick.
     partner = models.ForeignKey(
         Partner, on_delete=models.CASCADE, related_name="network_guest_choices",
-        verbose_name=_lazy("Заведение"),
+        null=True, blank=True, verbose_name=_lazy("Заведение"),
+    )
+    pending_start = models.CharField(
+        max_length=64, blank=True, verbose_name=_lazy("Ссылка до выбора")
     )
 
     class Meta:

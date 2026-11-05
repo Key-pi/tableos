@@ -160,6 +160,16 @@ class BroadcastCampaign(PartnerBoundModel):
 
     name = models.CharField(max_length=255, verbose_name=_lazy("Название рассылки"))
     message = models.TextField(verbose_name=_lazy("Текст рассылки"))
+    # PQ-047: to the guests of every venue of the network, once per person,
+    # through the network's bot.
+    whole_network = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Всем гостям сети"),
+        help_text=_lazy(
+            "Гости всех точек сети, каждому один раз, через бота сети. Гость, отписавшийся "
+            "от рассылок в любой точке сети, её не получит.",
+        ),
+    )
     status = models.CharField(
         max_length=16,
         choices=Status.choices,

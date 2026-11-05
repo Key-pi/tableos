@@ -21,6 +21,18 @@ class NotificationPreferenceRepository:
         )
 
     @staticmethod
+    def marketing_guests_for(partner_ids):
+        """``marketing_guests`` of several venues (a network, PQ-047)."""
+
+        return GuestProfile.objects.select_related("telegram_account").filter(
+            partner_id__in=partner_ids,
+            is_subscribed=True,
+        ).filter(
+            Q(notification_preferences__isnull=True)
+            | Q(notification_preferences__marketing_enabled=True)
+        )
+
+    @staticmethod
     def guest_allows_order_updates(guest_id):
         return not NotificationPreference.objects.filter(
             guest_id=guest_id,

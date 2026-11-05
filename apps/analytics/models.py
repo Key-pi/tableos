@@ -81,6 +81,16 @@ class TrafficSource(PartnerBoundModel):
         ),
     )
     note = models.TextField(blank=True, verbose_name=_lazy("Заметка"))
+    # PQ-047: one link for the network's bot; the visit counts at the venue
+    # the guest picks. The code is unique within the network.
+    whole_network = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Для всей сети"),
+        help_text=_lazy(
+            "Одна ссылка на бота сети: гость выбирает заведение, переход засчитывается "
+            "выбранной точке.",
+        ),
+    )
 
     class Meta:
         ordering = ["name"]

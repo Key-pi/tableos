@@ -29,6 +29,14 @@ msgid "Источник с таким кодом уже есть."
 msgstr "A source with this code already exists."
 
 #: apps/analytics/admin.py
+msgid "Заведение не входит в сеть."
+msgstr "The venue is not in a network."
+
+#: apps/analytics/admin.py
+msgid "Такой код уже есть у источника сети или у точки этой сети."
+msgstr "This code is already used by a network source or a venue of this network."
+
+#: apps/analytics/admin.py
 msgid "Ссылка (её же можно превратить в QR-код)"
 msgstr "Link (it can also be turned into a QR code)"
 
@@ -115,6 +123,14 @@ msgstr "A disabled source does not count visits; the guest still reaches the bot
 #: apps/analytics/models.py
 msgid "Заметка"
 msgstr "Note"
+
+#: apps/analytics/models.py
+msgid "Для всей сети"
+msgstr "For the whole network"
+
+#: apps/analytics/models.py
+msgid "Одна ссылка на бота сети: гость выбирает заведение, переход засчитывается выбранной точке."
+msgstr "One link to the network bot: the guest picks the venue, the visit counts for the venue picked."
 
 #: apps/analytics/models.py
 msgid "Источник перехода"
@@ -2161,6 +2177,14 @@ msgid "Текст рассылки"
 msgstr "Campaign text"
 
 #: apps/notifications/models.py
+msgid "Всем гостям сети"
+msgstr "To all guests of the network"
+
+#: apps/notifications/models.py
+msgid "Гости всех точек сети, каждому один раз, через бота сети. Гость, отписавшийся от рассылок в любой точке сети, её не получит."
+msgstr "Guests of every venue of the network, once each, through the network bot. A guest who unsubscribed at any venue of the network will not get it."
+
+#: apps/notifications/models.py
 msgid "Сообщения, судьба которых неизвестна после сбоя воркера. Повторно не отправляются: гость получает рассылку не больше одного раза (PQ-014)."
 msgstr "Messages whose outcome is unknown after a worker failure. They are never resent: a guest gets a campaign at most once (PQ-014)."
 
@@ -2473,6 +2497,10 @@ msgstr "Bill #{public_id} prepared for {total} UAH"
 #: apps/notifications/services.py
 msgid "Стол #{number} просит счёт"
 msgstr "Table #{number} asks for the bill"
+
+#: apps/notifications/services.py
+msgid "У сети нет бота сети: выберите его в настройках сети."
+msgstr "The network has no network bot: pick one in the network settings."
 
 #: apps/notifications/services.py
 msgid "Нет гостей, которым можно отправить рассылку."
@@ -3775,6 +3803,10 @@ msgstr "There is no such text in the bot catalog."
 #: apps/partners/models.py
 msgid "Такая подпись уже у другой кнопки: бот их спутает."
 msgstr "Another button already has this label: the bot would mix them up."
+
+#: apps/partners/models.py
+msgid "Ссылка до выбора"
+msgstr "Link before the pick"
 
 #: apps/partners/models.py
 msgid "выбор заведения гостем"

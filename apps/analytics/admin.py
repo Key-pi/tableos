@@ -6,7 +6,8 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.analytics.models import PartnerDailyMetric, SourceVisit, TrafficSource
-from apps.partners.networks import bot_for_partner
+from apps.partners.models import Partner
+from apps.partners.networks import bot_for_partner, network_bot
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 from core.i18n import _
@@ -60,7 +61,7 @@ class SourcePeriodFilter(admin.SimpleListFilter):
 class TrafficSourceForm(forms.ModelForm):
     class Meta:
         model = TrafficSource
-        fields = ("partner", "name", "code", "is_active", "note")
+        fields = ("partner", "name", "code", "is_active", "whole_network", "note")
 
     def clean_code(self):
         code = (self.cleaned_data.get("code") or "").strip().lower()
@@ -77,6 +78,35 @@ class TrafficSourceForm(forms.ModelForm):
                 raise forms.ValidationError(_("Источник с таким кодом уже есть."))
         return code
 
+    def clean(self):
+        cleaned = super().clean()
+        # PQ-047: a network-wide code may not repeat anywhere in the network,
+        # and a venue's code may not repeat a network-wide one: the bot of the
+        # network must know which source a link is.
+        partner_id = getattr(self, "scope_partner_id", None)
+        if partner_id is None and cleaned.get("partner") is not None:
+            partner_id = cleaned["partner"].id
+        code = cleaned.get("code") or self.instance.code
+        network_id = (
+            Partner.objects.filter(id=partner_id).values_list("network_id", flat=True).first()
+            if partner_id
+            else None
+        )
+        if cleaned.get("whole_network") and network_id is None:
+            self.add_error("whole_network", _("Заведение не входит в сеть."))
+        elif code and network_id is not None:
+            others = TrafficSource.objects.filter(partner__network_id=network_id, code=code)
+            if self.instance.pk:
+                others = others.exclude(pk=self.instance.pk)
+            if not cleaned.get("whole_network"):
+                others = others.filter(whole_network=True)
+            if others.exists():
+                self.add_error(
+                    "code" if "code" in self.fields else None,
+                    _("Такой код уже есть у источника сети или у точки этой сети."),
+                )
+        return cleaned
+
 
 @admin.register(TrafficSource)
 class TrafficSourceAdmin(ScopedAdminMixin):
@@ -87,6 +117,9 @@ class TrafficSourceAdmin(ScopedAdminMixin):
     list_display = ("name", "link", "clicks_column", "new_guests_column", "is_active")
     list_filter = (SourcePeriodFilter, "is_active", "partner")
     search_fields = ("name", "code")
+
+    # A link for the whole network (PQ-047): the owner's call.
+    owner_only_fields = ("whole_network",)
 
     def get_readonly_fields(self, request, obj=None):
         # The code is printed on flyers and QR codes: it never changes.
@@ -106,7 +139,11 @@ class TrafficSourceAdmin(ScopedAdminMixin):
     def link(self, obj):
         if obj is None or not obj.pk:
             return _("появится после сохранения")
-        bot = bot_for_partner(obj.partner_id)  # own, else the network's (PQ-047)
+        # Own, else the network's; a network-wide link — the network's (PQ-047).
+        if obj.whole_network:
+            bot = network_bot(obj.partner.network_id)
+        else:
+            bot = bot_for_partner(obj.partner_id)
         if bot is None:
             return _(
                 "/start {deep_link_payload} (у заведения нет активного бота)",

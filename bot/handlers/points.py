@@ -31,17 +31,22 @@ router = Router(name="points")
 
 
 @router.callback_query(lambda c: (c.data or "").startswith(POINT_CALLBACK_PREFIX))
-async def point_picked_handler(callback: CallbackQuery, bot: Bot) -> None:
+async def point_picked_handler(
+    callback: CallbackQuery, bot: Bot, pending_start: str = ""
+) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     await callback.answer()
     await callback.message.edit_text(
         _("📍 {partner_name}", partner_name=escape_html(partner.name)), reply_markup=None
     )
-    # The same greeting as /start, now for this venue.
+    # The same greeting as /start, now for this venue — with the link the
+    # guest followed before picking (a network-wide source is counted here).
     greeting = SimpleNamespace(
-        text="/start", from_user=callback.from_user, answer=callback.message.answer
+        text=f"/start {pending_start}".strip(),
+        from_user=callback.from_user,
+        answer=callback.message.answer,
     )
-    await start.start_handler(greeting, SimpleNamespace(args=""), bot)
+    await start.start_handler(greeting, SimpleNamespace(args=pending_start), bot)
 
 
 @router.message(Command("point"))

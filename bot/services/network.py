@@ -87,9 +87,9 @@ def point_from_start_link(points, payload: str):
     source = parse_source_payload(payload)
     if source is not None:
         found = list(
-            TrafficSource.objects.filter(code=source, partner_id__in=ids).values_list(
-                "partner_id", flat=True
-            )[:2]
+            # A network-wide source names no venue: the guest picks.
+            TrafficSource.objects.filter(code=source, partner_id__in=ids, whole_network=False)
+            .values_list("partner_id", flat=True)[:2]
         )
         return by_id.get(found[0]) if len(found) == 1 else None
     parts = payload.split("_", 2)
@@ -146,6 +146,7 @@ def network_update_point(
             if facts.start_payload
             else None
         ),
+        start_payload=facts.start_payload,
     )
     return bot_instance, point
 

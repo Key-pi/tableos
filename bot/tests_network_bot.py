@@ -371,3 +371,128 @@ class ChoosingTheNetworkBotTests(NetworkBotFixture):
         self.assertEqual(response.status_code, 302)
         self.network.refresh_from_db()
         self.assertEqual(self.network.bot, self.bot_instance)
+
+
+class NetworkWideBroadcastAndSourceTests(NetworkBotFixture):
+    """Step 2b: a campaign to every guest of the network, once per person; a
+    source link for the whole network, counted at the venue the guest picks."""
+
+    def _guest(self, partner, telegram_id, *, subscribed=True):
+        from apps.users.models import GuestProfile
+
+        account, _created = TelegramAccount.objects.get_or_create(telegram_id=telegram_id)
+        return GuestProfile.objects.create(
+            partner=partner, telegram_account=account, is_subscribed=subscribed
+        )
+
+    def _campaign(self, **fields):
+        from apps.notifications.models import BroadcastCampaign
+
+        return BroadcastCampaign.objects.create(
+            partner=self.a, name="Новое меню", message="Новое меню во всех кофейнях", **fields
+        )
+
+    def _send(self, campaign):
+        from apps.notifications.services import send_broadcast_campaign_now
+        from apps.notifications.test_delivery import RecordingSender
+
+        sender = RecordingSender()
+        with patch("apps.notifications.services._send_telegram_messages", new=sender):
+            send_broadcast_campaign_now(campaign)
+        campaign.refresh_from_db()
+        return sender.sent
+
+    def test_a_network_campaign_reaches_each_person_once_and_respects_opt_outs(self):
+        self._guest(self.a, 7741001)
+        self._guest(self.b, 7741001)  # the same person in two venues
+        self._guest(self.b, 7741002)
+        self._guest(self.a, 7741003)
+        self._guest(self.b, 7741003, subscribed=False)  # opted out in one venue
+        stranger = venue("Stranger", None)
+        self._guest(stranger, 7741004)
+        campaign = self._campaign(whole_network=True)
+        sent = self._send(campaign)
+        self.assertEqual(sorted(sent), [7741001, 7741002])
+        # One delivery per person: a second one would be resent in a later batch.
+        self.assertEqual(campaign.deliveries.count(), 2)
+
+    def test_a_venue_campaign_stays_in_its_venue(self):
+        self._guest(self.a, 7741001)
+        self._guest(self.b, 7741002)
+        self.assertEqual(self._send(self._campaign()), [7741001])
+
+    def test_a_network_campaign_needs_the_network_bot(self):
+        from apps.notifications.models import BroadcastCampaign
+
+        Network.objects.filter(id=self.network.id).update(bot=None)
+        self._guest(self.b, 7741002)
+        campaign = self._campaign(whole_network=True)
+        self.assertEqual(self._send(campaign), [])
+        self.assertEqual(campaign.status, BroadcastCampaign.Status.FAILED)
+        self.assertIn("бота сети", campaign.last_error)
+
+    def test_a_network_source_counts_at_the_venue_the_guest_picks(self):
+        from apps.analytics.models import SourceVisit
+
+        TrafficSource.objects.create(
+            partner=self.a, name="Instagram сети", code="netinsta", whole_network=True
+        )
+        # A new guest: the link waits for the pick.
+        self.assertIsNone(self.run_update(message=self._message("/start src_netinsta")))
+        self.assertEqual(NetworkGuestChoice.objects.get().pending_start, "src_netinsta")
+        seen = {}
+
+        async def handler(event, data):
+            seen["partner"] = await sync_to_async(resolve_partner_for_bot_token)(TOKEN)
+            seen["pending"] = data["pending_start"]
+
+        update = Update(update_id=2, callback_query=self._callback(f"point:{self.b.id.hex}"))
+        async_to_sync(PartnerRuntimeMiddleware())(
+            handler, update, {"bot": self.bot, "event_from_user": self._user()}
+        )
+        self.assertEqual((seen["partner"], seen["pending"]), (self.b, "src_netinsta"))
+        self.assertEqual(NetworkGuestChoice.objects.get().pending_start, "")
+
+        # The pick handler greets with that link: the visit counts at venue B.
+        callback = SimpleNamespace(
+            data=f"point:{self.b.id.hex}",
+            from_user=SimpleNamespace(
+                id=GUEST, username="", first_name="Оля", last_name="", language_code=""
+            ),
+            answer=AsyncMock(),
+            message=SimpleNamespace(edit_text=AsyncMock(), answer=AsyncMock()),
+        )
+
+        async def pick():
+            with network_update(self.bot_instance.id, 2, self.b.id), partner_for_this_update(
+                TOKEN, self.b
+            ):
+                await points_handlers.point_picked_handler(
+                    callback, self.bot, pending_start="src_netinsta"
+                )
+
+        async_to_sync(pick)()
+        visit = SourceVisit.objects.get()
+        self.assertEqual(
+            (visit.partner, visit.source.code, visit.is_new_guest), (self.b, "netinsta", True)
+        )
+
+    def test_codes_of_network_sources_do_not_repeat_in_the_network(self):
+        from apps.analytics.admin import TrafficSourceForm
+
+        TrafficSource.objects.create(partner=self.b, name="Листовка", code="flyer")
+
+        def form(partner, code, whole_network):
+            instance = TrafficSourceForm(
+                data={"partner": str(partner.id), "name": "X", "code": code,
+                      "is_active": "on", "note": "",
+                      **({"whole_network": "on"} if whole_network else {})},
+            )
+            instance.scope_partner_id = partner.id
+            return instance
+
+        self.assertFalse(form(self.a, "flyer", True).is_valid())
+        self.assertTrue(form(self.a, "flyer", False).is_valid())  # another venue's own code
+        TrafficSource.objects.create(partner=self.a, name="Сеть", code="net", whole_network=True)
+        self.assertFalse(form(self.b, "net", False).is_valid())
+        self.assertFalse(form(venue("Alone", None), "solo", True).is_valid())

@@ -35,9 +35,14 @@ from apps.notifications.repositories import (
 from apps.partners.bot_texts import INLINE_BUTTON_TEXTS
 from apps.partners.languages import speaking_to_employee, speaking_to_guest
 from apps.partners.models import BotInstance, Partner
-from apps.partners.networks import bot_for_partner, remember_message_point, serves_network
+from apps.partners.networks import (
+    bot_for_partner,
+    network_bot,
+    remember_message_point,
+    serves_network,
+)
 from apps.tables.services import get_active_table_session
-from apps.users.models import TelegramAccount
+from apps.users.models import GuestProfile, TelegramAccount
 from core.i18n import _
 from core.settings.env import app_settings
 
@@ -1043,7 +1048,17 @@ def send_broadcast_campaign_now(
         return BroadcastCampaign.objects.get(id=campaign.id)
 
     try:
-        bot_instance = _active_partner_bot(started.partner_id)
+        if _network_points_of(started) is not None:
+            # To the whole network: only its bot reaches guests of every venue.
+            bot_instance = network_bot(
+                Partner.objects.values_list("network_id", flat=True).get(id=started.partner_id)
+            )
+            if bot_instance is None or not bot_instance.has_usable_token:
+                raise NotificationDeliveryError(
+                    _("У сети нет бота сети: выберите его в настройках сети.")
+                )
+        else:
+            bot_instance = _active_partner_bot(started.partner_id)
     except NotificationDeliveryError as exc:
         return _fail_broadcast(started.id, str(exc))
 
@@ -1103,7 +1118,60 @@ def _start_broadcast(campaign_id, *, legacy_after_guest_id: str = ""):
     return campaign
 
 
+def _network_points_of(campaign: BroadcastCampaign) -> list | None:
+    """The venues of a whole-network campaign (PQ-047); None for a venue's own."""
+
+    if not campaign.whole_network:
+        return None
+    network_id = (
+        Partner.objects.filter(id=campaign.partner_id).values_list("network_id", flat=True).first()
+    )
+    if network_id is None:
+        return None
+    return list(
+        Partner.objects.filter(network_id=network_id, status=Partner.Status.ACTIVE).values_list(
+            "id", flat=True
+        )
+    )
+
+
+def _network_marketing_guests(partner_ids):
+    """Guests of these venues who take campaigns: one profile per person (a
+    guest of three venues gets a network campaign once), and nobody who opted
+    out at any of them."""
+
+    opted_out = (
+        GuestProfile.objects.filter(partner_id__in=partner_ids)
+        .exclude(
+            id__in=NotificationPreferenceRepository.marketing_guests_for(partner_ids).values("id")
+        )
+        .values("telegram_account_id")
+    )
+    return (
+        NotificationPreferenceRepository.marketing_guests_for(partner_ids)
+        .exclude(telegram_account_id__in=opted_out)
+        .exclude(telegram_account__is_blocked=True)
+    )
+
+
+def _record_network_audience(campaign: BroadcastCampaign, partner_ids) -> int:
+    seen: set = set()
+    deliveries = []
+    for guest in _network_marketing_guests(partner_ids).order_by("telegram_account_id", "id"):
+        if guest.telegram_account_id in seen:
+            continue
+        seen.add(guest.telegram_account_id)
+        deliveries.append(
+            BroadcastDelivery(partner_id=campaign.partner_id, campaign=campaign, guest=guest)
+        )
+    BroadcastDelivery.objects.bulk_create(deliveries, ignore_conflicts=True, batch_size=1000)
+    return len(deliveries)
+
+
 def _record_broadcast_audience(campaign: BroadcastCampaign, *, after_guest_id: str = "") -> int:
+    network_points = _network_points_of(campaign)
+    if network_points is not None:
+        return _record_network_audience(campaign, network_points)
     created = 0
     cursor = after_guest_id or None
     while True:
@@ -1185,9 +1253,14 @@ def _claim_broadcast_batch(campaign_id):
 def _send_claimed_broadcast_batch(*, campaign, token, claim_token, deliveries) -> None:
     # Eligibility is rechecked right before sending: a guest who opted out or
     # blocked the bot since the audience was recorded is skipped.
+    network_points = _network_points_of(campaign)
+    eligible = (
+        _network_marketing_guests(network_points)
+        if network_points is not None
+        else NotificationPreferenceRepository.marketing_guests(campaign.partner_id)
+    )
     eligible_ids = set(
-        NotificationPreferenceRepository.marketing_guests(campaign.partner_id)
-        .filter(id__in=[delivery.guest_id for delivery in deliveries])
+        eligible.filter(id__in=[delivery.guest_id for delivery in deliveries])
         .exclude(telegram_account__is_blocked=True)
         .values_list("id", flat=True)
     )

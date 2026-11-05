@@ -90,6 +90,9 @@ class UpdatePoint:
     # The venue was found by 1. or 2. above (the guest's choice is not
     # changed by 1.).
     explicit: bool = False
+    # A /start link that came before the guest picked (a network-wide
+    # source): the bot handles it once the venue is known.
+    pending_start: str = ""
 
 
 def network_points(network_id) -> list:
@@ -112,6 +115,20 @@ def serves_network(bot_instance) -> bool:
     ).exists()
 
 
+def network_bot(network_id):
+    """The network's own bot when it is switched on (``Network.bot``)."""
+
+    from apps.partners.models import BotInstance
+
+    if network_id is None:
+        return None
+    return (
+        BotInstance.objects.select_related("partner")
+        .filter(network_of__id=network_id, partner__network_id=network_id, is_active=True)
+        .first()
+    )
+
+
 def bot_for_partner(partner_id, *, active_only: bool = True):
     """The bot that speaks for this venue: its own, else its network's."""
 
@@ -131,13 +148,31 @@ def bot_for_partner(partner_id, *, active_only: bool = True):
     return bots.filter(network_of__id=network_id, partner__network_id=network_id).first()
 
 
-def _save_choice(network_id, telegram_id: int, partner) -> None:
+def _save_choice(network_id, telegram_id: int, partner) -> str:
+    """Store the pick; return a /start link that waited for it ("" if none)."""
+
+    from apps.partners.models import NetworkGuestChoice
+    from apps.users.models import TelegramAccount
+
+    account, _created = TelegramAccount.objects.get_or_create(telegram_id=telegram_id)
+    choice, _created = NetworkGuestChoice.objects.get_or_create(
+        network_id=network_id, telegram_account=account, defaults={"partner": partner}
+    )
+    pending = choice.pending_start
+    if choice.partner_id != getattr(partner, "id", None) or pending:
+        choice.partner = partner
+        choice.pending_start = ""
+        choice.save(update_fields=["partner", "pending_start", "updated_at"])
+    return pending
+
+
+def _keep_pending_start(network_id, telegram_id: int, payload: str) -> None:
     from apps.partners.models import NetworkGuestChoice
     from apps.users.models import TelegramAccount
 
     account, _created = TelegramAccount.objects.get_or_create(telegram_id=telegram_id)
     NetworkGuestChoice.objects.update_or_create(
-        network_id=network_id, telegram_account=account, defaults={"partner": partner}
+        network_id=network_id, telegram_account=account, defaults={"pending_start": payload[:64]}
     )
 
 
@@ -149,6 +184,7 @@ def resolve_update_point(
     message_id: int | None = None,
     picked_partner_id=None,
     pick_from_link=None,
+    start_payload: str = "",
 ) -> UpdatePoint:
     """The venue of one update of a network's bot (see the order above).
 
@@ -183,9 +219,14 @@ def resolve_update_point(
     if chosen is None and pick_from_link is not None:
         chosen = pick_from_link(points)
     if chosen is not None:
+        pending = ""
         if telegram_id is not None:
-            _save_choice(network_id, telegram_id, chosen)
-        return UpdatePoint(chosen, points, explicit=True)
+            pending = _save_choice(network_id, telegram_id, chosen)
+        # A link the guest followed just now wins over an older waiting one.
+        return UpdatePoint(
+            chosen, points, explicit=True,
+            pending_start="" if start_payload else pending,
+        )
 
     if telegram_id is not None:
         partner_id = (
@@ -199,6 +240,9 @@ def resolve_update_point(
             return UpdatePoint(every_point[partner_id], points)
     if len(points) == 1:
         return UpdatePoint(points[0], points)
+    if start_payload and telegram_id is not None:
+        # E.g. a network-wide source link: counted once the guest picks.
+        _keep_pending_start(network_id, telegram_id, start_payload)
     return UpdatePoint(None, points)
 
 
