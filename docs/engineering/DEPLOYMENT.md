@@ -68,18 +68,41 @@
    в комментариях файла. Сохраните `BOT_TOKEN_ENCRYPTION_KEY` и пароли в
    менеджере паролей: без ключа сохранённые токены ботов не расшифровать.
    `.env.production` не коммитится.
-4. **HTTPS.** Перед `web` нужен обратный прокси с HTTPS. Проще всего
-   [Caddy](https://caddyserver.com/) — он сам получает сертификат. Файл
-   `/etc/caddy/Caddyfile`:
+4. **HTTPS и фото — Caddy (обязательно).** Перед `web` нужен обратный прокси
+   с HTTPS, и он же отдаёт фото меню: иначе их отдаёт Django, и несколько
+   гостей на медленной связи займут все веб-процессы (их 3) — Admin и
+   Mini App встанут. [Caddy](https://caddyserver.com/) сам получает
+   сертификат. Папка фото (`MEDIA_DIR` в `.env.production`, по умолчанию
+   `/srv/botera-shop/media`) — на хосте; `web` пишет в неё от пользователя
+   с uid 10001:
+
+   ```bash
+   sudo mkdir -p /srv/botera-shop/media && sudo chown 10001 /srv/botera-shop/media
+   ```
+
+   Файл `/etc/caddy/Caddyfile` (готовый — `infrastructure/caddy/Caddyfile`):
 
    ```
    shop.example.com {
-       reverse_proxy 127.0.0.1:8000
+       encode gzip zstd
+       handle_path /media/* {
+           root * /srv/botera-shop/media
+           header Cache-Control "public, max-age=2592000, immutable"
+           file_server
+       }
+       handle {
+           reverse_proxy 127.0.0.1:8000
+       }
    }
    ```
 
-   Прокси обязан передавать `X-Forwarded-Proto`; Caddy и стандартный nginx с
-   `proxy_set_header X-Forwarded-Proto $scheme;` это делают.
+   Затем `sudo systemctl reload caddy`. Проверка: картинка позиции открывается
+   по `https://shop.example.com/media/menu/…webp`, а в `docker compose logs web`
+   запросов `/media/` нет. Прокси обязан передавать `X-Forwarded-Proto`; Caddy
+   и стандартный nginx с `proxy_set_header X-Forwarded-Proto $scheme;` это
+   делают. Фото при загрузке ужимаются до WebP, длинная сторона до 1200 px
+   (около 100–200 КБ); загруженные раньше — `python manage.py
+   compress_menu_photos`.
 5. **Запуск:**
 
    ```bash
@@ -132,16 +155,10 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
   ```
 
   Затем `/srv/offsite` синхронизируется наружу (rclone, restic).
-- **Фото меню** (PQ-048) лежат в томе `media`, не в базе. Копируйте его вместе
-  с базой, например:
-
-  ```bash
-  docker run --rm -v botera-shop-prod_media:/m -v /srv/offsite:/o alpine \
-    sh -c 'mkdir -p /o/media && cp -rn /m/. /o/media/'
-  ```
-
-  Фото отдаёт сам `web` по `/media/` (`core/media.py:serve_media`). При желании
-  их может отдавать Caddy: `handle_path /media/* { root * <путь к тому> file_server }`.
+- **Фото меню** (PQ-048) лежат в папке `MEDIA_DIR` на хосте, не в базе.
+  Копируйте её вместе с базой, например: `rsync -a /srv/botera-shop/media/
+  /srv/offsite/media/`. Отдаёт их Caddy (шаг 4); `core/media.py:serve_media` в
+  `web` остаётся только запасным путём для разработки.
 - **Внеочередная копия:**
 
   ```bash

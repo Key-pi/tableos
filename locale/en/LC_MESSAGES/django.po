@@ -2009,8 +2009,8 @@ msgid "Фото"
 msgstr "Photo"
 
 #: apps/menu/models.py
-msgid "JPG, PNG или WebP до 5 МБ. Без фото берётся ссылка ниже."
-msgstr "JPG, PNG or WebP up to 5 MB. Without a photo, the link below is used."
+msgid "JPG, PNG или WebP до 5 МБ; сохраняется уменьшенным (WebP, до 1200 px). Без фото берётся ссылка ниже."
+msgstr "JPG, PNG or WebP up to 5 MB; stored smaller (WebP, up to 1200 px). Without a photo, the link below is used."
 
 #: apps/menu/models.py
 msgid "Ссылка на фото"

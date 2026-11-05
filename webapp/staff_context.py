@@ -14,11 +14,11 @@ from dataclasses import dataclass, field
 
 from apps.employees.models import EmployeeProfile
 from apps.employees.selectors import get_staff_employee_by_telegram
-from apps.partners.mini_app import mini_app_on
+from apps.partners.mini_app import mini_app_on_for
 from apps.partners.models import BotInstance, Partner
 from apps.partners.networks import network_points, serves_network
 from bot.services.content import BotContent
-from bot.services.language import language_context
+from bot.services.language import language_context, partner_bot_settings
 from core.i18n import N_
 from webapp.auth import InitDataError, TelegramUser, validate_init_data
 from webapp.context import INIT_DATA_HEADER, REOPEN, WebAppDenied, find_bot
@@ -66,7 +66,6 @@ def staff_request(request, bot_hex: str) -> StaffRequest:
         raise WebAppDenied(401, REOPEN, code="unauthorized") from exc
 
     venues = _venues(bot, user.id)
-    language, overrides = language_context(bot.partner, user.id, user.language_code)
     chosen = None
     try:
         wanted = uuid.UUID(hex=request.GET.get("point", ""))
@@ -85,12 +84,17 @@ def staff_request(request, bot_hex: str) -> StaffRequest:
         return denied
 
     if chosen is None:
+        language, overrides = language_context(bot.partner, user.id, user.language_code)
         raise deny(403, NOT_STAFF, "not_staff")
     partner, employee = chosen
-    language, overrides = language_context(partner, user.id, user.language_code)
+    # The screen asks every 8 s: the language is worked out once, and the
+    # staff profile just loaded gives the person's own choice.
+    language, overrides = language_context(
+        partner, user.id, user.language_code, staff_choice=employee.user.language
+    )
     if partner.status != Partner.Status.ACTIVE:
         raise deny(403, N_("Заведение сейчас не принимает заказы."), "suspended")
-    if not mini_app_on(partner.id):
+    if not mini_app_on_for(partner_bot_settings(partner)):
         raise deny(
             403,
             N_("Рабочий экран здесь пока не включён — работайте в чате бота."),

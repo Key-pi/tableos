@@ -35,6 +35,14 @@ def mini_app_on(partner_id) -> bool:
     return _enabled(PartnerBotSettings.objects.filter(partner_id=partner_id))
 
 
+def mini_app_on_for(settings: PartnerBotSettings | None) -> bool:
+    """``mini_app_on`` for settings already loaded in this request."""
+
+    return bool(
+        settings is not None and settings.module_webapp_enabled and settings.module_cart_enabled
+    )
+
+
 def mini_app_link(bot_instance_id, partner_id, page: str = "") -> str:
     """The address to open for this venue (``page="staff/"``: the staff
     screen), or "" when not offered."""

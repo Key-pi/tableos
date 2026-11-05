@@ -80,7 +80,10 @@ class MenuItem(PartnerBoundModel):
             validate_menu_photo_size,
         ],
         verbose_name=_lazy("Фото"),
-        help_text=_lazy("JPG, PNG или WebP до 5 МБ. Без фото берётся ссылка ниже."),
+        help_text=_lazy(
+            "JPG, PNG или WebP до 5 МБ; сохраняется уменьшенным (WebP, до 1200 px). "
+            "Без фото берётся ссылка ниже.",
+        ),
     )
     image_url = models.URLField(blank=True, verbose_name=_lazy("Ссылка на фото"))
     item_type = models.CharField(
@@ -139,4 +142,26 @@ class MenuItem(PartnerBoundModel):
     def save(self, *args, **kwargs):
         if not self.public_id:
             self.public_id = secrets.token_hex(4)
-        return super().save(*args, **kwargs)
+        replaced = ""
+        if self.image and not getattr(self.image, "_committed", True):
+            # A new upload: kept as a small WebP only (apps/menu/photos.py).
+            from apps.menu.photos import compress_menu_photo
+
+            if self.pk:
+                replaced = (
+                    MenuItem.objects.filter(pk=self.pk).values_list("image", flat=True).first()
+                    or ""
+                )
+            self.image.save("photo.webp", compress_menu_photo(self.image.file), save=False)
+        elif self.pk and not self.image:
+            replaced = (
+                MenuItem.objects.filter(pk=self.pk).values_list("image", flat=True).first() or ""
+            )
+        result = super().save(*args, **kwargs)
+        if replaced and replaced != self.image.name:
+            # The old photo goes once the new one is saved.
+            from django.db import transaction
+
+            storage = self.image.storage
+            transaction.on_commit(lambda: storage.delete(replaced))
+        return result

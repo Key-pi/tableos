@@ -21,7 +21,7 @@ def png(name="photo.png", size=(40, 30)) -> SimpleUploadedFile:
     return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
 
 
-class MenuPhotoTests(TestCase):
+class PhotoFixture(TestCase):
     def setUp(self):
         self.media = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.media, ignore_errors=True)
@@ -52,6 +52,8 @@ class MenuPhotoTests(TestCase):
         }
         return self.client.post(reverse("admin:menu_menuitem_add"), data)
 
+
+class MenuPhotoTests(PhotoFixture):
     def test_the_owner_uploads_a_photo_and_it_is_served(self):
         response = self.add(png())
         self.assertEqual(response.status_code, 302)
@@ -60,7 +62,7 @@ class MenuPhotoTests(TestCase):
         self.assertTrue(item.photo_url.startswith("/media/menu/"))
         served = self.client.get(item.photo_url)
         self.assertEqual(served.status_code, 200)
-        self.assertEqual(served["Content-Type"], "image/png")
+        self.assertEqual(served["Content-Type"], "image/webp")  # stored small
         self.assertIn("max-age", served["Cache-Control"])
 
     def test_not_an_image_or_too_big_is_refused(self):
@@ -85,3 +87,48 @@ class MenuPhotoTests(TestCase):
     def test_nothing_outside_the_media_folder_is_served(self):
         for path in ("/media/../manage.py", "/media/%2e%2e/manage.py", "/media/menu/"):
             self.assertEqual(self.client.get(path).status_code, 404, path)
+
+
+class PhotoCompressionTests(PhotoFixture):
+    """A big photo is kept as a small WebP, the old one goes (PQ-048)."""
+
+    def test_a_big_photo_becomes_a_small_webp(self):
+        response = self.add(png("big.png", size=(3000, 2000)))
+        self.assertEqual(response.status_code, 302)
+        item = MenuItem.objects.get()
+        self.assertTrue(item.image.name.endswith(".webp"))
+        with Image.open(item.image.path) as stored:
+            self.assertEqual((stored.format, max(stored.size)), ("WEBP", 1200))
+            self.assertEqual(stored.size, (1200, 800))
+        served = self.client.get(item.photo_url)
+        self.assertEqual(served["Content-Type"], "image/webp")
+
+    def test_a_replaced_photo_is_removed(self):
+        self.add(png())
+        item = MenuItem.objects.get()
+        first = item.image.path
+        item.image = png("second.png")
+        with self.captureOnCommitCallbacks(execute=True):
+            item.save()
+        import os
+
+        self.assertFalse(os.path.exists(first))
+        self.assertTrue(os.path.exists(item.image.path))
+
+    def test_photos_uploaded_before_are_compressed_by_the_command(self):
+        from django.core.files.base import ContentFile
+        from django.core.management import call_command
+
+        item = MenuItem.objects.create(
+            partner=self.partner, category=self.category, name="Старое", price="10.00"
+        )
+        buffer = io.BytesIO()
+        Image.new("RGB", (2400, 2400), (10, 20, 30)).save(buffer, format="JPEG")
+        # As it was stored before compression: the original file as it came.
+        item.image.save("old.jpg", ContentFile(buffer.getvalue()), save=False)
+        MenuItem.objects.filter(pk=item.pk).update(image=item.image.name)
+        call_command("compress_menu_photos", stdout=io.StringIO())
+        item.refresh_from_db()
+        self.assertTrue(item.image.name.endswith(".webp"))
+        with Image.open(item.image.path) as stored:
+            self.assertEqual(stored.size, (1200, 1200))

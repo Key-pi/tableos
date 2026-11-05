@@ -12,6 +12,13 @@
 #   BROADCAST_WORKER  1 = separate broadcasts worker, as in docker compose
 #   WORKER_QUEUES     queues of the notification worker (default "default")
 #   API_DELAY         seconds added to every Telegram call (e.g. 0.04)
+#   SCREENS           open Mini App staff screens per partner (default 0); with
+#                     them the site runs too (gunicorn, WEB_WORKERS, default 3)
+#                     and results/OUT.screens.json has their answer times;
+#                     SCREENS_FULL=1 — screens never ask "since" (full answers)
+#   KEEP_OPEN_ORDERS  1 = keep orders left open by earlier runs (by default they
+#                     are closed first: a venue does not carry hundreds of open
+#                     orders, and the staff lists would measure that instead)
 #   REPO              code to run (default: this checkout)
 set -u
 L=$(cd "$(dirname "$0")" && pwd)
@@ -38,6 +45,13 @@ BotInstance.objects.filter(id__in=ids[:$P]).update(is_active=True)
 BotInstance.objects.filter(id__in=ids[$P:]).update(is_active=False)
 PY
 
+if [ "${KEEP_OPEN_ORDERS:-0}" != 1 ]; then
+  # Stand only: the throwaway database, not a way to fix real data.
+  psql -qc "update orders_order set status='completed' where status not in
+    ('completed','canceled') and partner_id in (select id from partners_partner
+    where slug like 'lt-%')" > /dev/null
+fi
+
 PROC_ARGS=""
 if [ "${BOT_PROCESSES:-1}" -gt 1 ]; then PROC_ARGS="--processes $BOT_PROCESSES"; fi
 taskset -c "$STACK" python3 manage.py runbot $PROC_ARGS > "$R/$OUT.bot.log" 2>&1 &
@@ -48,6 +62,17 @@ WPID=$!
 if [ "${BROADCAST_WORKER:-1}" = 1 ]; then
   taskset -c "$STACK" celery -A core.celery worker -Q broadcasts --pool=solo \
     --hostname=broadcasts@%h --loglevel=warning > "$R/$OUT.broadcasts.log" 2>&1 &
+fi
+if [ "${SCREENS:-0}" -gt 0 ]; then
+  # As in production: gunicorn with 3 workers behind the proxy (PQ-048).
+  python3 manage.py shell -c "from apps.partners.models import PartnerBotSettings as S; \
+S.objects.filter(partner__slug__startswith='lt-').update(module_webapp_enabled=True)" > /dev/null
+  taskset -c "$STACK" gunicorn core.wsgi:application --bind 127.0.0.1:8000 \
+    --workers "${WEB_WORKERS:-3}" --timeout 60 > "$R/$OUT.web.log" 2>&1 &
+  WEBPID=$!
+  taskset -c "$GEN" python3 "$L/screens.py" --partners "$P" --per-point "$SCREENS" \
+    --duration "$DUR" --warmup "$WARM" --startup 18 --out "$R/$OUT.screens.json" ${SCREENS_FULL:+--always-full} \
+    > "$R/$OUT.screens.log" 2>&1 &
 fi
 for pid in $(pgrep -x postgres) $(pgrep -x redis-server); do
   taskset -pc "$STACK" "$pid" > /dev/null 2>&1 || true
@@ -63,6 +88,7 @@ psql -At -F'|' -c "select sum(calls), round(sum(total_exec_time)::numeric,1),
   where dbid=(select oid from pg_database where datname=current_database())" \
   > "$R/$OUT.pg.txt" 2>/dev/null || true
 kill $BOTPID
+if [ -n "${WEBPID:-}" ]; then sleep 3; kill $WEBPID; fi
 pkill -TERM -f "celery -A core.celery worker"
 sleep 8
 tail -2 "$R/$OUT.loadgen.log"

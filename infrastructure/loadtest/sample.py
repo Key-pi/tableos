@@ -2,7 +2,8 @@
 
 usage: python sample.py BOT_PID WORKER_PID LOADGEN_PID
 Groups: bot (with its child processes), worker (every Celery worker process),
-postgres, redis, loadgen; plus the whole machine (sys_cpu).
+web (gunicorn, when the site runs), postgres, redis, loadgen, screens; plus the
+whole machine (sys_cpu).
 """
 
 import json
@@ -14,7 +15,7 @@ import psutil
 
 bot = psutil.Process(int(sys.argv[1]))
 generator = psutil.Process(int(sys.argv[3]))
-NAMES = ("bot", "worker", "postgres", "redis", "loadgen")
+NAMES = ("bot", "worker", "web", "postgres", "redis", "loadgen", "screens")
 _known: dict[int, psutil.Process] = {}
 running = True
 
@@ -37,11 +38,13 @@ def _group(name: str) -> list[psutil.Process]:
             return []
     if name == "loadgen":
         return [generator]
-    if name == "worker":
+    if name in ("worker", "web", "screens"):
+        needle = {"worker": ("celery", " worker"), "web": ("gunicorn", "core.wsgi"),
+                  "screens": ("screens.py", "--per-point")}[name]
         found = []
         for process in psutil.process_iter(["cmdline"]):
             command = " ".join(process.info["cmdline"] or [])
-            if "celery" in command and " worker" in command:
+            if all(part in command for part in needle):
                 found.append(process)
         return found
     executable = {"postgres": "postgres", "redis": "redis-server"}[name]

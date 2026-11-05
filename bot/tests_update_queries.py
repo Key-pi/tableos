@@ -87,6 +87,45 @@ class PartnerWithinOneUpdateTests(_Setup):
             resolve_partner_for_bot_token(TOKEN)
 
 
+class StartOfUpdateTests(_Setup):
+    """The start of every update (load test 2026-11-05): the bot of an
+    ordinary venue is read once, and the bot, the partner and the language
+    are worked out in one trip to the database thread."""
+
+    def _run(self, partner_status=Partner.Status.ACTIVE):
+        Partner.objects.filter(id=self.partner.id).update(status=partner_status)
+        text_overrides(self.partner.id)  # cached, as after the first update
+        seen = {}
+
+        async def handler(_event, data):
+            seen["language"] = data.get("language")
+
+        with CaptureQueriesContext(connection) as queries:
+            async_to_sync(PartnerRuntimeMiddleware().__call__)(
+                handler, SimpleNamespace(message=None, callback_query=None),
+                {"bot": SimpleNamespace(token=TOKEN),
+                 "event_from_user": SimpleNamespace(id=555, language_code="en")},
+            )
+        return seen, queries
+
+    def test_the_bot_is_read_once(self):
+        seen, queries = self._run()
+        reads = [q for q in queries if 'FROM "partners_botinstance"' in q["sql"]]
+        self.assertEqual(len(reads), 1, [q["sql"][:100] for q in queries])
+        # bot with partner and settings, the guest's and the staff language
+        self.assertLessEqual(len(queries), 3, [q["sql"][:100] for q in queries])
+        self.assertEqual(seen["language"], "en")
+
+    def test_a_suspended_partner_is_still_refused(self):
+        seen, _queries = self._run(Partner.Status.SUSPENDED)
+        self.assertEqual(seen, {})
+
+    def test_a_switched_off_bot_is_still_refused(self):
+        BotInstance.objects.filter(id=self.bot_instance.id).update(is_active=False)
+        seen, _queries = self._run()
+        self.assertEqual(seen, {})
+
+
 class OwnerTextsCacheTests(_Setup):
     def test_texts_are_read_once_until_changed(self):
         BotText.objects.create(partner=self.partner, language="uk", msgid="Меню", text="Карта")

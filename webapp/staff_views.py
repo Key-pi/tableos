@@ -13,9 +13,12 @@ Bills, tables, quick sales and reports stay in the bot for now.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import timedelta
 from functools import wraps
 
+from django.db.models import Count, Max
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -271,6 +274,7 @@ def _order_json(order: Order, *, now) -> dict:
             Order.Channel.PICKUP, Order.Channel.DELIVERY
         ) else "",
         "minutes": max(0, int((now - order.created_at).total_seconds() // 60)),
+        "created": order.created_at.isoformat(),
         "total": _money(order.total_amount),
         "payment": _payment_label(order),
         "paid": is_order_paid(order),
@@ -367,8 +371,56 @@ def _open_calls(staff: StaffRequest):
     )
 
 
+def _state_version(staff: StaffRequest, call_ids: list, request_ids: list, rights: dict) -> str:
+    """What the screen shows changes only with these: the open orders (any
+    change of an order moves its ``updated_at``), this person's calls, the
+    bill requests, the rights and the language. Few cheap queries."""
+
+    orders = (
+        get_open_orders_for_partner(staff.partner.id)
+        .order_by()
+        .aggregate(count=Count("id"), last=Max("updated_at"))
+    )
+    parts = [
+        staff.partner.id.hex, staff.employee.id.hex, staff.language,
+        orders["count"], orders["last"].isoformat() if orders["last"] else "",
+        call_ids, request_ids, sorted(rights.items()),
+        [venue.id.hex for venue in staff.venues],
+    ]
+    return hashlib.sha1(json.dumps(parts, default=str).encode()).hexdigest()[:16]
+
+
+def _created(moment) -> str:
+    return moment.isoformat()
+
+
 @staff_api("GET")
 def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
+    """Everything the screen shows; while nothing changed since ``?since=``,
+    only ``{"unchanged": true}`` — the screen asks every 8 s."""
+
+    employee = staff.employee
+    rights = {
+        "billing": can_manage_billing(employee, staff.content),
+        "tables": can_view_tables(employee, staff.content),
+        "sale": can_quick_sale(employee, staff.content),
+        "report": can_view_day_report(employee, staff.content),
+        "invite": bool(roles_invitable_by(employee.user, staff.partner.id)),
+    }
+    open_calls = list(_open_calls(staff))
+    # Open bill requests of guests, for the red badge of «Счета» (only to
+    # those who work with bills).
+    request_ids = [
+        request_id.hex
+        for request_id in BillingRequestRepository.open_for_partner(staff.partner.id)
+        .order_by("created_at").values_list("id", flat=True)
+    ] if rights["billing"] else []
+    version = _state_version(
+        staff, [notification.id.hex for notification in open_calls], request_ids, rights
+    )
+    if request.GET.get("since") == version:
+        return {"unchanged": True, "version": version}
+
     now = timezone.now()
     orders = list(get_open_orders_for_partner(staff.partner.id))
     calls = [
@@ -377,33 +429,24 @@ def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
             "table": notification.guest_call.table_number,
             "text": notification.message,
             "minutes": max(0, int((now - notification.created_at).total_seconds() // 60)),
+            "created": _created(notification.created_at),
         }
-        for notification in _open_calls(staff)
+        for notification in open_calls
     ]
-    employee = staff.employee
     return {
+        "version": version,
+        # The screen counts the minutes itself from these.
+        "now": _created(now),
         "texts": {key: _(msgid) for key, msgid in STAFF_TEXTS.items()},
         "venue": {"id": staff.partner.id.hex, "name": staff.partner.name},
         "venues": [
             {"id": venue.id.hex, "name": venue.name} for venue in staff.venues
         ] if len(staff.venues) > 1 else [],
         "employee": employee.user.get_full_name().strip() or employee.user.username,
-        "rights": {
-            "billing": can_manage_billing(employee, staff.content),
-            "tables": can_view_tables(employee, staff.content),
-            "sale": can_quick_sale(employee, staff.content),
-            "report": can_view_day_report(employee, staff.content),
-            "invite": bool(roles_invitable_by(employee.user, staff.partner.id)),
-        },
+        "rights": rights,
         "orders": [_order_json(order, now=now) for order in orders],
         "calls": calls,
-        # Open bill requests of guests, for the red badge of «Счета» (only
-        # to those who work with bills).
-        "bill_requests": [
-            request_id.hex
-            for request_id in BillingRequestRepository.open_for_partner(staff.partner.id)
-            .values_list("id", flat=True)
-        ] if can_manage_billing(employee, staff.content) else [],
+        "bill_requests": request_ids,
     }
 
 

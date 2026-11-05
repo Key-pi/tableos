@@ -140,14 +140,34 @@
         : null)));
   }
 
+  // Minutes since an order came, counted here: the server sends its clock once.
+  var clockOffset = 0;
+
+  function minutesSince(created, fallback) {
+    var moment = Date.parse(created || "");
+    if (isNaN(moment)) return fallback || 0;
+    return Math.max(0, Math.floor((Date.now() - clockOffset - moment) / 60000));
+  }
+
   function load(quiet) {
-    return api("state").then(function (result) {
+    // While nothing changed the server answers {"unchanged": true} only.
+    var params = quiet && data && data.version ? { since: data.version } : undefined;
+    return api("state", undefined, params).then(function (result) {
       if (!result.ok) {
         if (!quiet || !data) fatal(result);
         return;
       }
+      if (result.data.unchanged) {
+        if (quiet && (tab === "bills" || tab === "tables")) {
+          return loadTab().then(function () { if (!busy) render(); });
+        }
+        if (!busy && tab === "orders") render();  // the minutes move on
+        return;
+      }
       var previous = data;
       data = result.data;
+      var serverNow = Date.parse(data.now || "");
+      if (!isNaN(serverNow)) clockOffset = Date.now() - serverNow;
       T = data.texts || T;
       var ids = {};
       var arrived = false;
@@ -380,7 +400,7 @@
          el("span", { class: "place", text: order.place })),
       el("span", { class: "status", text: order.status_label })));
     card.appendChild(el("div", { class: "meta", text: [
-      t("minutes", { minutes: order.minutes }), order.when, order.guest
+      t("minutes", { minutes: minutesSince(order.created, order.minutes) }), order.when, order.guest
     ].filter(Boolean).join(" · ") }));
     var list = el("ul");
     order.items.forEach(function (item) { list.appendChild(el("li", { text: item.name + " × " + item.quantity })); });
@@ -819,7 +839,7 @@
         calls.appendChild(el("div", { class: "call" },
           el("div", null,
             el("div", { class: "what", text: "🔔 " + t("table", { number: call.table }) }),
-            el("div", { class: "meta", text: t("minutes", { minutes: call.minutes }) })),
+            el("div", { class: "meta", text: t("minutes", { minutes: minutesSince(call.created, call.minutes) }) })),
           el("button", { type: "button", class: "act primary", text: T.go, disabled: busy,
                          style: "flex:none", onclick: function () { takeCall(call); } })));
       });
@@ -836,7 +856,7 @@
       // New ones first, then the oldest: what waits longest is on top.
       shown.sort(function (a, b) {
         if ((a.status === "new") !== (b.status === "new")) return a.status === "new" ? -1 : 1;
-        return b.minutes - a.minutes;
+        return (Date.parse(a.created) || 0) - (Date.parse(b.created) || 0);  // oldest first
       });
       var board = el("div", { class: "board" });
       shown.forEach(function (order) { board.appendChild(orderCard(order)); });

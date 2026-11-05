@@ -511,3 +511,42 @@ class StaffInviteTests(StaffFixture):
         self.assertEqual(self.staff_call("invite", {"role": "owner"})[0], 400)
         self.assertEqual(self.staff_call("invite_roles", user_id=WAITER_TG)[0], 403)
         self.assertFalse(self.staff_call("state", user_id=WAITER_TG)[1]["rights"]["invite"])
+
+
+class StaffStateVersionTests(StaffFixture):
+    """While nothing changed the screen gets a short answer (load, 2026-11-05)."""
+
+    def test_unchanged_until_something_happens(self):
+        first = self.staff_call("state")[1]
+        version = first["version"]
+        quiet = self.staff_call("state", query=f"?since={version}")[1]
+        self.assertEqual(quiet, {"unchanged": True, "version": version})
+        order = self.place()  # a new order
+        fresh = self.staff_call("state", query=f"?since={version}")[1]
+        self.assertNotIn("unchanged", fresh)
+        self.assertEqual(len(fresh["orders"]), 1)
+        self.assertIn("created", fresh["orders"][0])
+        again = self.staff_call("state", query=f"?since={fresh['version']}")[1]
+        self.assertTrue(again["unchanged"])
+        self.act(order, "transfer_ok")  # a status change
+        changed = self.staff_call("state", query=f"?since={fresh['version']}")[1]
+        self.assertEqual(changed["orders"][0]["status"], "accepted")
+
+    def test_the_short_answer_stays_cheap(self):
+        """Each open screen asks every 8 s: the short answer is a handful of
+        queries (bot, person, language, settings, calls, bill requests,
+        orders), with the person and the module still checked each time."""
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        version = self.staff_call("state")[1]["version"]
+        with CaptureQueriesContext(connection) as queries:
+            quiet = self.staff_call("state", query=f"?since={version}")[1]
+        self.assertTrue(quiet["unchanged"])
+        self.assertLessEqual(len(queries), 8, [q["sql"][:120] for q in queries])
+
+    def test_each_person_has_their_own_version(self):
+        version = self.staff_call("state")[1]["version"]
+        other = self.staff_call("state", user_id=WAITER_TG, query=f"?since={version}")[1]
+        self.assertNotIn("unchanged", other)  # other rights, other screen
