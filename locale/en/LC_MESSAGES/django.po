@@ -212,7 +212,7 @@ msgstr "Bill request • table {number} • {request_type}"
 msgid "Гость: {guest} • статус: {status}"
 msgstr "Guest: {guest} • status: {status}"
 
-#: apps/analytics/services.py bot/handlers/staff.py
+#: apps/analytics/services.py bot/handlers/staff.py webapp/staff_billing.py
 msgid "несколько гостей"
 msgstr "several guests"
 
@@ -444,7 +444,7 @@ msgstr "Paid with bonuses"
 msgid "Итого"
 msgstr "Total"
 
-#: apps/billing/models.py
+#: apps/billing/models.py webapp/staff_views.py
 msgid "Оплачено"
 msgstr "Paid"
 
@@ -468,7 +468,7 @@ msgstr "Closed"
 msgid "счёт"
 msgstr "bill"
 
-#: apps/billing/models.py bot/keyboards/staff.py
+#: apps/billing/models.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Счета"
 msgstr "Bills"
 
@@ -476,7 +476,7 @@ msgstr "Bills"
 msgid "Личный счёт"
 msgstr "Personal bill"
 
-#: apps/billing/models.py bot/keyboards/staff.py
+#: apps/billing/models.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Общий счёт"
 msgstr "Shared bill"
 
@@ -492,7 +492,7 @@ msgstr "Open"
 msgid "Счёт подготовлен"
 msgstr "Bill prepared"
 
-#: apps/billing/models.py
+#: apps/billing/models.py webapp/staff_views.py
 msgid "Обработан"
 msgstr "Processed"
 
@@ -600,7 +600,7 @@ msgstr "Refunded"
 msgid "Отменена"
 msgstr "Canceled"
 
-#: apps/billing/models.py apps/orders/models.py bot/keyboards/staff.py
+#: apps/billing/models.py apps/orders/models.py bot/keyboards/staff.py webapp/staff_billing.py
 msgid "Наличные"
 msgstr "Cash"
 
@@ -620,7 +620,7 @@ msgstr "Online"
 msgid "Смешанная"
 msgstr "Mixed"
 
-#: apps/billing/models.py apps/bonuses/apps.py apps/orders/models.py apps/partners/bot_texts.py webapp/texts.py
+#: apps/billing/models.py apps/bonuses/apps.py apps/orders/models.py apps/partners/bot_texts.py webapp/staff_views.py webapp/texts.py
 msgid "Бонусы"
 msgstr "Bonuses"
 
@@ -664,7 +664,7 @@ msgstr "Line removed"
 msgid "Заказ отменён"
 msgstr "Order canceled"
 
-#: apps/billing/models.py
+#: apps/billing/models.py webapp/staff_billing.py
 msgid "Счёт аннулирован"
 msgstr "Bill voided"
 
@@ -776,7 +776,7 @@ msgstr "Cashback not taken back (already spent)"
 msgid "возврат"
 msgstr "refund"
 
-#: apps/billing/models.py
+#: apps/billing/models.py webapp/staff_sales.py
 msgid "Возвраты"
 msgstr "Refunds"
 
@@ -1308,7 +1308,7 @@ msgstr "The bonus amount is over the available limit."
 msgid "Укажите причину изменения счёта."
 msgstr "Give a reason for changing the bill."
 
-#: apps/billing/services.py bot/handlers/staff.py
+#: apps/billing/services.py bot/handlers/staff.py webapp/staff_billing.py
 msgid "Нет права изменять счета. Его выдаёт владелец заведения."
 msgstr "No right to change bills. The venue owner grants it."
 
@@ -1468,7 +1468,7 @@ msgstr "Cancel"
 msgid "Данные гостя"
 msgstr "Guest details"
 
-#: apps/bonuses/admin.py apps/bonuses/forms.py apps/users/models.py
+#: apps/bonuses/admin.py apps/bonuses/forms.py apps/users/models.py webapp/staff_views.py
 msgid "Код клиента"
 msgstr "Customer code"
 
@@ -1656,7 +1656,7 @@ msgstr "Bonuses accrued"
 msgid "быстрая продажа"
 msgstr "quick sale"
 
-#: apps/bonuses/models.py apps/partners/models.py bot/handlers/staff.py bot/keyboards/staff.py
+#: apps/bonuses/models.py apps/partners/models.py bot/handlers/staff.py bot/keyboards/staff.py webapp/staff_sales.py
 msgid "Быстрые продажи"
 msgstr "Quick sales"
 
@@ -1664,7 +1664,7 @@ msgstr "Quick sales"
 msgid "Аноним"
 msgstr "Anonymous"
 
-#: apps/bonuses/models.py
+#: apps/bonuses/models.py webapp/staff_views.py
 msgid "Продажа"
 msgstr "Sale"
 
@@ -2930,7 +2930,7 @@ msgstr "Not available to order {channel_names}: {not_sold}."
 msgid "Сначала выберите, как получите заказ."
 msgstr "First choose how you will get your order."
 
-#: apps/orders/services.py webapp/views.py
+#: apps/orders/services.py webapp/staff_sales.py webapp/views.py
 msgid "Количество должно изменяться хотя бы на 1."
 msgstr "The quantity must change by at least 1."
 
@@ -3656,7 +3656,7 @@ msgstr "Button to call a waiter, the bar or the hookah master. Needs tables."
 msgid "Продажа на кассе по коду клиента. Требует меню."
 msgstr "A till sale by customer code. Needs the menu."
 
-#: apps/partners/models.py bot/keyboards/staff.py
+#: apps/partners/models.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Отчёт дня"
 msgstr "Daily report"
 
@@ -3960,7 +3960,7 @@ msgstr "← Back"
 msgid "Страница {number} из {pages}"
 msgstr "Page {number} of {pages}"
 
-#: apps/partners/templates/admin/partners/bottext/catalog.html bot/handlers/staff_refunds.py bot/keyboards/profile.py bot/keyboards/staff.py
+#: apps/partners/templates/admin/partners/bottext/catalog.html bot/handlers/staff_refunds.py bot/keyboards/profile.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Дальше →"
 msgstr "Next →"
 
@@ -4120,7 +4120,7 @@ msgstr "Table #{number} visit: {exc}"
 msgid "Закрыто визитов: {closed_count}."
 msgstr "Visits closed: {closed_count}."
 
-#: apps/tables/apps.py apps/tables/models.py apps/users/constants.py bot/keyboards/staff.py
+#: apps/tables/apps.py apps/tables/models.py apps/users/constants.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Столы"
 msgstr "Tables"
 
@@ -4808,7 +4808,7 @@ msgstr "Payment: {payment}"
 msgid "Возвращено: {refunded} грн"
 msgstr "Refunded: {refunded} UAH"
 
-#: bot/handlers/profile.py bot/handlers/staff.py bot/handlers/staff_refunds.py webapp/staff_views.py
+#: bot/handlers/profile.py bot/handlers/staff.py bot/handlers/staff_refunds.py webapp/staff_billing.py webapp/staff_views.py
 msgid "Заказ не найден."
 msgstr "Order not found."
 
@@ -5340,7 +5340,7 @@ msgstr "on receipt, {to_pay} UAH{bonus_note}"
 msgid "Почта"
 msgstr "Post"
 
-#: bot/handlers/staff.py webapp/staff_views.py webapp/texts.py webapp/views.py
+#: bot/handlers/staff.py webapp/staff_billing.py webapp/staff_views.py webapp/texts.py webapp/views.py
 msgid "Стол {number}"
 msgstr "Table {number}"
 
@@ -5412,7 +5412,7 @@ msgstr ""
 msgid "📦 ТТН для заказа"
 msgstr "📦 Tracking number for order"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_sales.py
 msgid "Быстрая продажа сейчас доступна только владельцу, менеджеру или кассиру."
 msgstr "Quick sales are available only to the owner, a manager or a cashier right now."
 
@@ -5672,7 +5672,7 @@ msgstr "Active guests: {count}"
 msgid "Открытых заказов: {count}"
 msgstr "Open orders: {count}"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_views.py
 msgid "Заказов без счёта: {count}"
 msgstr "Orders without a bill: {count}"
 
@@ -5712,15 +5712,15 @@ msgstr "Guest left: {guest}"
 msgid "Гость ушёл? {guest} — не рассчитан"
 msgstr "Guest left? {guest} — not settled"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Счёт на гостя"
 msgstr "Bill per guest"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Счёт на весь стол"
 msgstr "Bill for the whole table"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Нестандартное разделение"
 msgstr "Custom split"
 
@@ -5908,11 +5908,11 @@ msgstr "📱 Work screen"
 msgid "Список обновлён"
 msgstr "List updated"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Работа со счетами доступна только владельцу, менеджеру или кассиру."
 msgstr "Bills are available only to the owner, a manager or a cashier."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Работа со столами доступна только владельцу, менеджеру или кассиру при включённом модуле столов."
 msgstr "Tables are available only to the owner, a manager or a cashier with the tables module on."
 
@@ -5944,15 +5944,15 @@ msgstr "Shared bill prepared"
 msgid "Персональные счета подготовлены"
 msgstr "Personal bills prepared"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Этот визит уже закрыт."
 msgstr "This visit is already closed."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Визит не найден."
 msgstr "Visit not found."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Счёт визита подготовлен"
 msgstr "Visit bill prepared"
 
@@ -5960,11 +5960,11 @@ msgstr "Visit bill prepared"
 msgid "Закрытие визитов доступно только владельцу, менеджеру или кассиру при включённом модуле столов."
 msgstr "Closing visits is available only to the owner, a manager or a cashier with the tables module on."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Визит закрыт"
 msgstr "Visit closed"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_sales.py
 msgid "Отчёт дня сейчас доступен только владельцу, менеджеру или кассиру."
 msgstr "The daily report is available only to the owner, a manager or a cashier right now."
 
@@ -6152,7 +6152,7 @@ msgstr "The order has changed, showing the current card"
 msgid "Заказ взят в работу"
 msgstr "Order taken"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Счёт не найден."
 msgstr "Bill not found."
 
@@ -6160,19 +6160,19 @@ msgstr "Bill not found."
 msgid "Карточка счёта обновлена"
 msgstr "Bill card updated"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Счёт выдан"
 msgstr "Bill issued"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Оплата зафиксирована"
 msgstr "Payment recorded"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Списано бонусами: {bonus_spent_amount} грн. Остаток к оплате: {remaining_amount} грн."
 msgstr "Paid with bonuses: {bonus_spent_amount} UAH. Left to pay: {remaining_amount} UAH."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Счёт полностью оплачен бонусами"
 msgstr "The bill is fully paid with bonuses"
 
@@ -6184,7 +6184,7 @@ msgstr ""
 "<b>Bill #{bill_public_id}</b>\n"
 "Fully paid and removed from the open bills."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Запрос счёта не найден."
 msgstr "Bill request not found."
 
@@ -6252,7 +6252,7 @@ msgstr "Comment saved."
 msgid "Комментарий очищен."
 msgstr "Comment cleared."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_sales.py
 msgid "Сначала добавьте позиции."
 msgstr "Add items first."
 
@@ -6292,7 +6292,7 @@ msgstr "← Work mode"
 msgid "Продажа сохранена"
 msgstr "Sale saved"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Позиция уже убрана из счёта."
 msgstr "The item is already removed from the bill."
 
@@ -6306,11 +6306,11 @@ msgstr ""
 "Remove “{item_name} x{quantity}” ({line_total} UAH)?\n"
 "Choose a reason."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Позиция убрана из счёта"
 msgstr "Item removed from the bill"
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Заказа уже нет в открытом счёте."
 msgstr "The order is no longer in an open bill."
 
@@ -6324,7 +6324,7 @@ msgstr ""
 "Cancel order #{order_public_id} and remove its items from the bill?\n"
 "Choose a reason."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Заказ #{order_public_id} отменён"
 msgstr "Order #{order_public_id} canceled"
 
@@ -6370,7 +6370,7 @@ msgstr "Write a comment on the bill change in one message."
 msgid "Комментарий сохранён в истории счёта."
 msgstr "Comment saved in the bill history."
 
-#: bot/handlers/staff_invites.py
+#: bot/handlers/staff_invites.py webapp/staff_sales.py
 msgid "Приглашать сотрудников может владелец или менеджер."
 msgstr "Only the owner or a manager can invite staff."
 
@@ -6382,7 +6382,7 @@ msgstr ""
 "<b>Invite an employee</b>\n"
 "With which role? The link can be used once and works for 24 hours."
 
-#: bot/handlers/staff_invites.py
+#: bot/handlers/staff_invites.py webapp/staff_sales.py
 msgid "Приглашение в команду «{partner_name}»"
 msgstr "Invitation to the «{partner_name}» team"
 
@@ -6400,7 +6400,7 @@ msgstr ""
 "\n"
 "The link can be used once and works for 24 hours. When the employee presses «Start», I will send you «Confirm» and «Reject» buttons."
 
-#: bot/handlers/staff_invites.py
+#: bot/handlers/staff_invites.py webapp/staff_views.py
 msgid "📤 Переслать ссылку"
 msgstr "📤 Forward the link"
 
@@ -6588,7 +6588,7 @@ msgstr "🛒 Cart: {count} pcs · {total} UAH"
 msgid "➕ {name} — {price} грн"
 msgstr "➕ {name} — {price} UAH"
 
-#: bot/keyboards/menu.py bot/keyboards/staff.py webapp/texts.py
+#: bot/keyboards/menu.py bot/keyboards/staff.py webapp/staff_views.py webapp/texts.py
 msgid "Очистить"
 msgstr "Clear"
 
@@ -6700,7 +6700,7 @@ msgstr "❌ Parcel not collected"
 msgid "❌ Гость не забрал"
 msgstr "❌ Guest did not collect"
 
-#: bot/keyboards/staff.py
+#: bot/keyboards/staff.py webapp/staff_views.py
 msgid "↩️ Возврат"
 msgstr "↩️ Refund"
 
@@ -6800,15 +6800,15 @@ msgstr "Confirm sale"
 msgid "Добавьте позиции"
 msgstr "Add items"
 
-#: bot/keyboards/staff.py
+#: bot/keyboards/staff.py webapp/staff_billing.py
 msgid "Выдать счёт"
 msgstr "Issue bill"
 
-#: bot/keyboards/staff.py
+#: bot/keyboards/staff.py webapp/staff_billing.py
 msgid "Оплатить бонусами"
 msgstr "Pay with bonuses"
 
-#: bot/keyboards/staff.py
+#: bot/keyboards/staff.py webapp/staff_billing.py
 msgid "Терминал"
 msgstr "Terminal"
 
@@ -6816,7 +6816,7 @@ msgstr "Terminal"
 msgid "Изменить счёт"
 msgstr "Change bill"
 
-#: bot/keyboards/staff.py
+#: bot/keyboards/staff.py webapp/staff_views.py
 msgid "Аннулировать"
 msgstr "Void"
 
@@ -6832,7 +6832,7 @@ msgstr "Back to the bill"
 msgid "Добавить комментарий"
 msgstr "Add comment"
 
-#: bot/keyboards/staff.py
+#: bot/keyboards/staff.py webapp/staff_views.py
 msgid "Открыть счёт"
 msgstr "Open bill"
 
@@ -6844,7 +6844,7 @@ msgstr "{title}: shared bill"
 msgid "По гостям"
 msgstr "Per guest"
 
-#: bot/keyboards/staff.py
+#: bot/keyboards/staff.py webapp/staff_views.py
 msgid "Закрыть визит"
 msgstr "Close visit"
 
@@ -7004,6 +7004,26 @@ msgstr "The venue is not taking orders right now."
 msgid "Заказ в приложении здесь пока не включён — закажите в чате бота."
 msgstr "Ordering in the app is not switched on here yet — order in the bot chat."
 
+#: webapp/staff_billing.py webapp/staff_views.py
+msgid "Выберите причину."
+msgstr "Choose a reason."
+
+#: webapp/staff_billing.py
+msgid "У заказа нет оплаченного счёта — возвращать нечего."
+msgstr "The order has no paid bill — nothing to refund."
+
+#: webapp/staff_billing.py webapp/staff_views.py
+msgid "Отметьте, что вернуть."
+msgstr "Tick what to refund."
+
+#: webapp/staff_billing.py
+msgid "Выберите причину и как вернёте деньги."
+msgstr "Choose the reason and how you return the money."
+
+#: webapp/staff_billing.py
+msgid "Возврат оформлен: {money} грн, бонусов {bonus}."
+msgstr "Refund done: {money} UAH, bonuses {bonus}."
+
 #: webapp/staff_context.py
 msgid "Рабочий экран — только для сотрудников этого заведения."
 msgstr "The work screen is for this venue's staff only."
@@ -7011,6 +7031,38 @@ msgstr "The work screen is for this venue's staff only."
 #: webapp/staff_context.py
 msgid "Рабочий экран здесь пока не включён — работайте в чате бота."
 msgstr "The work screen is not switched on here yet — work in the bot chat."
+
+#: webapp/staff_sales.py
+msgid "Продажа сохранена: {amount} грн, бонусов начислено {bonus}."
+msgstr "Sale saved: {amount} UAH, bonuses earned {bonus}."
+
+#: webapp/staff_sales.py
+msgid "Всего выручка"
+msgstr "Total revenue"
+
+#: webapp/staff_sales.py
+msgid "По счетам"
+msgstr "From bills"
+
+#: webapp/staff_sales.py
+msgid "Оплаченных счетов"
+msgstr "Paid bills"
+
+#: webapp/staff_sales.py
+msgid "Быстрых продаж"
+msgstr "Quick sales"
+
+#: webapp/staff_sales.py
+msgid "Создано заказов"
+msgstr "Orders created"
+
+#: webapp/staff_sales.py
+msgid "Открытых заказов"
+msgstr "Open orders"
+
+#: webapp/staff_sales.py
+msgid "Открытых счетов"
+msgstr "Open bills"
 
 #: webapp/staff_views.py
 msgid "Рабочий режим"
@@ -7077,6 +7129,142 @@ msgid "🔔 Звук новых заказов"
 msgstr "🔔 Sound for new orders"
 
 #: webapp/staff_views.py
+msgid "Открытых счетов и запросов нет."
+msgstr "No open bills or requests."
+
+#: webapp/staff_views.py
+msgid "Сейчас за столами никого нет."
+msgstr "Nobody at the tables right now."
+
+#: webapp/staff_views.py
+msgid "Просят счёт"
+msgstr "Asking for the bill"
+
+#: webapp/staff_views.py
+msgid "Открытые счета"
+msgstr "Open bills"
+
+#: webapp/staff_views.py webapp/texts.py
+msgid "К оплате"
+msgstr "To pay"
+
+#: webapp/staff_views.py
+msgid "У гостя {balance} бонусов — можно списать до {amount} грн."
+msgstr "The guest has {balance} bonuses — up to {amount} UAH can be paid with them."
+
+#: webapp/staff_views.py
+msgid "Убрано позиций: {count} (см. историю счёта)"
+msgstr "Lines removed: {count} (see the bill history)"
+
+#: webapp/staff_views.py
+msgid "Отменить запрос"
+msgstr "Cancel the request"
+
+#: webapp/staff_views.py
+msgid "Визит с {since}"
+msgstr "Visit since {since}"
+
+#: webapp/staff_views.py
+msgid "Гостей: {count}"
+msgstr "Guests: {count}"
+
+#: webapp/staff_views.py
+msgid "Без счёта: {count} на {total} грн"
+msgstr "Not billed: {count} for {total} UAH"
+
+#: webapp/staff_views.py
+msgid "Счёт каждому"
+msgstr "Bill each guest"
+
+#: webapp/staff_views.py
+msgid "Закрыть визит? Стол освободится, гости больше не смогут заказать."
+msgstr "Close the visit? The table becomes free; the guests can no longer order."
+
+#: webapp/staff_views.py
+msgid "уже возвращено"
+msgstr "already refunded"
+
+#: webapp/staff_views.py
+msgid "Гостю вернётся {money} грн и {bonus} бонусов."
+msgstr "The guest gets back {money} UAH and {bonus} bonuses."
+
+#: webapp/staff_views.py
+msgid "Причина возврата?"
+msgstr "Reason for the refund?"
+
+#: webapp/staff_views.py
+msgid "Как вернёте деньги гостю?"
+msgstr "How do you return the money?"
+
+#: webapp/staff_views.py
+msgid "Найти заказ по номеру"
+msgstr "Find an order by number"
+
+#: webapp/staff_views.py
+msgid "Номер заказа"
+msgstr "Order number"
+
+#: webapp/staff_views.py
+msgid "Убрать позицию (останется в истории счёта) или отменить заказ целиком:"
+msgstr "Remove a line (it stays in the bill history) or cancel a whole order:"
+
+#: webapp/staff_views.py
+msgid "Убрать «{name}» из счёта?"
+msgstr "Remove «{name}» from the bill?"
+
+#: webapp/staff_views.py
+msgid "Отменить заказ #{id}"
+msgstr "Cancel order #{id}"
+
+#: webapp/staff_views.py
+msgid "Код клиента — для бонусов; без кода — анонимная продажа"
+msgstr "Customer code — for bonuses; without a code — an anonymous sale"
+
+#: webapp/staff_views.py
+msgid "Списать бонусы: до {amount} грн"
+msgstr "Pay with bonuses: up to {amount} UAH"
+
+#: webapp/staff_views.py
+msgid "Гостю начислится бонусов: {bonus}"
+msgstr "The guest earns bonuses: {bonus}"
+
+#: webapp/staff_views.py
+msgid "Провести продажу"
+msgstr "Record the sale"
+
+#: webapp/staff_views.py
+msgid "По способам заказа"
+msgstr "By way of ordering"
+
+#: webapp/staff_views.py
+msgid "Методы оплаты"
+msgstr "Payment methods"
+
+#: webapp/staff_views.py
+msgid "По сотрудникам"
+msgstr "By staff member"
+
+#: webapp/staff_views.py
+msgid "Пригласить сотрудника"
+msgstr "Invite a staff member"
+
+#: webapp/staff_views.py
+msgid "С какой ролью? Ссылка будет одноразовой и проработает 24 часа."
+msgstr "Which role? The link works once, for 24 hours."
+
+#: webapp/staff_views.py
+msgid "Отправьте эту ссылку сотруднику. Когда он нажмёт «Start», бот пришлёт вам кнопки «Подтвердить» и «Отклонить»."
+msgstr "Send this link to the staff member. When they press «Start», the bot sends you «Confirm» and «Decline» buttons."
+
+#: webapp/staff_views.py
+msgid "Скопировать"
+msgstr "Copy"
+
+#: webapp/staff_views.py
+msgid "Ссылка скопирована"
+msgstr "Link copied"
+
+#: webapp/staff_views.py
 msgid "Отменить заказ?"
 msgstr "Cancel the order?"
 
@@ -7135,10 +7323,6 @@ msgstr "Items"
 #: webapp/texts.py
 msgid "Бонусов на счету"
 msgstr "Bonus balance"
-
-#: webapp/texts.py
-msgid "К оплате"
-msgstr "To pay"
 
 #: webapp/texts.py
 msgid "Номер для связи по заказу"

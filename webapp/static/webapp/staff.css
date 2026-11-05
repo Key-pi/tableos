@@ -25,9 +25,10 @@
 .order.new .status { background: var(--danger); color: #fff; }
 .order ul { margin: 2px 0; padding-left: 18px; }
 .order li { margin: 1px 0; }
-.order .row { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
-.order .row b { white-space: nowrap; }
-.order .row .meta { text-align: right; }
+.row { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; padding: 2px 0; }
+.row b { white-space: nowrap; }
+.row .meta { text-align: right; }
+.sheet .status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg2); }
 .order .note { color: var(--hint); font-size: 13px; overflow-wrap: anywhere; }
 .order a { color: var(--link); }
 .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }

@@ -38,6 +38,8 @@ from apps.billing.remote_orders import (
 )
 from apps.billing.services import BillingServiceError, cancel_order
 from apps.billing.staff_actions import staff_order_actions
+from apps.bonuses.services import BonusServiceError
+from apps.employees.invites import roles_invitable_by
 from apps.notifications.models import StaffNotification
 from apps.notifications.services import GuestCallError, take_guest_call
 from apps.orders.models import Order
@@ -49,6 +51,13 @@ from apps.orders.services import (
     is_order_received,
     requested_time_label,
     transition_order_status,
+)
+from apps.tables.services import TableSessionError
+from bot.services.staff_rights import (
+    can_manage_billing,
+    can_quick_sale,
+    can_view_day_report,
+    can_view_tables,
 )
 from core.i18n import N_, _, texts
 from webapp.context import WebAppDenied, find_bot
@@ -108,6 +117,63 @@ STAFF_TEXTS = {
     "retry": N_("Повторить"),
     "currency": N_("грн"),
     "sound_on": N_("🔔 Звук новых заказов"),
+    "bills": N_("Счета"),
+    "bonuses": N_("Бонусы"),
+    "tables": N_("Столы"),
+    "no_bills": N_("Открытых счетов и запросов нет."),
+    "no_tables": N_("Сейчас за столами никого нет."),
+    "bill_requests": N_("Просят счёт"),
+    "open_bills": N_("Открытые счета"),
+    "unbilled": N_("Заказов без счёта: {count}"),
+    "paid": N_("Оплачено"),
+    "remaining": N_("К оплате"),
+    "bonus_offer": N_("У гостя {balance} бонусов — можно списать до {amount} грн."),
+    "removed": N_("Убрано позиций: {count} (см. историю счёта)"),
+    "process": N_("Обработан"),
+    "cancel_request": N_("Отменить запрос"),
+    "open_bill": N_("Открыть счёт"),
+    "visit": N_("Визит с {since}"),
+    "guests": N_("Гостей: {count}"),
+    "not_billed": N_("Без счёта: {count} на {total} грн"),
+    "shared_bill": N_("Общий счёт"),
+    "personal_bills": N_("Счёт каждому"),
+    "close_visit": N_("Закрыть визит"),
+    "close_visit_confirm": N_("Закрыть визит? Стол освободится, гости больше не смогут заказать."),
+    "pick_reason": N_("Выберите причину."),
+    "refund": N_("↩️ Возврат"),
+    "refunded": N_("уже возвращено"),
+    "refund_amounts": N_("Гостю вернётся {money} грн и {bonus} бонусов."),
+    "refund_reason": N_("Причина возврата?"),
+    "refund_method": N_("Как вернёте деньги гостю?"),
+    "pick_lines": N_("Отметьте, что вернуть."),
+    "next": N_("Дальше →"),
+    "find_order": N_("Найти заказ по номеру"),
+    "order_number": N_("Номер заказа"),
+    "change_bill": N_("Убрать позицию (останется в истории счёта) или отменить заказ целиком:"),
+    "remove_line_q": N_("Убрать «{name}» из счёта?"),
+    "cancel_order": N_("Отменить заказ #{id}"),
+    "void_bill": N_("Аннулировать"),
+    "sale": N_("Продажа"),
+    "report": N_("Отчёт дня"),
+    "customer_code": N_("Код клиента"),
+    "customer_code_hint": N_("Код клиента — для бонусов; без кода — анонимная продажа"),
+    "sale_redeem": N_("Списать бонусы: до {amount} грн"),
+    "sale_bonus": N_("Гостю начислится бонусов: {bonus}"),
+    "sale_confirm": N_("Провести продажу"),
+    "clear": N_("Очистить"),
+    "to_pay": N_("К оплате"),
+    "by_channel": N_("По способам заказа"),
+    "by_method": N_("Методы оплаты"),
+    "by_staff": N_("По сотрудникам"),
+    "invite": N_("Пригласить сотрудника"),
+    "invite_role": N_("С какой ролью? Ссылка будет одноразовой и проработает 24 часа."),
+    "invite_ready": N_(
+        "Отправьте эту ссылку сотруднику. Когда он нажмёт «Start», бот пришлёт вам "
+        "кнопки «Подтвердить» и «Отклонить».",
+    ),
+    "share": N_("📤 Переслать ссылку"),
+    "copy": N_("Скопировать"),
+    "copied": N_("Ссылка скопирована"),
 }
 
 
@@ -217,6 +283,8 @@ def _order_json(order: Order, *, now) -> dict:
         if assignee is not None else "",
         "received": is_order_received(order) and order.status != Order.Status.COMPLETED,
         "actions": [_action_json(order, code) for code in staff_order_actions(order)],
+        # Refund of a paid order (PQ-037): the right is checked when it opens.
+        "can_refund": order.paid_at is not None and order.status != Order.Status.CANCELED,
     }
     if order.channel == Order.Channel.DELIVERY:
         data["address"] = order.delivery_address
@@ -253,7 +321,10 @@ def staff_api(method: str):
                     return JsonResponse(view(request, staff, body))
                 except WebAppDenied as exc:
                     return _error(exc.status, _(exc.message), exc.code)
-                except (OrderFlowError, BillingServiceError, GuestCallError) as exc:
+                except (
+                    OrderFlowError, BillingServiceError, GuestCallError, TableSessionError,
+                    BonusServiceError,
+                ) as exc:
                     return _error(400, str(exc), "refused")
 
         return wrapper
@@ -316,6 +387,13 @@ def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
             {"id": venue.id.hex, "name": venue.name} for venue in staff.venues
         ] if len(staff.venues) > 1 else [],
         "employee": employee.user.get_full_name().strip() or employee.user.username,
+        "rights": {
+            "billing": can_manage_billing(employee, staff.content),
+            "tables": can_view_tables(employee, staff.content),
+            "sale": can_quick_sale(employee, staff.content),
+            "report": can_view_day_report(employee, staff.content),
+            "invite": bool(roles_invitable_by(employee.user, staff.partner.id)),
+        },
         "orders": [_order_json(order, now=now) for order in orders],
         "calls": calls,
     }
@@ -326,6 +404,14 @@ def _load_order(staff: StaffRequest, public_id: str) -> Order:
         return OrderRepository.by_public_id_for_partner(staff.partner.id, public_id)
     except Order.DoesNotExist as exc:
         raise WebAppDenied(404, N_("Заказ не найден.")) from exc
+
+
+@staff_api("GET")
+def staff_order_view(request, staff: StaffRequest, body: dict) -> dict:
+    """One order of this venue by its number, open or not (to find and refund it)."""
+
+    public_id = (request.GET.get("id") or "").strip().lower().lstrip("#")
+    return {"order": _order_json(_load_order(staff, public_id), now=timezone.now())}
 
 
 RECEIPT_METHODS = {

@@ -230,3 +230,272 @@ class StaffCallsTests(StaffFixture):
         status, body = self.staff_call("call", {"call": late[0]["id"]}, user_id=7700203)
         self.assertEqual(status, 400)
         self.assertIn("kava_waiter", body["error"])
+
+
+class BillsFixture(StaffFixture):
+    def setUp(self):
+        super().setUp()
+        PartnerBotSettings.objects.filter(partner=self.partner).update(module_billing_enabled=True)
+        self.cashier = staff(self.partner, "kava_cashier", User.Role.CASHIER, 7700204)
+        self.table = Table.objects.create(partner=self.partner, number=7)
+        activate_table_session(
+            partner_id=self.partner.id, telegram_id=TG, payload=self.table.deep_link_payload
+        )
+        self.add_latte()
+        self.assertEqual(self.call("place", {})[0], 200)  # an order to the table
+
+    def visit(self, user_id=7700204):
+        status, body = self.staff_call("tables", user_id=user_id)
+        self.assertEqual(status, 200, body)
+        self.assertEqual([table["number"] for table in body["tables"]], [7])
+        return body["tables"][0]["visits"][0]
+
+
+class StaffBillsAndTablesTests(BillsFixture):
+    def test_a_waiter_has_no_bills_or_tables(self):
+        state = self.staff_call("state", user_id=WAITER_TG)[1]
+        self.assertEqual(
+            {key: state["rights"][key] for key in ("billing", "tables")},
+            {"billing": False, "tables": False},
+        )
+        for name in ("bills", "tables"):
+            status, body = self.staff_call(name, user_id=WAITER_TG)
+            self.assertEqual((status, body["code"]), (403, "no_right"), name)
+        status, _body = self.staff_call(
+            "visit_action", {"visit": "00" * 16, "action": "close"}, user_id=WAITER_TG
+        )
+        self.assertEqual(status, 403)
+
+    def test_bill_the_visit_take_the_money_close_the_visit(self):
+        visit = self.visit()
+        self.assertEqual((visit["unbilled"], visit["can_bill"], len(visit["guests"])), (1, True, 1))
+        status, body = self.staff_call(
+            "visit_action", {"visit": visit["id"], "action": "shared"}, user_id=7700204
+        )
+        self.assertEqual(status, 200, body)
+        bills = self.staff_call("bills", user_id=7700204)[1]["bills"]
+        self.assertEqual([bill["total"] for bill in bills], ["80.00"])
+        card = self.staff_call("bill", user_id=7700204, query=f"?id={bills[0]['id']}")[1]["bill"]
+        self.assertEqual([action["code"] for action in card["actions"]],
+                         ["issue", "pay_cash", "pay_terminal"])
+        status, body = self.staff_call(
+            "bill_action", {"bill": card["id"], "action": "pay_cash"}, user_id=7700204
+        )
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["bill"]["status"], "paid")
+        # Paid: the same button again does nothing.
+        status, body = self.staff_call(
+            "bill_action", {"bill": card["id"], "action": "pay_cash"}, user_id=7700204
+        )
+        self.assertTrue(body["stale"])
+        # Paid but not served yet: the visit does not close (the service says why).
+        status, body = self.staff_call(
+            "visit_action", {"visit": visit["id"], "action": "close"}, user_id=7700204
+        )
+        self.assertEqual((status, body["code"]), (400, "refused"))
+        order = Order.objects.get(table=self.table)
+        for action in ("status:accepted", "status:ready", "status:completed"):
+            self.assertTrue(self.act(order, action)[1]["ok"], action)
+        tables = self.staff_call("tables", user_id=7700204)[1]["tables"]
+        if tables:  # unless it closed itself after payment (PQ-027)
+            status, body = self.staff_call(
+                "visit_action", {"visit": visit["id"], "action": "close"}, user_id=7700204
+            )
+            self.assertEqual(status, 200, body)
+        self.assertEqual(self.staff_call("tables", user_id=7700204)[1]["tables"], [])
+
+    def test_a_bill_request_from_the_table(self):
+        from apps.billing.table_bills import create_billing_request_for_telegram_user
+
+        create_billing_request_for_telegram_user(
+            partner_id=self.partner.id, telegram_id=TG, request_type="shared"
+        )
+        requests = self.staff_call("bills", user_id=7700204)[1]["requests"]
+        self.assertEqual([item["table"] for item in requests], [7])
+        status, _body = self.staff_call(
+            "request_action", {"request": requests[0]["id"], "action": "cancel"}, user_id=7700204
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(self.staff_call("bills", user_id=7700204)[1]["requests"], [])
+
+    def test_another_venues_bill_or_visit_is_not_found(self):
+        other = make_venue("Other")
+        self.assertEqual(self.staff_call("bill", query="?id=nope")[0], 404)
+        from apps.tables.models import TableVisit
+
+        foreign_table = Table.objects.create(partner=other, number=1)
+        foreign_visit = TableVisit.objects.create(partner=other, table=foreign_table)
+        status, _body = self.staff_call(
+            "visit_action", {"visit": foreign_visit.id.hex, "action": "close"}, user_id=7700204
+        )
+        self.assertEqual(status, 404)
+
+    def test_same_bill_buttons_as_the_bot(self):
+        from apps.billing.repositories import BillRepository
+        from apps.billing.staff_actions import staff_bill_actions
+        from bot.handlers.staff import _build_bill_card_message
+
+        visit = self.visit()
+        self.staff_call("visit_action", {"visit": visit["id"], "action": "shared"},
+                        user_id=7700204)
+        bill = BillRepository.open_for_partner(self.partner.id).get()
+        codes = {"staffbillissue": "issue", "staffbillpaybonus": "pay_bonus",
+                 "staffbillpaycash": "pay_cash", "staffbillpayterminal": "pay_terminal"}
+        for _step in range(2):
+            _text, markup = _build_bill_card_message(bill, self.cashier.user)
+            bot_codes = [
+                codes[button.callback_data.split(":")[0]]
+                for row in markup.inline_keyboard for button in row
+                if button.callback_data.split(":")[0] in codes
+            ]
+            self.assertEqual(staff_bill_actions(bill), bot_codes)
+            self.staff_call("bill_action", {"bill": bill.public_id, "action": "issue"},
+                            user_id=7700204)
+            bill = BillRepository.all_for_partner(self.partner.id).get(id=bill.id)
+
+
+class StaffBillChangesAndRefundsTests(BillsFixture):
+    """Changing, voiding and refunding as in the bot (PQ-028, PQ-037)."""
+
+    def bill(self):
+        visit = self.visit()
+        self.staff_call("visit_action", {"visit": visit["id"], "action": "shared"},
+                        user_id=7700204)
+        bill_id = self.staff_call("bills", user_id=7700204)[1]["bills"][0]["id"]
+        return self.staff_call("bill", query=f"?id={bill_id}")[1]["bill"]  # the owner
+
+    def test_only_with_the_right_from_the_owner(self):
+        self.bill()
+        bill_id = self.staff_call("bills", user_id=7700204)[1]["bills"][0]["id"]
+        card = self.staff_call("bill", user_id=7700204, query=f"?id={bill_id}")[1]["bill"]
+        self.assertEqual((card["can_edit"], card["can_void"]), (False, False))
+        status, body = self.staff_call(
+            "bill_change", {"bill": bill_id, "action": "void", "reason": "other"},
+            user_id=7700204,
+        )
+        self.assertEqual(status, 400)  # the service refuses: no right
+
+    def test_the_owner_removes_a_line_then_voids(self):
+        card = self.bill()
+        self.assertEqual((card["can_edit"], card["can_void"]), (True, True))
+        self.assertEqual(self.staff_call(
+            "bill_change", {"bill": card["id"], "action": "void", "reason": ""}
+        )[0], 400)  # a reason is required
+        status, body = self.staff_call("bill_change", {
+            "bill": card["id"], "action": "void", "reason": "guest_refused", "comment": "ушли",
+        })
+        self.assertEqual(status, 200, body)
+        self.assertEqual(body["bill"]["status"], "canceled")
+        from apps.billing.models import BillAdjustment
+
+        adjustment = BillAdjustment.objects.get(bill__public_id=card["id"])
+        self.assertEqual(
+            (adjustment.reason_code, adjustment.reason_text), ("guest_refused", "ушли")
+        )
+
+    def test_remove_a_line(self):
+        self.add_latte()
+        self.call("place", {})
+        card = self.bill()
+        self.assertEqual(len(card["lines"]), 2)
+        status, body = self.staff_call("bill_change", {
+            "bill": card["id"], "action": "remove_line", "line": card["lines"][0]["id"],
+            "reason": "input_error",
+        })
+        self.assertEqual(status, 200, body)
+        self.assertEqual(len(body["bill"]["lines"]), 1)
+        again = self.staff_call("bill_change", {
+            "bill": card["id"], "action": "remove_line", "line": card["lines"][0]["id"],
+            "reason": "input_error",
+        })
+        self.assertEqual(again[0], 400)
+
+    def test_refund_a_paid_order(self):
+        card = self.bill()
+        self.staff_call("bill_action", {"bill": card["id"], "action": "pay_cash"},
+                        user_id=7700204)
+        order = Order.objects.get(table=self.table)
+        found = self.staff_call("order", query=f"?id=%23{order.public_id.upper()}")[1]["order"]
+        self.assertTrue(found["can_refund"])
+        refund = self.staff_call("refund", query=f"?order={order.public_id}")
+        self.assertEqual(refund[0], 200, refund[1])
+        lines = [line["id"] for line in refund[1]["lines"]]
+        preview = self.staff_call("refund_preview", {"order": order.public_id, "lines": lines})[1]
+        self.assertEqual(preview["money"], "80.00")
+        status, body = self.staff_call("refund_do", {
+            "order": order.public_id, "lines": lines, "reason": "quality", "method": "cash",
+        })
+        self.assertEqual(status, 200, body)
+        refund = self.staff_call("refund", query=f"?order={order.public_id}")[1]
+        self.assertTrue(all(line["refunded"] for line in refund["lines"]))
+        # The same lines again: nothing to refund.
+        self.assertEqual(self.staff_call("refund_do", {
+            "order": order.public_id, "lines": lines, "reason": "quality", "method": "cash",
+        })[0], 400)
+        # A cashier without the owner's right cannot.
+        self.assertEqual(
+            self.staff_call("refund", user_id=7700204, query=f"?order={order.public_id}")[0], 403
+        )
+
+
+class StaffSaleAndReportTests(StaffFixture):
+    def setUp(self):
+        super().setUp()
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            module_quick_sale_enabled=True, module_reports_enabled=True
+        )
+        self.cashier = staff(self.partner, "kava_cashier", User.Role.CASHIER, 7700204)
+
+    def test_a_quick_sale_with_the_guest_code(self):
+        menu = self.staff_call("sale_menu", user_id=7700204)[1]
+        latte = next(item for item in menu["categories"][0]["items"] if item["name"] == "Лате")
+        guest = GuestProfile.objects.get_or_create(
+            partner=self.partner, telegram_account=TelegramAccount.objects.get_or_create(
+                telegram_id=TG)[0],
+        )[0]
+        body = {"customer_code": guest.customer_code.lower(), "items": {latte["id"]: 2}}
+        status, preview = self.staff_call("sale_preview", body, user_id=7700204)
+        self.assertEqual(status, 200, preview)
+        self.assertEqual((preview["sale"]["total"], preview["sale"]["items"][0]["quantity"]),
+                         ("160.00", 2))
+        self.assertTrue(preview["sale"]["guest"])
+        status, done = self.staff_call("sale_confirm", body, user_id=7700204)
+        self.assertEqual(status, 200, done)
+        from apps.bonuses.models import WalkInSale
+
+        sale = WalkInSale.objects.get()
+        self.assertEqual((sale.amount, sale.guest_id, sale.created_by), (Decimal("160.00"),
+                         guest.id, self.cashier.user))
+
+    def test_unknown_code_empty_sale_and_a_waiter_are_refused(self):
+        self.assertEqual(self.staff_call(
+            "sale_preview", {"customer_code": "NOPE00", "items": {}}, user_id=7700204
+        )[0], 400)
+        self.assertEqual(self.staff_call(
+            "sale_confirm", {"customer_code": "", "items": {}}, user_id=7700204
+        )[0], 400)
+        self.assertEqual(self.staff_call("sale_menu", user_id=WAITER_TG)[0], 403)
+        self.assertEqual(self.staff_call("report", user_id=WAITER_TG)[0], 403)
+
+    def test_the_day_report(self):
+        order = self.place(payment="on_receipt")
+        self.act(order, "receipt_cash")
+        status, report = self.staff_call("report", user_id=7700204)
+        self.assertEqual(status, 200, report)
+        self.assertEqual(report["money"][0]["value"], "80.00")
+        self.assertEqual(self.staff_call("state", user_id=7700204)[1]["rights"],
+                         {"billing": False, "tables": True, "sale": True, "report": True,
+                          "invite": False})
+
+
+class StaffInviteTests(StaffFixture):
+    def test_the_owner_invites_a_waiter_is_refused(self):
+        roles = self.staff_call("invite_roles")[1]["roles"]
+        self.assertIn("waiter", [role["code"] for role in roles])
+        status, body = self.staff_call("invite", {"role": "waiter"})
+        self.assertEqual(status, 200, body)
+        self.assertIn("https://t.me/kava_bot?start=inv_", body["link"])
+        self.assertTrue(body["share"].startswith("https://t.me/share/url?url="))
+        self.assertEqual(self.staff_call("invite", {"role": "owner"})[0], 400)
+        self.assertEqual(self.staff_call("invite_roles", user_id=WAITER_TG)[0], 403)
+        self.assertFalse(self.staff_call("state", user_id=WAITER_TG)[1]["rights"]["invite"])

@@ -59,6 +59,7 @@ from apps.billing.services import (
     user_can_adjust_bills,
     void_bill,
 )
+from apps.billing.staff_actions import bill_change_rights
 from apps.billing.table_bills import (
     cancel_billing_request,
     create_personal_bills_for_table,
@@ -136,6 +137,7 @@ from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.mini_app import mini_app_link_for
 from bot.services.network import update_points_count
+from bot.services.staff_rights import STAFF_OPERATIONS_ROLES
 from bot.states.staff_sale import StaffBillStates, StaffQuickSaleStates
 from bot.utils.html import escape_html
 from core.i18n import N_, _, variants
@@ -449,13 +451,8 @@ def _is_staff_overview_message(message: Message | None, title: str) -> bool:
 TRACKING_PROMPT = N_("📦 ТТН для заказа")
 
 
-_STAFF_OPERATIONS_ROLES = frozenset(
-    {
-        "owner",
-        "manager",
-        "cashier",
-    }
-)
+# The same roles as the Mini App's staff screen (bot/services/staff_rights.py).
+_STAFF_OPERATIONS_ROLES = STAFF_OPERATIONS_ROLES
 
 
 def _module_enabled(employee: EmployeeProfile, check) -> bool:
@@ -1103,14 +1100,7 @@ _OPEN_BILL_STATUSES = frozenset(
 def _bill_change_flags(bill: Bill, actor_user) -> tuple[bool, bool]:
     """Return (can_edit, can_void) for the bill card buttons (PQ-028)."""
 
-    if bill.status not in _OPEN_BILL_STATUSES:
-        return False, False
-    if not user_can_adjust_bills(actor_user, bill.partner_id):
-        return False, False
-    has_active_lines = any(item.is_active for item in bill.items.all())
-    can_edit = has_active_lines and bill.bonus_spent_amount == 0
-    can_void = bill.paid_amount == 0
-    return can_edit, can_void
+    return bill_change_rights(bill, actor_user)
 
 
 def _build_bill_card_message(bill: Bill, actor_user):

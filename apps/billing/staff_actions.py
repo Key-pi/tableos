@@ -56,3 +56,60 @@ def staff_order_actions(order: Order) -> list[str]:
     if receipt_pending:
         actions.append(RECEIPT_NO)
     return actions
+
+
+# --- bills (the bot's bill card: bot/handlers/staff.py:_build_bill_card_message) --
+
+BILL_ISSUE = "issue"
+BILL_PAY_BONUS = "pay_bonus"
+BILL_PAY_CASH = "pay_cash"
+BILL_PAY_TERMINAL = "pay_terminal"
+OPEN_BILL_STATUSES = frozenset({"draft", "issued", "partially_paid"})
+
+
+def bill_bonus_offer(bill):
+    """How much of the bill the guest's bonuses may pay now (0: no offer)."""
+
+    from decimal import Decimal
+
+    from apps.bonuses.services import get_redeemable_bonus_amount
+
+    if not (
+        bill.primary_guest_id
+        and bill.status in OPEN_BILL_STATUSES
+        and not bill.bonus_spent_amount
+        and not bill.paid_amount
+        and bill.total_amount > 0
+    ):
+        return Decimal("0.00")
+    return get_redeemable_bonus_amount(
+        partner_id=bill.partner_id, guest=bill.primary_guest, purchase_total=bill.total_amount
+    )
+
+
+def staff_bill_actions(bill) -> list[str]:
+    """Issue and payments; changes and voiding stay in the bot's bill card."""
+
+    remaining = bill.total_amount - bill.paid_amount
+    actions = []
+    if bill.status == "draft":
+        actions.append(BILL_ISSUE)
+    if bill_bonus_offer(bill) > 0:
+        actions.append(BILL_PAY_BONUS)
+    if remaining > 0 and bill.status in OPEN_BILL_STATUSES:
+        actions += [BILL_PAY_CASH, BILL_PAY_TERMINAL]
+    return actions
+
+
+def bill_change_rights(bill, actor_user) -> tuple[bool, bool]:
+    """(may change lines, may void) on the bill card (PQ-028); the services
+    check again under the bill lock."""
+
+    from apps.billing.services import user_can_adjust_bills
+
+    if bill.status not in OPEN_BILL_STATUSES:
+        return False, False
+    if not user_can_adjust_bills(actor_user, bill.partner_id):
+        return False, False
+    has_active_lines = any(item.is_active for item in bill.items.all())
+    return has_active_lines and bill.bonus_spent_amount == 0, bill.paid_amount == 0
