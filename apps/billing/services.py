@@ -22,13 +22,15 @@ from apps.bonuses.services import (
     BonusServiceError,
     apply_bonus_programs,
     assert_bonus_balance_reconciled,
+    bonus_balance,
     get_redeemable_bonus_amount,
     sync_bonus_balance_from_ledger,
 )
 from apps.employees.models import EmployeeProfile
 from apps.orders.models import Order, OrderItem
 from apps.orders.services import transition_order_status
-from apps.users.models import AdminAccessProfile, GuestProfile, User
+from apps.partners.networks import acts_for_partner, owns_partner
+from apps.users.models import GuestProfile, User
 from core.i18n import _
 
 
@@ -822,28 +824,21 @@ def user_can_adjust_bills(user, partner_id) -> bool:
     """Return whether ``user`` may change or void bills of ``partner_id``.
 
     The venue owner always may; other staff only when the owner granted
-    ``EmployeeProfile.can_adjust_bills``.
+    ``EmployeeProfile.can_adjust_bills``. In a network (PQ-047) the owner of
+    the network and a manager given this venue act for it too, the manager
+    with the same rights as at home.
     """
 
     if user is None or not getattr(user, "is_active", False):
         return False
     if user.is_superuser:
         return True
-    if str(user.partner_id) != str(partner_id):
+    if not acts_for_partner(user, partner_id):
         return False
-    if user.role == User.Role.OWNER:
-        return True
-    if AdminAccessProfile.objects.filter(
-        user=user,
-        partner_id=partner_id,
-        is_partner_owner=True,
-        can_access_admin=True,
-        is_active=True,
-    ).exists():
+    if user.role == User.Role.OWNER or owns_partner(user, partner_id):
         return True
     return EmployeeProfile.objects.filter(
         user=user,
-        partner_id=partner_id,
         is_active=True,
         can_adjust_bills=True,
     ).exists()
@@ -1390,7 +1385,8 @@ def refund_bill_lines(
             )
             due = max(target - already, Decimal("0.00"))
             guest.refresh_from_db(fields=["loyalty_balance"])
-            take = min(due, max(Decimal(guest.loyalty_balance), Decimal("0.00")))
+            # Not below the balance — the shared one in a network (PQ-047).
+            take = min(due, max(bonus_balance(guest), Decimal("0.00")))
             if take > 0:
                 BonusTransaction.objects.create(
                     partner_id=bill.partner_id,

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from apps.bonuses.models import BonusProgram, BonusTransaction, WalkInSale, WalkInSaleItem
@@ -16,8 +16,10 @@ from apps.bonuses.strategies import (
 )
 from apps.menu.models import MenuItem
 from apps.orders.models import Order
+from apps.partners.models import NetworkWallet
+from apps.partners.networks import shared_bonus_scope
 from apps.users.models import GuestProfile
-from apps.users.selectors import get_guest_profile_by_customer_code
+from apps.users.services import find_guest_by_customer_code
 from core.i18n import _
 
 
@@ -51,6 +53,62 @@ def get_bonus_ledger_balance(*, partner_id, guest_id) -> Decimal:
     return balance.quantize(Decimal("0.01"))
 
 
+def _network_ledger_balance(scope, telegram_account_id) -> Decimal:
+    """A person's balance at every venue of a shared network: the sum of
+    their venue ledgers (PQ-047, stage 3)."""
+
+    balance = Decimal("0.00")
+    transactions = BonusTransaction.objects.filter(
+        partner_id__in=scope.partner_ids,
+        guest__telegram_account_id=telegram_account_id,
+    ).only("transaction_type", "amount")
+    for bonus_transaction in transactions.iterator():
+        amount = Decimal(bonus_transaction.amount).quantize(Decimal("0.01"))
+        if bonus_transaction.transaction_type in {
+            BonusTransaction.TransactionType.ACCRUAL,
+            BonusTransaction.TransactionType.MANUAL,
+            BonusTransaction.TransactionType.REVERSAL,
+        }:
+            balance += amount
+        else:
+            balance -= abs(amount)
+    return balance.quantize(Decimal("0.01"))
+
+
+def _locked_wallet(scope, telegram_account_id) -> NetworkWallet:
+    """Lock the person's shared balance — after the venue's ``GuestProfile``
+    (lock order: GuestProfile → NetworkWallet). A wallet made now starts
+    with what the venues already earned: the balances add up."""
+
+    lookup = {"network_id": scope.network_id, "telegram_account_id": telegram_account_id}
+    wallet = NetworkWallet.objects.select_for_update().filter(**lookup).first()
+    if wallet is None:
+        try:
+            with transaction.atomic():
+                NetworkWallet.objects.create(
+                    **lookup, balance=_network_ledger_balance(scope, telegram_account_id)
+                )
+        except IntegrityError:
+            pass  # made by a parallel transaction: lock that one
+        wallet = NetworkWallet.objects.select_for_update().get(**lookup)
+    return wallet
+
+
+def bonus_balance(guest: GuestProfile) -> Decimal:
+    """What the guest may spend at this venue: the venue's balance, or the
+    shared balance of the network (PQ-047)."""
+
+    scope = shared_bonus_scope(guest.partner_id)
+    if scope is None:
+        return Decimal(guest.loyalty_balance).quantize(Decimal("0.01"))
+    wallet = NetworkWallet.objects.filter(
+        network_id=scope.network_id, telegram_account_id=guest.telegram_account_id
+    ).first()
+    if wallet is not None:
+        return Decimal(wallet.balance).quantize(Decimal("0.01"))
+    return _network_ledger_balance(scope, guest.telegram_account_id)
+
+
 def assert_bonus_balance_reconciled(guest: GuestProfile) -> None:
     stored_balance = Decimal(guest.loyalty_balance).quantize(Decimal("0.01"))
     ledger_balance = get_bonus_ledger_balance(
@@ -61,6 +119,17 @@ def assert_bonus_balance_reconciled(guest: GuestProfile) -> None:
         raise BonusServiceError(
             _("Баланс бонусов требует сверки с историей операций перед изменением.")
         )
+    scope = shared_bonus_scope(guest.partner_id)
+    if scope is not None:
+        # Every bonus change comes here with the venue's guest locked: the
+        # shared balance is locked next, so two venues take turns.
+        wallet = _locked_wallet(scope, guest.telegram_account_id)
+        if Decimal(wallet.balance).quantize(Decimal("0.01")) != _network_ledger_balance(
+            scope, guest.telegram_account_id
+        ):
+            raise BonusServiceError(
+                _("Баланс бонусов требует сверки с историей операций перед изменением.")
+            )
 
 
 def sync_bonus_balance_from_ledger(guest: GuestProfile) -> GuestProfile:
@@ -71,6 +140,13 @@ def sync_bonus_balance_from_ledger(guest: GuestProfile) -> GuestProfile:
     if Decimal(guest.loyalty_balance).quantize(Decimal("0.01")) != ledger_balance:
         guest.loyalty_balance = ledger_balance
         guest.save(update_fields=["loyalty_balance", "updated_at"])
+    scope = shared_bonus_scope(guest.partner_id)
+    if scope is not None:
+        wallet = _locked_wallet(scope, guest.telegram_account_id)
+        network_balance = _network_ledger_balance(scope, guest.telegram_account_id)
+        if Decimal(wallet.balance).quantize(Decimal("0.01")) != network_balance:
+            wallet.balance = network_balance
+            wallet.save(update_fields=["balance", "updated_at"])
     return guest
 
 
@@ -185,7 +261,7 @@ def apply_manual_purchase_bonus(
     purchase_total: Decimal | str,
     comment: str = "",
 ) -> list[BonusTransaction]:
-    guest = get_guest_profile_by_customer_code(partner_id, customer_code)
+    guest = find_guest_by_customer_code(partner_id, customer_code)
     total = _parse_positive_money(purchase_total, label=_("Сумма покупки"))
     return apply_bonus_programs(
         partner_id=partner_id,
@@ -289,7 +365,7 @@ def register_walk_in_sale_by_customer_code(
     guest = None
     if normalized_customer_code:
         try:
-            guest = get_guest_profile_by_customer_code(partner_id, normalized_customer_code)
+            guest = find_guest_by_customer_code(partner_id, normalized_customer_code)
         except GuestProfile.DoesNotExist as exc:
             raise BonusServiceError(_("Гость с таким кодом в этом заведении не найден.")) from exc
     return register_walk_in_sale(
@@ -314,7 +390,7 @@ def preview_walk_in_sale_by_customer_code(
     guest = None
     if normalized_customer_code:
         try:
-            guest = get_guest_profile_by_customer_code(partner_id, normalized_customer_code)
+            guest = find_guest_by_customer_code(partner_id, normalized_customer_code)
         except GuestProfile.DoesNotExist as exc:
             raise BonusServiceError(_("Гость с таким кодом в этом заведении не найден.")) from exc
     normalized_items: list[dict] = []
@@ -438,7 +514,7 @@ def get_redeemable_bonus_amount(
 
     share_cap = (total * max_redeem_share / Decimal("100")).quantize(Decimal("0.01"))
     return min(
-        Decimal(guest.loyalty_balance).quantize(Decimal("0.01")),
+        bonus_balance(guest),
         share_cap,
         total,
     ).quantize(Decimal("0.01"))

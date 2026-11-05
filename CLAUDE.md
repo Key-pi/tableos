@@ -48,6 +48,7 @@
 | Языки бота и Admin, свои тексты владельца | `docs/architecture/LANGUAGES.md` (PQ-040) |
 | Доставка уведомлений и рассылок | `docs/architecture/BACKGROUND_JOBS.md`, ADR-0008 |
 | Бот, callback-и | `docs/architecture/BOT_RUNTIME.md` |
+| Несколько заведений у партнёра (сети) | `docs/architecture/NETWORKS.md` (PQ-047) |
 | Находки аудита и что сделано по батчам | `docs/audits/ARCHITECTURE_AUDIT.md`, `REFACTOR_ROADMAP.md` |
 | Тесты и журнал прогонов | `docs/engineering/TESTING.md` |
 | Нагрузка: сколько партнёров держит сервер, как повторить тест | `docs/engineering/LOAD_TESTING.md`, `infrastructure/loadtest/` |
@@ -129,6 +130,20 @@
   и менеджер (роль не выше своей, не владелец), одноразовая, 24 часа;
   подтверждает выдавший или владелец; доступ к Admin не даёт
   (`apps/employees/invites.py`).
+- **Сети заведений (PQ-047, `docs/architecture/NETWORKS.md`):** «Сеть» над
+  заведениями, точка остаётся партнёром (граница данных не меняется). Один
+  вход владельца с переключателем точки, менеджер на несколько точек
+  (`extra_partners`), отчёт по сети. Действия за точку — `acts_for_partner`
+  / `owns_partner`, не `user.partner_id`. Один бот на сеть (`Network.bot`,
+  выбирает владелец в карточке сети): точку обновления выбирает
+  middleware, обработчики не знают о сети; бот для точки —
+  `bot_for_partner`. Общие бонусы (`Network.bonus_mode`): журнал у точки,
+  баланс — сумма по сети, замок `NetworkWallet`; баланс показывать через
+  `bonus_balance(guest)`, код гостя искать через
+  `find_guest_by_customer_code`. Владелец и менеджеры сети в боте других
+  точек — копии их профиля сотрудника (`EmployeeProfile.mirrored_from`,
+  `apps/employees/network_staff.py`): копии не править и не удалять руками,
+  их держит в порядке `sync_network_staff` (сигналы).
 - **Данные гостей (PQ-024):** хранятся, гость меняет сам. Мониторинг ошибок —
   будущий Telegram-бот для всех систем Botera (PQ-039), пока не делаем.
 - Новый продуктовый смысл без решения владельца не выбирать — спросить.
@@ -144,6 +159,7 @@
 - Изменение счёта и возврат: `Bill → BillItem → GuestProfile → Order`.
 - Вызов персонала «Иду»: только `GuestCall` (`take_guest_call`).
 - Приглашение сотрудника: `StaffInvite → EmployeeProfile`.
+- Бонусы при общем балансе сети: `GuestProfile` (точки) → `NetworkWallet`.
 - На PostgreSQL `select_for_update` с nullable-join только с `of=("self",)`.
 
 ## Как работаем
@@ -232,6 +248,11 @@ eager; `docker compose up` поднимает db, redis, разовый init (м
 1. Подключение бизнеса в Shop: создание бизнеса одной командой/API, вход
    владельца в Admin по одноразовой ссылке, список «что ещё настроить»,
    сообщение владельцу платформы о новом бизнесе (PQ-045).
-2. Интеграция с Partnership; карточка для Discovery; Hub — вместе с Master.
-3. При росте базы — настройка памяти PostgreSQL (`DEPLOYMENT.md`); повтор
+2. Сети заведений (PQ-047): этап 1 (сеть и Admin) — в ветке
+   `venue-networks`, не слита; там же этапы 2 (один бот на сеть), 2б
+   (рассылки и источники по сети), 3 (общие бонусы) и персонал сети в боте
+   всех своих точек — сеть сделана целиком, ждёт проверки владельцем и
+   слияния.
+3. Интеграция с Partnership; карточка для Discovery; Hub — вместе с Master.
+4. При росте базы — настройка памяти PostgreSQL (`DEPLOYMENT.md`); повтор
    нагрузочного теста при 15–20 партнёрах.

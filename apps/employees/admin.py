@@ -12,7 +12,7 @@ from apps.employees.invites import (
     roles_invitable_by,
 )
 from apps.employees.models import EmployeeProfile, StaffInvite
-from apps.partners.models import BotInstance
+from apps.partners.networks import bot_for_partner
 from apps.users.admin import is_owner_user
 from apps.users.constants import AdminSection
 from apps.users.models import User
@@ -39,6 +39,7 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
         "notify_on_billing_requests",
         "can_adjust_bills",
         "is_active",
+        "mirrored_from",
     )
     list_filter = ("partner", "is_active")
     search_fields = (
@@ -107,11 +108,17 @@ class EmployeeProfileAdmin(ScopedAdminMixin):
     def has_change_permission(self, request, obj=None):
         if obj is not None and not self._may_touch(request, obj):
             return False
+        if obj is not None and obj.mirrored_from_id is not None:
+            # A copy of the network owner's or manager's own profile (PQ-047):
+            # its settings come from that profile and would be overwritten.
+            return False
         return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
         if obj is not None and not self._may_touch(request, obj):
             return False
+        if obj is not None and obj.mirrored_from_id is not None:
+            return False  # switched off by itself when access to the venue goes
         return super().has_delete_permission(request, obj)
 
     @staticmethod
@@ -227,13 +234,8 @@ class StaffInviteAdmin(ScopedAdminMixin):
     def link(self, obj: StaffInvite) -> str:
         if obj.status != StaffInvite.Status.PENDING:
             return "—"
-        bot = (
-            BotInstance.objects.filter(partner_id=obj.partner_id, is_active=True)
-            .exclude(username="")
-            .order_by("created_at")
-            .first()
-        )
-        if bot is None:
+        bot = bot_for_partner(obj.partner_id)  # own, else the network's (PQ-047)
+        if bot is None or not bot.username:
             return _("Сначала добавьте бота в «Боты».")
         return invite_link(obj.code, bot.username)
 

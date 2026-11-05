@@ -13,6 +13,7 @@ from apps.bonuses.selectors import (
     active_bonus_programs_for_partner,
     recent_bonus_transactions_for_guest,
 )
+from apps.bonuses.services import bonus_balance
 from apps.orders.models import Order
 from apps.orders.selectors import get_guest_orders
 from apps.orders.services import requested_time_label
@@ -57,6 +58,7 @@ def _render_profile_summary(
     partner_name: str,
     guest_profile,
     active_session,
+    balance=None,
 ) -> str:
     lines = [
         _("<b>Мой профиль</b> · {partner_name}", partner_name=escape_html(partner_name)),
@@ -66,7 +68,8 @@ def _render_profile_summary(
         ),
         _(
             "Бонусов на счёте: <b>{loyalty_balance}</b>",
-            loyalty_balance=guest_profile.loyalty_balance,
+            # The shared balance in a network with shared bonuses (PQ-047).
+            loyalty_balance=guest_profile.loyalty_balance if balance is None else balance,
         ),
     ]
     if active_session is not None:
@@ -84,6 +87,7 @@ def _render_profile_bonuses(
     active_programs,
     recent_transactions,
     page: int,
+    balance=None,
 ) -> tuple[str, int]:
     page = max(page, 0)
     total_transactions = len(recent_transactions)
@@ -97,7 +101,7 @@ def _render_profile_bonuses(
         _("<b>Бонусы</b>"),
         _(
             "Текущий баланс: {loyalty_balance} бонусов",
-            loyalty_balance=guest_profile.loyalty_balance,
+            loyalty_balance=guest_profile.loyalty_balance if balance is None else balance,
         ),
         "",
         _("<b>Активные программы</b>"),
@@ -122,15 +126,18 @@ def _render_profile_bonuses(
                 transaction.program.name if transaction.program_id else _("Ручная операция")
             )
             sign = "+" if transaction.amount >= 0 else ""
-            lines.append(
-                _(
-                    "• {sign}{amount} через {program_name} ({created})",
-                    sign=sign,
-                    amount=transaction.amount,
-                    program_name=escape_html(program_name),
-                    created=f"{transaction.created_at:%d.%m %H:%M}",
-                )
+            line = _(
+                "• {sign}{amount} через {program_name} ({created})",
+                sign=sign,
+                amount=transaction.amount,
+                program_name=escape_html(program_name),
+                created=f"{transaction.created_at:%d.%m %H:%M}",
             )
+            home = getattr(guest_profile, "partner_id", None)
+            if home is not None and getattr(transaction, "partner_id", home) != home:
+                # Shared bonuses (PQ-047): an operation at another venue.
+                line += f" · 📍 {escape_html(transaction.partner.name)}"
+            lines.append(line)
     else:
         lines.append(_("• История бонусов пока пуста."))
     if total_pages > 1:
@@ -176,6 +183,7 @@ async def profile_handler(message: Message, bot: Bot) -> None:
             partner_name=partner.name,
             guest_profile=guest_profile,
             active_session=session,
+            balance=await sync_to_async(bonus_balance)(guest_profile),
         ),
         reply_markup=build_profile_summary_keyboard(
             bonuses_label=content.button_profile_bonuses_label,
@@ -206,6 +214,7 @@ async def profile_summary_callback(callback: CallbackQuery, bot: Bot) -> None:
             partner_name=partner.name,
             guest_profile=guest_profile,
             active_session=session,
+            balance=await sync_to_async(bonus_balance)(guest_profile),
         ),
         reply_markup=build_profile_summary_keyboard(
             bonuses_label=content.button_profile_bonuses_label,
@@ -239,6 +248,7 @@ async def profile_bonuses_callback(callback: CallbackQuery, bot: Bot) -> None:
     )
     text, total_pages = _render_profile_bonuses(
         guest_profile=guest_profile,
+        balance=await sync_to_async(bonus_balance)(guest_profile),
         active_programs=active_programs,
         recent_transactions=recent_transactions,
         page=page,

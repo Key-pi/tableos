@@ -6,6 +6,7 @@ from apps.billing.models import Bill
 from apps.employees.models import EmployeeProfile
 from apps.orders.models import Cart, Order
 from apps.tables.services import get_active_table_session
+from bot.services.network import update_points_count
 
 
 class GuestJourney:
@@ -49,6 +50,7 @@ class GuestAction:
     REQUEST_BILL = "request_bill"
     # An employee of the venue: the button that opens the work mode.
     STAFF = "staff"
+    POINT = "point"
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +89,10 @@ def resolve_guest_navigation_state(
         partner_id=partner_id, telegram_id=telegram_id, content=content
     )
     if _is_venue_employee(partner_id, telegram_id):
-        return replace(state, available_actions=(*state.available_actions, GuestAction.STAFF))
+        state = replace(state, available_actions=(*state.available_actions, GuestAction.STAFF))
+    if update_points_count() > 1:
+        # A network's bot (PQ-047): the guest may switch the venue.
+        state = replace(state, available_actions=(*state.available_actions, GuestAction.POINT))
     return state
 
 

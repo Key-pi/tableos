@@ -11,4 +11,26 @@ def active_bonus_programs_for_partner(partner_id):
 
 
 def recent_bonus_transactions_for_guest(guest_id, *, limit: int = 5):
-    return BonusTransactionRepository.for_guest(guest_id)[:limit]
+    """The guest's latest bonus operations; with shared bonuses in a network
+    (PQ-047) — at every venue of it, since they are one balance."""
+
+    from apps.bonuses.models import BonusTransaction
+    from apps.partners.networks import shared_bonus_scope
+    from apps.users.models import GuestProfile
+
+    guest = (
+        GuestProfile.objects.filter(id=guest_id)
+        .values("partner_id", "telegram_account_id")
+        .first()
+    )
+    scope = shared_bonus_scope(guest["partner_id"]) if guest else None
+    if scope is None:
+        return BonusTransactionRepository.for_guest(guest_id)[:limit]
+    return (
+        BonusTransaction.objects.filter(
+            partner_id__in=scope.partner_ids,
+            guest__telegram_account_id=guest["telegram_account_id"],
+        )
+        .select_related("program", "partner")
+        .order_by("-created_at")[:limit]
+    )

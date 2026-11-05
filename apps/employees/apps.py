@@ -8,3 +8,6 @@ class EmployeesConfig(AppConfig):
     name = "apps.employees"
     label = "employees"
     verbose_name = _lazy("Сотрудники")
+
+    def ready(self):
+        from apps.employees import signals  # noqa: F401  (registers receivers)

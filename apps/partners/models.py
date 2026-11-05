@@ -15,6 +15,64 @@ LANGUAGE_CHOICES = [(code, LANGUAGE_NAMES[code]) for code in LANGUAGES]
 GUEST_LANGUAGE_FIELDS = {code: f"language_{code}" for code in LANGUAGES}
 
 
+class Network(TimeStampedModel):
+    """Several venues of one business (PQ-047). A venue stays a partner with
+    its own menu, tables, orders and staff; the network only shares what
+    the owner's decisions say (one Admin login now; one bot and bonuses in
+    later stages). A venue without a network is a network of one."""
+
+    name = models.CharField(max_length=255, verbose_name=_lazy("Название сети"))
+    # PQ-047, stage 2: one bot for every venue; the guest picks the venue
+    # after /start (apps/partners/networks.py). Venues need no bots of their own.
+    bot = models.OneToOneField(
+        "partners.BotInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="network_of",
+        verbose_name=_lazy("Бот сети"),
+        help_text=_lazy(
+            "Один бот на все точки: гость выбирает заведение после /start, QR стола "
+            "выбирает его сам. Своих ботов точкам не нужно.",
+        ),
+    )
+
+    class BonusMode(models.TextChoices):
+        SEPARATE = "separate", _lazy("Раздельные: свой баланс в каждой точке")
+        SHARED = "shared", _lazy("Общие: один баланс во всех точках")
+
+    # PQ-047, stage 3: each venue accrues by its own programs; with a shared
+    # balance the guest spends it at any venue (apps/bonuses/services.py).
+    bonus_mode = models.CharField(
+        max_length=16,
+        choices=BonusMode.choices,
+        default=BonusMode.SEPARATE,
+        verbose_name=_lazy("Бонусы в сети"),
+        help_text=_lazy(
+            "Общие: бонусы, накопленные в точках, складываются; каждая точка начисляет по "
+            "своей программе, тратить можно в любой; один код гостя на сеть. Включив общие, "
+            "обратно переключить нельзя.",
+        ),
+    )
+
+    class Meta:
+        verbose_name = _lazy("сеть заведений")
+        verbose_name_plural = _lazy("Сети заведений")
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.bot_id is not None and (
+            self.pk is None or self.bot.partner.network_id != self.pk
+        ):
+            raise ValidationError(
+                {"bot": _("Выберите бота одной из точек этой сети.")}
+            )
+
+
 class Partner(TimeStampedModel):
     """Venue or business account that owns isolated data inside the platform."""
 
@@ -39,6 +97,21 @@ class Partner(TimeStampedModel):
         choices=Status.choices,
         default=Status.DRAFT,
         verbose_name=_lazy("Статус"),
+    )
+    network = models.ForeignKey(
+        Network,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="points",
+        verbose_name=_lazy("Сеть"),
+        help_text=_lazy("Точки одной сети: один вход владельца в Admin и отчёт по сети."),
+    )
+    address = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name=_lazy("Адрес"),
+        help_text=_lazy("Гость сети видит его, когда выбирает заведение."),
     )
 
     class Meta:
@@ -676,3 +749,88 @@ class BotText(TimeStampedModel):
     def save(self, *args, **kwargs):
         self.key = text_key(self.msgid)
         super().save(*args, **kwargs)
+
+
+class NetworkGuestChoice(TimeStampedModel):
+    """The venue a guest chose in the network's bot (PQ-047, stage 2)."""
+
+    network = models.ForeignKey(
+        Network, on_delete=models.CASCADE, related_name="guest_choices",
+        verbose_name=_lazy("Сеть"),
+    )
+    telegram_account = models.ForeignKey(
+        "users.TelegramAccount", on_delete=models.CASCADE, related_name="network_choices",
+        verbose_name="Telegram",
+    )
+    # Empty until the guest picks; a /start link that did not name a venue
+    # waits in ``pending_start`` and is handled once they pick.
+    partner = models.ForeignKey(
+        Partner, on_delete=models.CASCADE, related_name="network_guest_choices",
+        null=True, blank=True, verbose_name=_lazy("Заведение"),
+    )
+    pending_start = models.CharField(
+        max_length=64, blank=True, verbose_name=_lazy("Ссылка до выбора")
+    )
+
+    class Meta:
+        verbose_name = _lazy("выбор заведения гостем")
+        verbose_name_plural = _lazy("Выбор заведения гостями")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["network", "telegram_account"], name="unique_network_guest_choice"
+            )
+        ]
+
+
+class BotMessagePoint(TimeStampedModel):
+    """Which venue a message of a network's bot was sent for, so a button
+    pressed on it later acts for that venue (PQ-047, stage 2)."""
+
+    bot_instance = models.ForeignKey(
+        BotInstance, on_delete=models.CASCADE, related_name="+", verbose_name=_lazy("Бот")
+    )
+    chat_id = models.BigIntegerField(verbose_name=_lazy("Чат"))
+    message_id = models.BigIntegerField(verbose_name=_lazy("Сообщение"))
+    partner = models.ForeignKey(
+        Partner, on_delete=models.CASCADE, related_name="+", verbose_name=_lazy("Заведение")
+    )
+
+    class Meta:
+        verbose_name = _lazy("сообщение бота сети")
+        verbose_name_plural = _lazy("Сообщения бота сети")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["bot_instance", "chat_id", "message_id"],
+                name="unique_bot_message_point",
+            )
+        ]
+        indexes = [models.Index(fields=["created_at"])]
+
+
+class NetworkWallet(TimeStampedModel):
+    """A guest's shared bonus balance in a network (PQ-047, stage 3).
+
+    The ledger stays at each venue (``BonusTransaction``); ``balance`` is the
+    sum of the person's transactions at every venue of the network. The row
+    is locked after the venue's ``GuestProfile`` by every bonus change, so
+    two venues cannot spend the same balance at once."""
+
+    network = models.ForeignKey(
+        Network, on_delete=models.CASCADE, related_name="wallets", verbose_name=_lazy("Сеть")
+    )
+    telegram_account = models.ForeignKey(
+        "users.TelegramAccount", on_delete=models.CASCADE, related_name="network_wallets",
+        verbose_name="Telegram",
+    )
+    balance = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0, verbose_name=_lazy("Общий баланс")
+    )
+
+    class Meta:
+        verbose_name = _lazy("общий баланс гостя в сети")
+        verbose_name_plural = _lazy("Общие балансы гостей в сетях")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["network", "telegram_account"], name="unique_network_wallet"
+            )
+        ]

@@ -12,11 +12,11 @@ msgstr "Період"
 msgid "Сегодня и вчера"
 msgstr "Сьогодні й учора"
 
-#: apps/analytics/admin.py
+#: apps/analytics/admin.py apps/partners/admin.py
 msgid "7 дней"
 msgstr "7 днів"
 
-#: apps/analytics/admin.py
+#: apps/analytics/admin.py apps/partners/admin.py
 msgid "30 дней"
 msgstr "30 днів"
 
@@ -27,6 +27,14 @@ msgstr "90 днів"
 #: apps/analytics/admin.py
 msgid "Источник с таким кодом уже есть."
 msgstr "Джерело з таким кодом уже є."
+
+#: apps/analytics/admin.py
+msgid "Заведение не входит в сеть."
+msgstr "Заклад не входить до мережі."
+
+#: apps/analytics/admin.py
+msgid "Такой код уже есть у источника сети или у точки этой сети."
+msgstr "Такий код уже є в джерела мережі або в точки цієї мережі."
 
 #: apps/analytics/admin.py
 msgid "Ссылка (её же можно превратить в QR-код)"
@@ -56,15 +64,19 @@ msgstr "Аналітика"
 msgid "День"
 msgstr "День"
 
-#: apps/analytics/models.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
 msgid "Выручка"
 msgstr "Виручка"
 
-#: apps/analytics/models.py core/urls.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html core/urls.py
 msgid "Заказов"
 msgstr "Замовлень"
 
-#: apps/analytics/models.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
+msgid "Продаж"
+msgstr "Продажів"
+
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
 msgid "Средний чек"
 msgstr "Середній чек"
 
@@ -111,6 +123,14 @@ msgstr "Вимкнене джерело не рахує переходи; гіс
 #: apps/analytics/models.py
 msgid "Заметка"
 msgstr "Нотатка"
+
+#: apps/analytics/models.py
+msgid "Для всей сети"
+msgstr "Для всієї мережі"
+
+#: apps/analytics/models.py
+msgid "Одна ссылка на бота сети: гость выбирает заведение, переход засчитывается выбранной точке."
+msgstr "Одне посилання на бота мережі: гість обирає заклад, перехід зараховується обраній точці."
 
 #: apps/analytics/models.py
 msgid "Источник перехода"
@@ -1877,6 +1897,10 @@ msgid "Убирать позиции, отменять заказы в счёт�
 msgstr "Прибирати позиції, скасовувати замовлення в рахунку й анулювати рахунки. Надає лише власник закладу."
 
 #: apps/employees/models.py
+msgid "Копия сотрудника из точки"
+msgstr "Копія працівника з точки"
+
+#: apps/employees/models.py
 msgid "сотрудник"
 msgstr "працівник"
 
@@ -2155,6 +2179,14 @@ msgstr "Назва розсилки"
 #: apps/notifications/models.py
 msgid "Текст рассылки"
 msgstr "Текст розсилки"
+
+#: apps/notifications/models.py
+msgid "Всем гостям сети"
+msgstr "Усім гостям мережі"
+
+#: apps/notifications/models.py
+msgid "Гости всех точек сети, каждому один раз, через бота сети. Гость, отписавшийся от рассылок в любой точке сети, её не получит."
+msgstr "Гості всіх точок мережі, кожному один раз, через бота мережі. Гість, який відписався від розсилок у будь-якій точці мережі, її не отримає."
 
 #: apps/notifications/models.py
 msgid "Сообщения, судьба которых неизвестна после сбоя воркера. Повторно не отправляются: гость получает рассылку не больше одного раза (PQ-014)."
@@ -2469,6 +2501,10 @@ msgstr "Підготовлено рахунок #{public_id} на {total} грн
 #: apps/notifications/services.py
 msgid "Стол #{number} просит счёт"
 msgstr "Стіл #{number} просить рахунок"
+
+#: apps/notifications/services.py
+msgid "У сети нет бота сети: выберите его в настройках сети."
+msgstr "У мережі немає бота мережі: оберіть його в налаштуваннях мережі."
 
 #: apps/notifications/services.py
 msgid "Нет гостей, которым можно отправить рассылку."
@@ -3022,6 +3058,22 @@ msgstr "Свій текст"
 msgid "Каталог текстов бота"
 msgstr "Каталог текстів бота"
 
+#: apps/partners/admin.py
+msgid "Точек"
+msgstr "Точок"
+
+#: apps/partners/admin.py
+msgid "Отчёт"
+msgstr "Звіт"
+
+#: apps/partners/admin.py
+msgid "Отчёт по сети"
+msgstr "Звіт по мережі"
+
+#: apps/partners/admin.py
+msgid "Сегодня"
+msgstr "Сьогодні"
+
 #: apps/partners/apps.py apps/partners/models.py
 msgid "Заведения"
 msgstr "Заклади"
@@ -3061,6 +3113,10 @@ msgstr "Попросити рахунок"
 #: apps/partners/bot_texts.py
 msgid "🧑‍🍳 Рабочий режим"
 msgstr "🧑‍🍳 Робочий режим"
+
+#: apps/partners/bot_texts.py
+msgid "📍 Заведение"
+msgstr "📍 Заклад"
 
 #: apps/partners/bot_texts.py apps/users/constants.py apps/users/models.py
 msgid "Официант"
@@ -3229,6 +3285,46 @@ msgid "Для этого текста и языка уже есть свой в�
 msgstr "Для цього тексту й мови вже є свій варіант — змініть його."
 
 #: apps/partners/models.py
+msgid "Название сети"
+msgstr "Назва мережі"
+
+#: apps/partners/models.py
+msgid "Бот сети"
+msgstr "Бот мережі"
+
+#: apps/partners/models.py
+msgid "Один бот на все точки: гость выбирает заведение после /start, QR стола выбирает его сам. Своих ботов точкам не нужно."
+msgstr "Один бот на всі точки: гість обирає заклад після /start, QR стола обирає його сам. Власні боти точкам не потрібні."
+
+#: apps/partners/models.py
+msgid "Раздельные: свой баланс в каждой точке"
+msgstr "Окремі: свій баланс у кожній точці"
+
+#: apps/partners/models.py
+msgid "Общие: один баланс во всех точках"
+msgstr "Спільні: один баланс у всіх точках"
+
+#: apps/partners/models.py
+msgid "Бонусы в сети"
+msgstr "Бонуси в мережі"
+
+#: apps/partners/models.py
+msgid "Общие: бонусы, накопленные в точках, складываются; каждая точка начисляет по своей программе, тратить можно в любой; один код гостя на сеть. Включив общие, обратно переключить нельзя."
+msgstr "Спільні: бонуси, накопичені в точках, додаються; кожна точка нараховує за своєю програмою, витрачати можна в будь-якій; один код гостя на мережу. Увімкнувши спільні, назад переключити не можна."
+
+#: apps/partners/models.py
+msgid "сеть заведений"
+msgstr "мережа закладів"
+
+#: apps/partners/models.py
+msgid "Сети заведений"
+msgstr "Мережі закладів"
+
+#: apps/partners/models.py
+msgid "Выберите бота одной из точек этой сети."
+msgstr "Оберіть бота однієї з точок цієї мережі."
+
+#: apps/partners/models.py
 msgid "Приостановлен"
 msgstr "Призупинено"
 
@@ -3251,6 +3347,22 @@ msgstr "Часовий пояс"
 #: apps/partners/models.py
 msgid "Контактный телефон"
 msgstr "Контактний телефон"
+
+#: apps/partners/models.py
+msgid "Сеть"
+msgstr "Мережа"
+
+#: apps/partners/models.py
+msgid "Точки одной сети: один вход владельца в Admin и отчёт по сети."
+msgstr "Точки однієї мережі: один вхід власника в Admin і звіт по мережі."
+
+#: apps/partners/models.py
+msgid "Адрес"
+msgstr "Адреса"
+
+#: apps/partners/models.py
+msgid "Гость сети видит его, когда выбирает заведение."
+msgstr "Гість мережі бачить її, коли обирає заклад."
 
 #: apps/partners/models.py
 msgid "заведение"
@@ -3712,6 +3824,50 @@ msgstr "Такого тексту немає в каталозі бота."
 msgid "Такая подпись уже у другой кнопки: бот их спутает."
 msgstr "Такий підпис уже має інша кнопка: бот їх сплутає."
 
+#: apps/partners/models.py
+msgid "Ссылка до выбора"
+msgstr "Посилання до вибору"
+
+#: apps/partners/models.py
+msgid "выбор заведения гостем"
+msgstr "вибір закладу гостем"
+
+#: apps/partners/models.py
+msgid "Выбор заведения гостями"
+msgstr "Вибір закладу гостями"
+
+#: apps/partners/models.py
+msgid "Бот"
+msgstr "Бот"
+
+#: apps/partners/models.py
+msgid "Чат"
+msgstr "Чат"
+
+#: apps/partners/models.py
+msgid "Сообщение"
+msgstr "Повідомлення"
+
+#: apps/partners/models.py
+msgid "сообщение бота сети"
+msgstr "повідомлення бота мережі"
+
+#: apps/partners/models.py
+msgid "Сообщения бота сети"
+msgstr "Повідомлення бота мережі"
+
+#: apps/partners/models.py
+msgid "Общий баланс"
+msgstr "Спільний баланс"
+
+#: apps/partners/models.py
+msgid "общий баланс гостя в сети"
+msgstr "спільний баланс гостя в мережі"
+
+#: apps/partners/models.py
+msgid "Общие балансы гостей в сетях"
+msgstr "Спільні баланси гостей у мережах"
+
 #: apps/partners/opening_hours.py
 msgid "Пн"
 msgstr "Пн"
@@ -3783,6 +3939,30 @@ msgstr "Далі →"
 #: apps/partners/templates/admin/partners/bottext/change_list.html
 msgid "Каталог текстов"
 msgstr "Каталог текстів"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Цифры обновляются каждые 15 минут. Продажи — оплаченные счета и быстрые продажи, средний чек — на продажу. Видны только точки, которые вам доступны."
+msgstr "Цифри оновлюються кожні 15 хвилин. Продажі — оплачені рахунки та швидкі продажі, середній чек — на продаж. Видно лише точки, доступні вам."
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "⚙ Настройки сети: название и бот"
+msgstr "⚙ Налаштування мережі: назва і бот"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Точка"
+msgstr "Точка"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Бонусов начислено"
+msgstr "Бонусів нараховано"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Бонусов списано"
+msgstr "Бонусів списано"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Вся сеть"
+msgstr "Уся мережа"
 
 #: apps/tables/admin.py
 msgid "Работа стола"
@@ -4185,6 +4365,14 @@ msgid "Владелец заведения"
 msgstr "Власник закладу"
 
 #: apps/users/models.py
+msgid "Ещё точки сети"
+msgstr "Інші точки мережі"
+
+#: apps/users/models.py
+msgid "Другие точки той же сети, где у пользователя те же права. Владельцу сети не нужно: он видит все точки."
+msgstr "Інші точки тієї ж мережі, де в користувача ті самі права. Власнику мережі не потрібно: він бачить усі точки."
+
+#: apps/users/models.py
 msgid "Вход в Admin"
 msgstr "Вхід в Admin"
 
@@ -4435,6 +4623,10 @@ msgstr "Кошик оновлено."
 #: bot/handlers/order.py
 msgid "Позиция удалена."
 msgstr "Позицію видалено."
+
+#: bot/handlers/points.py
+msgid "📍 {partner_name}"
+msgstr "📍 {partner_name}"
 
 #: bot/handlers/profile.py
 msgid "<b>Мой профиль</b> · {partner_name}"
@@ -6703,6 +6895,10 @@ msgstr "Стіл активовано. Тепер можна відкрити м
 #: bot/services/content.py
 msgid "Стол активирован."
 msgstr "Стіл активовано."
+
+#: bot/services/network.py
+msgid "📍 В какое заведение? Выбор запомнится, сменить можно кнопкой «{button_point_label}»."
+msgstr "📍 У який заклад? Вибір запам’ятається, змінити можна кнопкою «{button_point_label}»."
 
 #: core/admin_mixins.py
 msgid "Запись принадлежит другому заведению."

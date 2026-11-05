@@ -67,6 +67,7 @@ from apps.billing.table_bills import (
 from apps.bonuses.models import WalkInSale
 from apps.bonuses.services import (
     BonusServiceError,
+    bonus_balance,
     get_redeemable_bonus_amount,
     preview_walk_in_sale_by_customer_code,
     register_walk_in_sale_from_menu_items_by_customer_code,
@@ -132,6 +133,7 @@ from bot.keyboards.staff import (
 )
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
+from bot.services.network import update_points_count
 from bot.states.staff_sale import StaffBillStates, StaffQuickSaleStates
 from bot.utils.html import escape_html
 from core.i18n import N_, _, variants
@@ -1082,7 +1084,7 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
                 _(
                     "У гостя {loyalty_balance} бонусов — можно списать до {redeemable_amount} "
                     "грн (1 бонус = 1 грн).",
-                    loyalty_balance=bill.primary_guest.loyalty_balance,
+                    loyalty_balance=bonus_balance(bill.primary_guest),
                     redeemable_amount=redeemable_amount,
                 )
             )
@@ -1284,7 +1286,7 @@ def _compose_staff_sale_view(
             _("Гость: {guest}", guest=escape_html(guest_preview.guest.staff_label())),
             _(
                 "Текущий баланс: {loyalty_balance} бонусов",
-                loyalty_balance=guest_preview.guest.loyalty_balance,
+                loyalty_balance=bonus_balance(guest_preview.guest),
             ),
             _("Первый визит: {first_visit}", first_visit=first_visit),
             _("Последний визит: {last_visit}", last_visit=last_visit),
@@ -2494,7 +2496,10 @@ async def staff_call_take_callback_handler(callback: CallbackQuery, bot: Bot) ->
             callback.message,
             _(
                 "{html_text}\n✓ Идёте вы",
-                html_text=staff_notification_text(notification),
+                # In a network's bot the message names the venue (PQ-047).
+                html_text=staff_notification_text(
+                    notification, venue_name=partner.name if update_points_count() else ""
+                ),
             ),
             reply_markup=None,
         )

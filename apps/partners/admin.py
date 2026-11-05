@@ -5,7 +5,9 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
+from django.utils.html import format_html
 
+from apps.analytics.selectors import network_summary
 from apps.notifications.services import notify_owners_about_transfer_details_change
 from apps.partners.bot_texts import GROUP_LABELS, editable_texts
 from apps.partners.forms import BotInstanceAdminForm, BotTextForm, _short
@@ -13,11 +15,13 @@ from apps.partners.languages import enabled_languages, text_overrides
 from apps.partners.models import (
     BotInstance,
     BotText,
+    Network,
     OpeningHours,
     Partner,
     PartnerBotSettings,
     text_key,
 )
+from apps.partners.networks import admin_partner_ids, owns_partner
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 from core.i18n import LANGUAGE_NAMES, _, texts
@@ -166,8 +170,8 @@ class PartnerAdmin(ScopedAdminMixin):
     scope_partner_field = None
     allow_partner_add = False
     allow_partner_delete = False
-    platform_only_fields = ("slug", "status")
-    list_display = ("name", "slug", "status", "timezone", "created_at")
+    platform_only_fields = ("slug", "status", "network")
+    list_display = ("name", "slug", "status", "network", "timezone", "created_at")
     list_filter = ("status", "timezone")
     search_fields = ("name", "slug", "contact_phone")
     prepopulated_fields = {"slug": ("name",)}
@@ -176,7 +180,7 @@ class PartnerAdmin(ScopedAdminMixin):
     def get_list_display(self, request):
         if request.user.is_superuser:
             return self.list_display
-        return ("name", "timezone", "contact_phone", "created_at")
+        return ("name", "address", "timezone", "contact_phone", "created_at")
 
     def get_list_filter(self, request):
         if request.user.is_superuser:
@@ -202,6 +206,7 @@ class PartnerAdmin(ScopedAdminMixin):
                 {
                     "fields": (
                         "name",
+                        "address",  # shown to guests when they pick a venue (PQ-047)
                         "timezone",
                         "contact_phone",
                     )
@@ -435,3 +440,136 @@ class BotTextAdmin(ScopedAdminMixin):
             "partner_id": str(partner_id or ""),
         }
         return TemplateResponse(request, "admin/partners/bottext/catalog.html", context)
+
+
+@admin.register(Network)
+class NetworkAdmin(admin.ModelAdmin):
+    """Networks of venues (PQ-047). The platform creates them and puts
+    venues in (Partner.network); an owner or manager of several venues sees
+    the network report here."""
+
+    list_display = ("name", "bot", "points_count", "report_link")
+    search_fields = ("name",)
+
+    @staticmethod
+    def _points(request) -> list:
+        return admin_partner_ids(request.user)
+
+    @staticmethod
+    def _owned_network_id(request):
+        """The network whose owner this person is (they may pick its bot)."""
+
+        points = admin_partner_ids(request.user)
+        if not points or not owns_partner(request.user, points[0]):
+            return None
+        return Partner.objects.filter(id=points[0]).values_list("network_id", flat=True).first()
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request).select_related("bot")
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(id=self._owned_network_id(request))
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser or len(self._points(request)) > 1
+
+    def has_view_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser:
+            return obj.id == self._owned_network_id(request)
+        return self.has_module_permission(request)
+
+    def has_add_permission(self, request):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        # The owner of the network names it and picks its bot (PQ-047).
+        if request.user.is_superuser:
+            return True
+        owned = self._owned_network_id(request)
+        return owned is not None and (obj is None or obj.id == owned)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_fields(self, request, obj=None):
+        return ("name", "bot", "bonus_mode")
+
+    def get_readonly_fields(self, request, obj=None):
+        # Shared bonuses are one-way for the owner (PQ-047): splitting the
+        # balance back would leave venues with spent or negative balances.
+        if (
+            obj is not None
+            and obj.bonus_mode == Network.BonusMode.SHARED
+            and not request.user.is_superuser
+        ):
+            return ("bonus_mode",)
+        return ()
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        form_class = super().get_form(request, obj, change=change, **kwargs)
+        network_id = obj.id if obj is not None else None
+
+        class NetworkForm(form_class):
+            def __init__(self, *args, **form_kwargs):
+                super().__init__(*args, **form_kwargs)
+                if "bot" in self.fields:
+                    # Only bots of this network's venues.
+                    self.fields["bot"].queryset = BotInstance.objects.filter(
+                        partner__network_id=network_id
+                    ).select_related("partner")
+
+        return NetworkForm
+
+    @admin.display(description=_lazy("Точек"))
+    def points_count(self, obj: Network) -> int:
+        return obj.points.count()
+
+    @admin.display(description=_lazy("Отчёт"))
+    def report_link(self, obj: Network):
+        url = reverse("admin:partners_network_report") + "?" + urlencode({"network": obj.id})
+        return format_html('<a href="{}">{}</a>', url, _("Отчёт по сети"))
+
+    def get_urls(self):
+        report = path(
+            "report/",
+            self.admin_site.admin_view(self.report_view),
+            name="partners_network_report",
+        )
+        return [report, *super().get_urls()]
+
+    def changelist_view(self, request, extra_context=None):
+        if not request.user.is_superuser:
+            return self.report_view(request)
+        return super().changelist_view(request, extra_context)
+
+    REPORT_PERIODS = ((1, _lazy("Сегодня")), (7, _lazy("7 дней")), (30, _lazy("30 дней")))
+
+    def report_view(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        if request.user.is_superuser:
+            points = list(
+                Partner.objects.filter(network_id=request.GET.get("network") or None)
+                .values_list("id", flat=True)
+            )
+        else:
+            # Only the venues this person may open.
+            points = self._points(request)
+        try:
+            days = int(request.GET.get("days", 7))
+        except ValueError:
+            days = 7
+        if days not in {value for value, _label in self.REPORT_PERIODS}:
+            days = 7
+        owned = None if request.user.is_superuser else self._owned_network_id(request)
+        context = {
+            **self.admin_site.each_context(request),
+            "settings_url": (
+                reverse("admin:partners_network_change", args=[owned]) if owned else ""
+            ),
+            "title": _("Отчёт по сети"),
+            "rows": network_summary(points, days=days),
+            "days": days,
+            "periods": self.REPORT_PERIODS,
+        }
+        return TemplateResponse(request, "admin/partners/network/report.html", context)

@@ -55,6 +55,7 @@ class BotContent:
     button_call_staff_label: str
     button_request_bill_label: str
     button_staff_label: str
+    button_point_label: str
     button_call_waiter_label: str
     button_call_bartender_label: str
     button_call_hookah_label: str

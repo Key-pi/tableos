@@ -3,6 +3,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.core.exceptions import ValidationError
 
+from apps.partners.models import Partner
 from apps.users.constants import (
     ADMIN_ACCESS_PRESET_TEMPLATES,
     AdminAccessPreset,
@@ -214,8 +215,12 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
         if self.is_platform_admin(request):
             return queryset
         # AA-026: platform accounts are never part of a venue's user list,
-        # even when a superuser happens to carry the venue's partner.
-        return queryset.filter(is_superuser=False)
+        # even when a superuser happens to carry the venue's partner. Nor are
+        # the network staff's copies: they follow the person's own account
+        # (``apps/employees/network_staff.py``, PQ-047).
+        return queryset.filter(is_superuser=False).exclude(
+            employee_profile__mirrored_from__isnull=False
+        )
 
     def get_fieldsets(self, request, obj=None):
         # On the add page Django must use the add_fieldsets (password1/password2),
@@ -326,11 +331,27 @@ class AdminAccessProfileAdmin(ScopedAdminMixin):
                     "is_partner_owner",
                     "can_access_admin",
                     "is_active",
+                    "extra_partners",
                     "permission_summary",
                 )
             },
         ),
     )
+    # PQ-047: which other venues of the network a person runs — the owner's call.
+    owner_only_fields = ("extra_partners",)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        if db_field.name == "extra_partners" and not self.is_platform_admin(request):
+            # The other venues of the network now open in Admin.
+            scope = Partner.objects.filter(id=self.get_partner_scope_id(request)).first()
+            network_id = scope.network_id if scope is not None else None
+            kwargs["queryset"] = (
+                Partner.objects.filter(network_id=network_id).exclude(id=scope.id)
+                if network_id is not None
+                else Partner.objects.none()
+            )
+            return admin.ModelAdmin.formfield_for_manytomany(self, db_field, request, **kwargs)
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def has_change_permission(self, request, obj=None):
         if obj is not None and not self._may_touch(request, obj):

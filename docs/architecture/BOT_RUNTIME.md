@@ -117,6 +117,14 @@ billing → guest_call → staff`. aiogram выбирает первый под�
   Действия персонала `stafftxok`, `stafftxno` (сначала переспрашивает) и
   `stafftxnoy` заново загружают заказ в пределах партнёра сотрудника;
   сервис проверяет роль (владелец, менеджер, кассир).
+- Бот сети (PQ-047, [NETWORKS.md](NETWORKS.md)). `PartnerRuntimeMiddleware`
+  для бота сети (`Network.bot`) сначала выбирает точку обновления
+  (`bot/services/network.py`). Без точки он спрашивает «📍 В какое
+  заведение?» (`point:<hex>`) и обработчики не вызывает. С точкой
+  обработчики работают как в собственном боте точки. Middleware запросов
+  `bot/middlewares/message_points.py` запоминает точку каждого
+  отправленного сообщения, чтобы его кнопки действовали для неё. Смена
+  точки — `bot/handlers/points.py` (кнопка «📍 Заведение», `/point`).
 - Приглашения сотрудников (PQ-046, `bot/handlers/staff_invites.py`): `/start
   inv_<код>` разбирает `start_handler` до QR стола и источников. Callback-и
   `staffinv` (роли), `staffinv:r:<роль>` (выдать ссылку),

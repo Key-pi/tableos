@@ -20,7 +20,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.employees.models import EmployeeProfile, StaffInvite
-from apps.users.models import AdminAccessProfile, TelegramAccount, User
+from apps.partners.networks import acts_for_partner, owns_partner
+from apps.users.models import TelegramAccount, User
 from core.i18n import _
 
 INVITE_PREFIX = "inv_"
@@ -47,16 +48,15 @@ class ClaimResult:
 
 
 def _is_owner(user: User, partner_id) -> bool:
-    return user.role == User.Role.OWNER or AdminAccessProfile.objects.filter(
-        user=user, partner_id=partner_id, is_partner_owner=True
-    ).exists()
+    # The venue's owner, or the owner of its network (PQ-047).
+    return user.role == User.Role.OWNER or owns_partner(user, partner_id)
 
 
 def _active_in_partner(user: User | None, partner_id) -> bool:
-    if user is None or not user.is_active or user.partner_id != partner_id:
+    if user is None or not user.is_active or not acts_for_partner(user, partner_id):
         return False
     # Staff without a profile (Admin only) may still be the owner.
-    profile = EmployeeProfile.objects.filter(user=user, partner_id=partner_id).first()
+    profile = EmployeeProfile.objects.filter(user=user).first()
     return profile is None or profile.is_active
 
 

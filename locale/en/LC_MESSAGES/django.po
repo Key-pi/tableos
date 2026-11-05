@@ -12,11 +12,11 @@ msgstr "Period"
 msgid "Сегодня и вчера"
 msgstr "Today and yesterday"
 
-#: apps/analytics/admin.py
+#: apps/analytics/admin.py apps/partners/admin.py
 msgid "7 дней"
 msgstr "7 days"
 
-#: apps/analytics/admin.py
+#: apps/analytics/admin.py apps/partners/admin.py
 msgid "30 дней"
 msgstr "30 days"
 
@@ -27,6 +27,14 @@ msgstr "90 days"
 #: apps/analytics/admin.py
 msgid "Источник с таким кодом уже есть."
 msgstr "A source with this code already exists."
+
+#: apps/analytics/admin.py
+msgid "Заведение не входит в сеть."
+msgstr "The venue is not in a network."
+
+#: apps/analytics/admin.py
+msgid "Такой код уже есть у источника сети или у точки этой сети."
+msgstr "This code is already used by a network source or a venue of this network."
 
 #: apps/analytics/admin.py
 msgid "Ссылка (её же можно превратить в QR-код)"
@@ -56,15 +64,19 @@ msgstr "Analytics"
 msgid "День"
 msgstr "Day"
 
-#: apps/analytics/models.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
 msgid "Выручка"
 msgstr "Revenue"
 
-#: apps/analytics/models.py core/urls.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html core/urls.py
 msgid "Заказов"
 msgstr "Orders"
 
-#: apps/analytics/models.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
+msgid "Продаж"
+msgstr "Sales"
+
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
 msgid "Средний чек"
 msgstr "Average check"
 
@@ -111,6 +123,14 @@ msgstr "A disabled source does not count visits; the guest still reaches the bot
 #: apps/analytics/models.py
 msgid "Заметка"
 msgstr "Note"
+
+#: apps/analytics/models.py
+msgid "Для всей сети"
+msgstr "For the whole network"
+
+#: apps/analytics/models.py
+msgid "Одна ссылка на бота сети: гость выбирает заведение, переход засчитывается выбранной точке."
+msgstr "One link to the network bot: the guest picks the venue, the visit counts for the venue picked."
 
 #: apps/analytics/models.py
 msgid "Источник перехода"
@@ -1877,6 +1897,10 @@ msgid "Убирать позиции, отменять заказы в счёт�
 msgstr "Remove items, cancel orders in a bill and void bills. Only the venue owner grants it."
 
 #: apps/employees/models.py
+msgid "Копия сотрудника из точки"
+msgstr "Copy of the staff member from venue"
+
+#: apps/employees/models.py
 msgid "сотрудник"
 msgstr "staff member"
 
@@ -2155,6 +2179,14 @@ msgstr "Campaign name"
 #: apps/notifications/models.py
 msgid "Текст рассылки"
 msgstr "Campaign text"
+
+#: apps/notifications/models.py
+msgid "Всем гостям сети"
+msgstr "To all guests of the network"
+
+#: apps/notifications/models.py
+msgid "Гости всех точек сети, каждому один раз, через бота сети. Гость, отписавшийся от рассылок в любой точке сети, её не получит."
+msgstr "Guests of every venue of the network, once each, through the network bot. A guest who unsubscribed at any venue of the network will not get it."
 
 #: apps/notifications/models.py
 msgid "Сообщения, судьба которых неизвестна после сбоя воркера. Повторно не отправляются: гость получает рассылку не больше одного раза (PQ-014)."
@@ -2469,6 +2501,10 @@ msgstr "Bill #{public_id} prepared for {total} UAH"
 #: apps/notifications/services.py
 msgid "Стол #{number} просит счёт"
 msgstr "Table #{number} asks for the bill"
+
+#: apps/notifications/services.py
+msgid "У сети нет бота сети: выберите его в настройках сети."
+msgstr "The network has no network bot: pick one in the network settings."
 
 #: apps/notifications/services.py
 msgid "Нет гостей, которым можно отправить рассылку."
@@ -3022,6 +3058,22 @@ msgstr "Own text"
 msgid "Каталог текстов бота"
 msgstr "Bot text catalog"
 
+#: apps/partners/admin.py
+msgid "Точек"
+msgstr "Venues"
+
+#: apps/partners/admin.py
+msgid "Отчёт"
+msgstr "Report"
+
+#: apps/partners/admin.py
+msgid "Отчёт по сети"
+msgstr "Network report"
+
+#: apps/partners/admin.py
+msgid "Сегодня"
+msgstr "Today"
+
 #: apps/partners/apps.py apps/partners/models.py
 msgid "Заведения"
 msgstr "Venues"
@@ -3061,6 +3113,10 @@ msgstr "Request the bill"
 #: apps/partners/bot_texts.py
 msgid "🧑‍🍳 Рабочий режим"
 msgstr "🧑‍🍳 Work mode"
+
+#: apps/partners/bot_texts.py
+msgid "📍 Заведение"
+msgstr "📍 Venue"
 
 #: apps/partners/bot_texts.py apps/users/constants.py apps/users/models.py
 msgid "Официант"
@@ -3229,6 +3285,46 @@ msgid "Для этого текста и языка уже есть свой в�
 msgstr "This text and language already have an own version, edit it instead."
 
 #: apps/partners/models.py
+msgid "Название сети"
+msgstr "Network name"
+
+#: apps/partners/models.py
+msgid "Бот сети"
+msgstr "Network bot"
+
+#: apps/partners/models.py
+msgid "Один бот на все точки: гость выбирает заведение после /start, QR стола выбирает его сам. Своих ботов точкам не нужно."
+msgstr "One bot for every venue: the guest picks the venue after /start, a table QR picks it itself. Venues need no bots of their own."
+
+#: apps/partners/models.py
+msgid "Раздельные: свой баланс в каждой точке"
+msgstr "Separate: each venue has its own balance"
+
+#: apps/partners/models.py
+msgid "Общие: один баланс во всех точках"
+msgstr "Shared: one balance at every venue"
+
+#: apps/partners/models.py
+msgid "Бонусы в сети"
+msgstr "Bonuses in the network"
+
+#: apps/partners/models.py
+msgid "Общие: бонусы, накопленные в точках, складываются; каждая точка начисляет по своей программе, тратить можно в любой; один код гостя на сеть. Включив общие, обратно переключить нельзя."
+msgstr "Shared: bonuses earned at the venues add up; each venue accrues by its own program, they can be spent at any; one guest code for the network. Once shared is on, it cannot be switched back."
+
+#: apps/partners/models.py
+msgid "сеть заведений"
+msgstr "venue network"
+
+#: apps/partners/models.py
+msgid "Сети заведений"
+msgstr "Venue networks"
+
+#: apps/partners/models.py
+msgid "Выберите бота одной из точек этой сети."
+msgstr "Pick a bot of one of this network's venues."
+
+#: apps/partners/models.py
 msgid "Приостановлен"
 msgstr "Suspended"
 
@@ -3251,6 +3347,22 @@ msgstr "Time zone"
 #: apps/partners/models.py
 msgid "Контактный телефон"
 msgstr "Contact phone"
+
+#: apps/partners/models.py
+msgid "Сеть"
+msgstr "Network"
+
+#: apps/partners/models.py
+msgid "Точки одной сети: один вход владельца в Admin и отчёт по сети."
+msgstr "Venues of one network: one owner login to Admin and a network report."
+
+#: apps/partners/models.py
+msgid "Адрес"
+msgstr "Address"
+
+#: apps/partners/models.py
+msgid "Гость сети видит его, когда выбирает заведение."
+msgstr "Guests of the network see it when they pick a venue."
 
 #: apps/partners/models.py
 msgid "заведение"
@@ -3712,6 +3824,50 @@ msgstr "There is no such text in the bot catalog."
 msgid "Такая подпись уже у другой кнопки: бот их спутает."
 msgstr "Another button already has this label: the bot would mix them up."
 
+#: apps/partners/models.py
+msgid "Ссылка до выбора"
+msgstr "Link before the pick"
+
+#: apps/partners/models.py
+msgid "выбор заведения гостем"
+msgstr "guest's venue choice"
+
+#: apps/partners/models.py
+msgid "Выбор заведения гостями"
+msgstr "Guests' venue choices"
+
+#: apps/partners/models.py
+msgid "Бот"
+msgstr "Bot"
+
+#: apps/partners/models.py
+msgid "Чат"
+msgstr "Chat"
+
+#: apps/partners/models.py
+msgid "Сообщение"
+msgstr "Message"
+
+#: apps/partners/models.py
+msgid "сообщение бота сети"
+msgstr "network bot message"
+
+#: apps/partners/models.py
+msgid "Сообщения бота сети"
+msgstr "Network bot messages"
+
+#: apps/partners/models.py
+msgid "Общий баланс"
+msgstr "Shared balance"
+
+#: apps/partners/models.py
+msgid "общий баланс гостя в сети"
+msgstr "guest's shared balance in a network"
+
+#: apps/partners/models.py
+msgid "Общие балансы гостей в сетях"
+msgstr "Guests' shared balances in networks"
+
 #: apps/partners/opening_hours.py
 msgid "Пн"
 msgstr "Mon"
@@ -3783,6 +3939,30 @@ msgstr "Next →"
 #: apps/partners/templates/admin/partners/bottext/change_list.html
 msgid "Каталог текстов"
 msgstr "Text catalog"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Цифры обновляются каждые 15 минут. Продажи — оплаченные счета и быстрые продажи, средний чек — на продажу. Видны только точки, которые вам доступны."
+msgstr "Figures refresh every 15 minutes. Sales are paid bills and quick sales; the average check is per sale. Only venues you can open are shown."
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "⚙ Настройки сети: название и бот"
+msgstr "⚙ Network settings: name and bot"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Точка"
+msgstr "Venue"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Бонусов начислено"
+msgstr "Bonuses accrued"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Бонусов списано"
+msgstr "Bonuses redeemed"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Вся сеть"
+msgstr "Whole network"
 
 #: apps/tables/admin.py
 msgid "Работа стола"
@@ -4185,6 +4365,14 @@ msgid "Владелец заведения"
 msgstr "Venue owner"
 
 #: apps/users/models.py
+msgid "Ещё точки сети"
+msgstr "Other venues of the network"
+
+#: apps/users/models.py
+msgid "Другие точки той же сети, где у пользователя те же права. Владельцу сети не нужно: он видит все точки."
+msgstr "Other venues of the same network where the user has the same rights. Not needed for the network owner: they see every venue."
+
+#: apps/users/models.py
 msgid "Вход в Admin"
 msgstr "Admin login"
 
@@ -4435,6 +4623,10 @@ msgstr "Cart updated."
 #: bot/handlers/order.py
 msgid "Позиция удалена."
 msgstr "Item removed."
+
+#: bot/handlers/points.py
+msgid "📍 {partner_name}"
+msgstr "📍 {partner_name}"
 
 #: bot/handlers/profile.py
 msgid "<b>Мой профиль</b> · {partner_name}"
@@ -6703,6 +6895,10 @@ msgstr "Your table is active. Now you can open the menu."
 #: bot/services/content.py
 msgid "Стол активирован."
 msgstr "Your table is active."
+
+#: bot/services/network.py
+msgid "📍 В какое заведение? Выбор запомнится, сменить можно кнопкой «{button_point_label}»."
+msgstr "📍 Which venue? The choice is remembered; change it with the «{button_point_label}» button."
 
 #: core/admin_mixins.py
 msgid "Запись принадлежит другому заведению."

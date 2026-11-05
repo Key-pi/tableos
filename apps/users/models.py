@@ -201,6 +201,18 @@ class AdminAccessProfile(TimeStampedModel):
         verbose_name=_lazy("Набор прав"),
     )
     is_partner_owner = models.BooleanField(default=False, verbose_name=_lazy("Владелец заведения"))
+    # PQ-047: a manager may run several venues of the network with the same
+    # rights; the owner of the network sees all of its venues anyway.
+    extra_partners = models.ManyToManyField(
+        "partners.Partner",
+        blank=True,
+        related_name="extra_admin_access_profiles",
+        verbose_name=_lazy("Ещё точки сети"),
+        help_text=_lazy(
+            "Другие точки той же сети, где у пользователя те же права. Владельцу сети "
+            "не нужно: он видит все точки.",
+        ),
+    )
     can_access_admin = models.BooleanField(default=False, verbose_name=_lazy("Вход в Admin"))
     is_active = models.BooleanField(default=True, verbose_name=_lazy("Активен"))
 

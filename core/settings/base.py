@@ -108,6 +108,10 @@ UNFOLD = {
     "SHOW_LANGUAGES": True,
     "LANGUAGE_FLAGS": {"uk": "🇺🇦", "ru": "🇷🇺", "en": "🇬🇧"},
     "LANGUAGES": {"action": "/admin/language/"},
+    # PQ-047: a network's owner or manager switches venues here.
+    "SITE_SUBHEADER": "apps.partners.admin_network.site_subheader",
+    "SITE_DROPDOWN": "apps.partners.admin_network.site_dropdown",
+    "ENVIRONMENT": "apps.partners.admin_network.header_badge",
 }
 
 BOT_TOKEN_ENCRYPTION_KEY = app_settings.bot_token_encryption_key
@@ -143,6 +147,10 @@ CELERY_BEAT_SCHEDULE = {
     "cancel-expired-transfer-orders": {
         "task": "billing.cancel_expired_transfer_orders",
         "schedule": timedelta(minutes=5),
+    },
+    "forget-old-network-message-points": {
+        "task": "partners.forget_old_message_points",
+        "schedule": timedelta(days=1),
     },
     "refresh-daily-partner-metrics": {
         "task": "analytics.refresh_daily_partner_metrics",
