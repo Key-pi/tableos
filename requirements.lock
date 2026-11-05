@@ -68,6 +68,8 @@ multidict==7.1.0
     #   yarl
 packaging==26.3
     # via kombu
+pillow==13.0.0
+    # via tableos (pyproject.toml)
 prompt-toolkit==3.0.53
     # via click-repl
 propcache==0.5.4

@@ -126,6 +126,16 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
   ```
 
   Затем `/srv/offsite` синхронизируется наружу (rclone, restic).
+- **Фото меню** (PQ-048) лежат в томе `media`, не в базе. Копируйте его вместе
+  с базой, например:
+
+  ```bash
+  docker run --rm -v botera-shop-prod_media:/m -v /srv/offsite:/o alpine \
+    sh -c 'mkdir -p /o/media && cp -rn /m/. /o/media/'
+  ```
+
+  Фото отдаёт сам `web` по `/media/` (`core/media.py:serve_media`). При желании
+  их может отдавать Caddy: `handle_path /media/* { root * <путь к тому> file_server }`.
 - **Внеочередная копия:**
 
   ```bash

@@ -9,6 +9,7 @@ from apps.partners.models import BotInstance, Partner
 from apps.tables.models import Table
 from apps.users.views import set_admin_language
 from core.i18n import _
+from core.media import serve_media
 from core.security.login_throttle import throttle_login
 
 
@@ -103,4 +104,6 @@ urlpatterns = [
     path("admin/point/<str:partner_hex>/", switch_admin_point, name="admin-point"),
     path("admin/", admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
+    # PQ-048: photos of menu items uploaded in Admin.
+    path("media/<path:path>", serve_media, name="media"),
 ]

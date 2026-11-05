@@ -94,6 +94,9 @@ services:
         --access-logfile - --forwarded-allow-ips '*'
     ports:
       - "127.0.0.1:${WEB_PORT_ON_HOST:-8000}:8000"
+    # Photos of menu items uploaded in Admin (PQ-048), served at /media/.
+    volumes:
+      - media:/app/media
     healthcheck:
       test:
         - CMD
@@ -176,3 +179,4 @@ volumes:
   postgres_data:
   redis_data:
   backups:
+  media:

@@ -1,12 +1,31 @@
 import secrets
 from decimal import Decimal
 
-from django.core.validators import MinValueValidator
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
+from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
+
+MENU_PHOTO_EXTENSIONS = ("jpg", "jpeg", "png", "webp")
+
+
+def menu_photo_path(item: "MenuItem", filename: str) -> str:
+    # A new name on every upload: the old link may stay in a guest's cache.
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+    return f"menu/{item.partner_id.hex}/{secrets.token_hex(8)}.{extension}"
+
+
+def validate_menu_photo_size(photo) -> None:
+    limit = settings.MENU_PHOTO_MAX_BYTES
+    if photo.size > limit:
+        raise ValidationError(
+            _("Фото больше {size} МБ — уменьшите его.", size=limit // (1024 * 1024) or 1)
+        )
 
 
 class MenuCategory(PartnerBoundModel):
@@ -53,6 +72,16 @@ class MenuItem(PartnerBoundModel):
         validators=[MinValueValidator(Decimal("0.01"))],
         verbose_name=_lazy("Цена"),
     )
+    image = models.ImageField(
+        upload_to=menu_photo_path,
+        blank=True,
+        validators=[
+            FileExtensionValidator(MENU_PHOTO_EXTENSIONS),
+            validate_menu_photo_size,
+        ],
+        verbose_name=_lazy("Фото"),
+        help_text=_lazy("JPG, PNG или WebP до 5 МБ. Без фото берётся ссылка ниже."),
+    )
     image_url = models.URLField(blank=True, verbose_name=_lazy("Ссылка на фото"))
     item_type = models.CharField(
         max_length=16,
@@ -95,6 +124,14 @@ class MenuItem(PartnerBoundModel):
 
     def __str__(self) -> str:
         return f"{self.partner.name} / {self.name}"
+
+    @property
+    def photo_url(self) -> str:
+        """The uploaded photo, else the link (PQ-048)."""
+
+        if self.image:
+            return self.image.url
+        return self.image_url
 
     def is_sold_in(self, channel: str) -> bool:
         return bool(getattr(self, self.CHANNEL_FIELDS[channel]))

@@ -1965,6 +1965,10 @@ msgid "Меню"
 msgstr "Menu"
 
 #: apps/menu/models.py
+msgid "Фото больше {size} МБ — уменьшите его."
+msgstr "The photo is larger than {size} MB — make it smaller."
+
+#: apps/menu/models.py
 msgid "Порядок"
 msgstr "Order"
 
@@ -1999,6 +2003,14 @@ msgstr "Item code"
 #: apps/menu/models.py
 msgid "Описание"
 msgstr "Description"
+
+#: apps/menu/models.py
+msgid "Фото"
+msgstr "Photo"
+
+#: apps/menu/models.py
+msgid "JPG, PNG или WebP до 5 МБ. Без фото берётся ссылка ниже."
+msgstr "JPG, PNG or WebP up to 5 MB. Without a photo, the link below is used."
 
 #: apps/menu/models.py
 msgid "Ссылка на фото"
