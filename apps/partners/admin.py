@@ -112,6 +112,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                 "fields": (
                     "module_orders_enabled",
                     "module_cart_enabled",
+                    "module_webapp_enabled",
                     "module_billing_enabled",
                 ),
             },

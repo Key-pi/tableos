@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "bot.apps.BotConfig",
+    "webapp.apps.WebAppConfig",
     "apps.partners.apps.PartnersConfig",
     "apps.users.apps.UsersConfig",
     "apps.tables.apps.TablesConfig",
@@ -88,6 +89,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+# Telegram Mini App (PQ-048): public HTTPS address of the site.
+WEBAPP_BASE_URL = app_settings.webapp_base_url.rstrip("/")
 # Photos of menu items uploaded in Admin (PQ-048).
 MENU_PHOTO_MAX_BYTES = 5 * 1024 * 1024
 

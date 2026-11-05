@@ -34,7 +34,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["apps", "bot", "core"]
+packages = ["apps", "bot", "core", "webapp"]
 
 [tool.ruff]
 line-length = 100

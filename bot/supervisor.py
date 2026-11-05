@@ -28,11 +28,13 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramConflictError, TelegramUnauthorizedError
-from aiogram.methods import GetUpdates, TelegramMethod
+from aiogram.methods import GetUpdates, SetChatMenuButton, TelegramMethod
+from aiogram.types import MenuButtonDefault, MenuButtonWebApp, WebAppInfo
 from aiogram.utils.backoff import Backoff, BackoffConfig
 from asgiref.sync import sync_to_async
 from django.db import close_old_connections
 
+from apps.partners.mini_app import menu_buttons
 from apps.partners.models import BotInstance
 from apps.partners.services import record_bot_runtime_states
 from bot.main import create_dispatcher
@@ -97,6 +99,8 @@ class BotSupervisor:
         self.rejected: dict[str, str] = {}
         self.states: dict[str, str] = {}
         self._recorded: dict[str, str] = {}
+        # The Mini App menu button each bot was given (PQ-048): (url, text).
+        self._menu_buttons: dict[str, tuple[str, str] | None] = {}
         # Bots whose first poll Telegram answered.
         self._confirmed: set[str] = set()
         self._scan_states: dict[str, str] = {}
@@ -157,6 +161,31 @@ class BotSupervisor:
         for instance_id, state in self._scan_states.items():
             self.states[instance_id] = self._state_of(instance_id, state)
         await self._record()
+        await self._sync_menu_buttons()
+
+    async def _sync_menu_buttons(self) -> None:
+        """The chat menu button opens the Mini App where its module is on
+        (PQ-048); a bot that never had it is not touched."""
+
+        if not self.running:
+            return
+        wanted = await sync_to_async(menu_buttons)(list(self.running))
+        for instance_id, button in wanted.items():
+            running = self.running.get(instance_id)
+            # A bot never given the button counts as None: not touched.
+            if running is None or self._menu_buttons.get(instance_id) == button:
+                continue
+            menu_button = (
+                MenuButtonWebApp(text=button[1], web_app=WebAppInfo(url=button[0]))
+                if button is not None
+                else MenuButtonDefault()
+            )
+            try:
+                await running.bot(SetChatMenuButton(menu_button=menu_button))
+            except Exception:  # noqa: BLE001 — retried at the next check
+                logger.warning("Menu button of @%s not set", running.config.username)
+                continue
+            self._menu_buttons[instance_id] = button
 
     def _state_of(self, instance_id: str, scanned: str) -> str:
         """What Admin shows: a refused token, a conflict, running (once
@@ -204,6 +233,7 @@ class BotSupervisor:
             await asyncio.wait(running.updates, timeout=10)
         await running.bot.session.close()
         self._confirmed.discard(instance_id)
+        self._menu_buttons.pop(instance_id, None)
         logger.info("Stopped @%s", running.config.username)
 
     async def _poll(self, running: RunningBot) -> None:

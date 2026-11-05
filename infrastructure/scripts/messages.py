@@ -29,7 +29,7 @@ import sys
 from dataclasses import dataclass, field
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-SOURCE_DIRS = ("apps", "bot", "core")
+SOURCE_DIRS = ("apps", "bot", "core", "webapp")
 CODE_CATALOG = "django.po"
 TARGET_LANGUAGES = ("uk", "en")
 LANGUAGES = ("uk", "ru", "en")

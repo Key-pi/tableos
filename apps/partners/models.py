@@ -437,6 +437,16 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name=_lazy("Корзина"),
         help_text=_lazy("Сбор позиций перед заказом. Требует меню и модуль заказов."),
     )
+    # PQ-048: the Telegram Mini App next to the bot; the bot keeps working.
+    module_webapp_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Mini App (меню и заказ в приложении)"),
+        help_text=_lazy(
+            "Кнопка «📱 Меню и заказ» в боте открывает меню с фото, корзину и оформление "
+            "внутри Telegram. Бот работает как прежде, гость выбирает, где удобнее. Нужен "
+            "адрес сайта (WEBAPP_BASE_URL) и модуль корзины.",
+        ),
+    )
     module_orders_enabled = models.BooleanField(
         default=True,
         verbose_name=_lazy("Заказы"),
