@@ -21,7 +21,7 @@ from apps.partners.models import (
     PartnerBotSettings,
     text_key,
 )
-from apps.partners.networks import admin_partner_ids
+from apps.partners.networks import admin_partner_ids, owns_partner
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 from core.i18n import LANGUAGE_NAMES, _, texts
@@ -232,8 +232,6 @@ class PartnerAdmin(ScopedAdminMixin):
 class BotInstanceAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BOT_INSTANCES
     platform_only_fields = ("mode", "webhook_url")
-    # One bot for every venue of the network (PQ-047): the owner's call.
-    owner_only_fields = ("serves_network",)
     form = BotInstanceAdminForm
     list_display = (
         "display_name",
@@ -449,27 +447,66 @@ class NetworkAdmin(admin.ModelAdmin):
     venues in (Partner.network); an owner or manager of several venues sees
     the network report here."""
 
-    list_display = ("name", "points_count", "report_link")
+    list_display = ("name", "bot", "points_count", "report_link")
     search_fields = ("name",)
 
     @staticmethod
     def _points(request) -> list:
         return admin_partner_ids(request.user)
 
+    @staticmethod
+    def _owned_network_id(request):
+        """The network whose owner this person is (they may pick its bot)."""
+
+        points = admin_partner_ids(request.user)
+        if not points or not owns_partner(request.user, points[0]):
+            return None
+        return Partner.objects.filter(id=points[0]).values_list("network_id", flat=True).first()
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request).select_related("bot")
+        if request.user.is_superuser:
+            return queryset
+        return queryset.filter(id=self._owned_network_id(request))
+
     def has_module_permission(self, request):
         return request.user.is_superuser or len(self._points(request)) > 1
 
     def has_view_permission(self, request, obj=None):
+        if obj is not None and not request.user.is_superuser:
+            return obj.id == self._owned_network_id(request)
         return self.has_module_permission(request)
 
     def has_add_permission(self, request):
         return request.user.is_superuser
 
     def has_change_permission(self, request, obj=None):
-        return request.user.is_superuser
+        # The owner of the network names it and picks its bot (PQ-047).
+        if request.user.is_superuser:
+            return True
+        owned = self._owned_network_id(request)
+        return owned is not None and (obj is None or obj.id == owned)
 
     def has_delete_permission(self, request, obj=None):
         return request.user.is_superuser
+
+    def get_fields(self, request, obj=None):
+        return ("name", "bot")
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        form_class = super().get_form(request, obj, change=change, **kwargs)
+        network_id = obj.id if obj is not None else None
+
+        class NetworkForm(form_class):
+            def __init__(self, *args, **form_kwargs):
+                super().__init__(*args, **form_kwargs)
+                if "bot" in self.fields:
+                    # Only bots of this network's venues.
+                    self.fields["bot"].queryset = BotInstance.objects.filter(
+                        partner__network_id=network_id
+                    ).select_related("partner")
+
+        return NetworkForm
 
     @admin.display(description=_lazy("Точек"))
     def points_count(self, obj: Network) -> int:
@@ -512,8 +549,12 @@ class NetworkAdmin(admin.ModelAdmin):
             days = 7
         if days not in {value for value, _label in self.REPORT_PERIODS}:
             days = 7
+        owned = None if request.user.is_superuser else self._owned_network_id(request)
         context = {
             **self.admin_site.each_context(request),
+            "settings_url": (
+                reverse("admin:partners_network_change", args=[owned]) if owned else ""
+            ),
             "title": _("Отчёт по сети"),
             "rows": network_summary(points, days=days),
             "days": days,

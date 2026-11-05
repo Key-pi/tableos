@@ -9,7 +9,9 @@ from unittest.mock import AsyncMock, patch
 
 from aiogram.types import CallbackQuery, Chat, Message, Update, User
 from asgiref.sync import async_to_sync, sync_to_async
+from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.urls import reverse
 
 from apps.analytics.models import TrafficSource
 from apps.employees.invites import create_staff_invite
@@ -23,9 +25,10 @@ from apps.partners.models import (
     Partner,
     PartnerBotSettings,
 )
-from apps.partners.networks import bot_for_partner, remember_message_point
+from apps.partners.networks import bot_for_partner, remember_message_point, serves_network
 from apps.tables.models import Table
-from apps.users.models import TelegramAccount
+from apps.users.constants import AdminAccessPreset
+from apps.users.models import AdminAccessProfile, TelegramAccount
 from apps.users.models import User as DjangoUser
 from bot.handlers import points as points_handlers
 from bot.middlewares.message_points import MessagePointMiddleware
@@ -63,10 +66,13 @@ class NetworkBotFixture(TestCase):
         self.c = venue("Kava C", self.network, status=Partner.Status.SUSPENDED)
         self.bot_instance = BotInstance.objects.create(
             partner=self.a, display_name="Kava", username="kava_net_bot",
-            token_encrypted="", is_active=True, serves_network=True,
+            token_encrypted="", is_active=True,
         )
         self.bot_instance.set_token("123456789:AAEexampleexampleexampleexample")
         self.bot_instance.save()
+        # The owner picks it in the network's card (Admin → Сети заведений).
+        self.network.bot = self.bot_instance
+        self.network.save()
         register_runtime_configs(
             [
                 BotRuntimeConfig(
@@ -314,5 +320,54 @@ class StaffSeeTheVenueTests(NetworkBotFixture):
         self.assertEqual(_venue_name(self.bot_instance, self.b.id), "Kava B")
         text = staff_notification_text(notification, venue_name="Kava B")
         self.assertTrue(text.startswith("📍 Kava B\n<b>Стол #1 зовёт</b>"))
-        own = BotInstance(partner=self.b, serves_network=False)
+        own = BotInstance(partner=self.b)
         self.assertEqual(_venue_name(own, self.b.id), "")
+
+
+class ChoosingTheNetworkBotTests(NetworkBotFixture):
+    def test_only_a_bot_of_the_networks_venues_can_be_its_bot(self):
+        stranger = venue("Stranger", None)
+        foreign = BotInstance.objects.create(
+            partner=stranger, display_name="S", username="stranger_bot", token_encrypted=""
+        )
+        self.network.bot = foreign
+        with self.assertRaises(ValidationError):
+            self.network.full_clean()
+
+    def test_a_venue_moved_out_takes_its_bot_along_as_its_own(self):
+        self.assertTrue(serves_network(self.bot_instance))
+        Partner.objects.filter(id=self.a.id).update(network=None)
+        self.bot_instance.refresh_from_db()
+        self.assertFalse(serves_network(self.bot_instance))
+        self.assertIsNone(bot_for_partner(self.b.id))
+
+    def test_the_owner_of_the_network_picks_its_bot_in_admin(self):
+        def admin_user(username, owner):
+            user = DjangoUser.objects.create_user(
+                username=username, password="x", partner=self.a, is_staff=True,
+                role=DjangoUser.Role.OWNER if owner else DjangoUser.Role.MANAGER,
+            )
+            AdminAccessProfile.objects.create(
+                user=user, partner=self.a, can_access_admin=True, is_partner_owner=owner,
+                preset=AdminAccessPreset.OWNER if owner else AdminAccessPreset.MANAGER,
+            )
+            return user
+
+        Network.objects.filter(id=self.network.id).update(bot=None)
+        url = reverse("admin:partners_network_change", args=[self.network.id])
+        manager = admin_user("kava_manager", owner=False)
+        AdminAccessProfile.objects.get(user=manager).extra_partners.add(self.b)
+        self.client.force_login(manager)
+        self.client.post(url, {"name": "Кава Мережа", "bot": str(self.bot_instance.id)})
+        self.network.refresh_from_db()
+        self.assertIsNone(self.network.bot_id)
+
+        self.client.force_login(admin_user("kava_owner2", owner=True))
+        report = self.client.get(reverse("admin:partners_network_report"))
+        self.assertContains(report, url)
+        response = self.client.post(
+            url, {"name": "Кава Мережа", "bot": str(self.bot_instance.id)}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.network.refresh_from_db()
+        self.assertEqual(self.network.bot, self.bot_instance)

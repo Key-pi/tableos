@@ -35,7 +35,7 @@ from apps.notifications.repositories import (
 from apps.partners.bot_texts import INLINE_BUTTON_TEXTS
 from apps.partners.languages import speaking_to_employee, speaking_to_guest
 from apps.partners.models import BotInstance, Partner
-from apps.partners.networks import bot_for_partner, remember_message_point
+from apps.partners.networks import bot_for_partner, remember_message_point, serves_network
 from apps.tables.services import get_active_table_session
 from apps.users.models import TelegramAccount
 from core.i18n import _
@@ -139,7 +139,7 @@ def _remember_points(bot_instance, partner_id, results) -> None:
     """In a network's bot, a button of this message acts for this venue
     later, whichever venue the reader has open (PQ-047)."""
 
-    if not bot_instance.serves_network:
+    if not serves_network(bot_instance):
         return
     for result in results:
         if len(result) > 5 and result[1] and result[5] is not None:
@@ -314,7 +314,7 @@ def staff_notification_text(notification: StaffNotification, *, venue_name: str 
 def _venue_name(bot_instance, partner_id) -> str:
     """The venue named in a staff message of a network's bot, else ""."""
 
-    if not bot_instance.serves_network:
+    if not serves_network(bot_instance):
         return ""
     return Partner.objects.filter(id=partner_id).values_list("name", flat=True).first() or ""
 

@@ -22,6 +22,20 @@ class Network(TimeStampedModel):
     later stages). A venue without a network is a network of one."""
 
     name = models.CharField(max_length=255, verbose_name=_lazy("Название сети"))
+    # PQ-047, stage 2: one bot for every venue; the guest picks the venue
+    # after /start (apps/partners/networks.py). Venues need no bots of their own.
+    bot = models.OneToOneField(
+        "partners.BotInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="network_of",
+        verbose_name=_lazy("Бот сети"),
+        help_text=_lazy(
+            "Один бот на все точки: гость выбирает заведение после /start, QR стола "
+            "выбирает его сам. Своих ботов точкам не нужно.",
+        ),
+    )
 
     class Meta:
         verbose_name = _lazy("сеть заведений")
@@ -30,6 +44,15 @@ class Network(TimeStampedModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.bot_id is not None and (
+            self.pk is None or self.bot.partner.network_id != self.pk
+        ):
+            raise ValidationError(
+                {"bot": _("Выберите бота одной из точек этой сети.")}
+            )
 
 
 class Partner(TimeStampedModel):
@@ -119,16 +142,6 @@ class BotInstance(TimeStampedModel):
     )
     webhook_url = models.URLField(blank=True, verbose_name=_lazy("Адрес webhook"))
     is_active = models.BooleanField(default=True, verbose_name=_lazy("Включён"))
-    # PQ-047, stage 2: one bot for every venue of the network; the guest
-    # picks the venue after /start (apps/partners/networks.py).
-    serves_network = models.BooleanField(
-        default=False,
-        verbose_name=_lazy("Бот всей сети"),
-        help_text=_lazy(
-            "Один бот на все точки сети: гость выбирает заведение после /start, QR стола "
-            "выбирает его сам. Работает, если заведение в сети.",
-        ),
-    )
 
     class RuntimeState(models.TextChoices):
         # Written by the bot service (bot/supervisor.py) on every check:

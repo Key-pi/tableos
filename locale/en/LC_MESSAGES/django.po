@@ -3257,12 +3257,24 @@ msgid "Название сети"
 msgstr "Network name"
 
 #: apps/partners/models.py
+msgid "Бот сети"
+msgstr "Network bot"
+
+#: apps/partners/models.py
+msgid "Один бот на все точки: гость выбирает заведение после /start, QR стола выбирает его сам. Своих ботов точкам не нужно."
+msgstr "One bot for every venue: the guest picks the venue after /start, a table QR picks it itself. Venues need no bots of their own."
+
+#: apps/partners/models.py
 msgid "сеть заведений"
 msgstr "venue network"
 
 #: apps/partners/models.py
 msgid "Сети заведений"
 msgstr "Venue networks"
+
+#: apps/partners/models.py
+msgid "Выберите бота одной из точек этой сети."
+msgstr "Pick a bot of one of this network's venues."
 
 #: apps/partners/models.py
 msgid "Приостановлен"
@@ -3335,14 +3347,6 @@ msgstr "Webhook URL"
 #: apps/partners/models.py
 msgid "Включён"
 msgstr "Enabled"
-
-#: apps/partners/models.py
-msgid "Бот всей сети"
-msgstr "Bot of the whole network"
-
-#: apps/partners/models.py
-msgid "Один бот на все точки сети: гость выбирает заведение после /start, QR стола выбирает его сам. Работает, если заведение в сети."
-msgstr "One bot for every venue of the network: the guest picks the venue after /start, a table QR picks it itself. Works when the venue is in a network."
 
 #: apps/partners/models.py
 msgid "Ещё не проверен"
@@ -3875,6 +3879,10 @@ msgstr "Text catalog"
 #: apps/partners/templates/admin/partners/network/report.html
 msgid "Цифры обновляются каждые 15 минут. Продажи — оплаченные счета и быстрые продажи, средний чек — на продажу. Видны только точки, которые вам доступны."
 msgstr "Figures refresh every 15 minutes. Sales are paid bills and quick sales; the average check is per sale. Only venues you can open are shown."
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "⚙ Настройки сети: название и бот"
+msgstr "⚙ Network settings: name and bot"
 
 #: apps/partners/templates/admin/partners/network/report.html
 msgid "Точка"

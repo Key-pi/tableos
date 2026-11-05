@@ -3,6 +3,7 @@
 {% block content %}
 <div class="px-4">
   <p style="margin-bottom: 12px;">{% tr "Цифры обновляются каждые 15 минут. Продажи — оплаченные счета и быстрые продажи, средний чек — на продажу. Видны только точки, которые вам доступны." %}</p>
+  {% if settings_url %}<p style="margin-bottom: 12px;"><a href="{{ settings_url }}">{% tr "⚙ Настройки сети: название и бот" %}</a></p>{% endif %}
   <p style="margin-bottom: 12px; display: flex; gap: 12px;">
     {% for value, label in periods %}
       {% if value == days %}<strong>{{ label }}</strong>{% else %}<a href="?days={{ value }}">{{ label }}</a>{% endif %}

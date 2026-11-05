@@ -3257,12 +3257,24 @@ msgid "Название сети"
 msgstr "Назва мережі"
 
 #: apps/partners/models.py
+msgid "Бот сети"
+msgstr "Бот мережі"
+
+#: apps/partners/models.py
+msgid "Один бот на все точки: гость выбирает заведение после /start, QR стола выбирает его сам. Своих ботов точкам не нужно."
+msgstr "Один бот на всі точки: гість обирає заклад після /start, QR стола обирає його сам. Власні боти точкам не потрібні."
+
+#: apps/partners/models.py
 msgid "сеть заведений"
 msgstr "мережа закладів"
 
 #: apps/partners/models.py
 msgid "Сети заведений"
 msgstr "Мережі закладів"
+
+#: apps/partners/models.py
+msgid "Выберите бота одной из точек этой сети."
+msgstr "Оберіть бота однієї з точок цієї мережі."
 
 #: apps/partners/models.py
 msgid "Приостановлен"
@@ -3335,14 +3347,6 @@ msgstr "Адреса webhook"
 #: apps/partners/models.py
 msgid "Включён"
 msgstr "Увімкнено"
-
-#: apps/partners/models.py
-msgid "Бот всей сети"
-msgstr "Бот усієї мережі"
-
-#: apps/partners/models.py
-msgid "Один бот на все точки сети: гость выбирает заведение после /start, QR стола выбирает его сам. Работает, если заведение в сети."
-msgstr "Один бот на всі точки мережі: гість обирає заклад після /start, QR стола обирає його сам. Працює, якщо заклад у мережі."
 
 #: apps/partners/models.py
 msgid "Ещё не проверен"
@@ -3875,6 +3879,10 @@ msgstr "Каталог текстів"
 #: apps/partners/templates/admin/partners/network/report.html
 msgid "Цифры обновляются каждые 15 минут. Продажи — оплаченные счета и быстрые продажи, средний чек — на продажу. Видны только точки, которые вам доступны."
 msgstr "Цифри оновлюються кожні 15 хвилин. Продажі — оплачені рахунки та швидкі продажі, середній чек — на продаж. Видно лише точки, доступні вам."
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "⚙ Настройки сети: название и бот"
+msgstr "⚙ Налаштування мережі: назва і бот"
 
 #: apps/partners/templates/admin/partners/network/report.html
 msgid "Точка"

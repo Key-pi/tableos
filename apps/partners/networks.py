@@ -70,8 +70,8 @@ def owns_partner(user, partner_id) -> bool:
 
 # --- stage 2: one bot for the network ---------------------------------------
 #
-# A bot with ``BotInstance.serves_network`` answers for every active venue
-# of its venue's network. The venue of an update is, in this order:
+# The network's bot (``Network.bot``) answers for every active venue of the
+# network. The venue of an update is, in this order:
 #   1. the venue of the message whose button was pressed or that was replied
 #      to (``BotMessagePoint``: a staff member's notification of venue B
 #      works while they browse venue A);
@@ -101,7 +101,15 @@ def network_points(network_id) -> list:
 
 
 def serves_network(bot_instance) -> bool:
-    return bool(bot_instance.serves_network and bot_instance.partner.network_id)
+    """Whether this bot is its network's bot. Its own venue must still be in
+    that network: a venue moved out takes its bot along, as a venue's bot."""
+
+    from apps.partners.models import Network
+
+    network_id = bot_instance.partner.network_id
+    return network_id is not None and Network.objects.filter(
+        id=network_id, bot_id=bot_instance.id
+    ).exists()
 
 
 def bot_for_partner(partner_id, *, active_only: bool = True):
@@ -120,11 +128,7 @@ def bot_for_partner(partner_id, *, active_only: bool = True):
     )
     if network_id is None:
         return None
-    return (
-        bots.filter(serves_network=True, partner__network_id=network_id)
-        .order_by("created_at")
-        .first()
-    )
+    return bots.filter(network_of__id=network_id, partner__network_id=network_id).first()
 
 
 def _save_choice(network_id, telegram_id: int, partner) -> None:
