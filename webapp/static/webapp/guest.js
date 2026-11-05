@@ -83,6 +83,11 @@
     var url = API + path;
     if (params) url += "?" + new URLSearchParams(params).toString();
     var options = { headers: { "X-Telegram-Init-Data": initData } };
+    // A slow network or tunnel: give up after a while and offer to retry
+    // instead of loading forever.
+    var controller = window.AbortController ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, 20000) : null;
+    if (controller) options.signal = controller.signal;
     if (body !== undefined) {
       options.method = "POST";
       options.headers["Content-Type"] = "application/json";
@@ -90,9 +95,11 @@
     }
     return fetch(url, options).then(function (response) {
       return response.json().catch(function () { return {}; }).then(function (data) {
+        clearTimeout(timer);
         return { ok: response.ok, status: response.status, data: data };
       });
     }, function () {
+      clearTimeout(timer);
       return { ok: false, status: 0, data: { error: T.error } };
     });
   }
@@ -162,12 +169,21 @@
   function fatal(result) {
     setMain(null);
     setBack(null);
-    var message = (result.data && result.data.error) || T.error ||
+    var data = result.data || {};
+    if (data.texts) T = data.texts;
+    var message = data.error || T.error ||
       "Откройте меню из бота в Telegram. / Open the menu from the bot in Telegram.";
+    var points = data.points || [];
     show(el("div", { class: "center" }, el("div", null,
       el("p", { text: message }),
       result.status === 0 || result.status >= 500
         ? el("button", { class: "chip", type: "button", text: T.retry || "↻", onclick: start })
+        : null,
+      points.length
+        ? el("button", { class: "chip", type: "button", text: T.change_point, onclick: function () {
+            state = { points: points, venue: null };
+            renderPoints();
+          } })
         : null)));
   }
 

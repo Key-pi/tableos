@@ -35,11 +35,12 @@ def mini_app_on(partner_id) -> bool:
     return _enabled(PartnerBotSettings.objects.filter(partner_id=partner_id))
 
 
-def mini_app_link(bot_instance_id, partner_id) -> str:
-    """The address to open for this venue's guest, or "" when not offered."""
+def mini_app_link(bot_instance_id, partner_id, page: str = "") -> str:
+    """The address to open for this venue (``page="staff/"``: the staff
+    screen), or "" when not offered."""
 
     url = mini_app_url(bot_instance_id)
-    return url if url and mini_app_on(partner_id) else ""
+    return f"{url}{page}" if url and mini_app_on(partner_id) else ""
 
 
 def menu_buttons(instance_ids) -> dict[str, tuple[str, str] | None]:

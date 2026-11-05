@@ -22,6 +22,9 @@ from core.i18n import N_
 from webapp.auth import InitDataError, TelegramUser, validate_init_data
 
 INIT_DATA_HEADER = "X-Telegram-Init-Data"
+# The guest's language is not known yet: these are in the platform's language.
+GONE = N_("Это меню больше не работает. Откройте меню из бота ещё раз.")
+REOPEN = N_("Откройте меню из бота ещё раз.")
 
 
 class WebAppDenied(Exception):
@@ -35,6 +38,8 @@ class WebAppDenied(Exception):
         self.code = code
         self.language = ""
         self.overrides: dict = {}
+        # Other venues of the network the guest may pick instead.
+        self.points: list = []
 
 
 @dataclass
@@ -60,10 +65,10 @@ def find_bot(bot_hex: str) -> BotInstance:
     try:
         bot_id = uuid.UUID(hex=bot_hex)
     except ValueError as exc:
-        raise WebAppDenied(404, "not found") from exc
+        raise WebAppDenied(404, GONE) from exc
     bot = BotInstance.objects.select_related("partner").filter(id=bot_id, is_active=True).first()
     if bot is None:
-        raise WebAppDenied(404, "not found")
+        raise WebAppDenied(404, GONE)
     return bot
 
 
@@ -72,7 +77,7 @@ def guest_request(request, bot_hex: str, *, picked_point=None) -> GuestRequest:
     try:
         user = validate_init_data(request.headers.get(INIT_DATA_HEADER, ""), bot.token)
     except InitDataError as exc:
-        raise WebAppDenied(401, "unauthorized", code="unauthorized") from exc
+        raise WebAppDenied(401, REOPEN, code="unauthorized") from exc
 
     if serves_network(bot):
         point = resolve_update_point(
@@ -101,6 +106,7 @@ def guest_request(request, bot_hex: str, *, picked_point=None) -> GuestRequest:
             )
         if denied is not None:
             denied.language, denied.overrides = language, overrides
+            denied.points = [point for point in points if point.id != partner.id]
             raise denied
         get_or_create_guest_profile_with_created(
             partner_id=partner.id,

@@ -13,6 +13,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    WebAppInfo,
 )
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ValidationError
@@ -133,6 +134,7 @@ from bot.keyboards.staff import (
 )
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
+from bot.services.mini_app import mini_app_link_for
 from bot.services.network import update_points_count
 from bot.states.staff_sale import StaffBillStates, StaffQuickSaleStates
 from bot.utils.html import escape_html
@@ -1627,8 +1629,11 @@ def _staff_home_text(partner, employee) -> str:
     )
 
 
-def _staff_home_keyboard(employee):
-    return build_staff_home_keyboard(
+STAFF_SCREEN_BUTTON = N_("📱 Рабочий экран")
+
+
+def _staff_home_keyboard(employee, screen_link: str = ""):
+    markup = build_staff_home_keyboard(
         can_quick_sale=_can_use_quick_sale(employee),
         can_view_day_report=_can_view_day_report(employee),
         can_manage_billing=_can_manage_billing(employee),
@@ -1636,6 +1641,21 @@ def _staff_home_keyboard(employee):
         can_view_tables=_can_view_tables(employee),
         can_invite=_can_invite(employee),
     )
+    if screen_link and _can_view_open_orders(employee):
+        # PQ-048: orders and calls on one screen that refreshes itself.
+        markup.inline_keyboard.insert(
+            0,
+            [
+                InlineKeyboardButton(
+                    text=_(STAFF_SCREEN_BUTTON), web_app=WebAppInfo(url=screen_link)
+                )
+            ],
+        )
+    return markup
+
+
+async def _staff_screen_link(bot: Bot, partner) -> str:
+    return await sync_to_async(mini_app_link_for)(bot.token, partner.id, "staff/")
 
 
 @router.message(Command("staff"))
@@ -1648,7 +1668,8 @@ async def staff_help_handler(message: Message, bot: Bot) -> None:
         return
 
     await message.answer(
-        _staff_home_text(partner, employee), reply_markup=_staff_home_keyboard(employee)
+        _staff_home_text(partner, employee),
+        reply_markup=_staff_home_keyboard(employee, await _staff_screen_link(bot, partner)),
     )
 
 
@@ -1662,7 +1683,7 @@ async def staff_home_callback_handler(callback: CallbackQuery, bot: Bot) -> None
     await _safe_edit_message_text(
         callback.message,
         _staff_home_text(partner, employee),
-        reply_markup=_staff_home_keyboard(employee),
+        reply_markup=_staff_home_keyboard(employee, await _staff_screen_link(bot, partner)),
     )
     await callback.answer()
 

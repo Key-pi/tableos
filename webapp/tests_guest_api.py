@@ -100,6 +100,19 @@ class SignInTests(MiniAppFixture):
         self.assertEqual(self.call("state", auth_date=old)[0], 401)
         self.assertFalse(GuestProfile.objects.exists())
 
+    def test_an_old_opening_asks_to_open_the_menu_again(self):
+        old = int(time.time()) - 3 * 86400
+        status, body = self.call("state", auth_date=old)
+        self.assertEqual(status, 401)
+        self.assertIn("бота", body["error"])  # a sentence, not a code
+
+    def test_the_page_of_an_unknown_or_switched_off_bot_is_not_found(self):
+        self.assertEqual(self.client.get("/app/0123/").status_code, 404)
+        self.bot.is_active = False
+        self.bot.save()
+        response = self.client.get(reverse("webapp:guest", args=[self.bot.id.hex]))
+        self.assertEqual(response.status_code, 404)
+
     def test_a_switched_off_bot_or_unknown_address_is_not_found(self):
         self.bot.is_active = False
         self.bot.save()
@@ -300,6 +313,20 @@ class NetworkBotTests(MiniAppFixture):
         self.assertEqual(state["venue"]["name"], "Second")
         names = {item["id"] for item in self.call("menu")[1]["categories"][0]["items"]}
         self.assertTrue(all(name.startswith("SEC") for name in names))
+
+    def test_a_closed_venue_offers_the_other_venues(self):
+        self.call("point", {"point": self.second.id.hex})
+        Partner.objects.filter(id=self.second.id).update(status=Partner.Status.SUSPENDED)
+        # The saved choice is kept: the guest is told and offered the others.
+        PartnerBotSettings.objects.filter(partner=self.partner).update(module_webapp_enabled=True)
+        from apps.partners.models import NetworkGuestChoice
+        NetworkGuestChoice.objects.update(partner=self.second)
+        status, body = self.call("state", language="en")
+        self.assertEqual((status, body["code"]), (403, "suspended"))
+        self.assertEqual([point["name"] for point in body["points"]], ["Kava"])
+        self.assertEqual(body["texts"]["change_point"], "Change venue")
+        self.assertEqual(self.call("point", {"point": self.partner.id.hex})[0], 200)
+        self.assertEqual(self.call("state")[1]["venue"]["name"], "Kava")
 
     def test_a_venue_of_another_network_cannot_be_picked(self):
         stranger = make_venue("Stranger")

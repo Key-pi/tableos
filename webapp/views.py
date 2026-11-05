@@ -14,7 +14,7 @@ import uuid
 from decimal import Decimal, InvalidOperation
 from functools import wraps
 
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.csrf import csrf_exempt
@@ -58,7 +58,7 @@ from apps.tables.services import get_active_table_session
 from apps.users.models import GuestProfile
 from bot.services.content import BotContent
 from core.i18n import N_, _, texts
-from webapp.context import GuestRequest, WebAppDenied, guest_request, points_of
+from webapp.context import GuestRequest, WebAppDenied, find_bot, guest_request, points_of
 from webapp.texts import ui_texts
 
 # The bot's catalog texts (same entries, PQ-040).
@@ -85,7 +85,18 @@ def _error(status: int, message: str, code: str = "") -> JsonResponse:
 
 def _denied(exc: WebAppDenied) -> JsonResponse:
     with texts(exc.language, exc.overrides):
-        return _error(exc.status, _(exc.message), exc.code)
+        if not exc.points:
+            return _error(exc.status, _(exc.message), exc.code)
+        # A venue of the network is closed here: the guest may pick another.
+        return JsonResponse(
+            {
+                "error": _(exc.message),
+                "code": exc.code,
+                "points": [_point_json(point) for point in exc.points],
+                "texts": ui_texts(),
+            },
+            status=exc.status,
+        )
 
 
 def _body(request) -> dict:
@@ -144,6 +155,10 @@ def guest_api(method: str, *, picks_point: bool = False):
 
 @xframe_options_exempt  # Telegram Web shows Mini Apps in a frame
 def guest_page(request, bot_hex: str) -> HttpResponse:
+    try:
+        find_bot(bot_hex)
+    except WebAppDenied as exc:
+        raise Http404 from exc
     response = render(request, "webapp/guest.html", {"bot_hex": bot_hex})
     response["Content-Security-Policy"] = (
         "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"

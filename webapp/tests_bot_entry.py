@@ -131,3 +131,39 @@ class ChatMenuButtonTests(TestCase):
         self.assertIsNotNone(menu_buttons([bot.id])[str(bot.id)])
         Partner.objects.filter(id=other.id).update(status=Partner.Status.SUSPENDED)
         self.assertIsNone(menu_buttons([bot.id])[str(bot.id)])
+
+
+class StaffHomeButtonTests(GuestFlowFixture):
+    def setUp(self):
+        super().setUp()
+        from apps.employees.models import EmployeeProfile
+        from apps.users.models import TelegramAccount, User
+
+        user = User.objects.create_user(
+            username="flow_waiter", password="x", partner=self.partner, role=User.Role.WAITER
+        )
+        EmployeeProfile.objects.create(
+            partner=self.partner, user=user,
+            telegram_account=TelegramAccount.objects.get(
+                telegram_id=self.guest.telegram_account.telegram_id
+            ),
+        )
+
+    def home(self):
+        from bot.handlers import staff as staff_handlers
+
+        message = self._message()
+        async_to_sync(staff_handlers.staff_help_handler)(message, self.bot)
+        return message.answer.call_args.kwargs["reply_markup"]
+
+    def test_the_work_mode_opens_the_staff_screen_where_the_module_is_on(self):
+        with override_settings(WEBAPP_BASE_URL=BASE):
+            before = self.home()
+            self.assertFalse(any(button.web_app for button in _buttons(before)))
+            PartnerBotSettings.objects.filter(partner=self.partner).update(
+                module_webapp_enabled=True
+            )
+            after = self.home()
+        hex_id = BotInstance.objects.get(partner=self.partner).id.hex
+        self.assertEqual(after.inline_keyboard[0][0].web_app.url, f"{BASE}/app/{hex_id}/staff/")
+        self.assertEqual(after.inline_keyboard[1:], before.inline_keyboard)
