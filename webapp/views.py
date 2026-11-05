@@ -377,7 +377,10 @@ def checkout_view(request, guest: GuestRequest, body: dict) -> dict:
             for mode in quote.payment_modes
         ],
         "phone": profile.phone if profile is not None else "",
-        "slots": [{"code": slot, "label": _(SLOT_LABELS[slot])} for slot in quote.slots],
+        # Only pickup and delivery have a time; a parcel by post does not (PQ-034).
+        "slots": [
+            {"code": slot, "label": _(SLOT_LABELS[slot])} for slot in quote.slots
+        ] if channel in TIMED_CHANNELS else [],
         "closed": (
             closed_message(partner, channel)
             if channel in TIMED_CHANNELS and not quote.slots else ""

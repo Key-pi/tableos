@@ -36,6 +36,7 @@ from apps.billing.remote_orders import (
     shipping_cost_label,
     tracking_link,
 )
+from apps.billing.repositories import BillingRequestRepository
 from apps.billing.services import BillingServiceError, cancel_order
 from apps.billing.staff_actions import staff_order_actions
 from apps.bonuses.services import BonusServiceError
@@ -396,6 +397,13 @@ def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
         },
         "orders": [_order_json(order, now=now) for order in orders],
         "calls": calls,
+        # Open bill requests of guests, for the red badge of «Счета» (only
+        # to those who work with bills).
+        "bill_requests": [
+            request_id.hex
+            for request_id in BillingRequestRepository.open_for_partner(staff.partner.id)
+            .values_list("id", flat=True)
+        ] if can_manage_billing(employee, staff.content) else [],
     }
 
 

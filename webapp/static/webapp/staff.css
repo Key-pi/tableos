@@ -44,3 +44,4 @@
 .sheet { background: var(--bg); width: 100%; max-width: 520px; border-radius: 16px 16px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); }
 .sheet p { margin: 0 0 14px; }
 .sheet .acts { margin-top: 12px; }
+.chip.fresh { animation: flash 1.6s ease-out 3; }

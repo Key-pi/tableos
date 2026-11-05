@@ -20,6 +20,7 @@
   var filter = "all";
   var seen = null;       // order ids already shown
   var fresh = {};        // ids that just appeared: highlighted once
+  var freshTabs = {};    // tabs with something new: flash once
   var busy = false;
   var timer = null;
   var sound = false;
@@ -158,6 +159,13 @@
         var oldCalls = {};
         previous.calls.forEach(function (call) { oldCalls[call.id] = true; });
         data.calls.forEach(function (call) { if (!oldCalls[call.id]) arrived = true; });
+        var oldRequests = {};
+        (previous.bill_requests || []).forEach(function (id) { oldRequests[id] = true; });
+        data.bill_requests.forEach(function (id) {
+          if (!oldRequests[id]) { arrived = true; freshTabs.bills = true; }
+        });
+        // A guest asking for the bill: the open list of bills shows it at once.
+        if (freshTabs.bills && tab === "bills") tabData.bills = null;
       }
       seen = ids;
       if (arrived) { haptic("warning"); beep(); }
@@ -477,8 +485,10 @@
   }
 
   function tabsBar() {
-    var names = [["orders", T.orders + " " + data.orders.length]];
-    if (data.rights.billing) names.push(["bills", T.bills]);
+    var newOrders = data.orders.filter(function (order) { return order.status === "new"; }).length;
+    // [tab, title, red count]: new orders, guests asking for the bill.
+    var names = [["orders", T.orders + " " + data.orders.length, newOrders]];
+    if (data.rights.billing) names.push(["bills", T.bills, data.bill_requests.length]);
     if (data.rights.tables) names.push(["tables", T.tables]);
     if (data.rights.sale) names.push(["sale", T.sale]);
     if (data.rights.report) names.push(["report", T.report]);
@@ -486,10 +496,11 @@
     var bar = el("div", { class: "filters", role: "tablist" });
     names.forEach(function (item) {
       bar.appendChild(el("button", {
-        type: "button", class: "chip", role: "tab", "aria-pressed": String(tab === item[0]),
-        text: item[1], onclick: function () { switchTab(item[0]); }
-      }));
+        type: "button", class: "chip" + (item[2] && freshTabs[item[0]] ? " fresh" : ""), role: "tab",
+        "aria-pressed": String(tab === item[0]), onclick: function () { switchTab(item[0]); }
+      }, item[1], item[2] ? el("span", { class: "count", text: String(item[2]) }) : null));
     });
+    freshTabs = {};
     return bar;
   }
 

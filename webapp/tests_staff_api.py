@@ -318,6 +318,18 @@ class StaffBillsAndTablesTests(BillsFixture):
         self.assertEqual(status, 200)
         self.assertEqual(self.staff_call("bills", user_id=7700204)[1]["requests"], [])
 
+    def test_a_new_bill_request_is_counted_for_the_tab_badge(self):
+        from apps.billing.table_bills import create_billing_request_for_telegram_user
+
+        self.assertEqual(self.staff_call("state", user_id=7700204)[1]["bill_requests"], [])
+        create_billing_request_for_telegram_user(
+            partner_id=self.partner.id, telegram_id=TG, request_type="shared"
+        )
+        requests = self.staff_call("state", user_id=7700204)[1]["bill_requests"]
+        self.assertEqual(len(requests), 1)
+        # Without the right to bills the screen is not told about them.
+        self.assertEqual(self.staff_call("state", user_id=WAITER_TG)[1]["bill_requests"], [])
+
     def test_another_venues_bill_or_visit_is_not_found(self):
         other = make_venue("Other")
         self.assertEqual(self.staff_call("bill", query="?id=nope")[0], 404)

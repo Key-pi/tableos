@@ -268,6 +268,8 @@ class CheckoutTests(MiniAppFixture):
         self.details(carrier="nova_poshta", destination="Київ, відділення 12, Оля, 0501112233")
         quote = self.quote()
         self.assertEqual(quote["carriers"][0]["code"], "nova_poshta")
+        # No «when» by post: a parcel has no pickup time (PQ-034).
+        self.assertEqual((quote["slots"], quote["closed"]), ([], ""))
         status, body = self.call("place", {
             "payment": "prepaid", "shipping_cost": quote["shipping_cost"],
             "expected_total": quote["total"], "expected_to_pay": quote["to_pay"],
