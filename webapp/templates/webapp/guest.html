@@ -5,6 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex">
   <title>Botera Shop</title>
+  <style>
+    /* Before guest.css: the page is never an empty dark screen. */
+    html, body { background: var(--tg-theme-bg-color, #fff); color: var(--tg-theme-text-color, #16181d); }
+  </style>
+  <script>
+    // An error before the page is drawn is shown on it, not hidden (PQ-048).
+    window.addEventListener("error", function (event) {
+      var box = document.getElementById("app");
+      var target = event.target || {};
+      var file = (target.src || target.href || event.filename || "").split("/").pop();
+      var text = target.src || target.href ? "not loaded" : (event.message || "error");
+      if (box && box.querySelector(".spinner")) {
+        box.textContent = "⚠️ " + text + " (" + file + ")";
+        box.style.padding = "24px";
+      }
+    }, true);
+  </script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="{% static 'webapp/guest.css' %}">
 </head>

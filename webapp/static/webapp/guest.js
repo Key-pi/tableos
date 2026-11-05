@@ -6,6 +6,11 @@
   "use strict";
 
   var tg = window.Telegram && window.Telegram.WebApp;
+  // Tell Telegram at once that the page is here: until then iOS and macOS
+  // keep their loading screen over it.
+  if (tg) {
+    try { tg.ready(); tg.expand(); } catch (ignored) { /* older Telegram */ }
+  }
   var root = document.getElementById("app");
   var API = root.dataset.api;
   var initData = tg ? tg.initData : "";
@@ -134,8 +139,13 @@
     }
   }
 
+  function clear(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
   function show(node) {
-    root.replaceChildren(node);
+    clear(root);
+    root.appendChild(node);
   }
 
   // --- loading -------------------------------------------------------------
@@ -334,7 +344,7 @@
 
     function renderList() {
       needle = query.trim().toLowerCase();
-      list.replaceChildren();
+      clear(list);
       var shown = 0;
       categories.forEach(function (category) {
         var items = category.items.filter(function (item) {
@@ -587,7 +597,5 @@
     fatal({ status: 401, data: {} });
     return;
   }
-  tg.ready();
-  tg.expand();
   start();
 })();
