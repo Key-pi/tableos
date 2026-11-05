@@ -1897,6 +1897,10 @@ msgid "Убирать позиции, отменять заказы в счёт�
 msgstr "Remove items, cancel orders in a bill and void bills. Only the venue owner grants it."
 
 #: apps/employees/models.py
+msgid "Копия сотрудника из точки"
+msgstr "Copy of the staff member from venue"
+
+#: apps/employees/models.py
 msgid "сотрудник"
 msgstr "staff member"
 

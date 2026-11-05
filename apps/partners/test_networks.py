@@ -236,3 +236,106 @@ class NetworkReportTests(NetworkFixture):
     def test_a_single_venue_has_no_network_report(self):
         self.assertEqual(self.report(self.alone_owner).status_code, 403)
 
+
+
+def form_data(response):
+    """The data of the change form as it is shown, ready to post back."""
+
+    form = response.context["adminform"].form
+    data = {}
+    for name in form.fields:
+        value = form[name].value()
+        if isinstance(value, bool):
+            if value:
+                data[name] = "on"
+        elif isinstance(value, (list, tuple)):
+            data[name] = [str(item) for item in value]
+        elif value is not None:
+            data[name] = str(value)
+    return data
+
+
+class VenueSettingsInAdminTests(NetworkFixture):
+    """The owner of a network sets up each venue from one login (PQ-047)."""
+
+    def setUp(self):
+        super().setUp()
+        from apps.partners.models import PartnerBotSettings
+        from apps.users.models import TelegramAccount
+
+        self.settings_a = PartnerBotSettings.objects.create(
+            partner=self.a, transfer_payment_details="IBAN A"
+        )
+        self.settings_b = PartnerBotSettings.objects.create(
+            partner=self.b, transfer_payment_details="IBAN B"
+        )
+        EmployeeProfile.objects.create(
+            partner=self.a, user=self.owner,
+            telegram_account=TelegramAccount.objects.create(telegram_id=9920001),
+        )
+        self.client.force_login(self.owner)
+        self.client.get(reverse("admin-point", args=[self.b.id.hex]))
+
+    def test_the_open_venue_card_with_its_address(self):
+        url = reverse("admin:partners_partner_change", args=[self.b.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = form_data(response)
+        self.assertIn("address", response.context["adminform"].form.fields)
+        data.update(name="Point B", address="Харків, Сумська 1", contact_phone="+380501112233")
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.b.refresh_from_db()
+        self.a.refresh_from_db()
+        self.assertEqual(self.b.address, "Харків, Сумська 1")
+        self.assertEqual(self.a.address, "")
+        # The venue of another network still does not open.
+        other = self.client.get(reverse("admin:partners_partner_change", args=[self.e.id]))
+        self.assertNotEqual(other.status_code, 200)
+
+    def test_the_open_venue_bot_settings_and_the_owner_is_told(self):
+        from apps.notifications.models import StaffNotification
+
+        url = reverse("admin:partners_partnerbotsettings_change", args=[self.settings_b.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        data = form_data(response)
+        self.assertIn("transfer_payment_details", data)
+        data["transfer_payment_details"] = "IBAN B NEW"
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.settings_a.refresh_from_db()
+        self.settings_b.refresh_from_db()
+        self.assertEqual(self.settings_b.transfer_payment_details, "IBAN B NEW")
+        self.assertEqual(self.settings_a.transfer_payment_details, "IBAN A")
+        # The network's owner works in Point B through their copy and is told.
+        alert = StaffNotification.objects.get(partner=self.b)
+        self.assertEqual(alert.employee.telegram_account.telegram_id, 9920001)
+        # Point A's settings do not open while Point B is open.
+        response = self.client.get(
+            reverse("admin:partners_partnerbotsettings_change", args=[self.settings_a.id])
+        )
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_opening_hours_go_to_the_open_venue(self):
+        from apps.partners.models import OpeningHours
+
+        response = self.client.post(
+            reverse("admin:partners_openinghours_add"),
+            {"scope": OpeningHours.Scope.COMMON, "weekday": "0",
+             "opens_at": "10:00", "closes_at": "22:00"},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(OpeningHours.objects.get().partner, self.b)
+
+    def test_copies_of_network_staff_stay_out_of_the_venue_users(self):
+        copy = EmployeeProfile.objects.get(partner=self.b, mirrored_from__isnull=False)
+        users = self.client.get(reverse("admin:users_user_changelist"))
+        self.assertNotIn(copy.user, users.context["cl"].result_list)
+        opened = self.client.get(reverse("admin:users_user_change", args=[copy.user.id]))
+        self.assertNotEqual(opened.status_code, 200)
+        add_access = self.client.get(reverse("admin:users_adminaccessprofile_add"))
+        choices = add_access.context["adminform"].form.fields["user"].queryset
+        self.assertNotIn(copy.user, choices)
+        add_staff = self.client.get(reverse("admin:employees_employeeprofile_add"))
+        self.assertNotIn(copy.user, add_staff.context["adminform"].form.fields["user"].queryset)

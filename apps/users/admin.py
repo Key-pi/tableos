@@ -215,8 +215,12 @@ class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
         if self.is_platform_admin(request):
             return queryset
         # AA-026: platform accounts are never part of a venue's user list,
-        # even when a superuser happens to carry the venue's partner.
-        return queryset.filter(is_superuser=False)
+        # even when a superuser happens to carry the venue's partner. Nor are
+        # the network staff's copies: they follow the person's own account
+        # (``apps/employees/network_staff.py``, PQ-047).
+        return queryset.filter(is_superuser=False).exclude(
+            employee_profile__mirrored_from__isnull=False
+        )
 
     def get_fieldsets(self, request, obj=None):
         # On the add page Django must use the add_fieldsets (password1/password2),

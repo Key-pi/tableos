@@ -180,7 +180,7 @@ class PartnerAdmin(ScopedAdminMixin):
     def get_list_display(self, request):
         if request.user.is_superuser:
             return self.list_display
-        return ("name", "timezone", "contact_phone", "created_at")
+        return ("name", "address", "timezone", "contact_phone", "created_at")
 
     def get_list_filter(self, request):
         if request.user.is_superuser:
@@ -206,6 +206,7 @@ class PartnerAdmin(ScopedAdminMixin):
                 {
                     "fields": (
                         "name",
+                        "address",  # shown to guests when they pick a venue (PQ-047)
                         "timezone",
                         "contact_phone",
                     )

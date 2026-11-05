@@ -267,10 +267,13 @@ class ScopedAdminMixin(admin.ModelAdmin):
 
         model = queryset.model
         field_names = {field.name for field in model._meta.fields}
+        if model is User:
+            # Copies of the network staff are not venue accounts (PQ-047).
+            return queryset.filter(partner_id=partner_scope_id, is_superuser=False).exclude(
+                employee_profile__mirrored_from__isnull=False
+            )
         if "partner" in field_names:
             return queryset.filter(partner_id=partner_scope_id)
         if model is Partner:
             return queryset.filter(id=partner_scope_id)
-        if model is User:
-            return queryset.filter(partner_id=partner_scope_id, is_superuser=False)
         return queryset

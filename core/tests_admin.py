@@ -88,7 +88,7 @@ class OwnerFacingAdminTests(TestCase):
         self._assert_fieldsets_match_form(model_admin, request, self.partner)
         self.assertEqual(
             model_admin.get_list_display(request),
-            ("name", "timezone", "contact_phone", "created_at"),
+            ("name", "address", "timezone", "contact_phone", "created_at"),
         )
 
     def test_partner_bot_settings_admin_owner_fieldsets_match_form(self):

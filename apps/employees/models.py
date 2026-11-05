@@ -76,6 +76,18 @@ class EmployeeProfile(PartnerBoundModel):
         ),
     )
     is_active = models.BooleanField(default=True, verbose_name=_lazy("Активен"))
+    # PQ-047: the network's owner works in every venue of it, a manager in
+    # the venues given to them — through a copy of their own staff profile
+    # kept by apps/employees/network_staff.py.
+    mirrored_from = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="mirrors",
+        editable=False,
+        verbose_name=_lazy("Копия сотрудника из точки"),
+    )
 
     class Meta:
         verbose_name = _lazy("сотрудник")
