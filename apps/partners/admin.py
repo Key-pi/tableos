@@ -491,7 +491,18 @@ class NetworkAdmin(admin.ModelAdmin):
         return request.user.is_superuser
 
     def get_fields(self, request, obj=None):
-        return ("name", "bot")
+        return ("name", "bot", "bonus_mode")
+
+    def get_readonly_fields(self, request, obj=None):
+        # Shared bonuses are one-way for the owner (PQ-047): splitting the
+        # balance back would leave venues with spent or negative balances.
+        if (
+            obj is not None
+            and obj.bonus_mode == Network.BonusMode.SHARED
+            and not request.user.is_superuser
+        ):
+            return ("bonus_mode",)
+        return ()
 
     def get_form(self, request, obj=None, change=False, **kwargs):
         form_class = super().get_form(request, obj, change=change, **kwargs)

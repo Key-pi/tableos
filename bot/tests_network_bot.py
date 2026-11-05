@@ -358,7 +358,9 @@ class ChoosingTheNetworkBotTests(NetworkBotFixture):
         manager = admin_user("kava_manager", owner=False)
         AdminAccessProfile.objects.get(user=manager).extra_partners.add(self.b)
         self.client.force_login(manager)
-        self.client.post(url, {"name": "Кава Мережа", "bot": str(self.bot_instance.id)})
+        self.client.post(
+            url, {"name": "Кава Мережа", "bot": str(self.bot_instance.id), "bonus_mode": "separate"}
+        )
         self.network.refresh_from_db()
         self.assertIsNone(self.network.bot_id)
 
@@ -366,7 +368,7 @@ class ChoosingTheNetworkBotTests(NetworkBotFixture):
         report = self.client.get(reverse("admin:partners_network_report"))
         self.assertContains(report, url)
         response = self.client.post(
-            url, {"name": "Кава Мережа", "bot": str(self.bot_instance.id)}
+            url, {"name": "Кава Мережа", "bot": str(self.bot_instance.id), "bonus_mode": "separate"}
         )
         self.assertEqual(response.status_code, 302)
         self.network.refresh_from_db()

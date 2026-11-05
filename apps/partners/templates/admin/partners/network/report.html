@@ -17,6 +17,8 @@
         <th style="text-align: right;">{% tr "Продаж" %}</th>
         <th style="text-align: right;">{% tr "Средний чек" %}</th>
         <th style="text-align: right;">{% tr "Заказов" %}</th>
+        <th style="text-align: right;">{% tr "Бонусов начислено" %}</th>
+        <th style="text-align: right;">{% tr "Бонусов списано" %}</th>
       </tr>
     </thead>
     <tbody>
@@ -27,6 +29,8 @@
           <td style="padding: 6px 8px; text-align: right;">{{ row.sales }}</td>
           <td style="padding: 6px 8px; text-align: right;">{{ row.average_check }}</td>
           <td style="padding: 6px 8px; text-align: right;">{{ row.orders }}</td>
+          <td style="padding: 6px 8px; text-align: right;">{{ row.bonus_accrued }}</td>
+          <td style="padding: 6px 8px; text-align: right;">{{ row.bonus_redeemed }}</td>
         </tr>
       {% endfor %}
     </tbody>

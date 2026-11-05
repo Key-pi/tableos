@@ -1,5 +1,6 @@
 from django.utils import timezone
 
+from apps.partners.networks import shared_bonus_scope
 from apps.users.models import GuestProfile, TelegramAccount
 
 
@@ -59,6 +60,8 @@ def get_or_create_guest_profile_with_created(
     guest_profile, created = GuestProfile.objects.get_or_create(
         partner_id=partner_id,
         telegram_account=telegram_account,
+        # One guest code for a network with shared bonuses (PQ-047).
+        defaults={"customer_code": _network_customer_code(partner_id, telegram_account.id)},
     )
     return (
         GuestProfile.objects.select_related("telegram_account").get(id=guest_profile.id),
@@ -99,3 +102,55 @@ def set_guest_language(*, partner_id, telegram_id: int, language: str) -> GuestP
         guest.language = language
         guest.save(update_fields=["language", "updated_at"])
     return guest
+
+
+def _network_customer_code(partner_id, telegram_account_id) -> str:
+    """The code this person already has in a network with shared bonuses,
+    if it is free at this venue; "" lets the profile make its own."""
+
+    scope = shared_bonus_scope(partner_id)
+    if scope is None:
+        return ""
+    code = (
+        GuestProfile.objects.filter(
+            partner_id__in=scope.partner_ids, telegram_account_id=telegram_account_id
+        )
+        .order_by("created_at")
+        .values_list("customer_code", flat=True)
+        .first()
+    )
+    if not code or GuestProfile.objects.filter(partner_id=partner_id, customer_code=code).exists():
+        return ""
+    return code
+
+
+def find_guest_by_customer_code(partner_id, customer_code: str) -> GuestProfile:
+    """The guest a cashier names by code. In a network with shared bonuses
+    (PQ-047) a code from any venue works: the guest gets a profile here if
+    they had none. A code of this venue's own guest wins. Raises
+    ``GuestProfile.DoesNotExist``."""
+
+    code = customer_code.strip().upper()
+    try:
+        return GuestProfile.objects.select_related("telegram_account").get(
+            partner_id=partner_id, customer_code=code
+        )
+    except GuestProfile.DoesNotExist:
+        scope = shared_bonus_scope(partner_id)
+        if scope is None:
+            raise
+    elsewhere = (
+        GuestProfile.objects.filter(partner_id__in=scope.partner_ids, customer_code=code)
+        .order_by("created_at")
+        .first()
+    )
+    if elsewhere is None:
+        raise GuestProfile.DoesNotExist(f"No guest with code {code} in the network.")
+    profile, _created = GuestProfile.objects.get_or_create(
+        partner_id=partner_id,
+        telegram_account_id=elsewhere.telegram_account_id,
+        defaults={
+            "customer_code": _network_customer_code(partner_id, elsewhere.telegram_account_id)
+        },
+    )
+    return GuestProfile.objects.select_related("telegram_account").get(id=profile.id)

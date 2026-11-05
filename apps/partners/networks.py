@@ -267,3 +267,31 @@ def forget_old_message_points() -> int:
     since = timezone.now() - timedelta(days=MESSAGE_POINT_DAYS)
     deleted, _detail = BotMessagePoint.objects.filter(created_at__lt=since).delete()
     return deleted
+
+
+# --- stage 3: shared bonuses --------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SharedBonusScope:
+    network_id: object
+    partner_ids: list  # every venue of the network: their ledgers add up
+
+
+def shared_bonus_scope(partner_id) -> SharedBonusScope | None:
+    """The network whose venues share one bonus balance (PQ-047), if this
+    venue is in one; None keeps the venue's own balance."""
+
+    from apps.partners.models import Network
+
+    row = (
+        Partner.objects.filter(id=partner_id)
+        .values_list("network_id", "network__bonus_mode")
+        .first()
+    )
+    if row is None or row[0] is None or row[1] != Network.BonusMode.SHARED:
+        return None
+    return SharedBonusScope(
+        network_id=row[0],
+        partner_ids=list(Partner.objects.filter(network_id=row[0]).values_list("id", flat=True)),
+    )

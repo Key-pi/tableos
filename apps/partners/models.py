@@ -37,6 +37,24 @@ class Network(TimeStampedModel):
         ),
     )
 
+    class BonusMode(models.TextChoices):
+        SEPARATE = "separate", _lazy("Раздельные: свой баланс в каждой точке")
+        SHARED = "shared", _lazy("Общие: один баланс во всех точках")
+
+    # PQ-047, stage 3: each venue accrues by its own programs; with a shared
+    # balance the guest spends it at any venue (apps/bonuses/services.py).
+    bonus_mode = models.CharField(
+        max_length=16,
+        choices=BonusMode.choices,
+        default=BonusMode.SEPARATE,
+        verbose_name=_lazy("Бонусы в сети"),
+        help_text=_lazy(
+            "Общие: бонусы, накопленные в точках, складываются; каждая точка начисляет по "
+            "своей программе, тратить можно в любой; один код гостя на сеть. Включив общие, "
+            "обратно переключить нельзя.",
+        ),
+    )
+
     class Meta:
         verbose_name = _lazy("сеть заведений")
         verbose_name_plural = _lazy("Сети заведений")
@@ -787,3 +805,32 @@ class BotMessagePoint(TimeStampedModel):
             )
         ]
         indexes = [models.Index(fields=["created_at"])]
+
+
+class NetworkWallet(TimeStampedModel):
+    """A guest's shared bonus balance in a network (PQ-047, stage 3).
+
+    The ledger stays at each venue (``BonusTransaction``); ``balance`` is the
+    sum of the person's transactions at every venue of the network. The row
+    is locked after the venue's ``GuestProfile`` by every bonus change, so
+    two venues cannot spend the same balance at once."""
+
+    network = models.ForeignKey(
+        Network, on_delete=models.CASCADE, related_name="wallets", verbose_name=_lazy("Сеть")
+    )
+    telegram_account = models.ForeignKey(
+        "users.TelegramAccount", on_delete=models.CASCADE, related_name="network_wallets",
+        verbose_name="Telegram",
+    )
+    balance = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0, verbose_name=_lazy("Общий баланс")
+    )
+
+    class Meta:
+        verbose_name = _lazy("общий баланс гостя в сети")
+        verbose_name_plural = _lazy("Общие балансы гостей в сетях")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["network", "telegram_account"], name="unique_network_wallet"
+            )
+        ]

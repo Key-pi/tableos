@@ -3293,6 +3293,22 @@ msgid "Один бот на все точки: гость выбирает за�
 msgstr "Один бот на всі точки: гість обирає заклад після /start, QR стола обирає його сам. Власні боти точкам не потрібні."
 
 #: apps/partners/models.py
+msgid "Раздельные: свой баланс в каждой точке"
+msgstr "Окремі: свій баланс у кожній точці"
+
+#: apps/partners/models.py
+msgid "Общие: один баланс во всех точках"
+msgstr "Спільні: один баланс у всіх точках"
+
+#: apps/partners/models.py
+msgid "Бонусы в сети"
+msgstr "Бонуси в мережі"
+
+#: apps/partners/models.py
+msgid "Общие: бонусы, накопленные в точках, складываются; каждая точка начисляет по своей программе, тратить можно в любой; один код гостя на сеть. Включив общие, обратно переключить нельзя."
+msgstr "Спільні: бонуси, накопичені в точках, додаються; кожна точка нараховує за своєю програмою, витрачати можна в будь-якій; один код гостя на мережу. Увімкнувши спільні, назад переключити не можна."
+
+#: apps/partners/models.py
 msgid "сеть заведений"
 msgstr "мережа закладів"
 
@@ -3836,6 +3852,18 @@ msgstr "повідомлення бота мережі"
 msgid "Сообщения бота сети"
 msgstr "Повідомлення бота мережі"
 
+#: apps/partners/models.py
+msgid "Общий баланс"
+msgstr "Спільний баланс"
+
+#: apps/partners/models.py
+msgid "общий баланс гостя в сети"
+msgstr "спільний баланс гостя в мережі"
+
+#: apps/partners/models.py
+msgid "Общие балансы гостей в сетях"
+msgstr "Спільні баланси гостей у мережах"
+
 #: apps/partners/opening_hours.py
 msgid "Пн"
 msgstr "Пн"
@@ -3919,6 +3947,14 @@ msgstr "⚙ Налаштування мережі: назва і бот"
 #: apps/partners/templates/admin/partners/network/report.html
 msgid "Точка"
 msgstr "Точка"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Бонусов начислено"
+msgstr "Бонусів нараховано"
+
+#: apps/partners/templates/admin/partners/network/report.html
+msgid "Бонусов списано"
+msgstr "Бонусів списано"
 
 #: apps/partners/templates/admin/partners/network/report.html
 msgid "Вся сеть"

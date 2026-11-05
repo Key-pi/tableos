@@ -22,6 +22,7 @@ from apps.bonuses.services import (
     BonusServiceError,
     apply_bonus_programs,
     assert_bonus_balance_reconciled,
+    bonus_balance,
     get_redeemable_bonus_amount,
     sync_bonus_balance_from_ledger,
 )
@@ -1384,7 +1385,8 @@ def refund_bill_lines(
             )
             due = max(target - already, Decimal("0.00"))
             guest.refresh_from_db(fields=["loyalty_balance"])
-            take = min(due, max(Decimal(guest.loyalty_balance), Decimal("0.00")))
+            # Not below the balance — the shared one in a network (PQ-047).
+            take = min(due, max(bonus_balance(guest), Decimal("0.00")))
             if take > 0:
                 BonusTransaction.objects.create(
                     partner_id=bill.partner_id,

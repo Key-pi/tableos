@@ -2,7 +2,7 @@ from django import forms
 
 from apps.bonuses.models import WalkInSale
 from apps.users.models import GuestProfile
-from apps.users.selectors import get_guest_profile_by_customer_code
+from apps.users.services import find_guest_by_customer_code
 from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
 
@@ -51,7 +51,7 @@ class WalkInSaleAdminForm(forms.ModelForm):
 
         if customer_code:
             try:
-                guest = get_guest_profile_by_customer_code(partner.id, customer_code)
+                guest = find_guest_by_customer_code(partner.id, customer_code)
             except GuestProfile.DoesNotExist as exc:
                 self.add_error(
                     "customer_code_input",
