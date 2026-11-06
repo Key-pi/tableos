@@ -15,7 +15,7 @@
 
 ``update`` добавляет новые тексты с пустым переводом и убирает те, которых
 в коде больше нет; готовые переводы сохраняет. Тест
-``core/tests_i18n_catalog.py`` требует, чтобы ``check`` был пуст.
+``tests/core/test_i18n_catalog.py`` требует, чтобы ``check`` был пуст.
 """
 
 from __future__ import annotations

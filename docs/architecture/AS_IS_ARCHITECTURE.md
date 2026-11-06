@@ -69,7 +69,7 @@ Admin по-русски:
 - строки темы Unfold — `LOCALE_PATHS` → `locale/ru/LC_MESSAGES/theme.po`,
   `django.mo` собирает `infrastructure/scripts/messages.py compile`, gettext
   не нужен;
-- проверка — `core/tests_admin_language.py`.
+- проверка — `tests/core/test_admin_language.py`.
 
 Продакшен (AA-038, `docs/engineering/DEPLOYMENT.md`): `docker-compose.prod.yml`
 задаёт `core.settings.production` всем процессам. Модуль отказывается
@@ -532,7 +532,7 @@ apps.notifications.tasks` — цикл, разорванный только им
 
 Порядок блокировок: `StaffInvite → EmployeeProfile` (возвращаемый бывший
 сотрудник). Гонки двух нажатий и двух подтверждений проверены на PostgreSQL
-(`apps/employees/test_invites.py:ClaimRaceTests`). Удалять приглашения в
+(`tests/apps/employees/test_invites.py:ClaimRaceTests`). Удалять приглашения в
 Admin нельзя — их отменяет действие «Отменить ссылку».
 
 ### Уведомления и рассылки
@@ -669,20 +669,20 @@ Admin показывает поля жизненного цикла, произ�
 - 853 тестов после исправлений по проверке Mini App (PQ-048), зелёные на SQLite и на
   PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
-  (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа
-  (`apps/orders/test_concurrency.py`); параллельные сканы QR, два гостя
+  (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
+  (`tests/apps/orders/test_concurrency.py`); параллельные сканы QR, два гостя
   сканируют пустой стол, оплата визита во время присоединения гостя,
   блокировка стола против проверки внешнего ключа (AA-040)
-  (`apps/tables/test_concurrency.py`); параллельное распределение по счёту,
+  (`tests/apps/tables/test_concurrency.py`); параллельное распределение по счёту,
   оплата бонусами, последняя оплата, аннулирование против оплаты и отмена
-  против выставления счёта (`apps/billing/test_concurrency.py`); два
+  против выставления счёта (`tests/apps/billing/test_concurrency.py`); два
   сотрудника вводят ТТН одной посылки
-  (`apps/billing/test_shipping_concurrency.py`); автоотмена против
-  подтверждения перевода (`apps/billing/test_unpaid_concurrency.py`); два
-  возврата одной строки (`apps/billing/test_refund_concurrency.py`); планы
+  (`tests/apps/billing/test_shipping_concurrency.py`); автоотмена против
+  подтверждения перевода (`tests/apps/billing/test_unpaid_concurrency.py`); два
+  возврата одной строки (`tests/apps/billing/test_refund_concurrency.py`); планы
   запросов открытых заказов и счетов используют частичные индексы (AA-045,
-  `apps/orders/test_open_indexes.py`). Тест
-  миграции (`apps/tables/test_visit_migration.py`) прогоняет заполнение
+  `tests/apps/orders/test_open_indexes.py`). Тест
+  миграции (`tests/apps/tables/test_visit_migration.py`) прогоняет заполнение
   визитов назад и вперёд.
 - Записанные прогоны — в
   [`../engineering/TESTING.md`](../engineering/TESTING.md).

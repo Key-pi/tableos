@@ -74,7 +74,7 @@ billing → guest_call → staff`. aiogram выбирает первый под�
    (`BotSupervisor._sync_menu_buttons`, [MINI_APP.md](MINI_APP.md)).
 
 `bot/main.py:run_polling` (обычный `start_polling`) остался для эмулятора и
-нагрузочного теста. Тесты сервиса — `bot/tests_supervisor.py`, на
+нагрузочного теста. Тесты сервиса — `tests/bot/test_supervisor.py`, на
 поддельном боте без сети.
 
 ## Договор обработчика

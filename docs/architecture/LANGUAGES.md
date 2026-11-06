@@ -25,7 +25,7 @@
   python infrastructure/scripts/messages.py compile  # .po → django.mo
   ```
 
-  Тест `core/tests_i18n_catalog.py` падает, если какой-то текст кода не
+  Тест `tests/core/test_i18n_catalog.py` падает, если какой-то текст кода не
   переведён, если в переводе другие подстановки `{…}` или HTML-теги, если в
   каталоге остались тексты, которых в коде нет, или `django.mo` устарел.
 - **Свои тексты владельца** — `apps/partners/models.py:BotText`: заведение,
@@ -38,7 +38,7 @@
   выполняет обработчик внутри `core.i18n.texts(язык, свои_тексты)`. Язык и
   свои тексты живут в `asgiref.local.Local` — у каждого обновления свои, они
   переходят в `sync_to_async` (проверено тестом
-  `core/tests_i18n.py:OwnerTextTests.test_concurrent_updates_keep_their_own_language_and_texts`).
+  `tests/core/test_i18n.py:OwnerTextTests.test_concurrent_updates_keep_their_own_language_and_texts`).
   `data["language"]` доступен обработчикам. Свои тексты заведения
   (`apps/partners/languages.py:text_overrides`) берутся из кэша Django (Redis
   в продакшене) на 300 с; сохранение и удаление `BotText` сбрасывает запись
@@ -139,8 +139,8 @@ Admin (модели, формы), в каталог для замены не в�
   сайт; язык сохраняется в `User.language`.
 - Строки темы Unfold переведены в `locale/{ru,uk}/LC_MESSAGES/theme.po`
   (английский — сами строки темы); Django Admin переведён самим Django.
-- Тесты: `core/tests_admin_i18n.py` (язык пользователя, переключатель,
-  подписи моделей, ленивые подписи Admin), `core/tests_admin_language.py`.
+- Тесты: `tests/core/test_admin_i18n.py` (язык пользователя, переключатель,
+  подписи моделей, ленивые подписи Admin), `tests/core/test_admin_language.py`.
 
 ## Какой язык у человека
 
@@ -170,10 +170,10 @@ Admin (модели, формы), в каталог для замены не в�
 Набор тестов читает тексты так, как они написаны в коде: тестовый запуск
 работает с `LANGUAGE_CODE = "ru"` (`core/test_runner.py`). Русский при
 `LANGUAGE_CODE = "uk"`, как на сервере, проверяет
-`core/tests_i18n.py:CatalogTests` (каталоги Django при этом сбрасываются:
+`tests/core/test_i18n.py:CatalogTests` (каталоги Django при этом сбрасываются:
 язык замены фиксируется при загрузке каталога). Другие языки
-проверяются явно: `core/tests_i18n.py`, `bot/tests_language.py`,
-`apps/partners/test_languages.py`.
+проверяются явно: `tests/core/test_i18n.py`, `tests/bot/test_language.py`,
+`tests/apps/partners/test_languages.py`.
 
 ## Что уже на языках
 

@@ -58,7 +58,7 @@
 | `./.venv/bin/ruff format --check --no-cache .` | FAIL — 54 файла были бы переформатированы; 167 уже отформатированы |
 | `docker compose config --quiet` | PASS |
 
-Ошибки Ruff были в закоммиченных файлах приложения ещё до аудита. Затронуты, в том числе, `apps/analytics/tests.py`, `apps/billing/tests.py`, `apps/notifications/services.py`, `apps/notifications/tests.py`, `apps/orders/tests.py`, `bot/handlers/profile.py`, `bot/handlers/staff.py`, `bot/tests_menu.py` и `bot/tests_staff.py`. В режиме аудита их намеренно не исправляли.
+Ошибки Ruff были в закоммиченных файлах приложения ещё до аудита. Затронуты, в том числе, `tests/apps/analytics/test_analytics.py`, `tests/apps/billing/test_billing.py`, `apps/notifications/services.py`, `tests/apps/notifications/test_notifications.py`, `tests/apps/orders/test_orders.py`, `bot/handlers/profile.py`, `bot/handlers/staff.py`, `tests/bot/test_menu.py` и `tests/bot/test_staff.py`. В режиме аудита их намеренно не исправляли.
 
 ## Расхождения документации на базе
 

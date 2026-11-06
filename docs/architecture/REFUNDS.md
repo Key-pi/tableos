@@ -58,7 +58,7 @@
 
 Блокировки: `Bill → BillItem → GuestProfile → Order` — тот же порядок, что
 при изменении счёта. Два одновременных возврата одной строки дают один
-возврат (`apps/billing/test_refund_concurrency.py`, PostgreSQL).
+возврат (`tests/apps/billing/test_refund_concurrency.py`, PostgreSQL).
 
 ## Модель данных
 

@@ -79,7 +79,7 @@
   «переводом заранее» и/или «при получении» на модуль
   (`Order.payment_timing`). Новый модуль — с тестом, что он работает один
   и что его настройки и выключение не задевают остальные
-  (`apps/billing/test_shipping.py:ModuleIndependenceTests`).
+  (`tests/apps/billing/test_shipping.py:ModuleIndependenceTests`).
 - **Самовывоз:** перевод на реквизиты заведения (подтверждает
   владелец/менеджер/кассир) и/или оплата на месте, бонусы по желанию,
   телефон обязателен, только в часы работы (`OpeningHours`).
@@ -180,6 +180,9 @@
 
 - Ветка: `clean-project-rules`. Коммитить небольшими зелёными шагами;
   пушить в неё, когда владелец просит.
+- Тесты — только в `tests/` по модулям кода (`tests/apps/<приложение>/`,
+  `tests/bot/`, `tests/core/`, `tests/webapp/`), файлы `test_*.py`; запуск
+  части — `manage.py test tests.apps.billing` (`docs/engineering/TESTING.md`).
 - Сначала тест, который падает; для блокировок — тест на PostgreSQL
   (`TransactionTestCase`, `skipUnless(connection.vendor == "postgresql")`) и
   проверка мутацией (убрать защиту → тест падает).
@@ -196,7 +199,7 @@
   `_("Сумма: {total} грн", total=...)`), переводы на украинский и английский —
   в `locale/{uk,en}/LC_MESSAGES/django.po`: `python
   infrastructure/scripts/messages.py update`, перевести, `… compile`
-  (PQ-040, `docs/architecture/LANGUAGES.md`; `core/tests_i18n_catalog.py`
+  (PQ-040, `docs/architecture/LANGUAGES.md`; `tests/core/test_i18n_catalog.py`
   проверяет полноту). Подписи, вычисляемые при импорте (`verbose_name`,
   `choices`, `@admin.display`, `fieldsets`), — `gettext_lazy as _lazy`; в
   шаблонах — `{% load botera_i18n %}{% tr "…" %}`; текст для другого
@@ -204,7 +207,7 @@
   `speaking_to_guest(...)`; `_` не использовать как переменную
   (`_unused`). Сообщения бота в HTML, все динамические значения через
   `escape_html`. У новых полей и вариантов — `verbose_name` и подписи
-  по-русски (`core/tests_admin_language.py`); строки темы Admin —
+  по-русски (`tests/core/test_admin_language.py`); строки темы Admin —
   `locale/<язык>/LC_MESSAGES/theme.po`.
 - Telegram callback_data ≤ 64 байт: UUID в виде hex, состояние шагов — в
   самом callback (без FSM, где можно).
