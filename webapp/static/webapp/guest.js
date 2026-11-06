@@ -29,6 +29,17 @@
 
   // --- small helpers ------------------------------------------------------
 
+  // A photo that does not load (a dead link, a tunnel answering with its own
+  // page) shows the placeholder instead of the broken-image icon.
+  function photoMissing(placeholder) {
+    return function (event) {
+      var box = event.target.parentNode;
+      if (!box) return;
+      box.removeChild(event.target);
+      box.textContent = placeholder;
+    };
+  }
+
   function el(tag, attrs) {
     var node = document.createElement(tag);
     Object.keys(attrs || {}).forEach(function (key) {
@@ -289,7 +300,8 @@
     var photo = el("div", { class: "photo" });
     if (item.photo) {
       photo.appendChild(el("img", { src: item.photo, alt: "", loading: "lazy",
-                                    style: "width:100%;height:100%;object-fit:cover;display:block" }));
+                                    style: "width:100%;height:100%;object-fit:cover;display:block",
+                                    onerror: photoMissing("🍽") }));
     } else {
       photo.textContent = "🍽";
     }
@@ -405,7 +417,8 @@
       var thumb = el("div", { class: "thumb" });
       if (line.photo) {
         thumb.appendChild(el("img", { src: line.photo, alt: "", loading: "lazy",
-                                      style: "width:100%;height:100%;object-fit:cover;border-radius:10px" }));
+                                      style: "width:100%;height:100%;object-fit:cover;border-radius:10px",
+                                      onerror: photoMissing("") }));
       }
       section.appendChild(el("div", { class: "line" },
         thumb,
