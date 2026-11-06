@@ -19,13 +19,15 @@ TG = 7700101
 TOKEN = "777000111:AAEwebappexampleexampleexample01"
 
 
-def make_venue(name, *, network=None, status=Partner.Status.ACTIVE, webapp=True):
+def make_venue(name, *, network=None, status=Partner.Status.ACTIVE, webapp=True,
+               staff_screen=True):
     partner = Partner.objects.create(
         name=name, slug=name.lower().replace(" ", "-"), status=status, network=network,
         timezone="Europe/Kyiv",
     )
     PartnerBotSettings.objects.create(
-        partner=partner, module_webapp_enabled=webapp, module_menu_enabled=True,
+        partner=partner, module_webapp_enabled=webapp, module_staff_screen_enabled=staff_screen,
+        module_menu_enabled=True,
         module_cart_enabled=True, module_orders_enabled=True, module_tables_enabled=True,
         module_pickup_enabled=True, module_delivery_enabled=True,
         module_shipping_enabled=True, shipping_nova_poshta=True,

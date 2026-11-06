@@ -226,6 +226,12 @@ class WalkInSale(PartnerBoundModel):
         related_name="created_walk_in_sales",
         verbose_name=_lazy("Кто создал"),
     )
+    # One sale per key: a repeated request (a slow line, a second press)
+    # gets the sale already saved (Mini App, PQ-048).
+    request_key = models.CharField(
+        max_length=64, blank=True, default="", editable=False,
+        verbose_name=_lazy("Ключ запроса"),
+    )
 
     class Meta:
         verbose_name = _lazy("быстрая продажа")
@@ -235,7 +241,12 @@ class WalkInSale(PartnerBoundModel):
             models.CheckConstraint(
                 condition=Q(amount__gt=0),
                 name="walk_in_sale_amount_positive",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["partner", "request_key"],
+                condition=~Q(request_key=""),
+                name="walk_in_sale_request_key_unique",
+            ),
         ]
 
     def __str__(self) -> str:

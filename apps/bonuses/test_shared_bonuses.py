@@ -247,3 +247,69 @@ class SettingAndHistoryTests(SharedBonusFixture, TestCase):
         self.share()
         self.network.refresh_from_db()
         self.assertEqual(model_admin.get_readonly_fields(request, self.network), ("bonus_mode",))
+
+
+@unittest.skipUnless(connection.vendor == "postgresql", "unique keys under load need PostgreSQL")
+class RepeatedSaleRaceTests(TransactionTestCase):
+    """The same quick sale sent twice at the same moment (a retry while the
+    first is still saving, Mini App PQ-048): one sale, one spend, one accrual."""
+
+    def test_two_copies_of_one_sale_at_once(self):
+        from apps.bonuses.models import WalkInSale
+        from apps.bonuses.services import (
+            register_walk_in_sale_from_menu_items_by_customer_code,
+            sync_bonus_balance_from_ledger,
+        )
+        from apps.menu.models import MenuCategory, MenuItem
+
+        partner = Partner.objects.create(
+            name="Кава", slug="kava-race", status=Partner.Status.ACTIVE
+        )
+        BonusProgram.objects.create(
+            partner=partner, name="Кешбэк", program_type=BonusProgram.ProgramType.CASHBACK,
+            trigger_event=BonusProgram.TriggerEvent.MANUAL_PURCHASE, percent=D("10"),
+            max_redeem_share=D("50"),
+        )
+        category = MenuCategory.objects.create(partner=partner, name="Кава")
+        latte = MenuItem.objects.create(
+            partner=partner, category=category, name="Лате", price="80.00", public_id="RACELAT"
+        )
+        guest = get_or_create_guest_profile(partner_id=partner.id, telegram_id=PERSON)
+        BonusTransaction.objects.create(
+            partner=partner, guest=guest, transaction_type="manual", amount=D("30.00"),
+            source_type="test", source_id="seed", idempotency_key="race-seed",
+        )
+        sync_bonus_balance_from_ledger(guest)
+        real_preview = services.preview_walk_in_sale_by_customer_code
+        barrier = threading.Barrier(2)
+
+        def slow_preview(**kwargs):
+            barrier.wait()  # both copies are past the "already saved?" check
+            return real_preview(**kwargs)
+
+        errors = []
+
+        def sell():
+            try:
+                register_walk_in_sale_from_menu_items_by_customer_code(
+                    partner_id=partner.id, customer_code=guest.customer_code,
+                    items=[{"menu_item_id": latte.id, "quantity": 2}],
+                    redeem_bonus=True, request_key="race-key-0001",
+                )
+            except Exception as exc:  # noqa: BLE001 — reported below
+                errors.append(exc)
+            finally:
+                close_old_connections()
+
+        with patch.object(services, "preview_walk_in_sale_by_customer_code", slow_preview):
+            threads = [threading.Thread(target=sell) for _copy in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(WalkInSale.objects.count(), 1)
+        sale = WalkInSale.objects.get()
+        self.assertEqual(BonusTransaction.objects.filter(walk_in_sale=sale).count(), 2)
+        guest.refresh_from_db()
+        assert_bonus_balance_reconciled(guest)

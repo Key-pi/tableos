@@ -3,6 +3,7 @@ as the bot's work mode through the same services."""
 
 from decimal import Decimal
 
+from django.test import TestCase as DjangoTestCase
 from django.urls import reverse
 
 from apps.billing.staff_actions import staff_order_actions
@@ -71,8 +72,30 @@ class StaffAccessTests(StaffFixture):
         self.assertEqual(self.staff_call("state", user_id=OWNER_TG)[0], 200)
 
     def test_the_module_is_checked(self):
-        PartnerBotSettings.objects.filter(partner=self.partner).update(module_webapp_enabled=False)
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            module_staff_screen_enabled=False
+        )
         self.assertEqual(self.staff_call("state")[1]["code"], "module_off")
+
+    def test_its_own_module_without_the_guests_mini_app_or_the_cart(self):
+        """PQ-033: the staff screen is a module of its own (owner, 2026-11-06)."""
+
+        order = self.place()
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            module_webapp_enabled=False, module_cart_enabled=False
+        )
+        status, body = self.staff_call("state")
+        self.assertEqual(status, 200, body)
+        self.assertEqual([card["id"] for card in body["orders"]], [order.public_id])
+        self.assertEqual(self.act(order, "accepted")[0], 200)
+
+    def test_switching_it_changes_nothing_for_guests(self):
+        guest_before = self.call("state")
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            module_staff_screen_enabled=False
+        )
+        guest_after = self.call("state")
+        self.assertEqual(guest_before, guest_after)
 
     def test_the_page(self):
         response = self.client.get(reverse("webapp:staff", args=[self.bot.id.hex]))
@@ -479,6 +502,60 @@ class StaffSaleAndReportTests(StaffFixture):
         self.assertEqual((sale.amount, sale.guest_id, sale.created_by), (Decimal("160.00"),
                          guest.id, self.cashier.user))
 
+    def _sale_with_bonuses(self):
+        from apps.bonuses.models import BonusProgram, BonusTransaction
+
+        BonusProgram.objects.create(
+            partner=self.partner, name="5%",
+            trigger_event=BonusProgram.TriggerEvent.MANUAL_PURCHASE,
+            program_type=BonusProgram.ProgramType.CASHBACK, percent=Decimal("5"),
+            max_redeem_share=Decimal("50"), is_active=True,
+        )
+        guest = GuestProfile.objects.get_or_create(
+            partner=self.partner, telegram_account=TelegramAccount.objects.get_or_create(
+                telegram_id=TG)[0],
+        )[0]
+        BonusTransaction.objects.create(
+            partner=self.partner, guest=guest, transaction_type="manual",
+            amount=Decimal("30.00"), source_type="test", source_id="seed",
+            idempotency_key=f"seed:{guest.id}",
+        )
+        from apps.bonuses.services import sync_bonus_balance_from_ledger
+
+        sync_bonus_balance_from_ledger(guest)
+        menu = self.staff_call("sale_menu", user_id=7700204)[1]
+        latte = next(item for item in menu["categories"][0]["items"] if item["name"] == "Лате")
+        return guest, {"customer_code": guest.customer_code, "items": {latte["id"]: 2},
+                       "redeem": True}
+
+    def test_a_repeated_sale_is_saved_once(self):
+        """A slow line: the screen gave up waiting, the cashier presses again —
+        the same key, the same sale; no second accrual or spend (PQ-048)."""
+
+        from apps.bonuses.models import BonusTransaction, WalkInSale
+
+        guest, body = self._sale_with_bonuses()
+        body["key"] = "6f1c2a4e-0b9d-4c55-9d3a-8a1f0f7e2b10"
+        first = self.staff_call("sale_confirm", body, user_id=7700204)
+        again = self.staff_call("sale_confirm", body, user_id=7700204)
+        self.assertEqual((first[0], again[0]), (200, 200), (first, again))
+        self.assertEqual(WalkInSale.objects.count(), 1)
+        sale = WalkInSale.objects.get()
+        self.assertGreater(sale.bonus_spent_amount, 0)
+        self.assertEqual(
+            BonusTransaction.objects.filter(walk_in_sale=sale).count(), 2  # spend + accrual
+        )
+        self.assertIn(str(sale.amount), again[1]["notice"])
+        # A new sale has a new key.
+        body["key"] = "0a7d3b51-55e2-4a3e-b1a6-2c4f9e8d7c61"
+        self.assertEqual(self.staff_call("sale_confirm", body, user_id=7700204)[0], 200)
+        self.assertEqual(WalkInSale.objects.count(), 2)
+
+    def test_a_broken_key_is_refused(self):
+        _guest, body = self._sale_with_bonuses()
+        body["key"] = "x" * 80
+        self.assertEqual(self.staff_call("sale_confirm", body, user_id=7700204)[0], 400)
+
     def test_unknown_code_empty_sale_and_a_waiter_are_refused(self):
         self.assertEqual(self.staff_call(
             "sale_preview", {"customer_code": "NOPE00", "items": {}}, user_id=7700204
@@ -550,3 +627,28 @@ class StaffStateVersionTests(StaffFixture):
         version = self.staff_call("state")[1]["version"]
         other = self.staff_call("state", user_id=WAITER_TG, query=f"?since={version}")[1]
         self.assertNotIn("unchanged", other)  # other rights, other screen
+
+
+class StaffScreenMigrationTests(DjangoTestCase):
+    """partners.0025: where the staff screen worked (the guests' Mini App with
+    the cart), it stays on as its own module; nowhere else."""
+
+    def test_only_where_it_worked(self):
+        import importlib
+
+        from django.apps import apps
+
+        migration = importlib.import_module("apps.partners.migrations.0025_staff_screen_module")
+        make_venue("Both", staff_screen=False)
+        no_cart = make_venue("No cart", staff_screen=False)
+        PartnerBotSettings.objects.filter(partner=no_cart).update(module_cart_enabled=False)
+        off = make_venue("Off", webapp=False, staff_screen=False)
+        migration.keep_staff_screens(apps, None)
+        on = set(
+            PartnerBotSettings.objects.filter(module_staff_screen_enabled=True)
+            .values_list("partner__name", flat=True)
+        )
+        self.assertEqual(on, {"Both"})
+        self.assertFalse(
+            PartnerBotSettings.objects.get(partner=off).module_staff_screen_enabled
+        )

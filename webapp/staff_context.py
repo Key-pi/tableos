@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 from apps.employees.models import EmployeeProfile
 from apps.employees.selectors import get_staff_employee_by_telegram
-from apps.partners.mini_app import mini_app_on_for
+from apps.partners.mini_app import staff_screen_on_for
 from apps.partners.models import BotInstance, Partner
 from apps.partners.networks import network_points, serves_network
 from bot.services.content import BotContent
@@ -94,7 +94,7 @@ def staff_request(request, bot_hex: str) -> StaffRequest:
     )
     if partner.status != Partner.Status.ACTIVE:
         raise deny(403, N_("Заведение сейчас не принимает заказы."), "suspended")
-    if not mini_app_on_for(partner_bot_settings(partner)):
+    if not staff_screen_on_for(partner_bot_settings(partner)):
         raise deny(
             403,
             N_("Рабочий экран здесь пока не включён — работайте в чате бота."),

@@ -27,6 +27,7 @@ from apps.orders.kitchen import (
     DONE_MINUTES,
     SCREEN_STATUSES,
     KitchenScreenError,
+    covered_stations,
     done_recently,
     item_station,
     mark_ready,
@@ -154,14 +155,15 @@ def _item_json(item) -> dict:
     return {"name": item.item_name, "quantity": item.quantity, "comment": item.comment}
 
 
-def _order_json(order: Order, screen: KitchenScreen) -> dict:
+def _order_json(order: Order, screen: KitchenScreen, covered: set[str]) -> dict:
     mine = stations_of(screen.shows)
     marks = {mark.station for mark in order.station_marks.all()}
     items, elsewhere = [], []
     for item in order.items.all():
-        station = item_station(item)
+        station = item_station(item, covered)
         if station in mine:
-            items.append(_item_json(item))
+            # On a screen for everything a part another screen marked shows as done.
+            items.append({**_item_json(item), "done": station in marks})
         else:
             elsewhere.append({**_item_json(item), "station": station, "done": station in marks})
     return {
@@ -180,8 +182,8 @@ def _order_json(order: Order, screen: KitchenScreen) -> dict:
 
 def _version(screen: KitchenScreen) -> str:
     """What the screen shows changes only with these: the orders on screens,
-    the marks of the last minutes, where categories are made, the screen's
-    own settings."""
+    the marks of the last minutes, where categories are made, the venue's
+    screens (which places have one) and this screen's own settings."""
 
     orders = Order.objects.filter(
         partner_id=screen.partner_id, status__in=SCREEN_STATUSES
@@ -193,9 +195,13 @@ def _version(screen: KitchenScreen) -> str:
     categories = MenuCategory.objects.filter(partner_id=screen.partner_id).aggregate(
         last=Max("updated_at")
     )
+    screens = KitchenScreen.objects.filter(partner_id=screen.partner_id).aggregate(
+        last=Max("updated_at")
+    )
     parts = [
         screen.id.hex, screen.shows, screen.language, screen.name, screen.updated_at,
         orders["count"], orders["last"], marks["count"], marks["last"], categories["last"],
+        screens["last"], sorted(covered_stations(screen.partner_id)),
     ]
     return hashlib.sha1(json.dumps(parts, default=str).encode()).hexdigest()[:16]
 
@@ -209,6 +215,7 @@ def kitchen_state_view(request, screen: KitchenScreen, body: dict) -> dict:
     version = _version(screen)
     if request.GET.get("since") == version:
         return {"unchanged": True, "version": version}
+    covered = covered_stations(screen.partner_id)
     return {
         "version": version,
         "now": timezone.now().isoformat(),
@@ -218,7 +225,9 @@ def kitchen_state_view(request, screen: KitchenScreen, body: dict) -> dict:
             "venue": screen.partner.name,
         },
         "texts": {key: _(msgid) for key, msgid in KITCHEN_TEXTS.items()},
-        "orders": [_order_json(order, screen) for order in screen_orders(screen)],
+        "orders": [
+            _order_json(order, screen, covered) for order in screen_orders(screen, covered)
+        ],
         "done": [
             {
                 "id": mark.order.public_id,

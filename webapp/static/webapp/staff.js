@@ -695,7 +695,22 @@
 
   // --- quick sale ------------------------------------------------------------------
 
+  // One key per sale: a retry after a slow answer sends the same key and the
+  // server returns the sale already saved; any change makes a new sale.
+  function saleKey() {
+    if (!sale.key) {
+      if (window.crypto && window.crypto.randomUUID) sale.key = window.crypto.randomUUID();
+      else {
+        var bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        sale.key = Array.prototype.map.call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+      }
+    }
+    return sale.key;
+  }
+
   function salePreview() {
+    sale.key = "";
     api("sale_preview", { customer_code: sale.code, items: sale.items, redeem: sale.redeem }).then(function (result) {
       if (!result.ok) { toast(result.data.error || T.error); sale.preview = null; }
       else sale.preview = result.data.sale;
@@ -758,7 +773,7 @@
       if (Number(preview.bonus_awarded) > 0) summary.appendChild(el("div", { class: "note", text: t("sale_bonus", { bonus: preview.bonus_awarded }) }));
       var comment = el("input", { type: "text", placeholder: T.comment, value: sale.comment,
         style: "width:100%;padding:10px 12px;margin-top:8px;border-radius:10px;border:1px solid var(--separator);background:var(--bg)",
-        onchange: function (event) { sale.comment = event.target.value; } });
+        onchange: function (event) { sale.comment = event.target.value; sale.key = ""; } });
       summary.appendChild(comment);
       summary.appendChild(el("div", { class: "acts" },
         el("button", { type: "button", class: "act", text: T.clear, onclick: function () {
@@ -767,7 +782,7 @@
         el("button", { type: "button", class: "act primary", text: T.sale_confirm, disabled: busy, onclick: function () {
           if (busy) return;
           busy = true;
-          api("sale_confirm", { customer_code: sale.code, items: sale.items, redeem: sale.redeem, comment: sale.comment })
+          api("sale_confirm", { customer_code: sale.code, items: sale.items, redeem: sale.redeem, comment: sale.comment, key: saleKey() })
             .then(function (result) {
               if (result.ok) sale = { code: "", items: {}, redeem: false, comment: "", preview: null, category: sale.category };
               after(result);

@@ -130,6 +130,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                 "fields": (
                     "module_staff_call_enabled",
                     "module_quick_sale_enabled",
+                    "module_staff_screen_enabled",
                     "module_kitchen_screen_enabled",
                     "module_reports_enabled",
                 ),

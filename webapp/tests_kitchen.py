@@ -274,6 +274,48 @@ class SplitScreensTests(KitchenFixture, TestCase):
         self.assertEqual(self.ids(self.kitchen_token), [])
 
 
+class MissingScreenTests(KitchenFixture, TestCase):
+    """A place without a working screen counts as «не указано» (owner,
+    2026-11-06): its items are on every screen and do not hold the order."""
+
+    def setUp(self):
+        super().setUp()
+        self.screen.delete()
+
+    def test_no_bar_screen_the_kitchen_makes_the_whole_order(self):
+        _kitchen, kitchen_token = self.make_screen("Кухня", KitchenScreen.Shows.KITCHEN)
+        order = self.order("Пиво", "Паста")
+        card = self.board(kitchen_token)["orders"][0]
+        self.assertEqual([item["name"] for item in card["items"]], ["Пиво", "Паста"])
+        self.assertEqual(card["elsewhere"], [])
+        self.assertTrue(self.press(order, "ready", token=kitchen_token)[1]["ready"])
+
+    def test_a_bar_only_order_reaches_the_kitchen_when_the_bar_has_no_screen(self):
+        bar, bar_token = self.make_screen("Бар", KitchenScreen.Shows.BAR)
+        _kitchen, kitchen_token = self.make_screen("Кухня", KitchenScreen.Shows.KITCHEN)
+        order = self.order("Пиво")
+        self.assertEqual(self.ids(kitchen_token), [])  # the bar has a screen
+        version = self.board(kitchen_token)["version"]
+        bar.is_active = False
+        bar.save()
+        quiet = self.call("state", token=kitchen_token, query=f"?since={version}")[1]
+        self.assertNotIn("unchanged", quiet)  # the kitchen's board changed with it
+        self.assertEqual(self.ids(kitchen_token), [order.public_id])
+        self.assertTrue(self.press(order, "ready", token=kitchen_token)[1]["ready"])
+        self.assertEqual(self.call("state", token=bar_token)[0], 401)
+
+    def test_the_screen_for_everything_shows_a_part_already_done(self):
+        _bar, bar_token = self.make_screen("Бар", KitchenScreen.Shows.BAR)
+        _all, all_token = self.make_screen("Все", KitchenScreen.Shows.ALL)
+        order = self.order("Пиво", "Паста")
+        self.press(order, "ready", token=bar_token)
+        card = self.board(all_token)["orders"][0]
+        self.assertEqual(
+            [(item["name"], item["done"]) for item in card["items"]],
+            [("Пиво", True), ("Паста", False)],
+        )
+
+
 class KitchenModuleIndependenceTests(KitchenFixture, TestCase):
     """PQ-033: the module works alone and does not change the others."""
 
@@ -355,6 +397,31 @@ class KitchenAdminTests(KitchenFixture, TestCase):
         self.assertNotContains(listing, "Чужой")
         page = self.client.get(reverse("admin:orders_kitchenscreen_change", args=[foreign.pk]))
         self.assertIn(page.status_code, (302, 404))
+
+    def test_admin_warns_when_a_place_has_no_working_screen(self):
+        _bar, _token = self.make_screen("Бар", KitchenScreen.Shows.BAR)
+        self.screen.delete()  # only the bar has a screen now
+        listing = self.client.get(reverse("admin:orders_kitchenscreen_changelist"))
+        warnings = [str(message) for message in listing.context["messages"]]
+        self.assertEqual(len(warnings), 1, warnings)
+        self.assertIn("Кухня", warnings[0])  # the category made in the kitchen
+        category = MenuCategory.objects.get(partner=self.partner, name="Кухня")
+        response = self.client.post(
+            reverse("admin:menu_menucategory_change", args=[category.pk]),
+            {"partner": str(self.partner.id), "name": "Кухня", "sort_order": "100",
+             "is_active": "on", "station": "kitchen"},
+            follow=True,
+        )
+        self.assertTrue(any("Кухня" in str(message) and "экран" in str(message)
+                            for message in response.context["messages"]))
+
+    def test_no_warning_without_the_module(self):
+        self.screen.delete()
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            module_kitchen_screen_enabled=False
+        )
+        listing = self.client.get(reverse("admin:orders_kitchenscreen_changelist"))
+        self.assertEqual([str(message) for message in listing.context["messages"]], [])
 
     def test_where_a_category_is_made(self):
         category = MenuCategory.objects.get(partner=self.partner, name="Бар")

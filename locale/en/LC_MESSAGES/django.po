@@ -1653,6 +1653,10 @@ msgid "Начислено бонусов"
 msgstr "Bonuses accrued"
 
 #: apps/bonuses/models.py
+msgid "Ключ запроса"
+msgstr "Request key"
+
+#: apps/bonuses/models.py
 msgid "быстрая продажа"
 msgstr "quick sale"
 
@@ -2633,6 +2637,18 @@ msgstr "Issue a new link"
 #: apps/orders/apps.py apps/orders/models.py apps/partners/models.py apps/users/constants.py
 msgid "Заказы"
 msgstr "Orders"
+
+#: apps/orders/kitchen.py
+msgid "бара"
+msgstr "the bar"
+
+#: apps/orders/kitchen.py
+msgid "кухни"
+msgstr "the kitchen"
+
+#: apps/orders/kitchen.py
+msgid "Нет работающего экрана {place}: позиции категорий «{names}» показываются на всех экранах и не задерживают «Готов». Добавьте экран или уберите отметку «Где готовят»."
+msgstr "No working screen for {place}: items of the categories “{names}” show on every screen and do not hold back “Ready”. Add a screen or clear “Made at”."
 
 #: apps/orders/kitchen.py webapp/kitchen_views.py
 msgid "Этого заказа на экране уже нет."
@@ -3743,6 +3759,14 @@ msgstr "Mini App (menu and ordering in the app)"
 #: apps/partners/models.py
 msgid "Кнопка «📱 Меню и заказ» в боте открывает меню с фото, корзину и оформление внутри Telegram. Бот работает как прежде, гость выбирает, где удобнее. Нужен адрес сайта (WEBAPP_BASE_URL) и модуль корзины."
 msgstr "The «📱 Menu & order» button in the bot opens the menu with photos, the cart and checkout inside Telegram. The bot works as before; the guest chooses what is handier. Needs the site address (WEBAPP_BASE_URL) and the cart module."
+
+#: apps/partners/models.py
+msgid "Рабочий экран персонала (Mini App)"
+msgstr "Staff screen (Mini App)"
+
+#: apps/partners/models.py
+msgid "Кнопка «Рабочий экран» в «Рабочем режиме» бота открывает в Telegram заказы, вызовы, счета, быструю продажу и отчёт — по включённым модулям. Не зависит от Mini App для гостей и корзины. Нужен адрес сайта (WEBAPP_BASE_URL)."
+msgstr "The “Staff screen” button in the bot's “Work mode” opens orders, calls, bills, quick sale and the report in Telegram — by the modules switched on. Does not depend on the guests' Mini App or the cart. Needs the site address (WEBAPP_BASE_URL)."
 
 #: apps/partners/models.py
 msgid "Оформление и обработку заказов. Требует меню и хотя бы один сценарий: столы, доставку или самовывоз."
@@ -7211,6 +7235,14 @@ msgstr "The work screen is for this venue's staff only."
 #: webapp/staff_context.py
 msgid "Рабочий экран здесь пока не включён — работайте в чате бота."
 msgstr "The work screen is not switched on here yet — work in the bot chat."
+
+#: webapp/staff_sales.py
+msgid "Обновите экран и проведите продажу ещё раз."
+msgstr "Refresh the screen and make the sale again."
+
+#: webapp/staff_sales.py
+msgid "Эта продажа уже сохранена: {amount} грн, бонусов начислено {bonus}."
+msgstr "This sale is already saved: {amount} UAH, bonuses awarded {bonus}."
 
 #: webapp/staff_sales.py
 msgid "Продажа сохранена: {amount} грн, бонусов начислено {bonus}."

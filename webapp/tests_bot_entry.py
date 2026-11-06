@@ -3,7 +3,8 @@ the chat menu button, only where the module is on; the bot stays the same."""
 
 import asyncio
 
-from aiogram.methods import SetChatMenuButton
+from aiogram.methods import GetChatMenuButton, SetChatMenuButton
+from aiogram.types import MenuButtonCommands, MenuButtonDefault, MenuButtonWebApp, WebAppInfo
 from asgiref.sync import async_to_sync, sync_to_async
 from django.test import TestCase, override_settings
 
@@ -56,13 +57,20 @@ class MenuMessageTests(GuestFlowFixture):
 
 
 class MenuButtonFakeBot(FakeBot):
+    """Keeps the chat menu button as Telegram does: it outlives our process."""
+
+    shown: dict[str, object] = {}
+
     def __init__(self, token):
         super().__init__(token)
         self.menu_buttons = []
 
     async def __call__(self, method, request_timeout=None):
+        if isinstance(method, GetChatMenuButton):
+            return self.shown.get(self.token, MenuButtonDefault())
         if isinstance(method, SetChatMenuButton):
             self.menu_buttons.append(method.menu_button)
+            self.shown[self.token] = method.menu_button
             return True
         return await super().__call__(method, request_timeout)
 
@@ -77,6 +85,7 @@ def settings_for(partner, **fields):
 class ChatMenuButtonTests(TestCase):
     def setUp(self):
         FakeBot.behaviour = {}
+        MenuButtonFakeBot.shown = {}
         self.made = {}
 
     def factory(self, token):
@@ -118,6 +127,60 @@ class ChatMenuButtonTests(TestCase):
         )
         self.assertEqual(self.calls(without), [])
 
+    def restart(self, *steps):
+        """A new process (any deploy): nothing remembered, Telegram still
+        shows what was set before."""
+
+        self.made = {}
+        self.run_checks(*steps)
+
+    def test_after_a_restart_a_button_no_longer_needed_is_removed(self):
+        bot = make_bot(3)
+        settings = settings_for(bot.partner, module_webapp_enabled=True)
+        self.run_checks()
+        self.assertEqual([button.type for button in self.calls(bot)], ["web_app"])
+        settings.module_webapp_enabled = False
+        settings.save()
+        self.restart()
+        self.assertEqual([button.type for button in self.calls(bot)], ["default"])
+        self.restart()
+        self.assertEqual(self.calls(bot), [])  # Telegram shows the default already
+
+    def test_after_a_restart_a_needed_button_is_not_set_again(self):
+        bot = make_bot(4)
+        settings_for(bot.partner, module_webapp_enabled=True)
+        self.run_checks()
+        self.restart()
+        self.assertEqual(self.calls(bot), [])
+
+    def test_a_changed_or_removed_address_is_followed(self):
+        bot = make_bot(5)
+        settings_for(bot.partner, module_webapp_enabled=True)
+        self.run_checks()
+        with override_settings(WEBAPP_BASE_URL="https://new.example.com"):
+            self.restart()
+        self.assertEqual(
+            self.calls(bot)[0].web_app.url, f"https://new.example.com/app/{bot.id.hex}/"
+        )
+        with override_settings(WEBAPP_BASE_URL=""):
+            self.restart()
+        self.assertEqual([button.type for button in self.calls(bot)], ["default"])
+
+    def test_a_button_that_is_not_ours_is_left_alone(self):
+        own = make_bot(6)
+        settings_for(own.partner)
+        commands = make_bot(7)
+        settings_for(commands.partner)
+        MenuButtonFakeBot.shown = {
+            own.token: MenuButtonWebApp(
+                text="Shop", web_app=WebAppInfo(url="https://owner.example.com/shop/")
+            ),
+            commands.token: MenuButtonCommands(),
+        }
+        self.run_checks()
+        self.assertEqual(self.calls(own), [])
+        self.assertEqual(self.calls(commands), [])
+
     def test_a_network_bot_offers_it_when_a_working_venue_has_it(self):
         network = Network.objects.create(name="Ночь")
         home = make_partner(10)
@@ -157,12 +220,16 @@ class StaffHomeButtonTests(GuestFlowFixture):
         return message.answer.call_args.kwargs["reply_markup"]
 
     def test_the_work_mode_opens_the_staff_screen_where_the_module_is_on(self):
+        settings = PartnerBotSettings.objects.filter(partner=self.partner)
+        settings.update(module_staff_screen_enabled=False)
         with override_settings(WEBAPP_BASE_URL=BASE):
             before = self.home()
             self.assertFalse(any(button.web_app for button in _buttons(before)))
-            PartnerBotSettings.objects.filter(partner=self.partner).update(
-                module_webapp_enabled=True
-            )
+            # The guests' Mini App alone does not open a staff screen.
+            settings.update(module_webapp_enabled=True)
+            self.assertFalse(any(button.web_app for button in _buttons(self.home())))
+            settings.update(module_webapp_enabled=False, module_cart_enabled=False,
+                            module_staff_screen_enabled=True)
             after = self.home()
         hex_id = BotInstance.objects.get(partner=self.partner).id.hex
         self.assertEqual(after.inline_keyboard[0][0].web_app.url, f"{BASE}/app/{hex_id}/staff/")

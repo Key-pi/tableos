@@ -135,7 +135,7 @@ from bot.keyboards.staff import (
 )
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
-from bot.services.mini_app import mini_app_link_for
+from bot.services.mini_app import staff_screen_link_for
 from bot.services.network import update_points_count
 from bot.services.staff_rights import STAFF_OPERATIONS_ROLES
 from bot.states.staff_sale import StaffBillStates, StaffQuickSaleStates
@@ -1645,7 +1645,7 @@ def _staff_home_keyboard(employee, screen_link: str = ""):
 
 
 async def _staff_screen_link(bot: Bot, partner) -> str:
-    return await sync_to_async(mini_app_link_for)(bot.token, partner.id, "staff/")
+    return await sync_to_async(staff_screen_link_for)(bot.token, partner.id)
 
 
 @router.message(Command("staff"))

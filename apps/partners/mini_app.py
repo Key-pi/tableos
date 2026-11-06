@@ -35,20 +35,26 @@ def mini_app_on(partner_id) -> bool:
     return _enabled(PartnerBotSettings.objects.filter(partner_id=partner_id))
 
 
-def mini_app_on_for(settings: PartnerBotSettings | None) -> bool:
-    """``mini_app_on`` for settings already loaded in this request."""
-
-    return bool(
-        settings is not None and settings.module_webapp_enabled and settings.module_cart_enabled
-    )
-
-
-def mini_app_link(bot_instance_id, partner_id, page: str = "") -> str:
-    """The address to open for this venue (``page="staff/"``: the staff
-    screen), or "" when not offered."""
+def mini_app_link(bot_instance_id, partner_id) -> str:
+    """The guests' Mini App of this venue, or "" when not offered."""
 
     url = mini_app_url(bot_instance_id)
-    return f"{url}{page}" if url and mini_app_on(partner_id) else ""
+    return url if url and mini_app_on(partner_id) else ""
+
+
+def staff_screen_on_for(settings: PartnerBotSettings | None) -> bool:
+    """The staff screen is a module of its own (owner, 2026-11-06): it does
+    not need the guests' Mini App or the cart."""
+
+    return bool(settings is not None and settings.module_staff_screen_enabled)
+
+
+def staff_screen_link(bot_instance_id, partner_id) -> str:
+    """The staff screen of this venue, or "" when not offered."""
+
+    url = mini_app_url(bot_instance_id)
+    settings = PartnerBotSettings.objects.filter(partner_id=partner_id).first()
+    return f"{url}staff/" if url and staff_screen_on_for(settings) else ""
 
 
 def menu_buttons(instance_ids) -> dict[str, tuple[str, str] | None]:

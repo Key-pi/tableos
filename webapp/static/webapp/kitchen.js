@@ -214,8 +214,9 @@
     if (fresh[order.id]) { classes.push("fresh"); delete fresh[order.id]; }
     var items = el("ul", { class: "items" });
     order.items.forEach(function (item) {
-      items.appendChild(el("li", null,
-        el("span", { class: "q", text: item.quantity + " ×" }), item.name,
+      items.appendChild(el("li", { class: item.done ? "ok" : null },
+        el("span", { class: "q", text: item.done ? "✓" : item.quantity + " ×" }),
+        item.done ? item.name + " ×" + item.quantity : item.name,
         item.comment ? el("span", { class: "c", text: item.comment }) : null));
     });
     var elsewhere = null;

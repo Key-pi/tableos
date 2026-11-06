@@ -7,7 +7,8 @@ bot, so the guest and the staff are told the same way.
 
 Split screens. A category of the menu says where it is made
 (``MenuCategory.station``: bar, kitchen, or not said). A screen shows all,
-only the bar or only the kitchen; a part not said is on every screen. On a
+only the bar or only the kitchen; a part not said is on every screen, and so
+is a part of a place no working screen shows (``covered_stations``). On a
 split screen «Готово» marks this screen's part (``OrderStationReady``) and
 the order leaves it; the order becomes «Готов» when every part it has is
 marked, so the guest gets one message when everything is made.
@@ -77,6 +78,58 @@ def note_seen(screen: KitchenScreen) -> None:
         screen.save(update_fields=["last_seen_at"])
 
 
+BAR = MenuCategory.Station.BAR
+KITCHEN = MenuCategory.Station.KITCHEN
+
+
+def covered_stations(partner_id) -> set[str]:
+    """The places that have a working screen. A place without one counts as
+    «не указано» (owner, 2026-11-06): its items are on every screen and do
+    not hold the order back."""
+
+    covered: set[str] = set()
+    shows = KitchenScreen.objects.filter(partner_id=partner_id, is_active=True)
+    for value in shows.values_list("shows", flat=True):
+        covered |= {BAR, KITCHEN} if value == ALL else {value}
+    return covered
+
+
+def uncovered_categories(partner_id) -> dict[str, list[str]]:
+    """Categories marked for a place no working screen shows (for Admin)."""
+
+    covered = covered_stations(partner_id)
+    found: dict[str, list[str]] = {}
+    categories = MenuCategory.objects.filter(
+        partner_id=partner_id, is_active=True, station__in=[BAR, KITCHEN]
+    ).exclude(station__in=covered).order_by("sort_order", "name")
+    for category in categories:
+        found.setdefault(category.station, []).append(category.name)
+    return found
+
+
+def missing_screen_warnings(partner_id) -> list[str]:
+    """For Admin: places marked on categories but without a working screen,
+    while the module is on."""
+
+    from apps.partners.models import PartnerBotSettings
+
+    if partner_id is None:
+        return []
+    settings = PartnerBotSettings.objects.filter(partner_id=partner_id).first()
+    if settings is None or not settings.module_kitchen_screen_enabled:
+        return []
+    places = {BAR: _("бара"), KITCHEN: _("кухни")}
+    return [
+        _(
+            "Нет работающего экрана {place}: позиции категорий «{names}» показываются на "
+            "всех экранах и не задерживают «Готов». Добавьте экран или уберите отметку "
+            "«Где готовят».",
+            place=places[station], names="», «".join(names),
+        )
+        for station, names in uncovered_categories(partner_id).items()
+    ]
+
+
 def stations_of(shows: str) -> set[str]:
     """The parts of an order a screen makes."""
 
@@ -85,14 +138,15 @@ def stations_of(shows: str) -> set[str]:
     return {ANY, shows}
 
 
-def item_station(item: OrderItem) -> str:
-    return item.menu_item.category.station if item.menu_item_id else ANY
+def item_station(item: OrderItem, covered: set[str]) -> str:
+    station = item.menu_item.category.station if item.menu_item_id else ANY
+    return station if station in covered else ANY
 
 
-def _is_complete(order: Order, items: list[OrderItem], marks: set[str]) -> bool:
+def _is_complete(items: list[OrderItem], marks: set[str], covered: set[str]) -> bool:
     if ALL in marks:
         return True
-    needed = {item_station(item) for item in items} - {ANY}
+    needed = {item_station(item, covered) for item in items} - {ANY}
     return bool(marks) and needed <= marks
 
 
@@ -105,7 +159,7 @@ def _items(queryset=None):
     )
 
 
-def screen_orders(screen: KitchenScreen) -> list[Order]:
+def screen_orders(screen: KitchenScreen, covered: set[str]) -> list[Order]:
     """Accepted orders with a part this screen makes and has not marked."""
 
     orders = (
@@ -118,7 +172,7 @@ def screen_orders(screen: KitchenScreen) -> list[Order]:
     mine = stations_of(screen.shows)
     return [
         order for order in orders
-        if any(item_station(item) in mine for item in order.items.all())
+        if any(item_station(item, covered) in mine for item in order.items.all())
     ]
 
 
@@ -171,8 +225,9 @@ def mark_ready(screen: KitchenScreen, public_id: str) -> tuple[Order, bool]:
         OrderItem.objects.filter(order=order, kind=OrderItem.Kind.ITEM)
         .select_related("menu_item__category")
     )
+    covered = covered_stations(screen.partner_id)
     mine = stations_of(screen.shows)
-    if not any(item_station(item) in mine for item in items):
+    if not any(item_station(item, covered) in mine for item in items):
         raise KitchenScreenError(_("Этого заказа на экране уже нет."))
     OrderStationReady.objects.get_or_create(
         order=order,
@@ -182,7 +237,7 @@ def mark_ready(screen: KitchenScreen, public_id: str) -> tuple[Order, bool]:
     marks = set(
         OrderStationReady.objects.filter(order=order).values_list("station", flat=True)
     )
-    if not _is_complete(order, items, marks):
+    if not _is_complete(items, marks, covered):
         return order, False
     order = transition_order_status(
         order=order, to_status=Order.Status.READY, note=_note(screen)

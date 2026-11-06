@@ -447,6 +447,15 @@ class PartnerBotSettings(TimeStampedModel):
             "адрес сайта (WEBAPP_BASE_URL) и модуль корзины.",
         ),
     )
+    module_staff_screen_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Рабочий экран персонала (Mini App)"),
+        help_text=_lazy(
+            "Кнопка «Рабочий экран» в «Рабочем режиме» бота открывает в Telegram заказы, "
+            "вызовы, счета, быструю продажу и отчёт — по включённым модулям. Не зависит от "
+            "Mini App для гостей и корзины. Нужен адрес сайта (WEBAPP_BASE_URL).",
+        ),
+    )
     module_orders_enabled = models.BooleanField(
         default=True,
         verbose_name=_lazy("Заказы"),

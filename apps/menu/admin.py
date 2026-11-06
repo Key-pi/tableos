@@ -1,6 +1,7 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 
 from apps.menu.models import MenuCategory, MenuItem
+from apps.orders.kitchen import missing_screen_warnings
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
 
@@ -11,6 +12,13 @@ class MenuCategoryAdmin(ScopedAdminMixin):
     list_display = ("name", "partner", "sort_order", "station", "is_active")
     list_filter = ("partner", "station", "is_active")
     search_fields = ("name", "partner__name")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if obj.station:
+            # Kitchen and bar screens (PQ-048): a place nobody shows.
+            for warning in missing_screen_warnings(obj.partner_id):
+                messages.warning(request, warning)
 
 
 @admin.register(MenuItem)

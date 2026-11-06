@@ -5,7 +5,7 @@ from django.utils.html import format_html
 from apps.billing.admin_actions import run_with_reason
 from apps.billing.models import Bill, BillItem
 from apps.billing.services import BillingServiceError, cancel_order, create_bill_from_orders
-from apps.orders.kitchen import issue_screen_link
+from apps.orders.kitchen import issue_screen_link, missing_screen_warnings
 from apps.orders.models import (
     Cart,
     CartItem,
@@ -395,6 +395,12 @@ class KitchenScreenAdmin(ScopedAdminMixin):
         super().save_model(request, obj, form, change)
         if not change:
             self._show_link(request, obj)
+
+    def changelist_view(self, request, extra_context=None):
+        if request.method == "GET":
+            for warning in missing_screen_warnings(self.get_partner_scope_id(request)):
+                messages.warning(request, warning)
+        return super().changelist_view(request, extra_context)
 
     @admin.action(description=_lazy("Выдать новую ссылку"), permissions=["change"])
     def issue_link_action(self, request, queryset):

@@ -9,12 +9,14 @@ and sends them whole each time; nothing is saved until «Провести».
 
 from __future__ import annotations
 
+import re
 import uuid
 
 from apps.analytics.services import build_daily_operations_report
 from apps.bonuses.services import (
     preview_walk_in_sale_by_customer_code,
     register_walk_in_sale_from_menu_items_by_customer_code,
+    walk_in_sale_by_request_key,
 )
 from apps.menu.repositories import MenuItemRepository
 from bot.services.staff_rights import can_quick_sale, can_view_day_report
@@ -105,12 +107,20 @@ def sale_preview_view(request, staff: StaffRequest, body: dict) -> dict:
     return {"sale": _preview_json(preview, redeem)}
 
 
+# The screen makes one key per sale (staff.js) and sends it again on a retry.
+SALE_KEY = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
+
 @staff_api("POST")
 def sale_confirm_view(request, staff: StaffRequest, body: dict) -> dict:
     _sales(staff)
     items = _items(body)
     if not items:
         raise WebAppDenied(400, N_("Сначала добавьте позиции."))
+    key = _text(body, "key")
+    if key and not SALE_KEY.fullmatch(key):
+        raise WebAppDenied(400, N_("Обновите экран и проведите продажу ещё раз."))
+    repeated = walk_in_sale_by_request_key(staff.partner.id, key) is not None
     sale = register_walk_in_sale_from_menu_items_by_customer_code(
         partner_id=staff.partner.id,
         customer_code=_text(body, "customer_code"),
@@ -118,13 +128,17 @@ def sale_confirm_view(request, staff: StaffRequest, body: dict) -> dict:
         comment=_text(body, "comment"),
         created_by=staff.employee.user,
         redeem_bonus=_redeem(body),
+        request_key=key,
+    )
+    text = (
+        N_("Эта продажа уже сохранена: {amount} грн, бонусов начислено {bonus}.")
+        if repeated
+        else N_("Продажа сохранена: {amount} грн, бонусов начислено {bonus}.")
     )
     return {
         "ok": True,
-        "notice": _(
-            "Продажа сохранена: {amount} грн, бонусов начислено {bonus}.",
-            amount=sale.amount, bonus=sale.bonus_awarded_amount,
-        ),
+        "repeated": repeated,
+        "notice": _(text, amount=sale.amount, bonus=sale.bonus_awarded_amount),
     }
 
 
