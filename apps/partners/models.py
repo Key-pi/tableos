@@ -473,6 +473,16 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name=_lazy("Быстрые продажи"),
         help_text=_lazy("Продажа на кассе по коду клиента. Требует меню."),
     )
+    # PQ-048, stage 3: a shared tablet at the bar or in the kitchen, without
+    # Telegram (apps/orders/kitchen.py).
+    module_kitchen_screen_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Экран кухни и бара"),
+        help_text=_lazy(
+            "Планшет на баре или кухне показывает принятые заказы: «Взять в работу» и "
+            "«Готово». Без Telegram, по ссылке экрана из Admin. Требует модуль заказов.",
+        ),
+    )
     module_reports_enabled = models.BooleanField(
         default=True,
         verbose_name=_lazy("Отчёт дня"),

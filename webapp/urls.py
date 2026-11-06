@@ -1,10 +1,14 @@
 from django.urls import path
 
-from webapp import staff_billing, staff_sales, staff_views, views
+from webapp import kitchen_views, staff_billing, staff_sales, staff_views, views
 
 app_name = "webapp"
 
 urlpatterns = [
+    # Stage 3: the kitchen/bar screen, without Telegram. Before "<bot>/".
+    path("screen/", kitchen_views.kitchen_page, name="kitchen"),
+    path("screen/api/state", kitchen_views.kitchen_state_view, name="kitchen_state"),
+    path("screen/api/action", kitchen_views.kitchen_action_view, name="kitchen_action"),
     path("<str:bot_hex>/", views.guest_page, name="guest"),
     path("<str:bot_hex>/api/state", views.state_view, name="state"),
     path("<str:bot_hex>/api/point", views.point_view, name="point"),

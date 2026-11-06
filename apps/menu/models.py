@@ -31,9 +31,26 @@ def validate_menu_photo_size(photo) -> None:
 class MenuCategory(PartnerBoundModel):
     """Logical menu section used to group items inside a partner catalog."""
 
+    class Station(models.TextChoices):
+        # Where the category is made, for the kitchen/bar screens (PQ-048).
+        ANY = "", _lazy("Не указано (на всех экранах)")
+        BAR = "bar", _lazy("Бар")
+        KITCHEN = "kitchen", _lazy("Кухня")
+
     name = models.CharField(max_length=255, verbose_name=_lazy("Название"))
     sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
     is_active = models.BooleanField(default=True, verbose_name=_lazy("Показывать"))
+    station = models.CharField(
+        max_length=16,
+        choices=Station.choices,
+        blank=True,
+        default=Station.ANY,
+        verbose_name=_lazy("Где готовят"),
+        help_text=_lazy(
+            "Для экранов кухни и бара: позиции категории видит экран этого места. "
+            "Не указано — все экраны.",
+        ),
+    )
 
     class Meta:
         verbose_name = _lazy("категория меню")

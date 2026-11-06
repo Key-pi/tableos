@@ -8,8 +8,8 @@ from core.admin_mixins import ScopedAdminMixin
 @admin.register(MenuCategory)
 class MenuCategoryAdmin(ScopedAdminMixin):
     admin_section = AdminSection.MENU
-    list_display = ("name", "partner", "sort_order", "is_active")
-    list_filter = ("partner", "is_active")
+    list_display = ("name", "partner", "sort_order", "station", "is_active")
+    list_filter = ("partner", "station", "is_active")
     search_fields = ("name", "partner__name")
 
 

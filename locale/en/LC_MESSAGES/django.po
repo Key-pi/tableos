@@ -96,7 +96,7 @@ msgstr "daily metric"
 msgid "Метрики по дням"
 msgstr "Daily metrics"
 
-#: apps/analytics/models.py apps/bonuses/models.py apps/menu/models.py apps/tables/models.py
+#: apps/analytics/models.py apps/bonuses/models.py apps/menu/models.py apps/orders/models.py apps/tables/models.py
 msgid "Название"
 msgstr "Name"
 
@@ -1576,7 +1576,7 @@ msgstr "Reserved for custom strategy settings."
 msgid "Настройки (JSON)"
 msgstr "Settings (JSON)"
 
-#: apps/bonuses/models.py apps/partners/models.py apps/tables/models.py
+#: apps/bonuses/models.py apps/orders/models.py apps/partners/models.py apps/tables/models.py
 msgid "Работает"
 msgstr "Active"
 
@@ -1876,11 +1876,11 @@ msgstr "Bill requests"
 msgid "Заказы за столом"
 msgstr "Table orders"
 
-#: apps/employees/models.py apps/menu/models.py apps/orders/models.py apps/partners/bot_texts.py apps/partners/models.py bot/handlers/staff.py webapp/staff_views.py
+#: apps/employees/models.py apps/menu/models.py apps/orders/models.py apps/partners/bot_texts.py apps/partners/models.py bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py
 msgid "Самовывоз"
 msgstr "Pickup"
 
-#: apps/employees/models.py apps/menu/models.py apps/notifications/models.py apps/orders/models.py apps/orders/services.py apps/partners/models.py bot/handlers/staff.py webapp/staff_views.py webapp/texts.py
+#: apps/employees/models.py apps/menu/models.py apps/notifications/models.py apps/orders/models.py apps/orders/services.py apps/partners/models.py bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py webapp/texts.py
 msgid "Доставка"
 msgstr "Delivery"
 
@@ -1969,12 +1969,32 @@ msgid "Фото больше {size} МБ — уменьшите его."
 msgstr "The photo is larger than {size} MB — make it smaller."
 
 #: apps/menu/models.py
+msgid "Не указано (на всех экранах)"
+msgstr "Not set (on every screen)"
+
+#: apps/menu/models.py
+msgid "Бар"
+msgstr "Bar"
+
+#: apps/menu/models.py
+msgid "Кухня"
+msgstr "Kitchen"
+
+#: apps/menu/models.py
 msgid "Порядок"
 msgstr "Order"
 
 #: apps/menu/models.py
 msgid "Показывать"
 msgstr "Show"
+
+#: apps/menu/models.py
+msgid "Где готовят"
+msgstr "Made at"
+
+#: apps/menu/models.py
+msgid "Для экранов кухни и бара: позиции категории видит экран этого места. Не указано — все экраны."
+msgstr "For kitchen and bar screens: this place's screen shows the category's items. Not set — every screen."
 
 #: apps/menu/models.py
 msgid "категория меню"
@@ -2594,9 +2614,29 @@ msgstr "Order #{public_id}"
 msgid "Обновлено заказов: {success_count}."
 msgstr "Orders updated: {success_count}."
 
+#: apps/orders/admin.py
+msgid "Ссылка"
+msgstr "Link"
+
+#: apps/orders/admin.py
+msgid "Ссылку видно один раз: после создания экрана или по действию «Выдать новую ссылку» в списке экранов. Новая ссылка отключает старую — так и поступайте, если планшет потерялся."
+msgstr "The link is shown once: after the screen is created or with the “Issue a new link” action in the list of screens. A new link switches the old one off — do that if a tablet is lost."
+
+#: apps/orders/admin.py
+msgid "Экран «{}»: откройте эту ссылку на планшете (её видно только сейчас, прежняя больше не работает): <a href=\"{}\">{}</a>"
+msgstr "Screen “{}”: open this link on the tablet (it is shown only now, the previous one no longer works): <a href=\"{}\">{}</a>"
+
+#: apps/orders/admin.py
+msgid "Выдать новую ссылку"
+msgstr "Issue a new link"
+
 #: apps/orders/apps.py apps/orders/models.py apps/partners/models.py apps/users/constants.py
 msgid "Заказы"
 msgstr "Orders"
+
+#: apps/orders/kitchen.py webapp/kitchen_views.py
+msgid "Этого заказа на экране уже нет."
+msgstr "This order is no longer on the screen."
 
 #: apps/orders/models.py bot/handlers/staff.py webapp/staff_views.py
 msgid "Новый"
@@ -2765,6 +2805,70 @@ msgstr "cart line"
 #: apps/orders/models.py
 msgid "Строки корзин"
 msgstr "Cart lines"
+
+#: apps/orders/models.py
+msgid "Всё"
+msgstr "Everything"
+
+#: apps/orders/models.py
+msgid "Только бар"
+msgstr "Bar only"
+
+#: apps/orders/models.py
+msgid "Только кухня"
+msgstr "Kitchen only"
+
+#: apps/orders/models.py
+msgid "Например: «Бар» или «Кухня»."
+msgstr "For example: “Bar” or “Kitchen”."
+
+#: apps/orders/models.py
+msgid "Что показывает"
+msgstr "Shows"
+
+#: apps/orders/models.py
+msgid "«Всё» — один экран на всё. Бар и кухня — по отметке «Где готовят» у категорий меню; заказ готов, когда свою часть отметили все."
+msgstr "“Everything” — one screen for all. Bar and kitchen — by “Made at” on menu categories; the order is ready when every screen has marked its part."
+
+#: apps/orders/models.py
+msgid "Язык экрана"
+msgstr "Screen language"
+
+#: apps/orders/models.py
+msgid "Отпечаток ссылки"
+msgstr "Link fingerprint"
+
+#: apps/orders/models.py
+msgid "Ссылка выдана"
+msgstr "Link issued"
+
+#: apps/orders/models.py
+msgid "Последний раз на связи"
+msgstr "Last seen"
+
+#: apps/orders/models.py
+msgid "экран кухни и бара"
+msgstr "kitchen and bar screen"
+
+#: apps/orders/models.py
+msgid "Экраны кухни и бара"
+msgstr "Kitchen and bar screens"
+
+#: apps/orders/models.py
+msgid "Где готовили"
+msgstr "Made at"
+
+#: apps/orders/models.py
+msgid "Экран"
+msgstr "Screen"
+
+#: apps/orders/models.py
+msgid "готовность части заказа"
+msgstr "order part done"
+
+#: apps/orders/models.py
+msgid "Готовность частей заказов"
+msgstr "Order parts done"
 
 #: apps/orders/services.py
 msgid "Укажите позиции в формате `code x qty`, например: `a1b2c3d4x2,e5f6a7b8x1`."
@@ -3035,8 +3139,8 @@ msgid "Модули · Операции и отчёты"
 msgstr "Modules · Operations and reports"
 
 #: apps/partners/admin.py
-msgid "Вызов персонала требует столы. Быстрые продажи требуют меню."
-msgstr "Staff calls need tables. Quick sales need the menu."
+msgid "Вызов персонала требует столы. Быстрые продажи требуют меню. Экран кухни и бара требует заказы; сами экраны — в разделе «Экраны кухни и бара»."
+msgstr "Staff calls need tables. Quick sales need the menu. The kitchen and bar screen needs orders; the screens themselves are under “Kitchen and bar screens”."
 
 #: apps/partners/admin.py
 msgid "Поведение бота"
@@ -3655,6 +3759,14 @@ msgstr "Button to call a waiter, the bar or the hookah master. Needs tables."
 #: apps/partners/models.py
 msgid "Продажа на кассе по коду клиента. Требует меню."
 msgstr "A till sale by customer code. Needs the menu."
+
+#: apps/partners/models.py
+msgid "Экран кухни и бара"
+msgstr "Kitchen and bar screen"
+
+#: apps/partners/models.py
+msgid "Планшет на баре или кухне показывает принятые заказы: «Взять в работу» и «Готово». Без Telegram, по ссылке экрана из Admin. Требует модуль заказов."
+msgstr "A tablet at the bar or in the kitchen shows accepted orders: “Take it” and “Ready”. No Telegram, by the screen's link from Admin. Needs the orders module."
 
 #: apps/partners/models.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Отчёт дня"
@@ -5336,15 +5448,15 @@ msgstr "awaiting transfer confirmation {to_transfer} UAH{bonus_note}"
 msgid "при получении, {to_pay} грн{bonus_note}"
 msgstr "on receipt, {to_pay} UAH{bonus_note}"
 
-#: bot/handlers/staff.py webapp/staff_views.py
+#: bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py
 msgid "Почта"
 msgstr "Post"
 
-#: bot/handlers/staff.py webapp/staff_billing.py webapp/staff_views.py webapp/texts.py webapp/views.py
+#: bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_billing.py webapp/staff_views.py webapp/texts.py webapp/views.py
 msgid "Стол {number}"
 msgstr "Table {number}"
 
-#: bot/handlers/staff.py webapp/staff_views.py
+#: bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py
 msgid "Вне стола"
 msgstr "No table"
 
@@ -6632,11 +6744,11 @@ msgstr "Back to my table"
 msgid "Начать новый визит"
 msgstr "Start a new visit"
 
-#: bot/keyboards/staff.py webapp/staff_views.py
+#: bot/keyboards/staff.py webapp/kitchen_views.py webapp/staff_views.py
 msgid "Взять в работу"
 msgstr "Take it"
 
-#: bot/keyboards/staff.py webapp/staff_views.py
+#: bot/keyboards/staff.py webapp/kitchen_views.py webapp/staff_views.py
 msgid "Готово"
 msgstr "Ready"
 
@@ -6996,13 +7108,81 @@ msgstr "This menu no longer works. Open the menu from the bot again."
 msgid "Откройте меню из бота ещё раз."
 msgstr "Open the menu from the bot again."
 
-#: webapp/context.py webapp/staff_context.py
+#: webapp/context.py webapp/kitchen_views.py webapp/staff_context.py
 msgid "Заведение сейчас не принимает заказы."
 msgstr "The venue is not taking orders right now."
 
 #: webapp/context.py
 msgid "Заказ в приложении здесь пока не включён — закажите в чате бота."
 msgstr "Ordering in the app is not switched on here yet — order in the bot chat."
+
+#: webapp/kitchen_views.py
+msgid "Экран не найден: ссылку заменили или экран выключили. Откройте новую ссылку из Admin."
+msgstr "Screen not found: the link was replaced or the screen switched off. Open a new link from Admin."
+
+#: webapp/kitchen_views.py
+msgid "Новые"
+msgstr "New"
+
+#: webapp/kitchen_views.py
+msgid "Готовятся"
+msgstr "Preparing"
+
+#: webapp/kitchen_views.py webapp/staff_views.py
+msgid "{minutes} мин"
+msgstr "{minutes} min"
+
+#: webapp/kitchen_views.py
+msgid "Ещё в заказе"
+msgstr "Also in the order"
+
+#: webapp/kitchen_views.py
+msgid "бар"
+msgstr "bar"
+
+#: webapp/kitchen_views.py
+msgid "кухня"
+msgstr "kitchen"
+
+#: webapp/kitchen_views.py
+msgid "готово"
+msgstr "done"
+
+#: webapp/kitchen_views.py
+msgid "Заказов нет — новые появятся сами."
+msgstr "No orders — new ones will appear by themselves."
+
+#: webapp/kitchen_views.py
+msgid "🔔 Звук включён"
+msgstr "🔔 Sound on"
+
+#: webapp/kitchen_views.py
+msgid "🔕 Включить звук"
+msgstr "🔕 Turn sound on"
+
+#: webapp/kitchen_views.py
+msgid "⛶ На весь экран"
+msgstr "⛶ Full screen"
+
+#: webapp/kitchen_views.py
+msgid "Не получилось. Попробуйте ещё раз."
+msgstr "That didn't work. Please try again."
+
+#: webapp/kitchen_views.py
+msgid "Нет связи с сервером — пробуем снова…"
+msgstr "No connection to the server — trying again…"
+
+#: webapp/kitchen_views.py webapp/staff_views.py webapp/texts.py
+msgid "Повторить"
+msgstr "Retry"
+
+#: webapp/kitchen_views.py
+msgid "всё"
+msgstr "everything"
+
+#: webapp/kitchen_views.py
+msgid "Экран кухни и бара выключен в настройках заведения."
+msgstr "The kitchen and bar screen is switched off in the venue's settings."
 
 #: webapp/staff_billing.py webapp/staff_views.py
 msgid "Выберите причину."
@@ -7101,10 +7281,6 @@ msgid "Оплата"
 msgstr "Payment"
 
 #: webapp/staff_views.py
-msgid "{minutes} мин"
-msgstr "{minutes} min"
-
-#: webapp/staff_views.py
 msgid "Подтвердить"
 msgstr "Confirm"
 
@@ -7115,10 +7291,6 @@ msgstr "Change venue"
 #: webapp/staff_views.py webapp/texts.py
 msgid "Что-то пошло не так. Попробуйте ещё раз."
 msgstr "Something went wrong. Please try again."
-
-#: webapp/staff_views.py webapp/texts.py
-msgid "Повторить"
-msgstr "Retry"
 
 #: webapp/staff_views.py webapp/texts.py
 msgid "грн"
