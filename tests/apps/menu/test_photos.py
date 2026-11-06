@@ -84,6 +84,20 @@ class MenuPhotoTests(PhotoFixture):
         item.image_url = ""
         self.assertEqual(item.photo_url, "")
 
+    def test_webp_is_served_where_python_does_not_know_it(self):
+        """Python 3.12 (the Docker image) keeps .webp only among "non-strict"
+        types, so a strict lookup says nothing without /etc/mime.types — and
+        every compressed photo answered 404 (owner, 2026-11-06)."""
+
+        from unittest import mock
+
+        self.add(png())
+        item = MenuItem.objects.get()
+        with mock.patch("mimetypes.guess_type", return_value=(None, None)):
+            served = self.client.get(item.photo_url)
+        self.assertEqual(served.status_code, 200)
+        self.assertEqual(served["Content-Type"], "image/webp")
+
     def test_nothing_outside_the_media_folder_is_served(self):
         for path in ("/media/../manage.py", "/media/%2e%2e/manage.py", "/media/menu/"):
             self.assertEqual(self.client.get(path).status_code, 404, path)
