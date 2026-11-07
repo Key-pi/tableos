@@ -99,7 +99,8 @@ class StaffAccessTests(StaffFixture):
 
     def test_the_page(self):
         response = self.client.get(reverse("webapp:staff", args=[self.bot.id.hex]))
-        self.assertContains(response, "staff.js")
+        self.assertContains(response, "staff.js?v=")
+        self.assertContains(response, "staff.css?v=")
         self.assertNotIn("X-Frame-Options", response)
 
 

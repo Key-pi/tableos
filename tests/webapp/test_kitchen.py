@@ -108,7 +108,8 @@ class KitchenFixture:
 class KitchenAccessTests(KitchenFixture, TestCase):
     def test_the_page_opens_without_telegram_and_cannot_be_framed(self):
         response = self.client.get(reverse("webapp:kitchen"))
-        self.assertContains(response, "kitchen.js")
+        self.assertContains(response, "kitchen.js?v=")
+        self.assertContains(response, "kitchen.css?v=")
         self.assertNotContains(response, "telegram-web-app.js")
         self.assertEqual(response["X-Frame-Options"], "DENY")
 

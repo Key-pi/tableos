@@ -1,4 +1,4 @@
-{% load static %}<!doctype html>
+{% load webapp_assets %}<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -7,13 +7,13 @@
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#14161a">
   <title>Botera Shop · Kitchen</title>
-  <link rel="stylesheet" href="{% static 'webapp/kitchen.css' %}">
+  <link rel="stylesheet" href="{% asset 'webapp/kitchen.css' %}">
 </head>
 <body>
   <main id="app" data-api="{% url 'webapp:kitchen' %}api/" aria-live="polite">
     <div class="center"><div class="spinner" role="status"></div></div>
   </main>
   <div id="toast" class="toast" role="alert" hidden></div>
-  <script src="{% static 'webapp/kitchen.js' %}"></script>
+  <script src="{% asset 'webapp/kitchen.js' %}"></script>
 </body>
 </html>

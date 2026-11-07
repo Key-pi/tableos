@@ -1,4 +1,4 @@
-{% load static %}<!doctype html>
+{% load webapp_assets %}<!doctype html>
 <html>
 <head>
   <meta charset="utf-8">
@@ -21,14 +21,14 @@
     }, true);
   </script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="stylesheet" href="{% static 'webapp/guest.css' %}">
-  <link rel="stylesheet" href="{% static 'webapp/staff.css' %}">
+  <link rel="stylesheet" href="{% asset 'webapp/guest.css' %}">
+  <link rel="stylesheet" href="{% asset 'webapp/staff.css' %}">
 </head>
 <body>
   <main id="app" data-api="{% url 'webapp:guest' bot_hex %}api/staff/" aria-live="polite">
     <div class="center"><div class="spinner" role="status"></div></div>
   </main>
   <div id="toast" class="toast" role="alert" hidden></div>
-  <script src="{% static 'webapp/staff.js' %}"></script>
+  <script src="{% asset 'webapp/staff.js' %}"></script>
 </body>
 </html>

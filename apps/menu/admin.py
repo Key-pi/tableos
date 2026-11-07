@@ -23,6 +23,35 @@ class ChoiceListField(forms.TypedMultipleChoiceField):
         return value or []
 
 
+def venue_form(form_class, partner_id):
+    """The form knows the venue before it checks. The venue field is hidden
+    from venue staff and was put in only on save, so «the parent is of this
+    venue» refused every subcategory and «unique in the venue» (SKU, barcode)
+    was skipped until the database refused it (owner, 2026-11-07)."""
+
+    if partner_id is None:
+        return form_class
+
+    class VenueForm(form_class):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            if self.instance.partner_id is None:
+                self.instance.partner_id = partner_id
+
+        def _get_validation_exclusions(self):
+            exclusions = super()._get_validation_exclusions()
+            exclusions.discard("partner")
+            return exclusions
+
+    return VenueForm
+
+
+class VenueFormMixin:
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        form_class = super().get_form(request, obj, change=change, **kwargs)
+        return venue_form(form_class, self.get_partner_scope_id(request))
+
+
 class MenuCategoryForm(forms.ModelForm):
     available_weekdays = ChoiceListField(
         choices=[(index, _lazy(day)) for index, day in enumerate(WEEKDAYS)],
@@ -39,7 +68,7 @@ class MenuCategoryForm(forms.ModelForm):
 
 
 @admin.register(MenuCategory)
-class MenuCategoryAdmin(ScopedAdminMixin):
+class MenuCategoryAdmin(VenueFormMixin, ScopedAdminMixin):
     admin_section = AdminSection.MENU
     form = MenuCategoryForm
     list_display = ("name", "parent", "partner", "sort_order", "station", "is_active")
@@ -62,6 +91,8 @@ class MenuCategoryAdmin(ScopedAdminMixin):
         if db_field.name == "parent":
             # Two levels: only a top category can hold others.
             field.queryset = field.queryset.filter(parent__isnull=True)
+            if not self.is_platform_admin(request):
+                field.label_from_instance = lambda category: category.name
         return field
 
     def save_model(self, request, obj, form, change):
@@ -120,7 +151,7 @@ SHOWCASE_FIELDS = (
 
 
 @admin.register(MenuItem)
-class MenuItemAdmin(ScopedAdminMixin):
+class MenuItemAdmin(VenueFormMixin, ScopedAdminMixin):
     admin_section = AdminSection.MENU
     form = MenuItemForm
     list_display = (

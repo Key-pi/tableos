@@ -215,6 +215,49 @@ class ShowcaseAdminTests(TestCase):
         self.assertTrue(any("Одяг" in choice for choice in choices))
         self.assertFalse(any("Футболки" in choice for choice in choices))
 
+    def add_category(self, **data):
+        return self.client.post(reverse("admin:menu_menucategory_add"), {
+            "name": "Футболки", "sort_order": "100", "is_active": "on", "station": "", **data,
+        })
+
+    def test_the_owner_adds_a_subcategory(self):
+        # The venue is put in on save; the check of the parent's venue ran
+        # before that and refused every subcategory (owner, 2026-11-07).
+        top = MenuCategory.objects.create(partner=self.partner, name="Одяг")
+        response = self.add_category(parent=str(top.pk))
+        self.assertEqual(response.status_code, 302, getattr(response, "context", None)
+                         and response.context["adminform"].form.errors)
+        shirts = MenuCategory.objects.get(name="Футболки")
+        self.assertEqual((shirts.partner, shirts.parent), (self.partner, top))
+
+    def test_a_category_of_another_venue_cannot_hold_it(self):
+        from tests.webapp.test_guest_api import make_venue
+
+        foreign = MenuCategory.objects.create(partner=make_venue("Other"), name="Чужа")
+        response = self.add_category(parent=str(foreign.pk))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("parent", response.context["adminform"].form.errors)
+        self.assertFalse(MenuCategory.objects.filter(name="Футболки").exists())
+
+    def test_a_repeated_barcode_is_shown_on_the_form(self):
+        # The venue field is hidden from the owner, so the check «unique in
+        # the venue» was skipped and the database refused it with an error page.
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            module_showcase_enabled=True
+        )
+        MenuItem.objects.filter(pk=self.item.pk).update(barcode="4820000000001", sku="A-1")
+        response = self.client.post(reverse("admin:menu_menuitem_add"), {
+            "category": str(self.item.category_id), "name": "Ще лате", "price": "70.00",
+            "item_type": "internal", "is_available": "on", "sort_order": "100",
+            "available_for_pickup": "on", "barcode": "4820000000001", "sku": "A-1",
+            "photos-TOTAL_FORMS": "0", "photos-INITIAL_FORMS": "0",
+            "attributes-TOTAL_FORMS": "0", "attributes-INITIAL_FORMS": "0",
+        })
+        self.assertEqual(response.status_code, 200)
+        form = response.context["adminform"].form
+        self.assertEqual(len(form.non_field_errors()), 2, form.errors)  # SKU and barcode
+        self.assertFalse(MenuItem.objects.filter(name="Ще лате").exists())
+
     def test_the_schedule_is_saved_from_ticks(self):
         response = self.client.post(reverse("admin:menu_menucategory_add"), {
             "name": "Ланч", "sort_order": "100", "is_active": "on", "station": "",

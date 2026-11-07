@@ -154,6 +154,14 @@ class SignInTests(MiniAppFixture):
         self.assertIn("telegram.org", response["Content-Security-Policy"])
         self.assertContains(response, "telegram-web-app.js")
 
+    def test_styles_and_script_are_fetched_anew_after_an_update(self):
+        # Telegram keeps old files in its cache: without a version in the
+        # link a new guest.js ran with the old guest.css (owner, 2026-11-07).
+        response = self.client.get(reverse("webapp:guest", args=[self.bot.id.hex]))
+        html = response.content.decode()
+        for name in ("guest.css", "guest.js"):
+            self.assertRegex(html, rf"webapp/{name}\?v=[0-9a-f]{{10}}\"")
+
 
 class MenuAndCartTests(MiniAppFixture):
     def test_the_menu_with_photos_and_where_items_are_sold(self):
