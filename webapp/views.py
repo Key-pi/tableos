@@ -39,6 +39,16 @@ from apps.billing.remote_orders import (
 )
 from apps.billing.services import BillingServiceError
 from apps.bonuses.services import bonus_balance
+from apps.menu.catalog import (
+    badges_of,
+    catalog_tree,
+    closed_category,
+    has_old_price,
+    local_now,
+    portion_label,
+    schedule_label,
+    showcase_on,
+)
 from apps.menu.repositories import MenuItemRepository
 from apps.orders.models import Order
 from apps.orders.services import (
@@ -268,22 +278,62 @@ def point_view(request, guest: GuestRequest, body: dict) -> dict:
     return {"ok": True}
 
 
+def _category_json(category, items, *, now, showcase: bool) -> dict:
+    closed = closed_category(category, now)
+    return {
+        "id": category.id.hex,
+        "name": category.name,
+        "description": category.description,
+        # Shown all day, sold only in its time (owner, 2026-11-07).
+        "closed": closed is not None,
+        "schedule": schedule_label(closed or category),
+        "items": [_item_json(item, showcase=showcase) for item in items],
+    }
+
+
+def _item_json(item, *, showcase: bool) -> dict:
+    data = {
+        "id": item.public_id,
+        "name": item.name,
+        "description": item.description,
+        "price": _money(item.price),
+        "photo": item.photo_url,
+        "sold_in": [channel for channel in item.CHANNEL_FIELDS if item.is_sold_in(channel)],
+    }
+    if showcase:
+        # The showcase module (owner, 2026-11-07): only while it is on.
+        data.update(
+            portion=portion_label(item),
+            old_price=_money(item.old_price) if has_old_price(item) else None,
+            badges=badges_of(item),
+            photos=[url for url in [item.photo_url] if url]
+            + [photo.image.url for photo in item.photos.all()],
+            attributes=[{"name": row.name, "value": row.value} for row in item.attributes.all()],
+            sku=item.sku,
+        )
+    return data
+
+
 @guest_api("GET")
 def menu_view(request, guest: GuestRequest, body: dict) -> dict:
-    categories: dict = {}
-    for item in MenuItemRepository.active_for_partner(guest.venue().id):
-        category = categories.setdefault(
-            item.category_id, {"id": item.category_id.hex, "name": item.category.name, "items": []}
-        )
-        category["items"].append({
-            "id": item.public_id,
-            "name": item.name,
-            "description": item.description,
-            "price": _money(item.price),
-            "photo": item.photo_url,
-            "sold_in": [channel for channel in item.CHANNEL_FIELDS if item.is_sold_in(channel)],
-        })
-    return {"categories": list(categories.values())}
+    """Top categories with their own items and subcategories (two levels)."""
+
+    venue = guest.venue()
+    showcase = showcase_on(venue)
+    items = MenuItemRepository.active_for_partner(venue.id).select_related("category__parent")
+    if showcase:
+        items = items.prefetch_related("custom_badges", "photos", "attributes")
+    now = local_now(venue)
+    categories = []
+    for branch in catalog_tree(venue.id, items):
+        top = _category_json(branch["category"], branch["items"], now=now, showcase=showcase)
+        top["parent"] = None
+        categories.append(top)
+        for child in branch["children"]:
+            sub = _category_json(child["category"], child["items"], now=now, showcase=showcase)
+            sub["parent"] = top["id"]
+            categories.append(sub)
+    return {"categories": categories, "showcase": showcase}
 
 
 # --- cart ----------------------------------------------------------------------

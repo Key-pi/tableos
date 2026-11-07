@@ -282,6 +282,15 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name=_lazy("Меню"),
         help_text=_lazy("Категории и позиции. Нужен для заказов и быстрых продаж."),
     )
+    module_showcase_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Расширенная витрина"),
+        help_text=_lazy(
+            "У позиций: порция (300 мл, 250 г), старая цена, метки («Хит», «Веган», свои), "
+            "ещё фото, характеристики, артикул и штрихкод. Гости видят их, пока модуль "
+            "включён. Требует меню.",
+        ),
+    )
     module_tables_enabled = models.BooleanField(
         default=True,
         verbose_name=_lazy("Столы и QR-сессии"),

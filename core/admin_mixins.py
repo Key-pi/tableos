@@ -277,3 +277,25 @@ class ScopedAdminMixin(admin.ModelAdmin):
         if model is Partner:
             return queryset.filter(id=partner_scope_id)
         return queryset
+
+
+class SectionInlineMixin:
+    """An inline editable by the rights of its Admin section, like the page
+    it sits on (Django's own model permissions are not used for venues)."""
+
+    admin_section: str = ""
+
+    def _allowed(self, request, action: str) -> bool:
+        return has_admin_section_permission(request.user, self.admin_section, action)
+
+    def has_view_permission(self, request, obj=None):
+        return self._allowed(request, "view")
+
+    def has_add_permission(self, request, obj=None):
+        return self._allowed(request, "change")
+
+    def has_change_permission(self, request, obj=None):
+        return self._allowed(request, "change")
+
+    def has_delete_permission(self, request, obj=None):
+        return self._allowed(request, "change")

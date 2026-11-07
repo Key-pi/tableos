@@ -42,26 +42,34 @@ def build_menu_keyboard(
     supports_cart: bool = True,
     cart=None,
     choose_way=(),
+    subcategories=(),
+    active_subcategory_id=None,
 ) -> InlineKeyboardMarkup:
-    """Categories, then the items to add (only once the guest chose a way of
-    ordering — ``has_session``), else the buttons that choose the way."""
+    """Top categories, the subcategories of the chosen one, then the items to
+    add (only once the guest chose a way of ordering — ``has_session``; none
+    while the category is out of its time), else the buttons that choose the
+    way."""
 
     rows: list[list[InlineKeyboardButton]] = []
 
-    category_row: list[InlineKeyboardButton] = []
-    for category in categories:
-        prefix = "• " if str(category.id) == str(active_category_id) else ""
-        category_row.append(
-            InlineKeyboardButton(
-                text=f"{prefix}{category.name}",
-                callback_data=f"menucat:{category.id}",
+    def category_rows(entries, active_id, marker=""):
+        row: list[InlineKeyboardButton] = []
+        for category in entries:
+            prefix = "• " if str(category.id) == str(active_id) else marker
+            row.append(
+                InlineKeyboardButton(
+                    text=f"{prefix}{category.name}",
+                    callback_data=f"menucat:{category.id}",
+                )
             )
-        )
-        if len(category_row) == 2:
-            rows.append(category_row)
-            category_row = []
-    if category_row:
-        rows.append(category_row)
+            if len(row) == 2:
+                rows.append(row)
+                row = []
+        if row:
+            rows.append(row)
+
+    category_rows(categories, active_category_id)
+    category_rows(subcategories, active_subcategory_id, marker="↳ ")
 
     if has_session and supports_cart:
         for item in items:

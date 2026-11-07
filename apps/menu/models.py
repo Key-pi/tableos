@@ -28,8 +28,42 @@ def validate_menu_photo_size(photo) -> None:
         )
 
 
+def store_compressed_photo(instance, model, field: str = "image") -> str:
+    """Before ``save``: a new upload is kept as a small WebP only
+    (apps/menu/photos.py). Returns the name of a photo it replaces or that
+    was cleared, to delete once the new one is saved."""
+
+    photo = getattr(instance, field)
+    previous = ""
+    if instance.pk:
+        previous = model.objects.filter(pk=instance.pk).values_list(field, flat=True).first() or ""
+    if photo and not getattr(photo, "_committed", True):
+        from apps.menu.photos import compress_menu_photo
+
+        photo.save("photo.webp", compress_menu_photo(photo.file), save=False)
+        return previous
+    if not photo:
+        return previous
+    return ""
+
+
+def delete_replaced_photo(instance, replaced: str, field: str = "image") -> None:
+    photo = getattr(instance, field)
+    if replaced and replaced != photo.name:
+        # The old photo goes once the new one is saved.
+        from django.db import transaction
+
+        storage = photo.storage
+        transaction.on_commit(lambda: storage.delete(replaced))
+
+
 class MenuCategory(PartnerBoundModel):
-    """Logical menu section used to group items inside a partner catalog."""
+    """Logical menu section used to group items inside a partner catalog.
+
+    Two levels at most (owner, 2026-11-07): a category may sit inside a top
+    category, never deeper. A schedule (from–until, on weekdays) shows the
+    category all day but sells it only in its time (``apps/menu/catalog.py``).
+    """
 
     class Station(models.TextChoices):
         # Where the category is made, for the kitchen/bar screens (PQ-048).
@@ -52,6 +86,26 @@ class MenuCategory(PartnerBoundModel):
         ),
     )
 
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="children",
+        verbose_name=_lazy("Внутри категории"),
+        help_text=_lazy("Подкатегория: например, «Футболки» внутри «Одежды». Два уровня."),
+    )
+    description = models.TextField(blank=True, verbose_name=_lazy("Описание"))
+    available_from = models.TimeField(
+        null=True, blank=True, verbose_name=_lazy("Продаётся с"),
+        help_text=_lazy("Например, завтраки с 08:00 до 12:00. Пусто — весь день."),
+    )
+    available_until = models.TimeField(null=True, blank=True, verbose_name=_lazy("Продаётся до"))
+    available_weekdays = models.JSONField(
+        default=list, blank=True, verbose_name=_lazy("Дни продажи"),
+        help_text=_lazy("Пусто — каждый день."),
+    )
+
     class Meta:
         verbose_name = _lazy("категория меню")
         verbose_name_plural = _lazy("Категории меню")
@@ -64,7 +118,66 @@ class MenuCategory(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / {self.name}"
+        return f"{self.partner.name} / {self.full_name}"
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.parent.name} › {self.name}" if self.parent_id else self.name
+
+    @property
+    def effective_station(self) -> str:
+        """Where the category is made; a subcategory without its own place
+        takes its parent's."""
+
+        if self.station or not self.parent_id:
+            return self.station
+        return self.parent.station
+
+    def clean(self):
+        super().clean()
+        if self.parent_id:
+            parent = self.parent
+            if parent.pk == self.pk:
+                raise ValidationError({"parent": _("Категория не может быть внутри себя.")})
+            if parent.partner_id != self.partner_id:
+                raise ValidationError({"parent": _("Это категория другого заведения.")})
+            if parent.parent_id:
+                raise ValidationError(
+                    {"parent": _("Подкатегории — только два уровня: выберите верхнюю категорию.")}
+                )
+            if self.pk and MenuCategory.objects.filter(parent_id=self.pk).exists():
+                raise ValidationError(
+                    {"parent": _("У этой категории есть свои подкатегории — её нельзя вложить.")}
+                )
+        if (self.available_from is None) != (self.available_until is None):
+            raise ValidationError(
+                {"available_until": _("Укажите и «с», и «до» — или оставьте оба пустыми.")}
+            )
+        if self.available_from is not None and self.available_from == self.available_until:
+            raise ValidationError({"available_until": _("«С» и «до» не могут совпадать.")})
+        days = self.available_weekdays or []
+        if not isinstance(days, list) or any(day not in range(7) for day in days):
+            raise ValidationError({"available_weekdays": _("Дни недели — числа от 0 до 6.")})
+
+
+class MenuBadge(PartnerBoundModel):
+    """An owner's own label for items, next to the ready ones
+    (``apps/menu/catalog.py:BUILTIN_BADGES``)."""
+
+    name = models.CharField(max_length=40, verbose_name=_lazy("Название"))
+    emoji = models.CharField(max_length=8, blank=True, verbose_name=_lazy("Значок"))
+    sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+
+    class Meta:
+        verbose_name = _lazy("метка позиций")
+        verbose_name_plural = _lazy("Метки позиций")
+        ordering = ["sort_order", "name"]
+        constraints = [
+            models.UniqueConstraint(fields=["partner", "name"], name="unique_menu_badge_name")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.emoji} {self.name}".strip()
 
 
 class MenuItem(PartnerBoundModel):
@@ -120,6 +233,38 @@ class MenuItem(PartnerBoundModel):
     ))
     sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
 
+    # The showcase (module_showcase_enabled, owner 2026-11-07): shown to
+    # guests only while the module is on.
+    class PortionUnit(models.TextChoices):
+        GRAM = "g", _lazy("г")
+        KILOGRAM = "kg", _lazy("кг")
+        MILLILITRE = "ml", _lazy("мл")
+        LITRE = "l", _lazy("л")
+        PIECE = "pcs", _lazy("шт")
+        CENTIMETRE = "cm", _lazy("см")
+        MINUTE = "min", _lazy("мин")
+
+    portion = models.DecimalField(
+        max_digits=10, decimal_places=3, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.001"))],
+        verbose_name=_lazy("Порция"),
+        help_text=_lazy("Объём, вес или размер: 300 мл, 250 г, 60 мин."),
+    )
+    portion_unit = models.CharField(
+        max_length=8, choices=PortionUnit.choices, blank=True, verbose_name=_lazy("Единица"),
+    )
+    old_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True,
+        verbose_name=_lazy("Старая цена"),
+        help_text=_lazy("Показывается зачёркнутой рядом с ценой; должна быть выше цены."),
+    )
+    badges = models.JSONField(default=list, blank=True, verbose_name=_lazy("Метки"))
+    custom_badges = models.ManyToManyField(
+        MenuBadge, blank=True, related_name="items", verbose_name=_lazy("Свои метки"),
+    )
+    sku = models.CharField(max_length=64, blank=True, verbose_name=_lazy("Артикул"))
+    barcode = models.CharField(max_length=64, blank=True, verbose_name=_lazy("Штрихкод"))
+
     CHANNEL_FIELDS = {
         "table": "available_at_table",
         "pickup": "available_for_pickup",
@@ -140,6 +285,15 @@ class MenuItem(PartnerBoundModel):
                 condition=Q(price__gt=0),
                 name="menu_item_price_positive",
             ),
+            models.UniqueConstraint(
+                fields=["partner", "sku"], condition=~Q(sku=""), name="unique_menu_item_sku",
+                violation_error_message=_lazy("Такой артикул уже есть у другой позиции."),
+            ),
+            models.UniqueConstraint(
+                fields=["partner", "barcode"], condition=~Q(barcode=""),
+                name="unique_menu_item_barcode",
+                violation_error_message=_lazy("Такой штрихкод уже есть у другой позиции."),
+            ),
         ]
 
     def __str__(self) -> str:
@@ -156,29 +310,81 @@ class MenuItem(PartnerBoundModel):
     def is_sold_in(self, channel: str) -> bool:
         return bool(getattr(self, self.CHANNEL_FIELDS[channel]))
 
+    def clean(self):
+        super().clean()
+        if self.old_price is not None and self.price is not None and self.old_price <= self.price:
+            raise ValidationError({"old_price": _("Старая цена должна быть выше цены.")})
+        if (self.portion is None) != (not self.portion_unit):
+            raise ValidationError(
+                {"portion_unit": _("Укажите и порцию, и единицу — или оставьте оба пустыми.")}
+            )
+        from apps.menu.catalog import BUILTIN_BADGES
+
+        badges = self.badges or []
+        if not isinstance(badges, list) or any(code not in BUILTIN_BADGES for code in badges):
+            raise ValidationError({"badges": _("Неизвестная метка.")})
+
     def save(self, *args, **kwargs):
         if not self.public_id:
             self.public_id = secrets.token_hex(4)
-        replaced = ""
-        if self.image and not getattr(self.image, "_committed", True):
-            # A new upload: kept as a small WebP only (apps/menu/photos.py).
-            from apps.menu.photos import compress_menu_photo
-
-            if self.pk:
-                replaced = (
-                    MenuItem.objects.filter(pk=self.pk).values_list("image", flat=True).first()
-                    or ""
-                )
-            self.image.save("photo.webp", compress_menu_photo(self.image.file), save=False)
-        elif self.pk and not self.image:
-            replaced = (
-                MenuItem.objects.filter(pk=self.pk).values_list("image", flat=True).first() or ""
-            )
+        replaced = store_compressed_photo(self, MenuItem)
         result = super().save(*args, **kwargs)
-        if replaced and replaced != self.image.name:
-            # The old photo goes once the new one is saved.
-            from django.db import transaction
-
-            storage = self.image.storage
-            transaction.on_commit(lambda: storage.delete(replaced))
+        delete_replaced_photo(self, replaced)
         return result
+
+
+class MenuItemPhoto(PartnerBoundModel):
+    """More photos of an item (showcase): the gallery after the main one."""
+
+    item = models.ForeignKey(
+        MenuItem, on_delete=models.CASCADE, related_name="photos", verbose_name=_lazy("Позиция"),
+    )
+    image = models.ImageField(
+        upload_to=menu_photo_path,
+        validators=[FileExtensionValidator(MENU_PHOTO_EXTENSIONS), validate_menu_photo_size],
+        verbose_name=_lazy("Фото"),
+        help_text=_lazy("JPG, PNG или WebP до 5 МБ; сохраняется уменьшенным."),
+    )
+    sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+
+    class Meta:
+        verbose_name = _lazy("фото позиции")
+        verbose_name_plural = _lazy("Ещё фото")
+        ordering = ["sort_order", "created_at"]
+
+    def __str__(self) -> str:
+        return self.image.name
+
+    def save(self, *args, **kwargs):
+        if self.item_id and not self.partner_id:
+            self.partner_id = self.item.partner_id
+        replaced = store_compressed_photo(self, MenuItemPhoto)
+        result = super().save(*args, **kwargs)
+        delete_replaced_photo(self, replaced)
+        return result
+
+
+class MenuItemAttribute(PartnerBoundModel):
+    """A characteristic of an item (showcase): brand, material, composition,
+    allergens, calories — name and value as the owner writes them."""
+
+    item = models.ForeignKey(
+        MenuItem, on_delete=models.CASCADE, related_name="attributes",
+        verbose_name=_lazy("Позиция"),
+    )
+    name = models.CharField(max_length=80, verbose_name=_lazy("Характеристика"))
+    value = models.CharField(max_length=255, verbose_name=_lazy("Значение"))
+    sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+
+    class Meta:
+        verbose_name = _lazy("характеристика")
+        verbose_name_plural = _lazy("Характеристики")
+        ordering = ["sort_order", "name"]
+
+    def __str__(self) -> str:
+        return f"{self.name}: {self.value}"
+
+    def save(self, *args, **kwargs):
+        if self.item_id and not self.partner_id:
+            self.partner_id = self.item.partner_id
+        return super().save(*args, **kwargs)

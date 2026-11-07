@@ -3,7 +3,15 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, Message, WebAppInfo
 from asgiref.sync import sync_to_async
 
-from apps.menu.models import MenuCategory
+from apps.menu.catalog import (
+    badges_of,
+    catalog_tree,
+    closed_category,
+    has_old_price,
+    portion_label,
+    schedule_label,
+    showcase_on,
+)
 from apps.menu.repositories import MenuItemRepository
 from apps.orders.models import Order
 from apps.orders.services import (
@@ -86,24 +94,41 @@ def _ordering_hint(content, *, channel, session) -> list[str]:
     return lines
 
 
+def _item_line(item, *, showcase: bool) -> str:
+    line = _("{name} — {price} грн", name=escape_html(item.name), price=item.price)
+    if not showcase:
+        return line
+    # The showcase module (owner, 2026-11-07): labels, old price, portion.
+    emojis = "".join(badge["emoji"] for badge in badges_of(item) if badge["emoji"])
+    if emojis:
+        line = f"{emojis} {line}"
+    if has_old_price(item):
+        line += f" <s>{escape_html(_('{price} грн', price=item.old_price))}</s>"
+    portion = portion_label(item)
+    if portion:
+        line += f" · {escape_html(portion)}"
+    return line
+
+
 def _render_menu_category_view(
-    *, partner, content, category, menu_items, session, channel=None
+    *, partner, content, category, menu_items, session, channel=None, closed_when: str = "",
+    showcase: bool = False,
 ) -> str:
     lines = [content.menu_header(partner_name=partner.name)]
-    lines.append(_("Категория: <b>{name}</b>", name=escape_html(category.name)))
+    name = getattr(category, "full_name", category.name)
+    lines.append(_("Категория: <b>{name}</b>", name=escape_html(name)))
+    if closed_when:
+        # Shown all day, sold only in its time (owner, 2026-11-07).
+        lines.append(
+            _("🕐 Продаётся {when} — сейчас заказать нельзя.", when=escape_html(closed_when))
+        )
     lines.append("")
     if not menu_items:
         lines.append(_("В этой категории сейчас нет доступных позиций."))
         lines.append("")
     else:
         for item in menu_items:
-            lines.append(
-                _(
-                    "{name} — {price} грн",
-                    name=escape_html(item.name),
-                    price=item.price,
-                )
-            )
+            lines.append(_item_line(item, showcase=showcase))
             if item.description:
                 lines.append(f"<i>{escape_html(_trim_menu_description(item.description))}</i>")
             lines.append("")
@@ -119,21 +144,33 @@ async def _answer(target, text: str, *, reply_markup) -> None:
         await target.answer(text, reply_markup=reply_markup)
 
 
-def _categories_with_items(partner_id, channel):
-    """Active categories that have something to show in this way of ordering."""
+def _menu_tree(partner, channel, showcase: bool):
+    """Top categories with their items and subcategories (two levels) that
+    have something to show in this way of ordering."""
 
-    category_ids = set(
-        MenuItemRepository.active_for_partner(partner_id, channel=channel).values_list(
-            "category_id", flat=True
-        )
+    items = MenuItemRepository.active_for_partner(partner.id, channel=channel).select_related(
+        "category__parent"
     )
-    return [
-        category
-        for category in MenuCategory.objects.filter(partner_id=partner_id, is_active=True).order_by(
-            "sort_order", "name"
-        )
-        if category.id in category_ids
-    ]
+    if showcase:
+        items = items.prefetch_related("custom_badges")
+    return catalog_tree(partner.id, list(items))
+
+
+def _pick(tree, category_id):
+    """(top branch, chosen entry): the asked category, else the first top;
+    a top with no own items opens its first subcategory."""
+
+    for branch in tree:
+        if str(branch["category"].id) == str(category_id):
+            break
+        for child in branch["children"]:
+            if str(child["category"].id) == str(category_id):
+                return branch, child
+    else:
+        branch = tree[0]
+    if not branch["items"] and branch["children"]:
+        return branch, branch["children"][0]
+    return branch, branch
 
 
 MINI_APP_BUTTON = N_("📱 Открыть меню в приложении")
@@ -176,20 +213,17 @@ async def send_menu_view(
             partner_id=partner.id,
             telegram_id=user.id,
         )
-    categories = await sync_to_async(_categories_with_items)(partner.id, channel)
-    if not categories:
+    showcase = await sync_to_async(showcase_on)(partner)
+    tree = await sync_to_async(_menu_tree)(partner, channel, showcase)
+    if not tree:
         await _answer(target, content.menu_empty_message_template, reply_markup=main_keyboard)
         return
 
-    category = next(
-        (item for item in categories if str(item.id) == str(category_id)),
-        categories[0],
-    )
-    menu_items = await sync_to_async(list)(
-        MenuItemRepository.active_for_partner(partner.id, channel=channel).filter(
-            category=category
-        )[: content.max_menu_items_per_category_message]
-    )
+    branch, chosen = _pick(tree, category_id)
+    category = chosen["category"]
+    menu_items = chosen["items"][: content.max_menu_items_per_category_message]
+    closed = await sync_to_async(closed_category)(category)
+    closed_when = schedule_label(closed) if closed is not None else ""
     cart = None
     if channel is not None:
         cart = await sync_to_async(get_active_cart_for_telegram_user)(
@@ -203,11 +237,15 @@ async def send_menu_view(
         menu_items=menu_items,
         session=session,
         channel=channel,
+        closed_when=closed_when,
+        showcase=showcase,
     )
     keyboard = build_menu_keyboard(
-        categories=categories,
-        active_category_id=category.id,
-        items=menu_items,
+        categories=[entry["category"] for entry in tree],
+        active_category_id=branch["category"].id,
+        subcategories=[entry["category"] for entry in branch["children"]],
+        active_subcategory_id=category.id if category.parent_id else None,
+        items=[] if closed is not None else menu_items,
         has_session=channel is not None,
         supports_cart=content.supports_cart(),
         cart=cart,

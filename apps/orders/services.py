@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.billing.models import BillItem
 from apps.employees.models import EmployeeProfile
+from apps.menu.catalog import first_not_on_sale
 from apps.menu.models import MenuItem
 from apps.notifications.models import StaffNotification
 from apps.notifications.services import deliver_staff_notification, send_guest_order_status_update
@@ -934,7 +935,9 @@ def checkout_active_cart_for_telegram_user(
         partner_id=partner_id,
         telegram_id=telegram_id,
     )
-    cart_items = list(cart.items.select_related("menu_item"))
+    cart_items = list(
+        cart.items.select_related("menu_item__partner", "menu_item__category__parent")
+    )
     if not cart_items:
         raise OrderFlowError(_("Корзина пуста. Добавьте позиции перед оформлением."))
     if cart.channel != Order.Channel.TABLE or cart.table_session_id is None:
@@ -949,6 +952,9 @@ def checkout_active_cart_for_telegram_user(
             "Недоступно для заказа к столу: {not_sold}.",
             not_sold=', '.join(not_sold),
         ))
+    closed = first_not_on_sale(item.menu_item for item in cart_items)
+    if closed:
+        raise OrderFlowError(closed)
 
     order = create_order(
         partner_id=partner_id,
@@ -992,7 +998,7 @@ def _build_items_payload(
             public_id__in=lookup_codes,
             is_available=True,
             category__is_active=True,
-        )
+        ).select_related("partner", "category__parent")
     }
     missing_codes = [
         item_code for item_code in menu_item_codes if item_code.lower() not in available_items
@@ -1005,6 +1011,11 @@ def _build_items_payload(
                 missing_codes=', '.join(missing_codes),
             )
         )
+
+    # A category's schedule: shown all day, sold only in its time.
+    closed = first_not_on_sale(available_items.values())
+    if closed:
+        raise OrderFlowError(closed)
 
     items_payload = []
     for item_code, quantity in parsed_entries:

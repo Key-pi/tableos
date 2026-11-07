@@ -58,6 +58,7 @@ from apps.billing.services import (
     record_payment,
 )
 from apps.bonuses.services import get_redeemable_bonus_amount
+from apps.menu.catalog import first_not_on_sale
 from apps.orders.models import Cart, Order
 from apps.orders.services import (
     CHANNEL_OFF_MESSAGES,
@@ -220,7 +221,9 @@ def _guest(partner_id, telegram_id: int, *, lock: bool = False) -> GuestProfile:
 
 
 def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = False) -> Cart:
-    queryset = Cart.objects.prefetch_related("items__menu_item")
+    queryset = Cart.objects.prefetch_related(
+        "items__menu_item__partner", "items__menu_item__category__parent"
+    )
     if lock:
         queryset = queryset.select_for_update(of=("self",))
     cart = (
@@ -248,6 +251,10 @@ def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = 
             channel=_(CHANNEL_TITLES[channel]),
             not_sold=', '.join(not_sold),
         ))
+    # A category's schedule: a cart from the morning is not ordered at noon.
+    closed = first_not_on_sale(item.menu_item for item in cart.items.all())
+    if closed:
+        raise RemoteOrderError(closed)
     return cart
 
 

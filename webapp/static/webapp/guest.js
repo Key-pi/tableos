@@ -21,6 +21,7 @@
   var checkout = null;
   var view = "menu";
   var query = "";
+  var selected = null; // the item open in full (view "item")
   var form = { phone: "", address: "", carrier: "", destination: "", slot: "", payment: "",
                shippingCost: "", useBonuses: false };
   var busy = false;
@@ -215,6 +216,7 @@
   function render() {
     if (view === "cart") renderCart();
     else if (view === "checkout") renderCheckout();
+    else if (view === "item" && selected) renderItem();
     else renderMenu();
   }
 
@@ -275,12 +277,14 @@
     });
   }
 
-  function itemCard(item) {
+  // What the guest can do with the item: add, change the count, or a note why not.
+  function itemAction(item, category) {
     var channel = state.cart.channel;
     var off = channel && item.sold_in.indexOf(channel) === -1;
     var quantity = cartQuantity(item.id);
     var action;
     if (!state.can_order) action = null;
+    else if (category && category.closed) action = el("span", { class: "note", text: T.not_now });
     else if (off) action = el("span", { class: "note", text: T.not_sold_here });
     else if (quantity > 0) {
       action = el("span", { class: "stepper" },
@@ -297,7 +301,36 @@
                                 changeCart({ action: "add", item: item.id });
                               } });
     }
-    var photo = el("div", { class: "photo" });
+    return action;
+  }
+
+  function badgesRow(item) {
+    if (!item.badges || !item.badges.length) return null;
+    var row = el("div", { class: "badges" });
+    item.badges.forEach(function (badge) {
+      row.appendChild(el("span", { class: "badge", text: (badge.emoji ? badge.emoji + " " : "") + badge.name }));
+    });
+    return row;
+  }
+
+  function priceLine(item) {
+    return el("span", { class: "price" }, money(item.price),
+      item.old_price ? el("s", { class: "old", text: money(item.old_price) }) : null);
+  }
+
+  function openItem(item, category) {
+    selected = { item: item, category: category };
+    view = "item";
+    window.scrollTo(0, 0);
+    render();
+  }
+
+  function itemCard(item, category) {
+    var channel = state.cart.channel;
+    var off = channel && item.sold_in.indexOf(channel) === -1;
+    var action = itemAction(item, category);
+    var open = function () { openItem(item, category); };
+    var photo = el("div", { class: "photo", onclick: open });
     if (item.photo) {
       photo.appendChild(el("img", { src: item.photo, alt: "", loading: "lazy",
                                     style: "width:100%;height:100%;object-fit:cover;display:block",
@@ -305,12 +338,59 @@
     } else {
       photo.textContent = "🍽";
     }
-    return el("div", { class: "card" + (off ? " off" : "") },
+    return el("div", { class: "card" + (off || (category && category.closed) ? " off" : "") },
       photo,
       el("div", { class: "body" },
-        el("div", { class: "name", text: item.name }),
-        item.description ? el("div", { class: "desc", text: item.description }) : null,
-        el("div", { class: "foot" }, el("span", { class: "price", text: money(item.price) }), action)));
+        badgesRow(item),
+        el("div", { class: "name", onclick: open, text: item.name }),
+        item.portion ? el("div", { class: "portion", text: item.portion }) : null,
+        item.description ? el("div", { class: "desc", onclick: open, text: item.description }) : null,
+        el("div", { class: "foot" }, priceLine(item), action)));
+  }
+
+  // One item in full: photos, labels, description, characteristics.
+  function renderItem() {
+    var item = selected.item;
+    var category = selected.category;
+    var back = function () { view = "menu"; render(); };
+    setBack(back);
+    var page = el("div", { class: "page item-page" });
+    var photos = item.photos && item.photos.length ? item.photos : (item.photo ? [item.photo] : []);
+    if (photos.length) {
+      var gallery = el("div", { class: "gallery" });
+      photos.forEach(function (url) {
+        var frame = el("div", { class: "frame" });
+        frame.appendChild(el("img", { src: url, alt: "", loading: "lazy", onerror: photoMissing("🍽") }));
+        gallery.appendChild(frame);
+      });
+      page.appendChild(gallery);
+    }
+    var body = el("div", { class: "item-body" });
+    if (badgesRow(item)) body.appendChild(badgesRow(item));
+    body.appendChild(el("h1", { text: item.name }));
+    if (item.portion) body.appendChild(el("div", { class: "portion", text: item.portion }));
+    if (category && category.closed) {
+      body.appendChild(el("div", { class: "schedule", text: "🕐 " + t("sold_when", { when: category.schedule }) }));
+    }
+    body.appendChild(el("div", { class: "foot" }, priceLine(item), itemAction(item, category)));
+    if (item.description) body.appendChild(el("p", { class: "full-desc", text: item.description }));
+    var rows = (item.attributes || []).slice();
+    if (item.sku) rows.push({ name: T.sku, value: item.sku });
+    if (rows.length) {
+      var table = el("dl", { class: "attributes" });
+      rows.forEach(function (row) {
+        table.appendChild(el("div", null, el("dt", { text: row.name }), el("dd", { text: row.value })));
+      });
+      body.appendChild(table);
+    }
+    page.appendChild(body);
+    show(page);
+    if (state.cart.count > 0) {
+      setMain(T.cart + " · " + state.cart.count + " · " + money(state.cart.total),
+              function () { view = "cart"; window.scrollTo(0, 0); render(); });
+    } else {
+      setMain(T.back, back);
+    }
   }
 
   function renderMenu() {
@@ -352,8 +432,9 @@
     var input = el("input", { type: "search", placeholder: T.search, value: query, "aria-label": T.search,
                               oninput: function (event) { query = event.target.value; renderList(); } });
     sticky.appendChild(el("div", { class: "search" }, input));
+    var tops = categories.filter(function (category) { return !category.parent; });
     var tabs = el("div", { class: "tabs", role: "tablist" });
-    categories.forEach(function (category, index) {
+    tops.forEach(function (category, index) {
       tabs.appendChild(el("button", {
         type: "button", class: "tab", role: "tab", text: category.name,
         "aria-selected": String(index === 0),
@@ -365,7 +446,7 @@
         }
       }));
     });
-    if (categories.length > 1) sticky.appendChild(tabs);
+    if (tops.length > 1) sticky.appendChild(tabs);
     page.appendChild(sticky);
     var list = el("div");
     page.appendChild(list);
@@ -374,16 +455,40 @@
       needle = query.trim().toLowerCase();
       clear(list);
       var shown = 0;
-      categories.forEach(function (category) {
-        var items = category.items.filter(function (item) {
-          return !needle || (item.name + " " + item.description).toLowerCase().indexOf(needle) !== -1;
+      function matching(category) {
+        return category.items.filter(function (item) {
+          var text = item.name + " " + item.description + " " + (item.sku || "");
+          return !needle || text.toLowerCase().indexOf(needle) !== -1;
         });
-        if (!items.length) return;
-        shown += items.length;
+      }
+      function block(category, items, heading) {
         var grid = el("div", { class: "grid" });
-        items.forEach(function (item) { grid.appendChild(itemCard(item)); });
-        list.appendChild(el("section", { class: "category", id: "c-" + category.id },
-          el("h2", { text: category.name }), grid));
+        items.forEach(function (item) { grid.appendChild(itemCard(item, category)); });
+        return [
+          el(heading, { text: category.name }),
+          category.closed ? el("div", { class: "schedule", text: "🕐 " + t("sold_when", { when: category.schedule }) }) : null,
+          items.length ? grid : null,
+        ];
+      }
+      tops.forEach(function (top) {
+        var section = el("section", { class: "category", id: "c-" + top.id });
+        var own = matching(top);
+        var count = own.length;
+        var parts = [];
+        categories.forEach(function (child) {
+          if (child.parent !== top.id) return;
+          var items = matching(child);
+          if (!items.length) return;
+          count += items.length;
+          var sub = el("div", { class: "subcategory", id: "c-" + child.id });
+          block(child, items, "h3").forEach(function (node) { if (node) sub.appendChild(node); });
+          parts.push(sub);
+        });
+        if (!count) return;
+        shown += count;
+        block(top, own, "h2").forEach(function (node) { if (node) section.appendChild(node); });
+        parts.forEach(function (node) { section.appendChild(node); });
+        list.appendChild(section);
       });
       if (!shown) list.appendChild(el("div", { class: "empty", text: categories.length ? T.nothing_found : T.menu_empty }));
     }

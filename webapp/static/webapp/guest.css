@@ -132,3 +132,25 @@ input, textarea { font: inherit; color: var(--text); }
   background: rgba(20, 20, 24, 0.92); color: #fff; border-radius: 12px; padding: 11px 14px;
   font-size: 14px; text-align: center;
 }
+
+/* Catalog (owner, 2026-11-07): subcategories, schedule, showcase, item page. */
+.subcategory h3 { font-size: 15px; margin: 14px 0 8px; color: var(--text); }
+.schedule { color: var(--hint); font-size: 13px; margin: -4px 0 8px; }
+.badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.badge { font-size: 11px; line-height: 1.2; padding: 2px 6px; border-radius: 999px; background: var(--secondary-bg, rgba(127,127,127,.15)); color: var(--text); white-space: nowrap; }
+.portion { color: var(--hint); font-weight: 400; font-size: 12px; }
+.price .old { color: var(--hint); font-weight: 400; margin-left: 6px; font-size: 0.9em; }
+.card .photo, .card .name, .card .desc { cursor: pointer; }
+.item-page { padding: 12px 16px 96px; }
+.gallery { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 8px; margin: 0 -16px; padding: 0 16px; }
+.gallery .frame { flex: 0 0 100%; aspect-ratio: 4 / 3; border-radius: 14px; overflow: hidden; background: var(--secondary-bg, rgba(127,127,127,.12)); scroll-snap-align: center; display: flex; align-items: center; justify-content: center; font-size: 42px; }
+.gallery .frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.item-body { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; }
+.item-body h1 { font-size: 20px; margin: 0; overflow-wrap: anywhere; }
+.item-body .portion { font-size: 14px; }
+.item-body .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 18px; }
+.full-desc { margin: 4px 0 0; line-height: 1.45; white-space: pre-line; overflow-wrap: anywhere; }
+.attributes { margin: 4px 0 0; display: flex; flex-direction: column; border-top: 1px solid var(--line, rgba(127,127,127,.2)); }
+.attributes div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line, rgba(127,127,127,.2)); }
+.attributes dt { color: var(--hint); }
+.attributes dd { margin: 0; text-align: right; overflow-wrap: anywhere; }

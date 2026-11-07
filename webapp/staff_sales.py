@@ -61,9 +61,14 @@ def _redeem(body: dict) -> bool:
 def sale_menu_view(request, staff: StaffRequest, body: dict) -> dict:
     _sales(staff)
     categories: dict = {}
-    for item in MenuItemRepository.active_for_partner(staff.partner.id):
+    items = MenuItemRepository.active_for_partner(staff.partner.id).select_related(
+        "category__parent"
+    )
+    for item in items:
+        # A subcategory with its parent: «Одежда › Футболки» (catalog, 2026-11-07).
         category = categories.setdefault(
-            item.category_id, {"id": item.category_id.hex, "name": item.category.name, "items": []}
+            item.category_id,
+            {"id": item.category_id.hex, "name": item.category.full_name, "items": []},
         )
         category["items"].append({
             "id": item.id.hex, "name": item.name, "price": _money(item.price),

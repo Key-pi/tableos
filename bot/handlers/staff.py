@@ -1204,10 +1204,9 @@ def _compose_staff_sale_view(
     redeem_bonus: bool = False,
 ):
     categories = list(
-        MenuCategory.objects.filter(partner_id=partner_id, is_active=True).order_by(
-            "sort_order",
-            "name",
-        )
+        MenuCategory.objects.filter(partner_id=partner_id, is_active=True)
+        .select_related("parent")
+        .order_by("sort_order", "name")
     )
     if not categories:
         raise OrderFlowError(_("Для быстрой продажи сначала добавьте активные категории меню."))
@@ -1238,7 +1237,7 @@ def _compose_staff_sale_view(
     can_redeem = guest_preview.guest is not None and guest_preview.redeemable_bonus_amount > 0
     redeem_active = redeem_bonus and can_redeem
     keyboard = build_staff_sale_keyboard(
-        categories=[(str(category.id), category.name) for category in categories],
+        categories=[(str(category.id), category.full_name) for category in categories],
         selected_category_id=selected_category_id,
         category_items=[
             (str(item.id), item.name, f"{Decimal(item.price):.2f}")

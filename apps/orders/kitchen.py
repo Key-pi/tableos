@@ -139,7 +139,8 @@ def stations_of(shows: str) -> set[str]:
 
 
 def item_station(item: OrderItem, covered: set[str]) -> str:
-    station = item.menu_item.category.station if item.menu_item_id else ANY
+    # A subcategory without its own place takes its parent's (catalog, 2026-11-07).
+    station = item.menu_item.category.effective_station if item.menu_item_id else ANY
     return station if station in covered else ANY
 
 
@@ -155,7 +156,7 @@ def _items(queryset=None):
         "items",
         queryset=(queryset or OrderItem.objects)
         .filter(kind=OrderItem.Kind.ITEM)
-        .select_related("menu_item__category"),
+        .select_related("menu_item__category__parent"),
     )
 
 
@@ -223,7 +224,7 @@ def mark_ready(screen: KitchenScreen, public_id: str) -> tuple[Order, bool]:
     order = _locked_order(screen, public_id)
     items = list(
         OrderItem.objects.filter(order=order, kind=OrderItem.Kind.ITEM)
-        .select_related("menu_item__category")
+        .select_related("menu_item__category__parent")
     )
     covered = covered_stations(screen.partner_id)
     mine = stations_of(screen.shows)

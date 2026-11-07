@@ -540,7 +540,7 @@ msgstr "Orders in bills"
 msgid "Строка заказа"
 msgstr "Order line"
 
-#: apps/billing/models.py apps/bonuses/models.py apps/orders/models.py
+#: apps/billing/models.py apps/bonuses/models.py apps/menu/models.py apps/orders/models.py
 msgid "Позиция"
 msgstr "Item"
 
@@ -1964,9 +1964,125 @@ msgstr "staff invite"
 msgid "Приглашения сотрудников"
 msgstr "Staff invites"
 
+#: apps/menu/admin.py apps/menu/models.py
+msgid "Дни продажи"
+msgstr "Days on sale"
+
+#: apps/menu/admin.py
+msgid "Ничего не отмечено — каждый день."
+msgstr "Nothing ticked — every day."
+
+#: apps/menu/admin.py
+msgid "Расписание"
+msgstr "Schedule"
+
+#: apps/menu/admin.py
+msgid "Вне этого времени категория видна гостям с пометкой, но не продаётся. Подкатегория продаётся, только пока продаётся и её верхняя категория."
+msgstr "Outside this time guests see the category with a note, but it is not sold. A subcategory is sold only while its top category is."
+
+#: apps/menu/admin.py apps/menu/models.py
+msgid "Метки"
+msgstr "Labels"
+
+#: apps/menu/admin.py
+msgid "Где продаётся"
+msgstr "Where it is sold"
+
+#: apps/menu/admin.py
+msgid "Витрина"
+msgstr "Showcase"
+
+#: apps/menu/admin.py
+msgid "Порция, старая цена, метки, артикул; ниже — ещё фото и характеристики."
+msgstr "Portion, old price, labels, SKU; below — more photos and characteristics."
+
 #: apps/menu/apps.py apps/partners/models.py apps/users/constants.py
 msgid "Меню"
 msgstr "Menu"
+
+#: apps/menu/catalog.py
+msgid "Новинка"
+msgstr "New"
+
+#: apps/menu/catalog.py
+msgid "Хит"
+msgstr "Hit"
+
+#: apps/menu/catalog.py
+msgid "Рекомендуем"
+msgstr "Recommended"
+
+#: apps/menu/catalog.py
+msgid "Острое"
+msgstr "Spicy"
+
+#: apps/menu/catalog.py
+msgid "Веган"
+msgstr "Vegan"
+
+#: apps/menu/catalog.py
+msgid "Вегетарианское"
+msgstr "Vegetarian"
+
+#: apps/menu/catalog.py
+msgid "Без глютена"
+msgstr "Gluten-free"
+
+#: apps/menu/catalog.py
+msgid "Без лактозы"
+msgstr "Lactose-free"
+
+#: apps/menu/catalog.py
+msgid "18+"
+msgstr "18+"
+
+#: apps/menu/catalog.py
+msgid "Ограниченное предложение"
+msgstr "Limited offer"
+
+#: apps/menu/catalog.py
+msgid "Эко"
+msgstr "Eco"
+
+#: apps/menu/catalog.py
+msgid "Ручная работа"
+msgstr "Handmade"
+
+#: apps/menu/catalog.py
+msgid "пн"
+msgstr "Mon"
+
+#: apps/menu/catalog.py
+msgid "вт"
+msgstr "Tue"
+
+#: apps/menu/catalog.py
+msgid "ср"
+msgstr "Wed"
+
+#: apps/menu/catalog.py
+msgid "чт"
+msgstr "Thu"
+
+#: apps/menu/catalog.py
+msgid "пт"
+msgstr "Fri"
+
+#: apps/menu/catalog.py
+msgid "сб"
+msgstr "Sat"
+
+#: apps/menu/catalog.py
+msgid "вс"
+msgstr "Sun"
+
+#: apps/menu/catalog.py
+msgid "с {start} до {end}"
+msgstr "from {start} to {end}"
+
+#: apps/menu/catalog.py
+msgid "«{name}» продаётся {when} — сейчас заказать нельзя."
+msgstr "“{name}” is sold {when} — it cannot be ordered now."
 
 #: apps/menu/models.py
 msgid "Фото больше {size} МБ — уменьшите его."
@@ -2001,12 +2117,80 @@ msgid "Для экранов кухни и бара: позиции катего
 msgstr "For kitchen and bar screens: this place's screen shows the category's items. Not set — every screen."
 
 #: apps/menu/models.py
+msgid "Внутри категории"
+msgstr "Inside category"
+
+#: apps/menu/models.py
+msgid "Подкатегория: например, «Футболки» внутри «Одежды». Два уровня."
+msgstr "A subcategory: e.g. “T-shirts” inside “Clothes”. Two levels."
+
+#: apps/menu/models.py
+msgid "Описание"
+msgstr "Description"
+
+#: apps/menu/models.py
+msgid "Продаётся с"
+msgstr "Sold from"
+
+#: apps/menu/models.py
+msgid "Например, завтраки с 08:00 до 12:00. Пусто — весь день."
+msgstr "E.g. breakfasts from 08:00 to 12:00. Empty — all day."
+
+#: apps/menu/models.py
+msgid "Продаётся до"
+msgstr "Sold until"
+
+#: apps/menu/models.py
+msgid "Пусто — каждый день."
+msgstr "Empty — every day."
+
+#: apps/menu/models.py
 msgid "категория меню"
 msgstr "menu category"
 
 #: apps/menu/models.py
 msgid "Категории меню"
 msgstr "Menu categories"
+
+#: apps/menu/models.py
+msgid "Категория не может быть внутри себя."
+msgstr "A category cannot be inside itself."
+
+#: apps/menu/models.py
+msgid "Это категория другого заведения."
+msgstr "This is another venue's category."
+
+#: apps/menu/models.py
+msgid "Подкатегории — только два уровня: выберите верхнюю категорию."
+msgstr "Subcategories go two levels only: choose a top category."
+
+#: apps/menu/models.py
+msgid "У этой категории есть свои подкатегории — её нельзя вложить."
+msgstr "This category has subcategories of its own — it cannot be put inside another."
+
+#: apps/menu/models.py
+msgid "Укажите и «с», и «до» — или оставьте оба пустыми."
+msgstr "Set both “from” and “until” — or leave both empty."
+
+#: apps/menu/models.py
+msgid "«С» и «до» не могут совпадать."
+msgstr "“From” and “until” cannot be the same."
+
+#: apps/menu/models.py
+msgid "Дни недели — числа от 0 до 6."
+msgstr "Weekdays are numbers from 0 to 6."
+
+#: apps/menu/models.py
+msgid "Значок"
+msgstr "Icon"
+
+#: apps/menu/models.py
+msgid "метка позиций"
+msgstr "item label"
+
+#: apps/menu/models.py
+msgid "Метки позиций"
+msgstr "Item labels"
 
 #: apps/menu/models.py
 msgid "Своя позиция"
@@ -2023,10 +2207,6 @@ msgstr "Category"
 #: apps/menu/models.py
 msgid "Код позиции"
 msgstr "Item code"
-
-#: apps/menu/models.py
-msgid "Описание"
-msgstr "Description"
 
 #: apps/menu/models.py
 msgid "Фото"
@@ -2053,12 +2233,120 @@ msgid "За столом"
 msgstr "At the table"
 
 #: apps/menu/models.py
+msgid "г"
+msgstr "g"
+
+#: apps/menu/models.py
+msgid "кг"
+msgstr "kg"
+
+#: apps/menu/models.py
+msgid "мл"
+msgstr "ml"
+
+#: apps/menu/models.py
+msgid "л"
+msgstr "l"
+
+#: apps/menu/models.py
+msgid "шт"
+msgstr "pcs"
+
+#: apps/menu/models.py
+msgid "см"
+msgstr "cm"
+
+#: apps/menu/models.py
+msgid "мин"
+msgstr "min"
+
+#: apps/menu/models.py
+msgid "Порция"
+msgstr "Portion"
+
+#: apps/menu/models.py
+msgid "Объём, вес или размер: 300 мл, 250 г, 60 мин."
+msgstr "Volume, weight or size: 300 ml, 250 g, 60 min."
+
+#: apps/menu/models.py
+msgid "Единица"
+msgstr "Unit"
+
+#: apps/menu/models.py
+msgid "Старая цена"
+msgstr "Old price"
+
+#: apps/menu/models.py
+msgid "Показывается зачёркнутой рядом с ценой; должна быть выше цены."
+msgstr "Shown struck out next to the price; must be above the price."
+
+#: apps/menu/models.py
+msgid "Свои метки"
+msgstr "Own labels"
+
+#: apps/menu/models.py webapp/texts.py
+msgid "Артикул"
+msgstr "SKU"
+
+#: apps/menu/models.py
+msgid "Штрихкод"
+msgstr "Barcode"
+
+#: apps/menu/models.py
 msgid "позиция меню"
 msgstr "menu item"
 
 #: apps/menu/models.py
 msgid "Позиции меню"
 msgstr "Menu items"
+
+#: apps/menu/models.py
+msgid "Такой артикул уже есть у другой позиции."
+msgstr "Another item already has this SKU."
+
+#: apps/menu/models.py
+msgid "Такой штрихкод уже есть у другой позиции."
+msgstr "Another item already has this barcode."
+
+#: apps/menu/models.py
+msgid "Старая цена должна быть выше цены."
+msgstr "The old price must be above the price."
+
+#: apps/menu/models.py
+msgid "Укажите и порцию, и единицу — или оставьте оба пустыми."
+msgstr "Set both the portion and the unit — or leave both empty."
+
+#: apps/menu/models.py
+msgid "Неизвестная метка."
+msgstr "Unknown label."
+
+#: apps/menu/models.py
+msgid "JPG, PNG или WebP до 5 МБ; сохраняется уменьшенным."
+msgstr "JPG, PNG or WebP up to 5 MB; stored smaller."
+
+#: apps/menu/models.py
+msgid "фото позиции"
+msgstr "item photo"
+
+#: apps/menu/models.py
+msgid "Ещё фото"
+msgstr "More photos"
+
+#: apps/menu/models.py
+msgid "Характеристика"
+msgstr "Characteristic"
+
+#: apps/menu/models.py
+msgid "Значение"
+msgstr "Value"
+
+#: apps/menu/models.py
+msgid "характеристика"
+msgstr "characteristic"
+
+#: apps/menu/models.py
+msgid "Характеристики"
+msgstr "Characteristics"
 
 #: apps/notifications/admin.py
 msgid "Отправить выбранные рассылки"
@@ -3593,6 +3881,14 @@ msgid "Категории и позиции. Нужен для заказов и
 msgstr "Categories and items. Needed for orders and quick sales."
 
 #: apps/partners/models.py
+msgid "Расширенная витрина"
+msgstr "Extended showcase"
+
+#: apps/partners/models.py
+msgid "У позиций: порция (300 мл, 250 г), старая цена, метки («Хит», «Веган», свои), ещё фото, характеристики, артикул и штрихкод. Гости видят их, пока модуль включён. Требует меню."
+msgstr "For items: portion (300 ml, 250 g), old price, labels (“Hit”, “Vegan”, own ones), more photos, characteristics, SKU and barcode. Guests see them while the module is on. Needs the menu."
+
+#: apps/partners/models.py
 msgid "Столы и QR-сессии"
 msgstr "Tables and QR sessions"
 
@@ -4669,16 +4965,24 @@ msgid "За столом — отсканируйте QR-код на столе.
 msgstr "At a table — scan the QR code on the table."
 
 #: bot/handlers/menu.py
+msgid "{name} — {price} грн"
+msgstr "{name} — {price} UAH"
+
+#: bot/handlers/menu.py
+msgid "{price} грн"
+msgstr "{price} UAH"
+
+#: bot/handlers/menu.py
 msgid "Категория: <b>{name}</b>"
 msgstr "Category: <b>{name}</b>"
 
 #: bot/handlers/menu.py
-msgid "В этой категории сейчас нет доступных позиций."
-msgstr "There are no items in this category right now."
+msgid "🕐 Продаётся {when} — сейчас заказать нельзя."
+msgstr "🕐 Sold {when} — cannot be ordered now."
 
 #: bot/handlers/menu.py
-msgid "{name} — {price} грн"
-msgstr "{name} — {price} UAH"
+msgid "В этой категории сейчас нет доступных позиций."
+msgstr "There are no items in this category right now."
 
 #: bot/handlers/menu.py
 msgid "📱 Открыть меню в приложении"
@@ -7511,6 +7815,14 @@ msgstr "How will you get your order?"
 #: webapp/texts.py
 msgid "Недоступно для этого способа"
 msgstr "Not available this way"
+
+#: webapp/texts.py
+msgid "Сейчас не продаётся"
+msgstr "Not on sale now"
+
+#: webapp/texts.py
+msgid "Продаётся {when}"
+msgstr "Sold {when}"
 
 #: webapp/texts.py
 msgid "Добавить"
