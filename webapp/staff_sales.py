@@ -18,13 +18,14 @@ from apps.bonuses.services import (
     register_walk_in_sale_from_menu_items_by_customer_code,
     walk_in_sale_by_request_key,
 )
+from apps.menu.options import catalog_choices, has_choices, needs_choice, price_from
 from apps.menu.repositories import MenuItemRepository
 from bot.services.staff_rights import can_quick_sale, can_view_day_report
 from core.i18n import N_, _
 from webapp.context import WebAppDenied
 from webapp.staff_context import StaffRequest
 from webapp.staff_views import staff_api
-from webapp.views import _money, _text
+from webapp.views import MAX_OPTIONS, _choices_json, _money, _text
 
 MAX_LINES = 50
 
@@ -37,19 +38,48 @@ def _sales(staff: StaffRequest) -> None:
         )
 
 
+def _quantity(quantity) -> int:
+    if not isinstance(quantity, int) or isinstance(quantity, bool) or not 0 < quantity <= 99:
+        raise WebAppDenied(400, N_("Количество должно изменяться хотя бы на 1."))
+    return quantity
+
+
+def _item_id(value) -> uuid.UUID:
+    try:
+        return uuid.UUID(hex=str(value))
+    except ValueError as exc:
+        raise WebAppDenied(400, N_("Сначала добавьте позиции.")) from exc
+
+
 def _items(body: dict) -> list[dict]:
+    """``{item id: quantity}`` (a screen opened before catalog step 2), or a
+    list of lines ``{"item", "quantity", "variant", "options"}``."""
+
     raw = body.get("items")
-    if not isinstance(raw, dict) or len(raw) > MAX_LINES:
+    if isinstance(raw, dict) and len(raw) <= MAX_LINES:
+        return [
+            {"menu_item_id": _item_id(item_id), "quantity": _quantity(quantity)}
+            for item_id, quantity in raw.items()
+        ]
+    if not isinstance(raw, list) or len(raw) > MAX_LINES:
         raise WebAppDenied(400, N_("Сначала добавьте позиции."))
     items = []
-    for item_id, quantity in raw.items():
-        try:
-            menu_item_id = uuid.UUID(hex=str(item_id))
-        except ValueError as exc:
-            raise WebAppDenied(400, N_("Сначала добавьте позиции.")) from exc
-        if not isinstance(quantity, int) or isinstance(quantity, bool) or not 0 < quantity <= 99:
-            raise WebAppDenied(400, N_("Количество должно изменяться хотя бы на 1."))
-        items.append({"menu_item_id": menu_item_id, "quantity": quantity})
+    for line in raw:
+        if not isinstance(line, dict):
+            raise WebAppDenied(400, N_("Сначала добавьте позиции."))
+        variant, options = line.get("variant"), line.get("options", [])
+        if variant is not None and not isinstance(variant, str):
+            raise WebAppDenied(400, "bad variant")
+        if not isinstance(options, list) or len(options) > MAX_OPTIONS or not all(
+            isinstance(option, str) for option in options
+        ):
+            raise WebAppDenied(400, "bad options")
+        items.append({
+            "menu_item_id": _item_id(line.get("item")),
+            "quantity": _quantity(line.get("quantity")),
+            "variant_id": variant or None,
+            "modifier_ids": options,
+        })
     return items
 
 
@@ -61,19 +91,28 @@ def _redeem(body: dict) -> bool:
 def sale_menu_view(request, staff: StaffRequest, body: dict) -> dict:
     _sales(staff)
     categories: dict = {}
-    items = MenuItemRepository.active_for_partner(staff.partner.id).select_related(
-        "category__parent"
+    items = list(
+        MenuItemRepository.active_for_partner(staff.partner.id).select_related("category__parent")
     )
+    # Variants and add-ons as the guest chooses them (owner, 2026-11-07).
+    choices = catalog_choices(staff.partner, items)
     for item in items:
         # A subcategory with its parent: «Одежда › Футболки» (catalog, 2026-11-07).
         category = categories.setdefault(
             item.category_id,
             {"id": item.category_id.hex, "name": item.category.full_name, "items": []},
         )
-        category["items"].append({
-            "id": item.id.hex, "name": item.name, "price": _money(item.price),
+        entry = {
+            "id": item.id.hex, "name": item.name,
+            "price": _money(price_from(item, choices[item.id])),
+            "price_from": bool(choices[item.id].variants),
             "photo": item.photo_url,
-        })
+            "choice": "required" if needs_choice(item, choices[item.id])
+            else "optional" if has_choices(item, choices[item.id]) else "none",
+        }
+        if entry["choice"] != "none":
+            entry.update(_choices_json(choices[item.id]))
+        category["items"].append(entry)
     return {"categories": list(categories.values())}
 
 
@@ -86,6 +125,7 @@ def _preview_json(preview, redeem: bool) -> dict:
                 "id": item["menu_item_id"].hex if hasattr(item["menu_item_id"], "hex")
                 else str(item["menu_item_id"]).replace("-", ""),
                 "name": item["item_name"], "quantity": item["quantity"],
+                "key": item.get("key", ""),
                 "total": _money(item["unit_price"] * item["quantity"]),
             }
             for item in preview.items

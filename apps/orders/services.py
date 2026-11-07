@@ -9,7 +9,8 @@ from django.utils import timezone
 from apps.billing.models import BillItem
 from apps.employees.models import EmployeeProfile
 from apps.menu.catalog import first_not_on_sale
-from apps.menu.models import MenuItem
+from apps.menu.models import MenuItem, MenuItemVariant
+from apps.menu.options import ChoiceError, catalog_choices, needs_choice, resolve_choice
 from apps.notifications.models import StaffNotification
 from apps.notifications.services import deliver_staff_notification, send_guest_order_status_update
 from apps.orders.models import Cart, CartItem, Order, OrderItem, OrderStatusHistory
@@ -194,6 +195,21 @@ def _validate_order_tenant_context(
         menu_item_ids
     ):
         raise OrderFlowError(_("Позиция заказа относится к другому заведению."))
+    # A variant is of its own item (catalog step 2).
+    wanted = {
+        str(item_payload["variant_id"]): str(item_payload["menu_item_id"])
+        for item_payload in items
+        if item_payload.get("variant_id")
+    }
+    if wanted:
+        found = {
+            str(variant_id): str(item_id)
+            for variant_id, item_id in MenuItemVariant.objects.filter(
+                id__in=list(wanted)
+            ).values_list("id", "item_id")
+        }
+        if found != wanted:
+            raise OrderFlowError(_("Вариант не относится к этой позиции."))
 
 
 @transaction.atomic
@@ -286,6 +302,8 @@ def create_order(
             unit_price=unit_price,
             quantity=quantity,
             comment=item_payload.get("comment", ""),
+            variant_id=item_payload.get("variant_id"),
+            modifiers=item_payload.get("modifiers") or [],
         )
     fee = Decimal(delivery_fee or 0).quantize(Decimal("0.01"))
     if fee < 0:
@@ -752,23 +770,19 @@ def add_items_to_cart_for_telegram_user(
                 not_sold=', '.join(not_sold),
             )
         )
+    # By codes there is nowhere to choose a variant or a required add-on.
+    menu_items = {payload["menu_item"].id: payload["menu_item"] for payload in items_payload}
+    choices = catalog_choices(partner_id, menu_items.values())
+    for menu_item in menu_items.values():
+        if needs_choice(menu_item, choices[menu_item.id]):
+            raise OrderFlowError(
+                _("«{name}»: выберите вариант и добавки в меню.", name=menu_item.name)
+            )
 
     for item_payload in items_payload:
-        cart_item, created = CartItem.objects.get_or_create(
-            partner_id=partner_id,
-            cart=cart,
-            menu_item_id=item_payload["menu_item_id"],
-            defaults={
-                "item_name": item_payload["item_name"],
-                "unit_price": item_payload["unit_price"],
-                "quantity": item_payload["quantity"],
-            },
-        )
-        if not created:
-            cart_item.quantity += item_payload["quantity"]
-            cart_item.unit_price = item_payload["unit_price"]
-            cart_item.item_name = item_payload["item_name"]
-            cart_item.save(update_fields=["quantity", "unit_price", "item_name", "updated_at"])
+        menu_item = item_payload["menu_item"]
+        _add_choice(cart, resolve_choice(menu_item, choices=choices[menu_item.id]),
+                    item_payload["quantity"])
 
     _refresh_cart_totals(cart)
     return Cart.objects.select_related("table_session__table").prefetch_related(
@@ -832,21 +846,89 @@ def ordering_channel_for_telegram_user(*, partner_id: UUID | str, telegram_id: i
     return _only_way_of_ordering(partner_id)
 
 
+def _add_choice(cart: Cart, choice, quantity: int) -> CartItem:
+    """One more of this choice: the same item with the same variant and
+    add-ons adds up, another choice is another line (catalog step 2)."""
+
+    line, created = CartItem.objects.get_or_create(
+        partner_id=cart.partner_id,
+        cart=cart,
+        menu_item_id=choice.item.id,
+        choice_key=choice.key,
+        defaults={
+            "item_name": choice.name,
+            "unit_price": choice.unit_price,
+            "quantity": quantity,
+            "variant_id": choice.variant_id,
+            "modifiers": choice.snapshot(),
+        },
+    )
+    if not created:
+        line.quantity += quantity
+        line.unit_price = choice.unit_price
+        line.item_name = choice.name
+        line.modifiers = choice.snapshot()
+        line.save(update_fields=["quantity", "unit_price", "item_name", "modifiers", "updated_at"])
+    return line
+
+
+@transaction.atomic
 def add_menu_item_for_telegram_user(
     *,
     partner_id: UUID | str,
     telegram_id: int,
     item_public_id: str,
+    variant_id=None,
+    modifier_ids=(),
 ) -> Cart:
-    """The guest adds one menu item by its button, in the way they chose."""
+    """The guest adds one menu item by its button, in the way they chose,
+    with the variant and add-ons they picked (``apps/menu/options.py``)."""
 
     if ordering_channel_for_telegram_user(partner_id=partner_id, telegram_id=telegram_id) is None:
         raise OrderFlowError(_(CHOOSE_WAY_FIRST))
-    return add_items_to_cart_for_telegram_user(
+    cart = get_or_create_active_cart_for_telegram_user(
         partner_id=partner_id,
         telegram_id=telegram_id,
-        raw_items=f"{item_public_id}x1",
     )
+    menu_item = _build_items_payload(
+        partner_id=partner_id, parsed_entries=[(item_public_id, 1)]
+    )[0]["menu_item"]
+    if not menu_item.is_sold_in(cart.channel):
+        raise OrderFlowError(
+            _(
+                "Недоступно для заказа {channel_names}: {not_sold}.",
+                channel_names=_(CHANNEL_NAMES[cart.channel]),
+                not_sold=menu_item.name,
+            )
+        )
+    try:
+        choice = resolve_choice(menu_item, variant_id, modifier_ids)
+    except ChoiceError as exc:
+        raise OrderFlowError(str(exc)) from exc
+    _add_choice(cart, choice, 1)
+    _refresh_cart_totals(cart)
+    return Cart.objects.select_related("table_session__table").prefetch_related(
+        "items",
+        "items__menu_item",
+    ).get(id=cart.id)
+
+
+def _cart_line(cart: Cart, *, item_public_id: str = "", line_id: str = "") -> CartItem:
+    """A line of this guest's cart: by its own id (a line with a choice), or
+    the first line of the item by its code (plain items, old buttons)."""
+
+    lines = cart.items.select_related("menu_item")
+    line = None
+    if line_id:
+        try:
+            line = lines.filter(id=UUID(hex=str(line_id))).first()
+        except ValueError:
+            line = None
+    elif item_public_id:
+        line = lines.filter(menu_item__public_id=item_public_id).order_by("created_at").first()
+    if line is None:
+        raise OrderFlowError(_("Эта позиция не найдена в активной корзине."))
+    return line
 
 
 @transaction.atomic
@@ -854,8 +936,9 @@ def change_cart_item_quantity_for_telegram_user(
     *,
     partner_id: UUID | str,
     telegram_id: int,
-    item_public_id: str,
+    item_public_id: str = "",
     delta: int,
+    line_id: str = "",
 ) -> Cart:
     if delta == 0:
         raise OrderFlowError(_("Количество должно изменяться хотя бы на 1."))
@@ -864,13 +947,7 @@ def change_cart_item_quantity_for_telegram_user(
         partner_id=partner_id,
         telegram_id=telegram_id,
     )
-    try:
-        cart_item = cart.items.select_related("menu_item").get(
-            partner_id=partner_id,
-            menu_item__public_id=item_public_id,
-        )
-    except CartItem.DoesNotExist as exc:
-        raise OrderFlowError(_("Эта позиция не найдена в активной корзине.")) from exc
+    cart_item = _cart_line(cart, item_public_id=item_public_id, line_id=line_id)
 
     new_quantity = cart_item.quantity + delta
     if new_quantity <= 0:
@@ -891,16 +968,24 @@ def remove_cart_item_for_telegram_user(
     *,
     partner_id: UUID | str,
     telegram_id: int,
-    item_public_id: str,
+    item_public_id: str = "",
+    line_id: str = "",
 ) -> Cart:
+    """Takes a line out by its id, or every line of the item by its code."""
+
     cart = get_or_create_active_cart_for_telegram_user(
         partner_id=partner_id,
         telegram_id=telegram_id,
     )
-    deleted_count, _details = cart.items.filter(
-        partner_id=partner_id,
-        menu_item__public_id=item_public_id,
-    ).delete()
+    lines = cart.items.filter(partner_id=partner_id)
+    if line_id:
+        try:
+            lines = lines.filter(id=UUID(hex=str(line_id)))
+        except ValueError:
+            lines = lines.none()
+    else:
+        lines = lines.filter(menu_item__public_id=item_public_id)
+    deleted_count, _details = lines.delete()
     if deleted_count == 0:
         raise OrderFlowError(_("Эта позиция уже отсутствует в корзине."))
 
@@ -955,22 +1040,16 @@ def checkout_active_cart_for_telegram_user(
     closed = first_not_on_sale(item.menu_item for item in cart_items)
     if closed:
         raise OrderFlowError(closed)
+    stale = stale_choice_message(cart_items)
+    if stale:
+        raise OrderFlowError(stale)
 
     order = create_order(
         partner_id=partner_id,
         guest=cart.guest,
         table=cart.table_session.table if cart.table_session_id else None,
         table_session=cart.table_session,
-        items=[
-            {
-                "menu_item_id": item.menu_item_id,
-                "item_name": item.item_name,
-                "unit_price": item.unit_price,
-                "quantity": item.quantity,
-                "comment": item.comment,
-            }
-            for item in cart_items
-        ],
+        items=[cart_line_payload(item) for item in cart_items],
         comment=comment or cart.comment,
     )
 
@@ -978,6 +1057,48 @@ def checkout_active_cart_for_telegram_user(
     cart.checked_out_at = timezone.now()
     cart.save(update_fields=["status", "checked_out_at", "updated_at"])
     return order
+
+
+def cart_line_payload(line: CartItem) -> dict:
+    """What an order line is made of: the cart line as the guest chose it."""
+
+    return {
+        "menu_item_id": line.menu_item_id,
+        "item_name": line.item_name,
+        "unit_price": line.unit_price,
+        "quantity": line.quantity,
+        "comment": line.comment,
+        "variant_id": line.variant_id,
+        "modifiers": line.modifiers or [],
+    }
+
+
+def stale_choice_message(cart_items) -> str | None:
+    """A line whose choice cannot be ordered any more — the owner took a
+    variant or an add-on off sale, made a choice required or switched the
+    module off — or None. Checked again at checkout, like the schedule."""
+
+    cart_items = list(cart_items)
+    if not cart_items:
+        return None
+    menu_items = {line.menu_item_id: line.menu_item for line in cart_items}
+    choices = catalog_choices(cart_items[0].partner_id, menu_items.values())
+    for line in cart_items:
+        try:
+            choice = resolve_choice(
+                line.menu_item,
+                line.variant_id,
+                [row.get("id") for row in line.modifiers or []],
+                choices=choices[line.menu_item_id],
+            )
+        except ChoiceError:
+            choice = None
+        if choice is None or choice.key != line.choice_key:
+            return _(
+                "«{name}» больше нельзя заказать так — уберите её из корзины и выберите заново.",
+                name=line.item_name,
+            )
+    return None
 
 
 def _build_items_payload(
@@ -1023,6 +1144,7 @@ def _build_items_payload(
         items_payload.append(
             {
                 "menu_item_id": menu_item.id,
+                "menu_item": menu_item,
                 "item_name": menu_item.name,
                 "unit_price": menu_item.price,
                 "quantity": quantity,

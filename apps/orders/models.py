@@ -353,6 +353,13 @@ class OrderItem(PartnerBoundModel):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_lazy("Цена"))
     quantity = models.PositiveIntegerField(default=1, verbose_name=_lazy("Количество"))
     comment = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Комментарий"))
+    # What was chosen (catalog step 2): the name and price above already
+    # include it; these keep it for reports and the stock of a variant.
+    variant = models.ForeignKey(
+        "menu.MenuItemVariant", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="order_items", verbose_name=_lazy("Вариант"),
+    )
+    modifiers = models.JSONField(default=list, blank=True, verbose_name=_lazy("Добавки"))
 
     class Meta:
         verbose_name = _lazy("строка заказа")
@@ -391,6 +398,16 @@ class CartItem(PartnerBoundModel):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_lazy("Цена"))
     quantity = models.PositiveIntegerField(default=1, verbose_name=_lazy("Количество"))
     comment = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Комментарий"))
+    # What was chosen (catalog step 2, apps/menu/options.py): the same item
+    # with another variant or add-ons is another line.
+    variant = models.ForeignKey(
+        "menu.MenuItemVariant", on_delete=models.CASCADE, null=True, blank=True,
+        related_name="cart_items", verbose_name=_lazy("Вариант"),
+    )
+    modifiers = models.JSONField(default=list, blank=True, verbose_name=_lazy("Добавки"))
+    choice_key = models.CharField(
+        max_length=32, blank=True, default="", verbose_name=_lazy("Ключ выбора"),
+    )
 
     class Meta:
         verbose_name = _lazy("строка корзины")
@@ -398,8 +415,8 @@ class CartItem(PartnerBoundModel):
         ordering = ["created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["cart", "menu_item"],
-                name="unique_menu_item_per_cart",
+                fields=["cart", "menu_item", "choice_key"],
+                name="unique_choice_per_cart",
             )
         ]
 

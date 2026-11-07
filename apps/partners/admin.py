@@ -63,6 +63,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                 "fields": (
                     "module_menu_enabled",
                     "module_showcase_enabled",
+                    "module_options_enabled",
                 ),
             },
         ),

@@ -49,6 +49,7 @@ from apps.menu.catalog import (
     schedule_label,
     showcase_on,
 )
+from apps.menu.options import catalog_choices, has_choices, needs_choice, price_from
 from apps.menu.repositories import MenuItemRepository
 from apps.orders.models import Order
 from apps.orders.services import (
@@ -119,6 +120,10 @@ def _body(request) -> dict:
     if not isinstance(data, dict):
         raise WebAppDenied(400, "bad json")
     return data
+
+
+# Add-ons chosen for one line at most (catalog step 2).
+MAX_OPTIONS = 50
 
 
 def _text(body: dict, key: str) -> str:
@@ -198,6 +203,8 @@ def _cart_json(guest: GuestRequest) -> dict:
     if cart is not None:
         items = [
             {
+                # A line per choice (catalog step 2): it changes by its own id.
+                "line": cart_item.id.hex,
                 "item": cart_item.menu_item.public_id,
                 "name": cart_item.item_name,
                 "quantity": cart_item.quantity,
@@ -278,7 +285,7 @@ def point_view(request, guest: GuestRequest, body: dict) -> dict:
     return {"ok": True}
 
 
-def _category_json(category, items, *, now, showcase: bool) -> dict:
+def _category_json(category, items, *, now, showcase: bool, choices) -> dict:
     closed = closed_category(category, now)
     return {
         "id": category.id.hex,
@@ -287,24 +294,65 @@ def _category_json(category, items, *, now, showcase: bool) -> dict:
         # Shown all day, sold only in its time (owner, 2026-11-07).
         "closed": closed is not None,
         "schedule": schedule_label(closed or category),
-        "items": [_item_json(item, showcase=showcase) for item in items],
+        "items": [
+            _item_json(item, showcase=showcase, choices=choices[item.id]) for item in items
+        ],
     }
 
 
-def _item_json(item, *, showcase: bool) -> dict:
+def _choices_json(choices) -> dict:
+    return {
+        "variants": [
+            {"id": variant.id.hex, "name": variant.name, "price": _money(variant.price)}
+            for variant in choices.variants
+        ],
+        "groups": [
+            {
+                "id": entry.group.id.hex,
+                "name": entry.group.name,
+                "min": entry.group.min_choices,
+                "max": entry.group.max_choices,
+                "options": [
+                    {"id": modifier.id.hex, "name": modifier.name,
+                     "price": _money(modifier.price)}
+                    for modifier in entry.modifiers
+                ],
+            }
+            for entry in choices.groups
+        ],
+    }
+
+
+def _item_json(item, *, showcase: bool, choices) -> dict:
+    # Variants and add-ons (module «Варианты и добавки»): «required» — the
+    # card opens the item to choose; «optional» — add-ons can be added there.
+    if needs_choice(item, choices):
+        choice = "required"
+    elif has_choices(item, choices):
+        choice = "optional"
+    else:
+        choice = "none"
     data = {
         "id": item.public_id,
         "name": item.name,
         "description": item.description,
-        "price": _money(item.price),
+        "price": _money(price_from(item, choices)),
+        "price_from": bool(choices.variants),
+        "choice": choice,
         "photo": item.photo_url,
         "sold_in": [channel for channel in item.CHANNEL_FIELDS if item.is_sold_in(channel)],
     }
+    if choice != "none":
+        data.update(_choices_json(choices))
     if showcase:
         # The showcase module (owner, 2026-11-07): only while it is on.
         data.update(
             portion=portion_label(item),
-            old_price=_money(item.old_price) if has_old_price(item) else None,
+            # Not next to «від …»: the old price is of the item, not its variants.
+            old_price=(
+                _money(item.old_price)
+                if has_old_price(item) and not choices.variants else None
+            ),
             badges=badges_of(item),
             photos=[url for url in [item.photo_url] if url]
             + [photo.image.url for photo in item.photos.all()],
@@ -323,14 +371,20 @@ def menu_view(request, guest: GuestRequest, body: dict) -> dict:
     items = MenuItemRepository.active_for_partner(venue.id).select_related("category__parent")
     if showcase:
         items = items.prefetch_related("custom_badges", "photos", "attributes")
+    items = list(items)
+    choices = catalog_choices(venue, items)
     now = local_now(venue)
     categories = []
     for branch in catalog_tree(venue.id, items):
-        top = _category_json(branch["category"], branch["items"], now=now, showcase=showcase)
+        top = _category_json(
+            branch["category"], branch["items"], now=now, showcase=showcase, choices=choices
+        )
         top["parent"] = None
         categories.append(top)
         for child in branch["children"]:
-            sub = _category_json(child["category"], child["items"], now=now, showcase=showcase)
+            sub = _category_json(
+                child["category"], child["items"], now=now, showcase=showcase, choices=choices
+            )
             sub["parent"] = top["id"]
             categories.append(sub)
     return {"categories": categories, "showcase": showcase}
@@ -349,24 +403,35 @@ def channel_view(request, guest: GuestRequest, body: dict) -> dict:
 
 @guest_api("POST")
 def cart_view(request, guest: GuestRequest, body: dict) -> dict:
-    """``{"action": "add" | "change" | "remove" | "clear", "item": …, "delta": …}``."""
+    """``{"action": "add" | "change" | "remove" | "clear", "item": …, "delta": …}``;
+    «add» may carry ``"variant"`` and ``"options"`` (ids), «change» and
+    «remove» a ``"line"`` of the cart (catalog step 2)."""
 
     partner_id, telegram_id = guest.venue().id, guest.telegram_id
-    action, item = _text(body, "action"), _text(body, "item")
+    action, item, line = _text(body, "action"), _text(body, "item"), _text(body, "line")
     if action == "add":
+        variant, options = body.get("variant"), body.get("options", [])
+        if variant is not None and not isinstance(variant, str):
+            raise WebAppDenied(400, "bad variant")
+        if not isinstance(options, list) or len(options) > MAX_OPTIONS or not all(
+            isinstance(option, str) for option in options
+        ):
+            raise WebAppDenied(400, "bad options")
         add_menu_item_for_telegram_user(
-            partner_id=partner_id, telegram_id=telegram_id, item_public_id=item
+            partner_id=partner_id, telegram_id=telegram_id, item_public_id=item,
+            variant_id=variant or None, modifier_ids=options,
         )
     elif action == "change":
         delta = body.get("delta")
         if not isinstance(delta, int) or isinstance(delta, bool) or not -20 <= delta <= 20:
             raise WebAppDenied(400, N_("Количество должно изменяться хотя бы на 1."))
         change_cart_item_quantity_for_telegram_user(
-            partner_id=partner_id, telegram_id=telegram_id, item_public_id=item, delta=delta
+            partner_id=partner_id, telegram_id=telegram_id, item_public_id=item, delta=delta,
+            line_id=line,
         )
     elif action == "remove":
         remove_cart_item_for_telegram_user(
-            partner_id=partner_id, telegram_id=telegram_id, item_public_id=item
+            partner_id=partner_id, telegram_id=telegram_id, item_public_id=item, line_id=line
         )
     elif action == "clear":
         clear_active_cart_for_telegram_user(partner_id=partner_id, telegram_id=telegram_id)

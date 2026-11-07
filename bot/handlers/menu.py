@@ -12,6 +12,7 @@ from apps.menu.catalog import (
     schedule_label,
     showcase_on,
 )
+from apps.menu.options import catalog_choices, choices_for, line_name
 from apps.menu.repositories import MenuItemRepository
 from apps.orders.models import Order
 from apps.orders.services import (
@@ -24,6 +25,15 @@ from apps.tables.services import get_active_table_session
 from bot.filters.content import PartnerButtonFilter
 from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.menu import build_menu_keyboard, refresh_cart_button
+from bot.keyboards.options import (
+    NOOP,
+    build_choice_keyboard,
+    chosen,
+    decode,
+    over_limit,
+    starting_pick,
+    valid,
+)
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
 from bot.services.mini_app import mini_app_link_for
@@ -94,15 +104,23 @@ def _ordering_hint(content, *, channel, session) -> list[str]:
     return lines
 
 
-def _item_line(item, *, showcase: bool) -> str:
-    line = _("{name} — {price} грн", name=escape_html(item.name), price=item.price)
+def _item_line(item, *, showcase: bool, choices=None) -> str:
+    variants = choices.variants if choices is not None else []
+    if variants:
+        # Variants with their own price (catalog step 2): from the lowest.
+        line = _(
+            "{name} — от {price} грн", name=escape_html(item.name),
+            price=min(variant.price for variant in variants),
+        )
+    else:
+        line = _("{name} — {price} грн", name=escape_html(item.name), price=item.price)
     if not showcase:
         return line
     # The showcase module (owner, 2026-11-07): labels, old price, portion.
     emojis = "".join(badge["emoji"] for badge in badges_of(item) if badge["emoji"])
     if emojis:
         line = f"{emojis} {line}"
-    if has_old_price(item):
+    if has_old_price(item) and not variants:
         line += f" <s>{escape_html(_('{price} грн', price=item.old_price))}</s>"
     portion = portion_label(item)
     if portion:
@@ -112,7 +130,7 @@ def _item_line(item, *, showcase: bool) -> str:
 
 def _render_menu_category_view(
     *, partner, content, category, menu_items, session, channel=None, closed_when: str = "",
-    showcase: bool = False,
+    showcase: bool = False, choices=None,
 ) -> str:
     lines = [content.menu_header(partner_name=partner.name)]
     name = getattr(category, "full_name", category.name)
@@ -128,7 +146,8 @@ def _render_menu_category_view(
         lines.append("")
     else:
         for item in menu_items:
-            lines.append(_item_line(item, showcase=showcase))
+            item_choices = choices.get(item.id) if choices else None
+            lines.append(_item_line(item, showcase=showcase, choices=item_choices))
             if item.description:
                 lines.append(f"<i>{escape_html(_trim_menu_description(item.description))}</i>")
             lines.append("")
@@ -224,6 +243,7 @@ async def send_menu_view(
     menu_items = chosen["items"][: content.max_menu_items_per_category_message]
     closed = await sync_to_async(closed_category)(category)
     closed_when = schedule_label(closed) if closed is not None else ""
+    choices = await sync_to_async(catalog_choices)(partner, menu_items)
     cart = None
     if channel is not None:
         cart = await sync_to_async(get_active_cart_for_telegram_user)(
@@ -239,6 +259,7 @@ async def send_menu_view(
         channel=channel,
         closed_when=closed_when,
         showcase=showcase,
+        choices=choices,
     )
     keyboard = build_menu_keyboard(
         categories=[entry["category"] for entry in tree],
@@ -250,6 +271,7 @@ async def send_menu_view(
         supports_cart=content.supports_cart(),
         cart=cart,
         choose_way=[] if channel is not None else choose_way_buttons(content),
+        choices=choices,
     )
     link = await sync_to_async(mini_app_link_for)(bot.token, partner.id)
     if link:
@@ -313,5 +335,122 @@ async def menu_add_callback(callback: CallbackQuery, bot: Bot) -> None:
         await callback.message.edit_reply_markup(
             reply_markup=refresh_cart_button(callback.message.reply_markup, cart)
         )
+    except (TelegramBadRequest, AttributeError):
+        pass
+
+
+# --- a variant and add-ons (catalog step 2) ---------------------------------
+
+
+def _choice_item(partner, public_id: str):
+    """The item on sale with what can be chosen for it, or (None, None)."""
+
+    item = (
+        MenuItemRepository.active_for_partner(partner.id)
+        .select_related("category__parent")
+        .filter(public_id=public_id)
+        .first()
+    )
+    if item is None:
+        return None, None
+    return item, choices_for(item)
+
+
+def _render_choice_view(item, choices, pick) -> str:
+    variant, modifiers = chosen(choices, pick)
+    lines = [f"<b>{escape_html(item.name)}</b>"]
+    if item.description:
+        lines.append(f"<i>{escape_html(_trim_menu_description(item.description))}</i>")
+    lines.append("")
+    lines.append(_("Выберите вариант и добавки — сумма на кнопке «Добавить»."))
+    current = line_name(
+        item.name, variant.name if variant is not None else "", [m.name for m in modifiers]
+    )
+    lines.append(_("Сейчас: {name}", name=escape_html(current)))
+    return "\n".join(lines)
+
+
+async def _choice_context(callback: CallbackQuery, bot: Bot):
+    """(partner, item, choices, pick) for a choice button, or None when the
+    guest has been answered already."""
+
+    partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    content = await sync_to_async(BotContent.for_partner)(partner)
+    if not content.supports_cart():
+        await callback.answer(content.cart_disabled_message(), show_alert=True)
+        return None
+    try:
+        public_id, pick = decode(callback.data or "")
+    except ValueError:
+        await callback.answer()
+        return None
+    item, choices = await sync_to_async(_choice_item)(partner, public_id)
+    if item is None:
+        await callback.answer(_("Эта позиция сейчас недоступна."), show_alert=True)
+        return None
+    return partner, item, choices, pick
+
+
+@router.callback_query(F.data.startswith("mo:"))
+async def menu_choice_callback(callback: CallbackQuery, bot: Bot) -> None:
+    """Opens or redraws the choice of an item; the choice is in the data."""
+
+    if callback.data == NOOP:
+        await callback.answer()
+        return
+    context = await _choice_context(callback, bot)
+    if context is None:
+        return
+    partner, item, choices, pick = context
+    if pick is None or not valid(choices, pick):
+        pick = starting_pick(choices)
+    group = over_limit(choices, pick)
+    if group is not None:
+        await callback.answer(
+            _("«{group}»: не больше {count}.", group=group.name, count=group.max_choices),
+            show_alert=True,
+        )
+        return
+    cart = await sync_to_async(get_active_cart_for_telegram_user)(
+        partner_id=partner.id, telegram_id=callback.from_user.id
+    )
+    keyboard = build_choice_keyboard(
+        item, choices, pick, back_callback=f"menucat:{item.category_id}", cart=cart
+    )
+    await _safe_edit_menu_message(
+        callback.message, _render_choice_view(item, choices, pick), reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("ma:"))
+async def menu_choice_add_callback(callback: CallbackQuery, bot: Bot) -> None:
+    """Adds the chosen variant and add-ons; the cart service checks them."""
+
+    context = await _choice_context(callback, bot)
+    if context is None:
+        return
+    partner, item, choices, pick = context
+    if pick is None or not valid(choices, pick):
+        await callback.answer(_("Меню изменилось — выберите заново."), show_alert=True)
+        return
+    variant, modifiers = chosen(choices, pick)
+    try:
+        cart = await sync_to_async(add_menu_item_for_telegram_user)(
+            partner_id=partner.id,
+            telegram_id=callback.from_user.id,
+            item_public_id=item.public_id,
+            variant_id=variant.id.hex if variant is not None else None,
+            modifier_ids=[modifier.id.hex for modifier in modifiers],
+        )
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    await callback.answer(_("Добавлено в корзину."))
+    keyboard = build_choice_keyboard(
+        item, choices, pick, back_callback=f"menucat:{item.category_id}", cart=cart
+    )
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboard)
     except (TelegramBadRequest, AttributeError):
         pass

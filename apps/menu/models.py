@@ -388,3 +388,124 @@ class MenuItemAttribute(PartnerBoundModel):
         if self.item_id and not self.partner_id:
             self.partner_id = self.item.partner_id
         return super().save(*args, **kwargs)
+
+
+# --- variants and add-ons (catalog step 2, module_options_enabled) ---------------
+
+
+class MenuItemVariant(PartnerBoundModel):
+    """A variant of an item with its own price: a size, colour or pack
+    («250 мл», «M, червона», «500 г»). One list per item (owner, 2026-11-07);
+    while the item has variants on sale the guest picks one."""
+
+    item = models.ForeignKey(
+        MenuItem, on_delete=models.CASCADE, related_name="variants",
+        verbose_name=_lazy("Позиция"),
+    )
+    name = models.CharField(
+        max_length=80, verbose_name=_lazy("Вариант"),
+        help_text=_lazy("Как увидит гость: 250 мл, M, червона, 500 г."),
+    )
+    price = models.DecimalField(
+        max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))],
+        verbose_name=_lazy("Цена"),
+    )
+    is_available = models.BooleanField(default=True, verbose_name=_lazy("В наличии"))
+    sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+
+    class Meta:
+        verbose_name = _lazy("вариант позиции")
+        verbose_name_plural = _lazy("Варианты")
+        ordering = ["sort_order", "price", "name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(price__gt=0), name="menu_item_variant_price_positive"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item.name}, {self.name}"
+
+    def save(self, *args, **kwargs):
+        if self.item_id and not self.partner_id:
+            self.partner_id = self.item.partner_id
+        return super().save(*args, **kwargs)
+
+
+class ModifierGroup(PartnerBoundModel):
+    """A group of add-ons set once and attached to items or whole categories
+    (owner, 2026-11-07): «Сиропы» (up to 3), «Молоко» (one, required),
+    «Без…». A category's group also covers its subcategories."""
+
+    name = models.CharField(
+        max_length=80, verbose_name=_lazy("Название"),
+        help_text=_lazy("Как увидит гость: Сироп, Молоко, Соус, Убрать."),
+    )
+    min_choices = models.PositiveSmallIntegerField(
+        default=0, verbose_name=_lazy("Выбрать не меньше"),
+        help_text=_lazy("0 — по желанию; 1 и больше — без выбора не добавить."),
+    )
+    max_choices = models.PositiveSmallIntegerField(
+        default=1, verbose_name=_lazy("Выбрать не больше"),
+        help_text=_lazy("1 — один из списка; 0 — сколько угодно."),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_lazy("Показывать"))
+    sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+    items = models.ManyToManyField(
+        MenuItem, blank=True, related_name="modifier_groups", verbose_name=_lazy("Позиции"),
+    )
+    categories = models.ManyToManyField(
+        MenuCategory, blank=True, related_name="modifier_groups",
+        verbose_name=_lazy("Категории"),
+        help_text=_lazy("Группа для всех позиций категории и её подкатегорий."),
+    )
+
+    class Meta:
+        verbose_name = _lazy("группа добавок")
+        verbose_name_plural = _lazy("Группы добавок")
+        ordering = ["sort_order", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self):
+        super().clean()
+        if self.max_choices and self.min_choices > self.max_choices:
+            raise ValidationError(
+                {"min_choices": _("«Не меньше» не может быть больше, чем «не больше».")}
+            )
+
+
+class Modifier(PartnerBoundModel):
+    """One add-on of a group: «Карамельний сироп» +15 грн, «Без цибулі» 0 грн."""
+
+    group = models.ForeignKey(
+        ModifierGroup, on_delete=models.CASCADE, related_name="modifiers",
+        verbose_name=_lazy("Группа"),
+    )
+    name = models.CharField(max_length=80, verbose_name=_lazy("Добавка"))
+    price = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("0.00"),
+        validators=[MinValueValidator(Decimal("0.00"))],
+        verbose_name=_lazy("Доплата"), help_text=_lazy("0 — бесплатно."),
+    )
+    is_available = models.BooleanField(default=True, verbose_name=_lazy("В наличии"))
+    sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+
+    class Meta:
+        verbose_name = _lazy("добавка")
+        verbose_name_plural = _lazy("Добавки")
+        ordering = ["sort_order", "name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(price__gte=0), name="modifier_price_not_negative"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.group.name}: {self.name}"
+
+    def save(self, *args, **kwargs):
+        if self.group_id and not self.partner_id:
+            self.partner_id = self.group.partner_id
+        return super().save(*args, **kwargs)

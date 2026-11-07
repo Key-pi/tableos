@@ -15,6 +15,7 @@ from apps.bonuses.strategies import (
     resolve_bonus_strategy,
 )
 from apps.menu.models import MenuItem
+from apps.menu.options import ChoiceError, catalog_choices, resolve_choice
 from apps.orders.models import Order
 from apps.partners.models import NetworkWallet
 from apps.partners.networks import shared_bonus_scope
@@ -502,6 +503,8 @@ def _register_walk_in_sale_from_menu_items(
                 item_name=item["item_name"],
                 unit_price=item["unit_price"],
                 quantity=item["quantity"],
+                variant_id=item.get("variant_id"),
+                modifiers=item.get("modifiers") or [],
             )
             for item in preview.items
         ]
@@ -572,24 +575,37 @@ def _normalize_walk_in_sale_items(*, partner_id, items: list[dict]) -> list[dict
             partner_id=partner_id,
             id__in=menu_item_ids,
             is_available=True,
-        )
+        ).select_related("category")
     }
     normalized_items: list[dict] = []
     missing_ids = [menu_item_id for menu_item_id in menu_item_ids if menu_item_id not in menu_items]
     if missing_ids:
         raise BonusServiceError(_("Часть позиций быстрой продажи недоступна в этом заведении."))
 
+    # The variant and add-ons as the guest would choose them (owner,
+    # 2026-11-07): the sale is at the price of the choice.
+    choices = catalog_choices(partner_id, menu_items.values())
     for item in items:
         menu_item = menu_items[str(item["menu_item_id"])]
         quantity = int(item.get("quantity", 0))
         if quantity <= 0:
             raise BonusServiceError("Quick-sale item quantity must be greater than zero.")
+        try:
+            choice = resolve_choice(
+                menu_item, item.get("variant_id"), item.get("modifier_ids") or (),
+                choices=choices[menu_item.id],
+            )
+        except ChoiceError as exc:
+            raise BonusServiceError(str(exc)) from exc
         normalized_items.append(
             {
                 "menu_item_id": menu_item.id,
-                "item_name": menu_item.name,
-                "unit_price": Decimal(menu_item.price).quantize(Decimal("0.01")),
+                "item_name": choice.name,
+                "unit_price": choice.unit_price,
                 "quantity": quantity,
+                "variant_id": choice.variant_id,
+                "modifiers": choice.snapshot(),
+                "key": choice.key,
             }
         )
     return normalized_items

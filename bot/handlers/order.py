@@ -548,6 +548,15 @@ async def _checkout_at_table(callback: CallbackQuery, partner, content) -> None:
     await callback.answer(_("Заказ оформлен."))
 
 
+def _cart_line_ref(target: str) -> dict:
+    """A cart line by its own id (32 hex, catalog step 2), or by the item's
+    code on a cart message sent before that."""
+
+    if len(target) == 32:
+        return {"line_id": target}
+    return {"item_public_id": target}
+
+
 @router.callback_query(F.data.startswith("cart:item:noop:"))
 async def cart_item_noop_callback(callback: CallbackQuery) -> None:
     await callback.answer()
@@ -558,15 +567,15 @@ async def cart_item_noop_callback(callback: CallbackQuery) -> None:
 async def cart_item_quantity_callback(callback: CallbackQuery, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
-    _prefix, _scope, action, item_public_id = (callback.data or "").split(":", 3)
+    _prefix, _scope, action, target = (callback.data or "").split(":", 3)
     delta = 1 if action == "add" else -1
     try:
         _ensure_cart_enabled(content)
         cart = await sync_to_async(change_cart_item_quantity_for_telegram_user)(
             partner_id=partner.id,
             telegram_id=callback.from_user.id,
-            item_public_id=item_public_id,
             delta=delta,
+            **_cart_line_ref(target),
         )
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)
@@ -592,13 +601,13 @@ async def cart_item_quantity_callback(callback: CallbackQuery, bot: Bot) -> None
 async def cart_item_remove_callback(callback: CallbackQuery, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
     content = await sync_to_async(BotContent.for_partner)(partner)
-    _prefix, _scope, _action, item_public_id = (callback.data or "").split(":", 3)
+    _prefix, _scope, _action, target = (callback.data or "").split(":", 3)
     try:
         _ensure_cart_enabled(content)
         cart = await sync_to_async(remove_cart_item_for_telegram_user)(
             partner_id=partner.id,
             telegram_id=callback.from_user.id,
-            item_public_id=item_public_id,
+            **_cart_line_ref(target),
         )
     except OrderFlowError as exc:
         await callback.answer(str(exc), show_alert=True)

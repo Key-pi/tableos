@@ -77,6 +77,15 @@ from apps.bonuses.services import (
 from apps.employees.models import EmployeeProfile
 from apps.employees.selectors import get_staff_employee_by_telegram
 from apps.menu.models import MenuCategory
+from apps.menu.options import (
+    ChoiceError,
+    catalog_choices,
+    choices_for,
+    has_choices,
+    line_name,
+    price_from,
+    resolve_choice,
+)
 from apps.menu.repositories import MenuItemRepository
 from apps.notifications.models import StaffNotification
 from apps.notifications.repositories import StaffNotificationRepository
@@ -106,6 +115,14 @@ from apps.tables.services import (
     close_table_visit,
 )
 from bot.filters.content import PartnerButtonFilter
+from bot.keyboards.options import (
+    build_choice_keyboard,
+    over_limit,
+    starting_pick,
+)
+from bot.keyboards.options import chosen as chosen_in_pick
+from bot.keyboards.options import decode as decode_choice
+from bot.keyboards.options import valid as choice_pick_valid
 from bot.keyboards.staff import (
     DELIVERY_STATUS_LABELS,
     SHIPPING_STATUS_LABELS,
@@ -1169,12 +1186,30 @@ def _build_bill_edit_view(bill: Bill, actor_user):
     return "\n".join(lines), markup
 
 
+def _sale_line_key(choice) -> str:
+    """The draft's key of a line: the item, or the item with its variant
+    and add-ons (catalog step 2)."""
+
+    if not choice.key:
+        return str(choice.item.id)
+    variant = choice.variant.id.hex if choice.variant is not None else "-"
+    modifiers = ",".join(sorted(modifier.id.hex for modifier in choice.modifiers))
+    return f"{choice.item.id}|{variant}|{modifiers}"
+
+
 def _build_quick_sale_items_payload(items_map: dict[str, int]) -> list[dict]:
-    return [
-        {"menu_item_id": item_id, "quantity": quantity}
-        for item_id, quantity in items_map.items()
-        if quantity > 0
-    ]
+    lines = []
+    for key, quantity in items_map.items():
+        if quantity <= 0:
+            continue
+        item_id, _sep, rest = key.partition("|")
+        line = {"menu_item_id": item_id, "quantity": quantity}
+        if rest:
+            variant, _sep, modifiers = rest.partition("|")
+            line["variant_id"] = None if variant == "-" else variant
+            line["modifier_ids"] = [modifier for modifier in modifiers.split(",") if modifier]
+        lines.append(line)
+    return lines
 
 
 def _require_staff_sale_preview_state(data: dict) -> dict:
@@ -1232,20 +1267,36 @@ def _compose_staff_sale_view(
         )
 
     category_items = list(
-        MenuItemRepository.active_for_partner(partner_id).filter(category_id=selected_category_id)[:12]
+        MenuItemRepository.active_for_partner(partner_id)
+        .filter(category_id=selected_category_id)
+        .select_related("category")[:12]
     )
+    choices = catalog_choices(partner_id, category_items)
+    draft_keys = [key for key, quantity in items_map.items() if quantity > 0]
+
+    def item_button(item):
+        if not has_choices(item, choices[item.id]):
+            return (str(item.id), item.name, f"{Decimal(item.price):.2f}")
+        price = f"{Decimal(price_from(item, choices[item.id])):.2f}"
+        if choices[item.id].variants:
+            price = _("от {price}", price=price)
+        return (str(item.id), item.name, price, f"so:{item.public_id}")
+
+    def draft_button(index, item):
+        if "|" not in draft_keys[index]:
+            return (str(item["menu_item_id"]), item["item_name"], item["quantity"])
+        return (
+            str(item["menu_item_id"]), item["item_name"], item["quantity"],
+            f"staffsale:ladd:{index}", f"staffsale:lsub:{index}",
+        )
     can_redeem = guest_preview.guest is not None and guest_preview.redeemable_bonus_amount > 0
     redeem_active = redeem_bonus and can_redeem
     keyboard = build_staff_sale_keyboard(
         categories=[(str(category.id), category.full_name) for category in categories],
         selected_category_id=selected_category_id,
-        category_items=[
-            (str(item.id), item.name, f"{Decimal(item.price):.2f}")
-            for item in category_items
-        ],
+        category_items=[item_button(item) for item in category_items],
         draft_items=[
-            (str(item["menu_item_id"]), item["item_name"], item["quantity"])
-            for item in guest_preview.items
+            draft_button(index, item) for index, item in enumerate(guest_preview.items)
         ],
         can_confirm=bool(guest_preview.items),
         has_comment=bool(comment),
@@ -3225,6 +3276,190 @@ async def staff_sale_item_quantity_handler(
         preview_message_id=preview_message_id,
     )
     await callback.answer(_("Черновик обновлён"))
+
+
+async def _rerender_staff_sale(
+    callback: CallbackQuery, bot: Bot, state: FSMContext, preview_data: dict, items_map: dict
+) -> bool:
+    try:
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_quick_sale_allowed(employee)
+        category_id, chat_id, message_id = await _render_staff_sale_message(
+            bot=bot,
+            chat_id=preview_data["preview_chat_id"],
+            message_id=preview_data["preview_message_id"],
+            partner_id=partner.id,
+            customer_code=preview_data["customer_code"],
+            items_map=items_map,
+            selected_category_id=preview_data["selected_category_id"],
+            comment=preview_data["comment"],
+            redeem_bonus=preview_data["redeem_bonus"],
+        )
+    except (OrderFlowError, BonusServiceError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return False
+    await state.update_data(
+        items=items_map,
+        selected_category_id=category_id,
+        preview_chat_id=chat_id,
+        preview_message_id=message_id,
+    )
+    return True
+
+
+def _sale_choice_item(partner_id, public_id: str):
+    item = (
+        MenuItemRepository.active_for_partner(partner_id)
+        .select_related("category__parent")
+        .filter(public_id=public_id)
+        .first()
+    )
+    if item is None:
+        return None, None
+    return item, choices_for(item)
+
+
+async def _staff_sale_choice_context(callback: CallbackQuery, bot: Bot, state: FSMContext):
+    """(preview data, item, choices, pick) for a choice button of the quick
+    sale, or None when the employee has been answered already."""
+
+    data = await state.get_data()
+    try:
+        preview_data = _require_staff_sale_preview_state(data)
+        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
+        _ensure_quick_sale_allowed(employee)
+        public_id, pick = decode_choice(callback.data or "")
+    except ValueError:
+        await callback.answer()
+        return None
+    except (OrderFlowError, BonusServiceError) as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return None
+    item, choices = await sync_to_async(_sale_choice_item)(partner.id, public_id)
+    if item is None:
+        await callback.answer(_("Эта позиция сейчас недоступна."), show_alert=True)
+        return None
+    return preview_data, item, choices, pick
+
+
+@router.callback_query(
+    StaffQuickSaleStates.browsing_menu, lambda c: c.data and c.data.startswith("so:")
+)
+async def staff_sale_choice_handler(callback: CallbackQuery, bot: Bot, state: FSMContext) -> None:
+    """The variant and add-ons of an item in the quick sale, as the guest
+    chooses them (owner, 2026-11-07); the choice is in the data."""
+
+    context = await _staff_sale_choice_context(callback, bot, state)
+    if context is None:
+        return
+    _preview_data, item, choices, pick = context
+    if pick is None or not choice_pick_valid(choices, pick):
+        pick = starting_pick(choices)
+    group = over_limit(choices, pick)
+    if group is not None:
+        await callback.answer(
+            _("«{group}»: не больше {count}.", group=group.name, count=group.max_choices),
+            show_alert=True,
+        )
+        return
+    variant, modifiers = chosen_in_pick(choices, pick)
+    text = "\n".join([
+        _("<b>Быстрая продажа</b>"),
+        f"<b>{escape_html(item.name)}</b>",
+        "",
+        _("Сейчас: {name}", name=escape_html(line_name(
+            item.name, variant.name if variant is not None else "", [m.name for m in modifiers]
+        ))),
+    ])
+    keyboard = build_choice_keyboard(
+        item, choices, pick, back_callback="staffsale:pback", staff=True
+    )
+    try:
+        await callback.message.edit_text(text, reply_markup=keyboard)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in str(exc).lower():
+            raise
+    await callback.answer()
+
+
+@router.callback_query(
+    StaffQuickSaleStates.browsing_menu, lambda c: c.data and c.data.startswith("sa:")
+)
+async def staff_sale_choice_add_handler(
+    callback: CallbackQuery, bot: Bot, state: FSMContext
+) -> None:
+    context = await _staff_sale_choice_context(callback, bot, state)
+    if context is None:
+        return
+    preview_data, item, choices, pick = context
+    if pick is None or not choice_pick_valid(choices, pick):
+        await callback.answer(_("Меню изменилось — выберите заново."), show_alert=True)
+        return
+    variant, modifiers = chosen_in_pick(choices, pick)
+    try:
+        choice = resolve_choice(
+            item, variant.id.hex if variant is not None else None,
+            [modifier.id.hex for modifier in modifiers], choices=choices,
+        )
+    except ChoiceError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    items_map = dict(preview_data["items"])
+    key = _sale_line_key(choice)
+    items_map[key] = int(items_map.get(key, 0)) + 1
+    if await _rerender_staff_sale(callback, bot, state, preview_data, items_map):
+        await callback.answer(_("Черновик обновлён"))
+
+
+@router.callback_query(
+    StaffQuickSaleStates.browsing_menu, lambda c: c.data == "staffsale:pback"
+)
+async def staff_sale_choice_back_handler(
+    callback: CallbackQuery, bot: Bot, state: FSMContext
+) -> None:
+    data = await state.get_data()
+    try:
+        preview_data = _require_staff_sale_preview_state(data)
+    except OrderFlowError as exc:
+        await callback.answer(str(exc), show_alert=True)
+        return
+    if await _rerender_staff_sale(callback, bot, state, preview_data, dict(preview_data["items"])):
+        await callback.answer()
+
+
+STALE_SALE_DRAFT = N_("Черновик быстрой продажи устарел. Начните заново.")
+
+
+@router.callback_query(
+    StaffQuickSaleStates.browsing_menu,
+    lambda c: c.data and c.data.startswith(("staffsale:ladd:", "staffsale:lsub:")),
+)
+async def staff_sale_line_quantity_handler(
+    callback: CallbackQuery, bot: Bot, state: FSMContext
+) -> None:
+    """± on a draft line with a choice, by its number in the draft."""
+
+    data = await state.get_data()
+    try:
+        preview_data = _require_staff_sale_preview_state(data)
+        _unused, action, raw_index = (callback.data or "").split(":", 2)
+        index = int(raw_index)
+    except (OrderFlowError, ValueError):
+        await callback.answer(_(STALE_SALE_DRAFT), show_alert=True)
+        return
+    items_map = dict(preview_data["items"])
+    keys = [key for key, quantity in items_map.items() if int(quantity) > 0]
+    if not 0 <= index < len(keys):
+        await callback.answer(_(STALE_SALE_DRAFT), show_alert=True)
+        return
+    key = keys[index]
+    quantity = int(items_map[key]) + (1 if action == "ladd" else -1)
+    if quantity > 0:
+        items_map[key] = quantity
+    else:
+        items_map.pop(key)
+    if await _rerender_staff_sale(callback, bot, state, preview_data, items_map):
+        await callback.answer(_("Черновик обновлён"))
 
 
 @router.message(StaffQuickSaleStates.waiting_for_comment)

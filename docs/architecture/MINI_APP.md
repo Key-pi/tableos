@@ -79,10 +79,16 @@ Mini App — ещё один адаптер, как бот и Admin. Он выз
 - **API** (`webapp/views.py`, JSON):
   - `GET state` — точка, способы заказа, корзина, бонусы, тексты на языке гостя;
   - `POST point` — выбор точки сети (сохраняется как в боте);
-  - `GET menu` — категории и позиции, фото, где продаётся;
+  - `GET menu` — категории и позиции, фото, где продаётся; с модулем
+    «Варианты и добавки» у позиции `choice` (`none` / `optional` /
+    `required`), `variants`, `groups` и цена «от» (каталог, шаг 2,
+    `docs/architecture/CATALOG.md`);
   - `POST channel`, `POST cart` — способ заказа и корзина
     (`switch_cart_channel_for_telegram_user`, `add_menu_item_for_telegram_user`,
-    `change_cart_item_quantity_for_telegram_user` и др.);
+    `change_cart_item_quantity_for_telegram_user` и др.); «add» несёт
+    `variant` и `options` (id, не больше 50), «change» и «remove» — `line`
+    (id строки корзины: у одной позиции может быть несколько строк с разным
+    выбором);
   - `GET checkout` — расчёт (`get_remote_quote`): сумма, доставка, бонусы,
     время (только самовывоз и доставка; у отправки почтой времени нет,
     PQ-034), способы оплаты, реквизиты, службы и пересылка;

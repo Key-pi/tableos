@@ -62,9 +62,11 @@ from apps.menu.catalog import first_not_on_sale
 from apps.orders.models import Cart, Order
 from apps.orders.services import (
     CHANNEL_OFF_MESSAGES,
+    cart_line_payload,
     create_order,
     notify_staff_about_new_order,
     requested_time_label,
+    stale_choice_message,
     transition_order_status,
 )
 from apps.partners.models import Partner, PartnerBotSettings
@@ -255,6 +257,10 @@ def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = 
     closed = first_not_on_sale(item.menu_item for item in cart.items.all())
     if closed:
         raise RemoteOrderError(closed)
+    # A variant or an add-on taken off sale since (catalog step 2).
+    stale = stale_choice_message(cart.items.all())
+    if stale:
+        raise RemoteOrderError(stale)
     return cart
 
 
@@ -666,16 +672,7 @@ def place_remote_order(
     order = create_order(
         partner_id=partner_id,
         guest=guest,
-        items=[
-            {
-                "menu_item_id": item.menu_item_id,
-                "item_name": item.item_name,
-                "unit_price": item.unit_price,
-                "quantity": item.quantity,
-                "comment": item.comment,
-            }
-            for item in cart_items
-        ],
+        items=[cart_line_payload(item) for item in cart_items],
         comment=cart.comment,
         channel=channel,
         requested_for=now + timedelta(minutes=minutes) if minutes else None,

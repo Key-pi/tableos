@@ -483,7 +483,12 @@
 
   var tab = "orders";
   var tabData = { bills: null, tables: null, sale: null, report: null };
-  var sale = { code: "", items: {}, redeem: false, comment: "", preview: null, category: "" };
+  // The sale's lines in order; a line is an item with its variant and add-ons
+  // (catalog step 2), ``key`` tells two choices apart.
+  function newSale(category) {
+    return { code: "", lines: [], redeem: false, comment: "", preview: null, category: category || "", picking: null };
+  }
+  var sale = newSale("");
   var openBillId = "";
 
   function loadTab() {
@@ -711,18 +716,126 @@
 
   function salePreview() {
     sale.key = "";
-    api("sale_preview", { customer_code: sale.code, items: sale.items, redeem: sale.redeem }).then(function (result) {
+    api("sale_preview", { customer_code: sale.code, items: saleItems(), redeem: sale.redeem }).then(function (result) {
       if (!result.ok) { toast(result.data.error || T.error); sale.preview = null; }
       else sale.preview = result.data.sale;
       render();
     });
   }
 
-  function saleChange(id, delta) {
-    var quantity = (sale.items[id] || 0) + delta;
-    if (quantity <= 0) delete sale.items[id]; else sale.items[id] = quantity;
+  function saleItems() {
+    return sale.lines.map(function (line) {
+      return { item: line.item, quantity: line.quantity, variant: line.variant, options: line.options };
+    });
+  }
+
+  function lineKey(item, variant, options) {
+    return item + "|" + (variant || "-") + "|" + options.slice().sort().join(",");
+  }
+
+  function saleLine(key) {
+    return sale.lines.filter(function (line) { return line.key === key; })[0];
+  }
+
+  function itemCount(itemId) {
+    return sale.lines.reduce(function (sum, line) { return sum + (line.item === itemId ? line.quantity : 0); }, 0);
+  }
+
+  function saleChange(item, variant, options, delta) {
+    var key = lineKey(item, variant, options);
+    var line = saleLine(key);
+    if (!line && delta > 0) {
+      line = { key: key, item: item, variant: variant, options: options, quantity: 0 };
+      sale.lines.push(line);
+    }
+    if (!line) return;
+    line.quantity += delta;
+    if (line.quantity <= 0) sale.lines = sale.lines.filter(function (other) { return other !== line; });
     haptic("success");
     salePreview();
+  }
+
+  // --- a variant and add-ons for the sale (as on the guest's page) -------------
+
+  function startingPick(item) {
+    var pick = { variant: null, options: {} };
+    if (item.variants && item.variants.length) pick.variant = item.variants[0].id;
+    (item.groups || []).forEach(function (group) {
+      if (group.min > 0 && group.max === 1 && group.options.length) pick.options[group.options[0].id] = true;
+    });
+    return pick;
+  }
+
+  function pickedPrice(item, pick) {
+    var price = Number(item.price);
+    (item.variants || []).forEach(function (variant) { if (variant.id === pick.variant) price = Number(variant.price); });
+    (item.groups || []).forEach(function (group) {
+      group.options.forEach(function (option) { if (pick.options[option.id]) price += Number(option.price); });
+    });
+    return price;
+  }
+
+  function pickedIn(group, pick) {
+    return group.options.filter(function (option) { return pick.options[option.id]; }).length;
+  }
+
+  function renderPicker(page) {
+    var item = sale.picking.item;
+    var pick = sale.picking.pick;
+    var box = el("div", { class: "section chooser" }, el("div", { class: "what", text: item.name }));
+    var addButton = el("button", { type: "button", class: "add-picked" });
+    function refresh() { addButton.textContent = t("add_for", { price: money(pickedPrice(item, pick)) }); }
+    if (item.variants && item.variants.length) {
+      var variants = el("fieldset", { class: "choice-group" }, el("legend", { text: T.variant }));
+      item.variants.forEach(function (variant) {
+        variants.appendChild(el("label", { class: "choice" },
+          el("input", { type: "radio", name: "sale-variant", checked: pick.variant === variant.id,
+                        onchange: function () { pick.variant = variant.id; refresh(); } }),
+          el("span", { class: "grow", text: variant.name }), el("span", { class: "muted", text: money(variant.price) })));
+      });
+      box.appendChild(variants);
+    }
+    (item.groups || []).forEach(function (group) {
+      var radio = group.min > 0 && group.max === 1;
+      var hints = [];
+      if (group.min > 0) hints.push(T.required);
+      if (group.max === 0) hints.push(T.any_number); else if (group.max > 1) hints.push(t("up_to", { count: group.max }));
+      var fieldset = el("fieldset", { class: "choice-group" },
+        el("legend", null, group.name, hints.length ? el("span", { class: "muted", text: " · " + hints.join(" · ") }) : null));
+      group.options.forEach(function (option) {
+        fieldset.appendChild(el("label", { class: "choice" },
+          el("input", { type: radio ? "radio" : "checkbox", name: "sale-g-" + group.id, value: option.id,
+                        checked: !!pick.options[option.id],
+                        onchange: function (event) {
+                          if (radio || (group.max === 1 && event.target.checked)) {
+                            group.options.forEach(function (other) { delete pick.options[other.id]; });
+                          }
+                          if (event.target.checked) pick.options[option.id] = true; else delete pick.options[option.id];
+                          if (group.max > 1 && pickedIn(group, pick) > group.max) {
+                            delete pick.options[option.id];
+                            toast(t("at_most", { group: group.name, count: group.max }));
+                            haptic("error");
+                          }
+                          fieldset.querySelectorAll("input").forEach(function (input) { input.checked = !!pick.options[input.value]; });
+                          refresh();
+                        } }),
+          el("span", { class: "grow", text: option.name }),
+          Number(option.price) > 0 ? el("span", { class: "muted", text: "+" + money(option.price) }) : null));
+      });
+      box.appendChild(fieldset);
+    });
+    addButton.onclick = function () {
+      if (item.variants && item.variants.length && !pick.variant) { toast(T.choose_variant); return; }
+      var missing = (item.groups || []).filter(function (group) { return pickedIn(group, pick) < group.min; })[0];
+      if (missing) { toast(t("choose_group", { group: missing.name })); haptic("error"); return; }
+      sale.picking = null;
+      saleChange(item.id, pick.variant, Object.keys(pick.options), 1);
+    };
+    refresh();
+    box.appendChild(addButton);
+    box.appendChild(el("button", { type: "button", class: "act", text: T.back,
+                                   onclick: function () { sale.picking = null; render(); } }));
+    page.appendChild(box);
   }
 
   function renderSale(page) {
@@ -743,25 +856,38 @@
         onclick: function () { sale.category = category.id; render(); } }));
     });
     page.appendChild(chips);
+    if (sale.picking) renderPicker(page);
     var grid = el("div", { class: "board" });
     info.categories.filter(function (category) { return category.id === sale.category; }).forEach(function (category) {
       category.items.forEach(function (item) {
-        var quantity = sale.items[item.id] || 0;
+        var quantity = itemCount(item.id);
+        var price = item.price_from ? t("price_from", { price: money(item.price) }) : money(item.price);
+        var control = item.choice && item.choice !== "none"
+          ? el("button", { type: "button", class: "add", text: "+", onclick: function () {
+              sale.picking = { item: item, pick: startingPick(item) }; render(); window.scrollTo(0, 0);
+            } })
+          : el("span", { class: "stepper" },
+              el("button", { type: "button", text: "−", onclick: function () { saleChange(item.id, null, [], -1); } }),
+              el("span", { text: String(quantity) }),
+              el("button", { type: "button", text: "+", onclick: function () { saleChange(item.id, null, [], 1); } }));
         grid.appendChild(el("div", { class: "call", style: "border-left-color:" + (quantity ? "var(--accent)" : "transparent") },
-          el("div", null, el("div", { class: "what", text: item.name }), el("div", { class: "meta", text: money(item.price) })),
-          el("span", { class: "stepper" },
-            el("button", { type: "button", text: "−", onclick: function () { saleChange(item.id, -1); } }),
-            el("span", { text: String(quantity) }),
-            el("button", { type: "button", text: "+", onclick: function () { saleChange(item.id, 1); } }))));
+          el("div", null, el("div", { class: "what", text: item.name }),
+             el("div", { class: "meta", text: price + (quantity && item.choice !== "none" ? " · ×" + quantity : "") })),
+          control));
       });
     });
     page.appendChild(grid);
     var preview = sale.preview;
     if (preview && preview.items.length) {
       var summary = el("div", { class: "section" });
-      preview.items.forEach(function (line) {
+      preview.items.forEach(function (line, index) {
+        var own = preview.items.length === sale.lines.length ? sale.lines[index] : null;
         summary.appendChild(el("div", { class: "row" }, el("span", { text: line.name + " × " + line.quantity }),
-                               el("span", { text: money(line.total) })));
+          el("span", null,
+            own ? el("span", { class: "stepper" },
+              el("button", { type: "button", text: "−", onclick: function () { saleChange(own.item, own.variant, own.options, -1); } }),
+              el("button", { type: "button", text: "+", onclick: function () { saleChange(own.item, own.variant, own.options, 1); } })) : null,
+            " " + money(line.total))));
       });
       if (Number(preview.redeemable) > 0) {
         var toggle = el("input", { type: "checkbox", onchange: function (event) { sale.redeem = event.target.checked; salePreview(); } });
@@ -777,14 +903,14 @@
       summary.appendChild(comment);
       summary.appendChild(el("div", { class: "acts" },
         el("button", { type: "button", class: "act", text: T.clear, onclick: function () {
-          sale = { code: "", items: {}, redeem: false, comment: "", preview: null, category: sale.category }; render();
+          sale = newSale(sale.category); render();
         } }),
         el("button", { type: "button", class: "act primary", text: T.sale_confirm, disabled: busy, onclick: function () {
           if (busy) return;
           busy = true;
-          api("sale_confirm", { customer_code: sale.code, items: sale.items, redeem: sale.redeem, comment: sale.comment, key: saleKey() })
+          api("sale_confirm", { customer_code: sale.code, items: saleItems(), redeem: sale.redeem, comment: sale.comment, key: saleKey() })
             .then(function (result) {
-              if (result.ok) sale = { code: "", items: {}, redeem: false, comment: "", preview: null, category: sale.category };
+              if (result.ok) sale = newSale(sale.category);
               after(result);
             });
         } })));

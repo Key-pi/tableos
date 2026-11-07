@@ -600,22 +600,29 @@ def build_staff_sale_keyboard(
     if category_row:
         keyboard.append(category_row)
 
-    for item_id, label, price in category_items:
+    for item_id, label, price, *extra in category_items:
+        # An item with variants or add-ons opens its choice (catalog step 2).
+        callback = extra[0] if extra and extra[0] else f"staffsale:add:{item_id}"
         keyboard.append(
             [
                 InlineKeyboardButton(
                     text=_("➕ {label} — {price} грн", label=label, price=price),
-                    callback_data=f"staffsale:add:{item_id}",
+                    callback_data=callback,
                 )
             ]
         )
 
-    for item_id, label, quantity in draft_items:
+    for item_id, label, quantity, *extra in draft_items:
+        # A line with a choice goes by its number in the draft: its key is
+        # longer than Telegram's 64 bytes.
+        add_callback, sub_callback = extra if extra else (
+            f"staffsale:add:{item_id}", f"staffsale:sub:{item_id}"
+        )
         keyboard.append(
             [
                 InlineKeyboardButton(
                     text="➖",
-                    callback_data=f"staffsale:sub:{item_id}",
+                    callback_data=sub_callback,
                 ),
                 InlineKeyboardButton(
                     text=f"{label} × {quantity}",
@@ -623,7 +630,7 @@ def build_staff_sale_keyboard(
                 ),
                 InlineKeyboardButton(
                     text="➕",
-                    callback_data=f"staffsale:add:{item_id}",
+                    callback_data=add_callback,
                 ),
             ]
         )

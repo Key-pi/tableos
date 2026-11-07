@@ -156,3 +156,16 @@ input, textarea { font: inherit; color: var(--text); }
 .attributes div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line, rgba(127,127,127,.2)); }
 .attributes dt { color: var(--hint); }
 .attributes dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+
+/* Variants and add-ons (catalog step 2). */
+.pick { display: inline-flex; align-items: center; gap: 6px; }
+.in-cart { color: var(--hint); font-size: 13px; }
+.chooser { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.choice-group { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; min-width: 0; }
+.choice-group legend { font-weight: 600; padding: 10px 0 4px; }
+.choice { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--separator); cursor: pointer; }
+.choice input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); flex: none; }
+.choice .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.choice .muted { flex: none; }
+.add-picked { width: 100%; border: 0; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 600; background: var(--accent); color: var(--accent-text); cursor: pointer; margin-top: 4px; }
+.in-cart-note { font-size: 13px; text-align: center; }

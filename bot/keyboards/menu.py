@@ -44,6 +44,7 @@ def build_menu_keyboard(
     choose_way=(),
     subcategories=(),
     active_subcategory_id=None,
+    choices=None,
 ) -> InlineKeyboardMarkup:
     """Top categories, the subcategories of the chosen one, then the items to
     add (only once the guest chose a way of ordering — ``has_session``; none
@@ -73,6 +74,19 @@ def build_menu_keyboard(
 
     if has_session and supports_cart:
         for item in items:
+            # An item with variants or add-ons opens its choice first
+            # (catalog step 2, bot/keyboards/options.py).
+            item_choices = (choices or {}).get(item.id)
+            if item_choices is not None and (item_choices.variants or item_choices.groups):
+                price = min(variant.price for variant in item_choices.variants) \
+                    if item_choices.variants else item.price
+                text = (
+                    _("➕ {name} — от {price} грн", name=item.name, price=price)
+                    if item_choices.variants
+                    else _("➕ {name} — {price} грн", name=item.name, price=price)
+                )
+                rows.append([InlineKeyboardButton(text=text, callback_data=f"mo:{item.public_id}")])
+                continue
             rows.append(
                 [
                     InlineKeyboardButton(
@@ -108,23 +122,26 @@ def build_cart_keyboard(
     has_items = bool(cart is not None and cart.items.all())
     if cart is not None:
         for item in cart.items.all():
+            # By the line's own id: one item may have lines with different
+            # variants and add-ons (catalog step 2).
+            line = item.id.hex
             rows.append(
                 [
                     InlineKeyboardButton(
                         text=f"➖ {item.item_name}",
-                        callback_data=f"cart:item:sub:{item.menu_item.public_id}",
+                        callback_data=f"cart:item:sub:{line}",
                     ),
                     InlineKeyboardButton(
                         text=str(item.quantity),
-                        callback_data=f"cart:item:noop:{item.menu_item.public_id}",
+                        callback_data=f"cart:item:noop:{line}",
                     ),
                     InlineKeyboardButton(
                         text="➕",
-                        callback_data=f"cart:item:add:{item.menu_item.public_id}",
+                        callback_data=f"cart:item:add:{line}",
                     ),
                     InlineKeyboardButton(
                         text="✕",
-                        callback_data=f"cart:item:remove:{item.menu_item.public_id}",
+                        callback_data=f"cart:item:remove:{line}",
                     ),
                 ]
             )

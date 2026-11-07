@@ -244,9 +244,11 @@
 
   // --- menu ------------------------------------------------------------------
 
+  // All lines of the item: with variants and add-ons it may have several.
   function cartQuantity(itemId) {
-    var line = state.cart.items.filter(function (item) { return item.item === itemId; })[0];
-    return line ? line.quantity : 0;
+    return state.cart.items.reduce(function (sum, line) {
+      return sum + (line.item === itemId ? line.quantity : 0);
+    }, 0);
   }
 
   function changeCart(body) {
@@ -278,7 +280,8 @@
   }
 
   // What the guest can do with the item: add, change the count, or a note why not.
-  function itemAction(item, category) {
+  // An item with variants or add-ons is chosen on its own page (``onPage``).
+  function itemAction(item, category, onPage) {
     var channel = state.cart.channel;
     var off = channel && item.sold_in.indexOf(channel) === -1;
     var quantity = cartQuantity(item.id);
@@ -286,6 +289,13 @@
     if (!state.can_order) action = null;
     else if (category && category.closed) action = el("span", { class: "note", text: T.not_now });
     else if (off) action = el("span", { class: "note", text: T.not_sold_here });
+    else if (item.choice && item.choice !== "none") {
+      if (onPage) return null;
+      action = el("span", { class: "pick" },
+        quantity > 0 ? el("span", { class: "in-cart", text: "×" + quantity }) : null,
+        el("button", { type: "button", class: "add", text: "+", "aria-label": T.add + " " + item.name,
+                       onclick: function () { openItem(item, category); } }));
+    }
     else if (quantity > 0) {
       action = el("span", { class: "stepper" },
         el("button", { type: "button", "aria-label": "−", text: "−",
@@ -314,12 +324,117 @@
   }
 
   function priceLine(item) {
-    return el("span", { class: "price" }, money(item.price),
+    return el("span", { class: "price" },
+      item.price_from ? t("price_from", { price: money(item.price) }) : money(item.price),
       item.old_price ? el("s", { class: "old", text: money(item.old_price) }) : null);
   }
 
+  // --- variants and add-ons (catalog step 2) ---------------------------------
+
+  // The first variant and the first of each required single choice are
+  // picked to start with; the guest changes what they want.
+  function startingPick(item) {
+    var pick = { variant: null, options: {} };
+    if (item.variants && item.variants.length) pick.variant = item.variants[0].id;
+    (item.groups || []).forEach(function (group) {
+      if (group.min > 0 && group.max === 1 && group.options.length) pick.options[group.options[0].id] = true;
+    });
+    return pick;
+  }
+
+  function pickedPrice(item, pick) {
+    var price = Number(item.price);
+    (item.variants || []).forEach(function (variant) {
+      if (variant.id === pick.variant) price = Number(variant.price);
+    });
+    (item.groups || []).forEach(function (group) {
+      group.options.forEach(function (option) { if (pick.options[option.id]) price += Number(option.price); });
+    });
+    return price;
+  }
+
+  function pickedIn(group, pick) {
+    return group.options.filter(function (option) { return pick.options[option.id]; }).length;
+  }
+
+  function groupHint(group) {
+    var parts = [];
+    if (group.min > 0) parts.push(T.required);
+    if (group.max === 0) parts.push(T.any_number);
+    else if (group.max > 1) parts.push(t("up_to", { count: group.max }));
+    return parts.join(" · ");
+  }
+
+  function chooser(item, onChange) {
+    var pick = selected.pick;
+    var box = el("div", { class: "chooser" });
+    if (item.variants && item.variants.length) {
+      var variants = el("fieldset", { class: "choice-group" }, el("legend", { text: T.variant }));
+      item.variants.forEach(function (variant) {
+        variants.appendChild(el("label", { class: "choice" },
+          el("input", { type: "radio", name: "variant", value: variant.id, checked: pick.variant === variant.id,
+                        onchange: function () { pick.variant = variant.id; onChange(); } }),
+          el("span", { class: "grow", text: variant.name }),
+          el("span", { class: "muted", text: money(variant.price) })));
+      });
+      box.appendChild(variants);
+    }
+    (item.groups || []).forEach(function (group) {
+      var radio = group.min > 0 && group.max === 1;
+      var hint = groupHint(group);
+      var fieldset = el("fieldset", { class: "choice-group" },
+        el("legend", null, group.name, hint ? el("span", { class: "muted", text: " · " + hint }) : null));
+      group.options.forEach(function (option) {
+        var input = el("input", {
+          type: radio ? "radio" : "checkbox", name: "g-" + group.id, value: option.id,
+          checked: !!pick.options[option.id],
+          onchange: function (event) {
+            if (radio || (group.max === 1 && event.target.checked)) {
+              group.options.forEach(function (other) { delete pick.options[other.id]; });
+            }
+            if (event.target.checked) pick.options[option.id] = true;
+            else delete pick.options[option.id];
+            if (group.max > 1 && pickedIn(group, pick) > group.max) {
+              delete pick.options[option.id];
+              event.target.checked = false;
+              toast(t("at_most", { group: group.name, count: group.max }));
+              haptic("error");
+            }
+            // Single choices: the other boxes follow the pick.
+            fieldset.querySelectorAll("input").forEach(function (box) { box.checked = !!pick.options[box.value]; });
+            onChange();
+          }
+        });
+        fieldset.appendChild(el("label", { class: "choice" }, input,
+          el("span", { class: "grow", text: option.name }),
+          Number(option.price) > 0 ? el("span", { class: "muted", text: "+" + money(option.price) }) : null));
+      });
+      box.appendChild(fieldset);
+    });
+    return box;
+  }
+
+  function addPicked(item) {
+    var pick = selected.pick;
+    if (!state.cart.channel) { toast(T.choose_way_first); haptic("error"); return; }
+    if (item.variants && item.variants.length && !pick.variant) { toast(T.choose_variant); haptic("error"); return; }
+    var missing = (item.groups || []).filter(function (group) { return pickedIn(group, pick) < group.min; })[0];
+    if (missing) { toast(t("choose_group", { group: missing.name })); haptic("error"); return; }
+    if (busy) return;
+    working(true);
+    api("cart", { action: "add", item: item.id, variant: pick.variant,
+                  options: Object.keys(pick.options) }).then(function (result) {
+      working(false);
+      if (!result.ok) { refused(result); return; }
+      state.cart = result.data.cart;
+      toast(T.added);
+      haptic("success");
+      render();
+    });
+  }
+
   function openItem(item, category) {
-    selected = { item: item, category: category };
+    selected = { item: item, category: category, pick: startingPick(item) };
     view = "item";
     window.scrollTo(0, 0);
     render();
@@ -372,8 +487,22 @@
     if (category && category.closed) {
       body.appendChild(el("div", { class: "schedule", text: "🕐 " + t("sold_when", { when: category.schedule }) }));
     }
-    body.appendChild(el("div", { class: "foot" }, priceLine(item), itemAction(item, category)));
+    body.appendChild(el("div", { class: "foot" }, priceLine(item), itemAction(item, category, true)));
     if (item.description) body.appendChild(el("p", { class: "full-desc", text: item.description }));
+    var orderable = state.can_order && !(category && category.closed)
+      && !(state.cart.channel && item.sold_in.indexOf(state.cart.channel) === -1);
+    if (item.choice && item.choice !== "none" && orderable) {
+      var addButton = el("button", { type: "button", class: "add-picked",
+                                     onclick: function () { addPicked(item); } });
+      var quantity = cartQuantity(item.id);
+      var refresh = function () {
+        addButton.textContent = t("add_for", { price: money(pickedPrice(item, selected.pick)) });
+      };
+      body.appendChild(chooser(item, refresh));
+      refresh();
+      body.appendChild(addButton);
+      if (quantity > 0) body.appendChild(el("div", { class: "muted in-cart-note", text: t("in_cart", { count: quantity }) }));
+    }
     var rows = (item.attributes || []).slice();
     if (item.sku) rows.push({ name: T.sku, value: item.sku });
     if (rows.length) {
@@ -532,10 +661,10 @@
           el("div", { class: "muted", text: money(line.unit_price) })),
         el("span", { class: "stepper" },
           el("button", { type: "button", text: "−", "aria-label": "−",
-                         onclick: function () { changeCart({ action: "change", item: line.item, delta: -1 }); } }),
+                         onclick: function () { changeCart({ action: "change", line: line.line, delta: -1 }); } }),
           el("span", { text: String(line.quantity) }),
           el("button", { type: "button", text: "+", "aria-label": "+",
-                         onclick: function () { changeCart({ action: "change", item: line.item, delta: 1 }); } }))));
+                         onclick: function () { changeCart({ action: "change", line: line.line, delta: 1 }); } }))));
     });
     section.appendChild(el("div", { class: "sum total" }, el("span", { text: T.total }),
                            el("span", { text: money(state.cart.total) })));

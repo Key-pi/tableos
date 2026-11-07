@@ -8,6 +8,9 @@ from apps.menu.models import (
     MenuItem,
     MenuItemAttribute,
     MenuItemPhoto,
+    MenuItemVariant,
+    Modifier,
+    ModifierGroup,
 )
 from apps.orders.kitchen import missing_screen_warnings
 from apps.partners.models import PartnerBotSettings
@@ -145,9 +148,28 @@ class MenuItemAttributeInline(SectionInlineMixin, admin.TabularInline):
     extra = 0
 
 
+class MenuItemVariantInline(SectionInlineMixin, admin.TabularInline):
+    """Variants with their own price (module «Варианты и добавки»)."""
+
+    admin_section = AdminSection.MENU
+    model = MenuItemVariant
+    fields = ("name", "price", "is_available", "sort_order")
+    extra = 0
+
+
 SHOWCASE_FIELDS = (
     "portion", "portion_unit", "old_price", "badges", "custom_badges", "sku", "barcode",
 )
+
+
+def module_on_for(admin_page, request, field: str) -> bool:
+    """A module's part of a page while the venue's module is on (platform
+    admins see it always)."""
+
+    partner_id = admin_page.get_partner_scope_id(request)
+    if partner_id is None:
+        return admin_page.is_platform_admin(request)
+    return PartnerBotSettings.objects.filter(partner_id=partner_id, **{field: True}).exists()
 
 
 @admin.register(MenuItem)
@@ -190,15 +212,7 @@ class MenuItemAdmin(VenueFormMixin, ScopedAdminMixin):
     )
 
     def showcase_on_for(self, request) -> bool:
-        """The showcase fields while the venue's module is on (platform
-        admins see them always)."""
-
-        partner_id = self.get_partner_scope_id(request)
-        if partner_id is None:
-            return self.is_platform_admin(request)
-        return PartnerBotSettings.objects.filter(
-            partner_id=partner_id, module_showcase_enabled=True
-        ).exists()
+        return module_on_for(self, request, "module_showcase_enabled")
 
     def get_exclude(self, request, obj=None):
         exclude = list(super().get_exclude(request, obj) or ())
@@ -214,6 +228,58 @@ class MenuItemAdmin(VenueFormMixin, ScopedAdminMixin):
         return [(name, options) for name, options in fieldsets if options.get("fields")]
 
     def get_inlines(self, request, obj):
+        inlines = []
+        if module_on_for(self, request, "module_options_enabled"):
+            inlines.append(MenuItemVariantInline)
         if self.showcase_on_for(request):
-            return [MenuItemPhotoInline, MenuItemAttributeInline]
-        return []
+            inlines += [MenuItemPhotoInline, MenuItemAttributeInline]
+        return inlines
+
+
+class ModifierInline(SectionInlineMixin, admin.TabularInline):
+    admin_section = AdminSection.MENU
+    model = Modifier
+    fields = ("name", "price", "is_available", "sort_order")
+    extra = 1
+
+
+@admin.register(ModifierGroup)
+class ModifierGroupAdmin(VenueFormMixin, ScopedAdminMixin):
+    """Add-ons set once and attached to items or whole categories (module
+    «Варианты и добавки»; guests see them while it is on)."""
+
+    admin_section = AdminSection.MENU
+    list_display = ("name", "partner", "min_choices", "max_choices", "is_active", "sort_order")
+    list_filter = ("partner", "is_active")
+    search_fields = ("name",)
+    filter_horizontal = ("categories", "items")
+    inlines = [ModifierInline]
+    fieldsets = (
+        (None, {
+            "description": _lazy(
+                "Гость выбирает добавки, пока включён модуль «Варианты и добавки». "
+                "Группа без добавок в наличии не показывается."
+            ),
+            "fields": ("partner", "name", "min_choices", "max_choices", "is_active",
+                       "sort_order"),
+        }),
+        (_lazy("К чему предлагать"), {
+            "description": _lazy(
+                "Категория — для всех её позиций и подкатегорий; позиции — по одной."
+            ),
+            "fields": ("categories", "items"),
+        }),
+    )
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        field = super().formfield_for_manytomany(db_field, request, **kwargs)
+        if not self.is_platform_admin(request):
+            # One venue: its name before every row says nothing.
+            if db_field.name == "categories":
+                field.label_from_instance = lambda category: category.full_name
+            elif db_field.name == "items":
+                field.label_from_instance = (
+                    lambda item: f"{item.name} · {item.category.full_name}"
+                )
+                field.queryset = field.queryset.select_related("category__parent")
+        return field

@@ -284,6 +284,12 @@ class WalkInSaleItem(PartnerBoundModel):
     item_name = models.CharField(max_length=255, verbose_name=_lazy("Позиция"))
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_lazy("Цена"))
     quantity = models.PositiveIntegerField(default=1, verbose_name=_lazy("Количество"))
+    # What was chosen (catalog step 2): already in the name and price.
+    variant = models.ForeignKey(
+        "menu.MenuItemVariant", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="walk_in_sale_items", verbose_name=_lazy("Вариант"),
+    )
+    modifiers = models.JSONField(default=list, blank=True, verbose_name=_lazy("Добавки"))
 
     class Meta:
         verbose_name = _lazy("позиция быстрой продажи")

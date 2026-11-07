@@ -291,6 +291,15 @@ class PartnerBotSettings(TimeStampedModel):
             "включён. Требует меню.",
         ),
     )
+    module_options_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Варианты и добавки"),
+        help_text=_lazy(
+            "Варианты позиции со своей ценой (размер, цвет, фасовка: 250 мл, M, 500 г) и "
+            "группы добавок (сиропы, соусы, «без лука»). Гость выбирает их при заказе, "
+            "персонал — в быстрой продаже. Требует меню.",
+        ),
+    )
     module_tables_enabled = models.BooleanField(
         default=True,
         verbose_name=_lazy("Столы и QR-сессии"),

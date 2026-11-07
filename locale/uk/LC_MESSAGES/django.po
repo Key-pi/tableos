@@ -1676,6 +1676,14 @@ msgstr "Продаж"
 msgid "Позиция меню"
 msgstr "Позиція меню"
 
+#: apps/bonuses/models.py apps/menu/models.py apps/orders/models.py webapp/staff_views.py webapp/texts.py
+msgid "Вариант"
+msgstr "Варіант"
+
+#: apps/bonuses/models.py apps/menu/models.py apps/orders/models.py
+msgid "Добавки"
+msgstr "Добавки"
+
 #: apps/bonuses/models.py
 msgid "позиция быстрой продажи"
 msgstr "позиція швидкого продажу"
@@ -1995,6 +2003,18 @@ msgstr "Вітрина"
 #: apps/menu/admin.py
 msgid "Порция, старая цена, метки, артикул; ниже — ещё фото и характеристики."
 msgstr "Порція, стара ціна, мітки, артикул; нижче — ще фото й характеристики."
+
+#: apps/menu/admin.py
+msgid "Гость выбирает добавки, пока включён модуль «Варианты и добавки». Группа без добавок в наличии не показывается."
+msgstr "Гість обирає добавки, поки ввімкнено модуль «Варіанти й добавки». Група без добавок у наявності не показується."
+
+#: apps/menu/admin.py
+msgid "К чему предлагать"
+msgstr "До чого пропонувати"
+
+#: apps/menu/admin.py
+msgid "Категория — для всех её позиций и подкатегорий; позиции — по одной."
+msgstr "Категорія — для всіх її позицій і підкатегорій; позиції — по одній."
 
 #: apps/menu/apps.py apps/partners/models.py apps/users/constants.py
 msgid "Меню"
@@ -2347,6 +2367,110 @@ msgstr "характеристика"
 #: apps/menu/models.py
 msgid "Характеристики"
 msgstr "Характеристики"
+
+#: apps/menu/models.py
+msgid "Как увидит гость: 250 мл, M, червона, 500 г."
+msgstr "Як побачить гість: 250 мл, M, червона, 500 г."
+
+#: apps/menu/models.py
+msgid "вариант позиции"
+msgstr "варіант позиції"
+
+#: apps/menu/models.py
+msgid "Варианты"
+msgstr "Варіанти"
+
+#: apps/menu/models.py
+msgid "Как увидит гость: Сироп, Молоко, Соус, Убрать."
+msgstr "Як побачить гість: Сироп, Молоко, Соус, Прибрати."
+
+#: apps/menu/models.py
+msgid "Выбрать не меньше"
+msgstr "Обрати не менше"
+
+#: apps/menu/models.py
+msgid "0 — по желанию; 1 и больше — без выбора не добавить."
+msgstr "0 — за бажанням; 1 і більше — без вибору не додати."
+
+#: apps/menu/models.py
+msgid "Выбрать не больше"
+msgstr "Обрати не більше"
+
+#: apps/menu/models.py
+msgid "1 — один из списка; 0 — сколько угодно."
+msgstr "1 — один зі списку; 0 — скільки завгодно."
+
+#: apps/menu/models.py webapp/texts.py
+msgid "Позиции"
+msgstr "Позиції"
+
+#: apps/menu/models.py
+msgid "Категории"
+msgstr "Категорії"
+
+#: apps/menu/models.py
+msgid "Группа для всех позиций категории и её подкатегорий."
+msgstr "Група для всіх позицій категорії та її підкатегорій."
+
+#: apps/menu/models.py
+msgid "группа добавок"
+msgstr "група добавок"
+
+#: apps/menu/models.py
+msgid "Группы добавок"
+msgstr "Групи добавок"
+
+#: apps/menu/models.py
+msgid "«Не меньше» не может быть больше, чем «не больше»."
+msgstr "«Не менше» не може бути більше, ніж «не більше»."
+
+#: apps/menu/models.py
+msgid "Группа"
+msgstr "Група"
+
+#: apps/menu/models.py
+msgid "Добавка"
+msgstr "Добавка"
+
+#: apps/menu/models.py
+msgid "Доплата"
+msgstr "Доплата"
+
+#: apps/menu/models.py
+msgid "0 — бесплатно."
+msgstr "0 — безкоштовно."
+
+#: apps/menu/models.py
+msgid "добавка"
+msgstr "добавка"
+
+#: apps/menu/options.py
+msgid "Варианты и добавки сейчас не выбираются."
+msgstr "Варіанти й добавки зараз не обираються."
+
+#: apps/menu/options.py
+msgid "Этого варианта «{name}» сейчас нет — выберите заново."
+msgstr "Цього варіанту «{name}» зараз немає — оберіть заново."
+
+#: apps/menu/options.py
+msgid "Выберите вариант: «{name}»."
+msgstr "Оберіть варіант: «{name}»."
+
+#: apps/menu/options.py
+msgid "Этой добавки к «{name}» сейчас нет — выберите заново."
+msgstr "Цієї добавки до «{name}» зараз немає — оберіть заново."
+
+#: apps/menu/options.py
+msgid "Выберите «{group}» для «{name}»."
+msgstr "Оберіть «{group}» для «{name}»."
+
+#: apps/menu/options.py
+msgid "«{group}»: выберите не меньше {count}."
+msgstr "«{group}»: оберіть не менше {count}."
+
+#: apps/menu/options.py bot/handlers/menu.py bot/handlers/staff.py
+msgid "«{group}»: не больше {count}."
+msgstr "«{group}»: не більше {count}."
 
 #: apps/notifications/admin.py
 msgid "Отправить выбранные рассылки"
@@ -3103,6 +3227,10 @@ msgid "Корзина"
 msgstr "Кошик"
 
 #: apps/orders/models.py
+msgid "Ключ выбора"
+msgstr "Ключ вибору"
+
+#: apps/orders/models.py
 msgid "строка корзины"
 msgstr "рядок кошика"
 
@@ -3213,6 +3341,10 @@ msgstr "Стіл замовлення належить до іншого зак�
 #: apps/orders/services.py
 msgid "Позиция заказа относится к другому заведению."
 msgstr "Позиція замовлення належить до іншого закладу."
+
+#: apps/orders/services.py
+msgid "Вариант не относится к этой позиции."
+msgstr "Варіант не належить до цієї позиції."
 
 #: apps/orders/services.py
 msgid "Нельзя создать заказ без позиций."
@@ -3334,17 +3466,21 @@ msgstr "Спершу відскануйте QR-код столу."
 msgid "Недоступно для заказа {channel_names}: {not_sold}."
 msgstr "Недоступно для замовлення {channel_names}: {not_sold}."
 
+#: apps/orders/services.py
+msgid "«{name}»: выберите вариант и добавки в меню."
+msgstr "«{name}»: оберіть варіант і добавки в меню."
+
 #: apps/orders/services.py webapp/texts.py webapp/views.py
 msgid "Сначала выберите, как получите заказ."
 msgstr "Спершу оберіть, як отримаєте замовлення."
 
-#: apps/orders/services.py webapp/staff_sales.py webapp/views.py
-msgid "Количество должно изменяться хотя бы на 1."
-msgstr "Кількість має змінюватися хоча б на 1."
-
 #: apps/orders/services.py
 msgid "Эта позиция не найдена в активной корзине."
 msgstr "Цю позицію не знайдено в активному кошику."
+
+#: apps/orders/services.py webapp/staff_sales.py webapp/views.py
+msgid "Количество должно изменяться хотя бы на 1."
+msgstr "Кількість має змінюватися хоча б на 1."
 
 #: apps/orders/services.py
 msgid "Эта позиция уже отсутствует в корзине."
@@ -3365,6 +3501,10 @@ msgstr "Кошик зібрано не для столу. Оформіть са�
 #: apps/orders/services.py
 msgid "Недоступно для заказа к столу: {not_sold}."
 msgstr "Недоступно для замовлення до столу: {not_sold}."
+
+#: apps/orders/services.py
+msgid "«{name}» больше нельзя заказать так — уберите её из корзины и выберите заново."
+msgstr "«{name}» більше не можна замовити так — приберіть її з кошика й оберіть заново."
 
 #: apps/orders/services.py
 msgid "Некоторые позиции недоступны или не принадлежат этому заведению: {missing_codes}."
@@ -3887,6 +4027,14 @@ msgstr "Розширена вітрина"
 #: apps/partners/models.py
 msgid "У позиций: порция (300 мл, 250 г), старая цена, метки («Хит», «Веган», свои), ещё фото, характеристики, артикул и штрихкод. Гости видят их, пока модуль включён. Требует меню."
 msgstr "У позицій: порція (300 мл, 250 г), стара ціна, мітки («Хіт», «Веган», свої), ще фото, характеристики, артикул і штрихкод. Гості бачать їх, поки модуль увімкнено. Потребує меню."
+
+#: apps/partners/models.py
+msgid "Варианты и добавки"
+msgstr "Варіанти й добавки"
+
+#: apps/partners/models.py
+msgid "Варианты позиции со своей ценой (размер, цвет, фасовка: 250 мл, M, 500 г) и группы добавок (сиропы, соусы, «без лука»). Гость выбирает их при заказе, персонал — в быстрой продаже. Требует меню."
+msgstr "Варіанти позиції зі своєю ціною (розмір, колір, фасування: 250 мл, M, 500 г) і групи добавок (сиропи, соуси, «без цибулі»). Гість обирає їх під час замовлення, персонал — у швидкому продажі. Потребує меню."
 
 #: apps/partners/models.py
 msgid "Столы и QR-сессии"
@@ -4965,6 +5113,10 @@ msgid "За столом — отсканируйте QR-код на столе.
 msgstr "За столом — відскануйте QR-код на столі."
 
 #: bot/handlers/menu.py
+msgid "{name} — от {price} грн"
+msgstr "{name} — від {price} грн"
+
+#: bot/handlers/menu.py
 msgid "{name} — {price} грн"
 msgstr "{name} — {price} грн"
 
@@ -4996,9 +5148,25 @@ msgstr "Меню зараз вимкнено для цього бота."
 msgid "Без изменений"
 msgstr "Без змін"
 
-#: bot/handlers/menu.py
+#: bot/handlers/menu.py webapp/texts.py
 msgid "Добавлено в корзину."
 msgstr "Додано до кошика."
+
+#: bot/handlers/menu.py
+msgid "Выберите вариант и добавки — сумма на кнопке «Добавить»."
+msgstr "Оберіть варіант і добавки — сума на кнопці «Додати»."
+
+#: bot/handlers/menu.py bot/handlers/staff.py
+msgid "Сейчас: {name}"
+msgstr "Зараз: {name}"
+
+#: bot/handlers/menu.py bot/handlers/staff.py
+msgid "Эта позиция сейчас недоступна."
+msgstr "Ця позиція зараз недоступна."
+
+#: bot/handlers/menu.py bot/handlers/staff.py
+msgid "Меню изменилось — выберите заново."
+msgstr "Меню змінилося — оберіть заново."
 
 #: bot/handlers/order.py
 msgid "способ не выбран"
@@ -6256,6 +6424,10 @@ msgstr "Чернетка швидкого продажу застаріла. П�
 msgid "Для быстрой продажи сначала добавьте активные категории меню."
 msgstr "Для швидкого продажу спершу додайте активні категорії меню."
 
+#: bot/handlers/staff.py webapp/staff_views.py webapp/texts.py
+msgid "от {price}"
+msgstr "від {price}"
+
 #: bot/handlers/staff.py
 msgid "Покупатель: Аноним (без кода клиента)"
 msgstr "Покупець: Анонім (без коду клієнта)"
@@ -7025,6 +7197,10 @@ msgid "🛒 Корзина: {count} шт. · {total} грн"
 msgstr "🛒 Кошик: {count} шт. · {total} грн"
 
 #: bot/keyboards/menu.py
+msgid "➕ {name} — от {price} грн"
+msgstr "➕ {name} — від {price} грн"
+
+#: bot/keyboards/menu.py
 msgid "➕ {name} — {price} грн"
 msgstr "➕ {name} — {price} грн"
 
@@ -7032,9 +7208,25 @@ msgstr "➕ {name} — {price} грн"
 msgid "Очистить"
 msgstr "Очистити"
 
-#: bot/keyboards/menu.py
+#: bot/keyboards/menu.py bot/keyboards/options.py
 msgid "← К меню"
 msgstr "← До меню"
+
+#: bot/keyboards/options.py webapp/staff_views.py webapp/texts.py
+msgid "обязательно"
+msgstr "обов'язково"
+
+#: bot/keyboards/options.py webapp/staff_views.py webapp/texts.py
+msgid "можно несколько"
+msgstr "можна кілька"
+
+#: bot/keyboards/options.py webapp/staff_views.py webapp/texts.py
+msgid "до {count}"
+msgstr "до {count}"
+
+#: bot/keyboards/options.py
+msgid "➕ Добавить · {price} грн"
+msgstr "➕ Додати · {price} грн"
 
 #: bot/keyboards/profile.py
 msgid "📋 Мои заказы"
@@ -7740,6 +7932,22 @@ msgstr "Гостю нарахується бонусів: {bonus}"
 msgid "Провести продажу"
 msgstr "Провести продаж"
 
+#: webapp/staff_views.py webapp/texts.py
+msgid "Добавить · {price}"
+msgstr "Додати · {price}"
+
+#: webapp/staff_views.py webapp/texts.py
+msgid "Выберите вариант."
+msgstr "Оберіть варіант."
+
+#: webapp/staff_views.py webapp/texts.py
+msgid "Выберите: {group}."
+msgstr "Оберіть: {group}."
+
+#: webapp/staff_views.py webapp/texts.py
+msgid "{group}: не больше {count}."
+msgstr "{group}: не більше {count}."
+
 #: webapp/staff_views.py
 msgid "По способам заказа"
 msgstr "За способами замовлення"
@@ -7825,16 +8033,16 @@ msgid "Продаётся {when}"
 msgstr "Продається {when}"
 
 #: webapp/texts.py
+msgid "В корзине: {count}"
+msgstr "У кошику: {count}"
+
+#: webapp/texts.py
 msgid "Добавить"
 msgstr "Додати"
 
 #: webapp/texts.py
 msgid "Оформить"
 msgstr "Оформити"
-
-#: webapp/texts.py
-msgid "Позиции"
-msgstr "Позиції"
 
 #: webapp/texts.py
 msgid "Бонусов на счету"
