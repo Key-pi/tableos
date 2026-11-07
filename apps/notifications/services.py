@@ -21,6 +21,7 @@ from django.db.models import Count, Max, Q
 from django.utils import timezone
 
 from apps.employees.models import EmployeeProfile
+from apps.menu.translations import line_names_in
 from apps.notifications import telegram_transport
 from apps.notifications.models import (
     BroadcastCampaign,
@@ -571,10 +572,20 @@ def render_guest_refund_notice(refund) -> str:
         public_id=_escape_html(refund.bill.public_id),
     )]
     by_order: dict[str, list[str]] = {}
-    for line in refund.lines.select_related("bill_item__order").order_by("created_at"):
+    refunded = list(
+        refund.lines.select_related(
+            "bill_item__order", "bill_item__order_item__menu_item",
+            "bill_item__order_item__variant",
+        ).order_by("created_at")
+    )
+    # The lines in the guest's language (catalog step 4).
+    names = line_names_in([line.bill_item.order_item for line in refunded])
+    for line, name in zip(refunded, names, strict=True):
         item = line.bill_item
+        if item.order_item.item_name != item.item_name:
+            name = item.item_name
         by_order.setdefault(item.order.public_id, []).append(
-            f"{_escape_html(item.item_name)} × {item.quantity}"
+            f"{_escape_html(name)} × {item.quantity}"
         )
     for public_id, items in by_order.items():
         lines.append(_(

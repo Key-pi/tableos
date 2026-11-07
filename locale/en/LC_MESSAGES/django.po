@@ -1980,6 +1980,14 @@ msgstr "staff invite"
 msgid "Приглашения сотрудников"
 msgstr "Staff invites"
 
+#: apps/menu/admin.py
+msgid "Гость видит перевод на своём языке; пусто — текст на основном языке. Языки — включённые для гостей в настройках бота, кроме основного. Персонал, экраны кухни и счета — на основном языке."
+msgstr "Guests see the translation in their language; empty means the text in the main language. The languages are the guest languages on in the bot settings, except the main one. Staff, kitchen screens and bills use the main language."
+
+#: apps/menu/admin.py
+msgid "Переводы для гостей"
+msgstr "Translations for guests"
+
 #: apps/menu/admin.py apps/menu/models.py
 msgid "Дни продажи"
 msgstr "Days on sale"
@@ -2123,6 +2131,14 @@ msgstr "“{name}” is sold {when} — it cannot be ordered now."
 #: apps/menu/models.py
 msgid "Фото больше {size} МБ — уменьшите его."
 msgstr "The photo is larger than {size} MB — make it smaller."
+
+#: apps/menu/models.py
+msgid "Переводы"
+msgstr "Translations"
+
+#: apps/menu/models.py
+msgid "Тексты для гостей на других языках; заполняются в Admin."
+msgstr "Texts for guests in other languages; filled in in Admin."
 
 #: apps/menu/models.py
 msgid "Не указано (на всех экранах)"
@@ -2567,6 +2583,22 @@ msgstr "First turn on «Track stock» for the item."
 #: apps/menu/stock.py
 msgid "Позиция не найдена."
 msgstr "Item not found."
+
+#: apps/menu/translations.py
+msgid "Переводы — словарь по языкам."
+msgstr "Translations are a dictionary by language."
+
+#: apps/menu/translations.py
+msgid "Неизвестный язык перевода: {language}."
+msgstr "Unknown translation language: {language}."
+
+#: apps/menu/translations.py
+msgid "Это поле не переводится: {field}."
+msgstr "This field is not translated: {field}."
+
+#: apps/menu/translations.py
+msgid "Перевод длиннее {limit} символов."
+msgstr "The translation is longer than {limit} characters."
 
 #: apps/notifications/admin.py
 msgid "Отправить выбранные рассылки"

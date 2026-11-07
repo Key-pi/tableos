@@ -88,7 +88,8 @@ Mini App — ещё один адаптер, как бот и Admin. Он выз
     `required`), `variants`, `groups` и цена «от» (каталог, шаг 2,
     `docs/architecture/CATALOG.md`); с модулем «Остатки» у учитываемой
     позиции и её вариантов `stock` — `out`, `low` или пусто, без числа
-    (шаг 3);
+    (шаг 3); названия, описания, варианты, добавки, характеристики, метки и
+    строки корзины — на языке гостя, где владелец перевёл (шаг 4);
   - `POST channel`, `POST cart` — способ заказа и корзина
     (`switch_cart_channel_for_telegram_user`, `add_menu_item_for_telegram_user`,
     `change_cart_item_quantity_for_telegram_user` и др.); «add» несёт

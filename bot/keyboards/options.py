@@ -17,6 +17,7 @@ from decimal import Decimal
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from apps.menu.stock import LOW_STOCK
+from apps.menu.translations import translated
 from bot.keyboards.menu import CART_CALLBACK, cart_button_text
 from core.i18n import _
 
@@ -141,8 +142,15 @@ def price_of(item, choices, pick: Pick) -> Decimal:
     )
 
 
-def _group_label(group) -> str:
-    parts = [group.name]
+def _shown(row, staff: bool) -> str:
+    """Guests read the catalog in their language (catalog step 4); the
+    staff in the main one, as on their order cards."""
+
+    return row.name if staff else translated(row, "name")
+
+
+def _group_label(group, staff: bool = False) -> str:
+    parts = [_shown(group, staff)]
     if group.min_choices > 0:
         parts.append(_("обязательно"))
     if group.max_choices == 0:
@@ -162,7 +170,7 @@ STAFF_ADD = "sa"
 
 
 def _variant_text(variant, mark: str, *, staff: bool, stock: bool) -> str:
-    text = f"{mark} {variant.name} · {variant.price}"
+    text = f"{mark} {_shown(variant, staff)} · {variant.price}"
     if not stock:
         return text
     if staff:
@@ -189,7 +197,8 @@ def build_choice_keyboard(
     for index, variant in enumerate(choices.variants):
         if stock and not staff and variant.stock_quantity <= 0:
             variant_buttons.append(InlineKeyboardButton(
-                text=_("✖ {name} — нет в наличии", name=variant.name), callback_data=NOOP
+                text=_("✖ {name} — нет в наличии", name=_shown(variant, staff)),
+                callback_data=NOOP,
             ))
             continue
         mark = "✅" if pick.variant == index else "○"
@@ -200,7 +209,9 @@ def build_choice_keyboard(
     rows += _rows_of_two(variant_buttons)
     flat = add_ons(choices)
     for entry in choices.groups:
-        rows.append([InlineKeyboardButton(text=_group_label(entry.group), callback_data=NOOP)])
+        rows.append([InlineKeyboardButton(
+            text=_group_label(entry.group, staff), callback_data=NOOP
+        )])
         buttons = []
         for index, (owner, modifier) in enumerate(flat):
             if owner is not entry:
@@ -210,7 +221,7 @@ def build_choice_keyboard(
             mark = "✅" if on else ("○" if single else "▫️")
             extra = f" +{modifier.price}" if modifier.price > 0 else ""
             buttons.append(InlineKeyboardButton(
-                text=f"{mark} {modifier.name}{extra}",
+                text=f"{mark} {_shown(modifier, staff)}{extra}",
                 callback_data=encode(open_prefix, item.public_id, toggled(choices, pick, index)),
             ))
         rows += _rows_of_two(buttons)

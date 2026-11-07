@@ -25,6 +25,7 @@ import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from apps.menu.translations import translated
 from core.i18n import _
 
 NAME_LIMIT = 255
@@ -202,15 +203,22 @@ class Choice:
     def snapshot(self) -> list[dict]:
         """The add-ons as they were at the order: kept on the line."""
 
-        return [
-            {
+        from apps.menu.translations import add_on_names
+
+        rows = []
+        for modifier in self.modifiers:
+            row = {
                 "id": modifier.id.hex,
                 "group": modifier.group.name,
                 "name": modifier.name,
                 "price": f"{Decimal(modifier.price):.2f}",
             }
-            for modifier in self.modifiers
-        ]
+            # For the guest's screens in their language (catalog step 4).
+            names = add_on_names(modifier)
+            if names:
+                row["names"] = names
+            rows.append(row)
+        return rows
 
 
 def _hex(value) -> str:
@@ -224,6 +232,8 @@ def resolve_choice(
     return the ``Choice``; ``ChoiceError`` says what is wrong."""
 
     modifier_ids = list(modifier_ids or ())
+    # Names in the reader's language (catalog step 4).
+    name = translated(item, "name")
     if choices is None:
         choices = choices_for(item)
     if choices is NOTHING or not (choices.variants or choices.groups):
@@ -231,14 +241,14 @@ def resolve_choice(
             if choices is NOTHING:  # the module is off
                 raise ChoiceError(_("Варианты и добавки сейчас не выбираются."))
             raise ChoiceError(
-                _("Этого варианта «{name}» сейчас нет — выберите заново.", name=item.name)
+                _("Этого варианта «{name}» сейчас нет — выберите заново.", name=name)
             )
         return Choice(item)
 
     variant = None
     if choices.variants:
         if not variant_id:
-            raise ChoiceError(_("Выберите вариант: «{name}».", name=item.name))
+            raise ChoiceError(_("Выберите вариант: «{name}».", name=name))
         try:
             wanted = _hex(variant_id)
         except ValueError:
@@ -246,11 +256,11 @@ def resolve_choice(
         variant = next((row for row in choices.variants if row.id.hex == wanted), None)
         if variant is None:
             raise ChoiceError(
-                _("Этого варианта «{name}» сейчас нет — выберите заново.", name=item.name)
+                _("Этого варианта «{name}» сейчас нет — выберите заново.", name=name)
             )
     elif variant_id:
         raise ChoiceError(
-            _("Этого варианта «{name}» сейчас нет — выберите заново.", name=item.name)
+            _("Этого варианта «{name}» сейчас нет — выберите заново.", name=name)
         )
 
     on_sale = {modifier.id.hex: modifier for modifier in choices.modifiers()}
@@ -262,7 +272,7 @@ def resolve_choice(
             key = ""
         if key not in on_sale:
             raise ChoiceError(
-                _("Этой добавки к «{name}» сейчас нет — выберите заново.", name=item.name)
+                _("Этой добавки к «{name}» сейчас нет — выберите заново.", name=name)
             )
         chosen[key] = on_sale[key]
 
@@ -272,15 +282,17 @@ def resolve_choice(
         if count < group.min_choices:
             if group.min_choices == 1:
                 raise ChoiceError(
-                    _("Выберите «{group}» для «{name}».", group=group.name, name=item.name)
+                    _("Выберите «{group}» для «{name}».", group=translated(group, "name"),
+                  name=name)
                 )
             raise ChoiceError(
-                _("«{group}»: выберите не меньше {count}.", group=group.name,
+                _("«{group}»: выберите не меньше {count}.", group=translated(group, "name"),
                   count=group.min_choices)
             )
         if group.max_choices and count > group.max_choices:
             raise ChoiceError(
-                _("«{group}»: не больше {count}.", group=group.name, count=group.max_choices)
+                _("«{group}»: не больше {count}.", group=translated(group, "name"),
+                  count=group.max_choices)
             )
 
     ordered = tuple(modifier for modifier in choices.modifiers() if modifier.id.hex in chosen)

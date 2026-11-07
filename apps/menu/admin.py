@@ -15,10 +15,12 @@ from apps.menu.models import (
     StockMovement,
 )
 from apps.menu.stock import count_stock
+from apps.menu.translations import fields_of, set_translation, translation_languages
 from apps.orders.kitchen import missing_screen_warnings
 from apps.partners.models import PartnerBotSettings
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin, SectionInlineMixin
+from core.i18n import LANGUAGE_NAMES
 from core.i18n import gettext_lazy as _lazy
 
 
@@ -52,6 +54,118 @@ def venue_form(form_class, partner_id):
     return VenueForm
 
 
+def translation_field(field: str, language: str) -> str:
+    return f"{field}_{language}"
+
+
+class TranslationsFormMixin:
+    """Form fields ``<field>_<language>`` kept in the instance's
+    ``translations``; languages not on the page stay as they are."""
+
+    translation_languages: tuple = ()
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        stored = getattr(self.instance, "translations", None) or {}
+        for language in self.translation_languages:
+            for field in fields_of(self._meta.model):
+                self.initial.setdefault(
+                    translation_field(field, language),
+                    (stored.get(language) or {}).get(field, ""),
+                )
+
+    def _post_clean(self):
+        for language in self.translation_languages:
+            for field in fields_of(self._meta.model):
+                name = translation_field(field, language)
+                if name in self.cleaned_data:
+                    set_translation(self.instance, language, field, self.cleaned_data[name] or "")
+        super()._post_clean()
+
+
+def translated_form(form_class, model, languages):
+    """``form_class`` with a field per text and language (catalog step 4)."""
+
+    if not languages:
+        return form_class
+    attrs = {"translation_languages": tuple(languages)}
+    for language in languages:
+        for field in fields_of(model):
+            model_field = model._meta.get_field(field)
+            long_text = model_field.max_length is None
+            attrs[translation_field(field, language)] = forms.CharField(
+                label=f"{model_field.verbose_name} · {LANGUAGE_NAMES[language]}",
+                required=False,
+                max_length=model_field.max_length,
+                widget=forms.Textarea(attrs={"rows": 2}) if long_text else forms.TextInput,
+            )
+    return type(form_class.__name__, (TranslationsFormMixin, form_class), attrs)
+
+
+TRANSLATIONS_HELP = _lazy(
+    "Гость видит перевод на своём языке; пусто — текст на основном языке. Языки — "
+    "включённые для гостей в настройках бота, кроме основного. Персонал, экраны кухни и "
+    "счета — на основном языке."
+)
+
+
+class TranslatedAdminMixin:
+    """A page with the translations of its texts (catalog step 4)."""
+
+    def translation_names(self, request, obj=None) -> list[str]:
+        partner_id = obj.partner_id if obj is not None else self.get_partner_scope_id(request)
+        return [
+            translation_field(field, language)
+            for language in translation_languages(partner_id)
+            for field in fields_of(self.model)
+        ]
+
+    def get_form(self, request, obj=None, change=False, **kwargs):
+        partner_id = obj.partner_id if obj is not None else self.get_partner_scope_id(request)
+        kwargs.setdefault(
+            "form", translated_form(self.form, self.model, translation_languages(partner_id))
+        )
+        return super().get_form(request, obj, change=change, **kwargs)
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = list(super().get_fieldsets(request, obj))
+        names = self.translation_names(request, obj)
+        if names and self.fieldsets:
+            fieldsets.append((_lazy("Переводы для гостей"), {
+                "description": TRANSLATIONS_HELP, "fields": names,
+            }))
+        return fieldsets
+
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+        if not self.fieldsets:
+            fields += [name for name in self.translation_names(request, obj) if name not in fields]
+        return fields
+
+
+class TranslatedInlineMixin:
+    """Rows with their translations: a column per text and language."""
+
+    def _partner_id(self, request, obj):
+        if obj is not None:
+            return obj.partner_id
+        parent = self.admin_site._registry.get(self.parent_model)
+        return parent.get_partner_scope_id(request) if parent is not None else None
+
+    def get_formset(self, request, obj=None, **kwargs):
+        languages = translation_languages(self._partner_id(request, obj))
+        kwargs.setdefault("form", translated_form(self.form, self.model, languages))
+        return super().get_formset(request, obj, **kwargs)
+
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+        return fields + [
+            translation_field(field, language)
+            for language in translation_languages(self._partner_id(request, obj))
+            for field in fields_of(self.model)
+        ]
+
+
 class VenueFormMixin:
     def get_form(self, request, obj=None, change=False, **kwargs):
         form_class = super().get_form(request, obj, change=change, **kwargs)
@@ -74,7 +188,7 @@ class MenuCategoryForm(forms.ModelForm):
 
 
 @admin.register(MenuCategory)
-class MenuCategoryAdmin(VenueFormMixin, ScopedAdminMixin):
+class MenuCategoryAdmin(TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
     admin_section = AdminSection.MENU
     form = MenuCategoryForm
     list_display = ("name", "parent", "partner", "sort_order", "station", "is_active")
@@ -110,10 +224,11 @@ class MenuCategoryAdmin(VenueFormMixin, ScopedAdminMixin):
 
 
 @admin.register(MenuBadge)
-class MenuBadgeAdmin(ScopedAdminMixin):
+class MenuBadgeAdmin(TranslatedAdminMixin, ScopedAdminMixin):
     """The owner's own labels for items; the ready ones are always there."""
 
     admin_section = AdminSection.MENU
+    fields = ("partner", "name", "emoji", "sort_order")
     list_display = ("name", "emoji", "partner", "sort_order")
     list_filter = ("partner",)
     search_fields = ("name",)
@@ -224,14 +339,14 @@ class MenuItemPhotoInline(SectionInlineMixin, admin.TabularInline):
     extra = 0
 
 
-class MenuItemAttributeInline(SectionInlineMixin, admin.TabularInline):
+class MenuItemAttributeInline(TranslatedInlineMixin, SectionInlineMixin, admin.TabularInline):
     admin_section = AdminSection.MENU
     model = MenuItemAttribute
     fields = ("name", "value", "sort_order")
     extra = 0
 
 
-class MenuItemVariantInline(SectionInlineMixin, admin.TabularInline):
+class MenuItemVariantInline(TranslatedInlineMixin, SectionInlineMixin, admin.TabularInline):
     """Variants with their own price (module «Варианты и добавки»)."""
 
     admin_section = AdminSection.MENU
@@ -265,7 +380,7 @@ def module_on_for(admin_page, request, field: str) -> bool:
 
 
 @admin.register(MenuItem)
-class MenuItemAdmin(VenueFormMixin, ScopedAdminMixin):
+class MenuItemAdmin(TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
     admin_section = AdminSection.MENU
     form = MenuItemForm
     list_display = (
@@ -415,7 +530,7 @@ class StockMovementAdmin(ScopedAdminMixin):
         return False
 
 
-class ModifierInline(SectionInlineMixin, admin.TabularInline):
+class ModifierInline(TranslatedInlineMixin, SectionInlineMixin, admin.TabularInline):
     admin_section = AdminSection.MENU
     model = Modifier
     fields = ("name", "price", "is_available", "sort_order")
@@ -423,7 +538,7 @@ class ModifierInline(SectionInlineMixin, admin.TabularInline):
 
 
 @admin.register(ModifierGroup)
-class ModifierGroupAdmin(VenueFormMixin, ScopedAdminMixin):
+class ModifierGroupAdmin(TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
     """Add-ons set once and attached to items or whole categories (module
     «Варианты и добавки»; guests see them while it is on)."""
 

@@ -57,7 +57,26 @@ def delete_replaced_photo(instance, replaced: str, field: str = "image") -> None
         transaction.on_commit(lambda: storage.delete(replaced))
 
 
-class MenuCategory(PartnerBoundModel):
+class TranslatableMixin:
+    """Texts for guests in other languages (catalog step 4,
+    ``apps/menu/translations.py``); the model's fields are the original, in
+    the venue's main language."""
+
+    def clean(self):
+        super().clean()
+        from apps.menu.translations import clean_translations
+
+        clean_translations(self)
+
+
+def translations_field():
+    return models.JSONField(
+        default=dict, blank=True, verbose_name=_lazy("Переводы"),
+        help_text=_lazy("Тексты для гостей на других языках; заполняются в Admin."),
+    )
+
+
+class MenuCategory(TranslatableMixin, PartnerBoundModel):
     """Logical menu section used to group items inside a partner catalog.
 
     Two levels at most (owner, 2026-11-07): a category may sit inside a top
@@ -105,6 +124,7 @@ class MenuCategory(PartnerBoundModel):
         default=list, blank=True, verbose_name=_lazy("Дни продажи"),
         help_text=_lazy("Пусто — каждый день."),
     )
+    translations = translations_field()
 
     class Meta:
         verbose_name = _lazy("категория меню")
@@ -160,13 +180,14 @@ class MenuCategory(PartnerBoundModel):
             raise ValidationError({"available_weekdays": _("Дни недели — числа от 0 до 6.")})
 
 
-class MenuBadge(PartnerBoundModel):
+class MenuBadge(TranslatableMixin, PartnerBoundModel):
     """An owner's own label for items, next to the ready ones
     (``apps/menu/catalog.py:BUILTIN_BADGES``)."""
 
     name = models.CharField(max_length=40, verbose_name=_lazy("Название"))
     emoji = models.CharField(max_length=8, blank=True, verbose_name=_lazy("Значок"))
     sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+    translations = translations_field()
 
     class Meta:
         verbose_name = _lazy("метка позиций")
@@ -180,7 +201,7 @@ class MenuBadge(PartnerBoundModel):
         return f"{self.emoji} {self.name}".strip()
 
 
-class MenuItem(PartnerBoundModel):
+class MenuItem(TranslatableMixin, PartnerBoundModel):
     """Sellable menu position shown to guests and reused in carts and orders."""
 
     class ItemType(models.TextChoices):
@@ -196,6 +217,7 @@ class MenuItem(PartnerBoundModel):
     public_id = models.CharField(max_length=12, editable=False, verbose_name=_lazy("Код позиции"))
     name = models.CharField(max_length=255, verbose_name=_lazy("Название"))
     description = models.TextField(blank=True, verbose_name=_lazy("Описание"))
+    translations = translations_field()
     price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -376,7 +398,7 @@ class MenuItemPhoto(PartnerBoundModel):
         return result
 
 
-class MenuItemAttribute(PartnerBoundModel):
+class MenuItemAttribute(TranslatableMixin, PartnerBoundModel):
     """A characteristic of an item (showcase): brand, material, composition,
     allergens, calories — name and value as the owner writes them."""
 
@@ -386,6 +408,7 @@ class MenuItemAttribute(PartnerBoundModel):
     )
     name = models.CharField(max_length=80, verbose_name=_lazy("Характеристика"))
     value = models.CharField(max_length=255, verbose_name=_lazy("Значение"))
+    translations = translations_field()
     sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
 
     class Meta:
@@ -405,7 +428,7 @@ class MenuItemAttribute(PartnerBoundModel):
 # --- variants and add-ons (catalog step 2, module_options_enabled) ---------------
 
 
-class MenuItemVariant(PartnerBoundModel):
+class MenuItemVariant(TranslatableMixin, PartnerBoundModel):
     """A variant of an item with its own price: a size, colour or pack
     («250 мл», «M, червона», «500 г»). One list per item (owner, 2026-11-07);
     while the item has variants on sale the guest picks one."""
@@ -424,6 +447,7 @@ class MenuItemVariant(PartnerBoundModel):
     )
     is_available = models.BooleanField(default=True, verbose_name=_lazy("В наличии"))
     sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+    translations = translations_field()
     stock_quantity = models.IntegerField(
         default=0, verbose_name=_lazy("Остаток"),
         help_text=_lazy("Когда у позиции включено «Учитывать остаток»."),
@@ -448,7 +472,7 @@ class MenuItemVariant(PartnerBoundModel):
         return super().save(*args, **kwargs)
 
 
-class ModifierGroup(PartnerBoundModel):
+class ModifierGroup(TranslatableMixin, PartnerBoundModel):
     """A group of add-ons set once and attached to items or whole categories
     (owner, 2026-11-07): «Сиропы» (up to 3), «Молоко» (one, required),
     «Без…». A category's group also covers its subcategories."""
@@ -466,6 +490,7 @@ class ModifierGroup(PartnerBoundModel):
         help_text=_lazy("1 — один из списка; 0 — сколько угодно."),
     )
     is_active = models.BooleanField(default=True, verbose_name=_lazy("Показывать"))
+    translations = translations_field()
     sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
     items = models.ManyToManyField(
         MenuItem, blank=True, related_name="modifier_groups", verbose_name=_lazy("Позиции"),
@@ -492,7 +517,7 @@ class ModifierGroup(PartnerBoundModel):
             )
 
 
-class Modifier(PartnerBoundModel):
+class Modifier(TranslatableMixin, PartnerBoundModel):
     """One add-on of a group: «Карамельний сироп» +15 грн, «Без цибулі» 0 грн."""
 
     group = models.ForeignKey(
@@ -500,6 +525,7 @@ class Modifier(PartnerBoundModel):
         verbose_name=_lazy("Группа"),
     )
     name = models.CharField(max_length=80, verbose_name=_lazy("Добавка"))
+    translations = translations_field()
     price = models.DecimalField(
         max_digits=10, decimal_places=2, default=Decimal("0.00"),
         validators=[MinValueValidator(Decimal("0.00"))],

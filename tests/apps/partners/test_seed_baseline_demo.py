@@ -20,6 +20,7 @@ from apps.menu.models import (
     MenuCategory,
     MenuItem,
     MenuItemVariant,
+    Modifier,
     ModifierGroup,
     StockMovement,
 )
@@ -154,6 +155,20 @@ class SeedBaselineDemoTests(TestCase):
         _seed()
         mouthpiece.refresh_from_db()
         self.assertEqual(mouthpiece.stock_quantity, 3)
+
+    def test_translations_for_the_guest_languages_on(self):
+        _seed()
+        cafe = MenuCategory.objects.get(partner__slug=CAFE, name="Сніданки")
+        self.assertEqual(cafe.translations, {"en": {"name": "Breakfast",
+                                                    "description": "Daily from 08:00 to 12:00."}})
+        hookah = MenuItem.objects.get(partner__slug=PODIL, name="Класичний кальян")
+        self.assertEqual(set(hookah.translations), {"ru", "en"})  # uk is the original
+        self.assertEqual(hookah.translations["en"]["name"], "Classic hookah")
+        oat = Modifier.objects.filter(partner__slug=PODIL, name="Вівсяне").first()
+        self.assertEqual(oat.translations["ru"]["name"], "Овсяное")
+        self.assertFalse(
+            MenuItem.objects.filter(partner__slug=SHOP).exclude(translations={}).exists()
+        )
 
     def test_the_night_owl_network(self):
         _seed()

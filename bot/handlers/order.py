@@ -10,6 +10,7 @@ from apps.billing.remote_orders import (
     get_delivery_terms,
     get_shipping_terms,
 )
+from apps.menu.translations import line_names_in
 from apps.orders.models import Order
 from apps.orders.services import (
     CHANNEL_OFF_MESSAGES,
@@ -74,12 +75,13 @@ def _render_cart(cart, *, removed: list[str] | None = None) -> str:
         _("<b>Корзина</b> • {cart_place}", cart_place=_cart_place(cart)),
         *removed_line,
     ]
-    for item in preview_items:
+    # The lines in the guest's language (catalog step 4).
+    for item, name in zip(preview_items, line_names_in(preview_items), strict=True):
         line_total = item.unit_price * item.quantity
         lines.append(
             _(
                 "{item_name} × {quantity} — {line_total} грн",
-                item_name=escape_html(item.item_name),
+                item_name=escape_html(name),
                 quantity=item.quantity,
                 unit_price=item.unit_price,
                 line_total=line_total,

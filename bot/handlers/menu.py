@@ -15,6 +15,7 @@ from apps.menu.catalog import (
 from apps.menu.options import catalog_choices, choices_for, line_name
 from apps.menu.repositories import MenuItemRepository
 from apps.menu.stock import counted, item_state, stock_on
+from apps.menu.translations import category_name, translated
 from apps.orders.models import Order
 from apps.orders.services import (
     OrderFlowError,
@@ -124,11 +125,13 @@ def _price_line(item, *, showcase: bool, choices=None) -> str:
     if variants:
         # Variants with their own price (catalog step 2): from the lowest.
         line = _(
-            "{name} — от {price} грн", name=escape_html(item.name),
+            "{name} — от {price} грн", name=escape_html(translated(item, "name")),
             price=min(variant.price for variant in variants),
         )
     else:
-        line = _("{name} — {price} грн", name=escape_html(item.name), price=item.price)
+        line = _(
+            "{name} — {price} грн", name=escape_html(translated(item, "name")), price=item.price
+        )
     if not showcase:
         return line
     # The showcase module (owner, 2026-11-07): labels, old price, portion.
@@ -148,8 +151,8 @@ def _render_menu_category_view(
     showcase: bool = False, choices=None, stock=None,
 ) -> str:
     lines = [content.menu_header(partner_name=partner.name)]
-    name = getattr(category, "full_name", category.name)
-    lines.append(_("Категория: <b>{name}</b>", name=escape_html(name)))
+    # The catalog in the guest's language (catalog step 4).
+    lines.append(_("Категория: <b>{name}</b>", name=escape_html(category_name(category))))
     if closed_when:
         # Shown all day, sold only in its time (owner, 2026-11-07).
         lines.append(
@@ -166,8 +169,9 @@ def _render_menu_category_view(
                 item, showcase=showcase, choices=item_choices,
                 stock=stock.get(item.id, "") if stock else "",
             ))
-            if item.description:
-                lines.append(f"<i>{escape_html(_trim_menu_description(item.description))}</i>")
+            description = translated(item, "description")
+            if description:
+                lines.append(f"<i>{escape_html(_trim_menu_description(description))}</i>")
             lines.append("")
     lines.extend(_ordering_hint(content, channel=channel, session=session))
     return "\n".join(lines).strip()
@@ -390,13 +394,16 @@ def _choice_item(partner, public_id: str):
 
 def _render_choice_view(item, choices, pick) -> str:
     variant, modifiers = chosen(choices, pick)
-    lines = [f"<b>{escape_html(item.name)}</b>"]
-    if item.description:
-        lines.append(f"<i>{escape_html(_trim_menu_description(item.description))}</i>")
+    lines = [f"<b>{escape_html(translated(item, 'name'))}</b>"]
+    description = translated(item, "description")
+    if description:
+        lines.append(f"<i>{escape_html(_trim_menu_description(description))}</i>")
     lines.append("")
     lines.append(_("Выберите вариант и добавки — сумма на кнопке «Добавить»."))
     current = line_name(
-        item.name, variant.name if variant is not None else "", [m.name for m in modifiers]
+        translated(item, "name"),
+        translated(variant, "name") if variant is not None else "",
+        [translated(modifier, "name") for modifier in modifiers],
     )
     lines.append(_("Сейчас: {name}", name=escape_html(current)))
     return "\n".join(lines)
@@ -440,7 +447,8 @@ async def menu_choice_callback(callback: CallbackQuery, bot: Bot) -> None:
     group = over_limit(choices, pick)
     if group is not None:
         await callback.answer(
-            _("«{group}»: не больше {count}.", group=group.name, count=group.max_choices),
+            _("«{group}»: не больше {count}.", group=translated(group, "name"),
+              count=group.max_choices),
             show_alert=True,
         )
         return

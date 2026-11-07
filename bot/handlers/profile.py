@@ -14,6 +14,7 @@ from apps.bonuses.selectors import (
     recent_bonus_transactions_for_guest,
 )
 from apps.bonuses.services import bonus_balance
+from apps.menu.translations import line_names_in
 from apps.orders.models import Order
 from apps.orders.selectors import get_guest_orders
 from apps.orders.services import requested_time_label
@@ -359,11 +360,13 @@ def _render_my_order(order: Order) -> str:
             if link:
                 lines.append(_('<a href="{link}">Отследить посылку</a>', link=escape_html(link)))
     lines.append("")
-    for item in order.items.all():
+    rows = list(order.items.all())
+    # The lines in the guest's language (catalog step 4).
+    for item, name in zip(rows, line_names_in(rows), strict=True):
         lines.append(
             _(
                 "• {item_name} × {quantity} — {line_total} грн",
-                item_name=escape_html(item.item_name),
+                item_name=escape_html(name),
                 quantity=item.quantity,
                 line_total=item.unit_price * item.quantity,
             )
@@ -398,7 +401,7 @@ def _load_my_orders(partner_id, telegram_id: int, page: int):
 def _load_my_order(partner_id, telegram_id: int, public_id: str):
     order = (
         get_guest_orders(partner_id=partner_id, telegram_id=telegram_id)
-        .prefetch_related("items")
+        .prefetch_related("items", "items__menu_item", "items__variant")
         .filter(public_id=public_id)
         .first()
     )

@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.utils import timezone
 
+from apps.menu.translations import translated
 from core.i18n import EN, N_, _, active_language
 
 # Ready labels, translated; the owner adds own ones (MenuBadge).
@@ -114,7 +115,7 @@ def not_on_sale_message(item, now: datetime | None = None) -> str | None:
         return None
     return _(
         "«{name}» продаётся {when} — сейчас заказать нельзя.",
-        name=item.name, when=schedule_label(closed),
+        name=translated(item, "name"), when=schedule_label(closed),
     )
 
 
@@ -152,7 +153,10 @@ def badges_of(item) -> list[dict]:
         for code in item.badges or []
         if code in BUILTIN_BADGES
     ]
-    found += [{"emoji": badge.emoji, "name": badge.name} for badge in item.custom_badges.all()]
+    found += [
+        {"emoji": badge.emoji, "name": translated(badge, "name")}
+        for badge in item.custom_badges.all()
+    ]
     return found
 
 

@@ -3,6 +3,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, Message
 from asgiref.sync import sync_to_async
 
+from apps.menu.translations import line_names_in
 from apps.orders.models import Order
 from apps.orders.selectors import get_orders_for_session
 from apps.orders.services import (
@@ -118,11 +119,13 @@ def _build_guest_order_card_text(order: Order, content: BotContent | None = None
           number=order.table.number),
     ]
     items = getattr(order, "items", None)
-    for item in items.all() if items is not None else []:
+    rows = list(items.all()) if items is not None else []
+    # The lines in the guest's language (catalog step 4).
+    for item, name in zip(rows, line_names_in(rows), strict=True):
         lines.append(
             _(
                 "{item_name} × {quantity}",
-                item_name=escape_html(item.item_name),
+                item_name=escape_html(name),
                 quantity=item.quantity,
             )
         )
@@ -194,6 +197,7 @@ async def session_handler(message: Message, bot: Bot) -> None:
 
     orders = await sync_to_async(list)(
         get_orders_for_session(session.id, partner_id=session.partner_id)
+        .prefetch_related("items__menu_item", "items__variant")
     )
     session_text, order_shortcuts = await sync_to_async(_build_guest_session_view)(
         partner=partner,
@@ -224,6 +228,7 @@ async def guest_order_open_callback(callback: CallbackQuery, bot: Bot) -> None:
 
     orders = await sync_to_async(list)(
         get_orders_for_session(session.id, partner_id=session.partner_id)
+        .prefetch_related("items__menu_item", "items__variant")
     )
     try:
         order = next(order for order in orders if order.public_id == order_public_id)
@@ -259,6 +264,7 @@ async def guest_session_back_callback(callback: CallbackQuery, bot: Bot) -> None
 
     orders = await sync_to_async(list)(
         get_orders_for_session(session.id, partner_id=session.partner_id)
+        .prefetch_related("items__menu_item", "items__variant")
     )
     session_text, order_shortcuts = await sync_to_async(_build_guest_session_view)(
         partner=partner,

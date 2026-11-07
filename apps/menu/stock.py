@@ -83,7 +83,12 @@ def item_state(item, variants=(), *, on: bool | None = None) -> str:
 
 
 def _name(item, variant) -> str:
-    return f"{item.name}, {variant.name}" if variant is not None else item.name
+    """In the reader's language (catalog step 4)."""
+
+    from apps.menu.translations import translated
+
+    name = translated(item, "name")
+    return f"{name}, {translated(variant, 'name')}" if variant is not None else name
 
 
 def check_room(item, variant, wanted: int) -> None:

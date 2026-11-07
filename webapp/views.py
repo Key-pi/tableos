@@ -52,6 +52,7 @@ from apps.menu.catalog import (
 from apps.menu.options import catalog_choices, has_choices, needs_choice, price_from
 from apps.menu.repositories import MenuItemRepository
 from apps.menu.stock import item_state, state_of, stock_on
+from apps.menu.translations import line_names_in, translated
 from apps.orders.models import Order
 from apps.orders.services import (
     OrderFlowError,
@@ -202,18 +203,20 @@ def _cart_json(guest: GuestRequest) -> dict:
     )
     items = []
     if cart is not None:
+        lines = list(cart.items.select_related("menu_item", "variant"))
+        names = line_names_in(lines)
         items = [
             {
                 # A line per choice (catalog step 2): it changes by its own id.
                 "line": cart_item.id.hex,
                 "item": cart_item.menu_item.public_id,
-                "name": cart_item.item_name,
+                "name": name,
                 "quantity": cart_item.quantity,
                 "unit_price": _money(cart_item.unit_price),
                 "total": _money(cart_item.unit_price * cart_item.quantity),
                 "photo": cart_item.menu_item.photo_url,
             }
-            for cart_item in cart.items.all()
+            for cart_item, name in zip(lines, names, strict=True)
         ]
     return {
         "channel": channel,
@@ -290,8 +293,9 @@ def _category_json(category, items, *, now, showcase: bool, choices, stock: bool
     closed = closed_category(category, now)
     return {
         "id": category.id.hex,
-        "name": category.name,
-        "description": category.description,
+        # The catalog in the guest's language (catalog step 4).
+        "name": translated(category, "name"),
+        "description": translated(category, "description"),
         # Shown all day, sold only in its time (owner, 2026-11-07).
         "closed": closed is not None,
         "schedule": schedule_label(closed or category),
@@ -305,17 +309,18 @@ def _category_json(category, items, *, now, showcase: bool, choices, stock: bool
 def _choices_json(choices) -> dict:
     return {
         "variants": [
-            {"id": variant.id.hex, "name": variant.name, "price": _money(variant.price)}
+            {"id": variant.id.hex, "name": translated(variant, "name"),
+             "price": _money(variant.price)}
             for variant in choices.variants
         ],
         "groups": [
             {
                 "id": entry.group.id.hex,
-                "name": entry.group.name,
+                "name": translated(entry.group, "name"),
                 "min": entry.group.min_choices,
                 "max": entry.group.max_choices,
                 "options": [
-                    {"id": modifier.id.hex, "name": modifier.name,
+                    {"id": modifier.id.hex, "name": translated(modifier, "name"),
                      "price": _money(modifier.price)}
                     for modifier in entry.modifiers
                 ],
@@ -336,8 +341,8 @@ def _item_json(item, *, showcase: bool, choices, stock: bool = False) -> dict:
         choice = "none"
     data = {
         "id": item.public_id,
-        "name": item.name,
-        "description": item.description,
+        "name": translated(item, "name"),
+        "description": translated(item, "description"),
         "price": _money(price_from(item, choices)),
         "price_from": bool(choices.variants),
         "choice": choice,
@@ -363,7 +368,10 @@ def _item_json(item, *, showcase: bool, choices, stock: bool = False) -> dict:
             badges=badges_of(item),
             photos=[url for url in [item.photo_url] if url]
             + [photo.image.url for photo in item.photos.all()],
-            attributes=[{"name": row.name, "value": row.value} for row in item.attributes.all()],
+            attributes=[
+                {"name": translated(row, "name"), "value": translated(row, "value")}
+                for row in item.attributes.all()
+            ],
             sku=item.sku,
         )
     return data

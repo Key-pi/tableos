@@ -12,6 +12,7 @@ from apps.menu.catalog import first_not_on_sale
 from apps.menu.models import MenuItem, MenuItemVariant
 from apps.menu.options import ChoiceError, catalog_choices, needs_choice, resolve_choice
 from apps.menu.stock import StockError, check_room, release_order, reserve_for_order
+from apps.menu.translations import line_name_in, line_names_in
 from apps.notifications.models import StaffNotification
 from apps.notifications.services import deliver_staff_notification, send_guest_order_status_update
 from apps.orders.models import Cart, CartItem, Order, OrderItem, OrderStatusHistory
@@ -710,11 +711,12 @@ def get_or_create_active_cart_for_telegram_user(
 
 def _remove_items_not_sold_in(cart: Cart) -> list[str]:
     removed = []
-    for item in cart.items.select_related("menu_item"):
+    lines = list(cart.items.select_related("menu_item", "variant"))
+    for item, name in zip(lines, line_names_in(lines), strict=True):
         menu_item = item.menu_item
         if menu_item.is_available and menu_item.is_sold_in(cart.channel):
             continue
-        removed.append(item.item_name)
+        removed.append(name)  # the guest reads it (catalog step 4)
         item.delete()
     if removed:
         _refresh_cart_totals(cart)
@@ -750,7 +752,7 @@ def switch_cart_channel_for_telegram_user(
     removed = _remove_items_not_sold_in(cart)
     return (
         Cart.objects.select_related("table_session__table")
-        .prefetch_related("items", "items__menu_item")
+        .prefetch_related("items", "items__menu_item", "items__variant")
         .get(id=cart.id),
         removed,
     )
@@ -806,6 +808,7 @@ def add_items_to_cart_for_telegram_user(
     return Cart.objects.select_related("table_session__table").prefetch_related(
         "items",
         "items__menu_item",
+        "items__variant",
     ).get(id=cart.id)
 
 
@@ -837,7 +840,7 @@ def get_active_cart_for_telegram_user(
         return None
     return (
         Cart.objects.select_related("table_session__table")
-        .prefetch_related("items", "items__menu_item")
+        .prefetch_related("items", "items__menu_item", "items__variant")
         .get(id=cart.id)
     )
 
@@ -938,6 +941,7 @@ def add_menu_item_for_telegram_user(
     return Cart.objects.select_related("table_session__table").prefetch_related(
         "items",
         "items__menu_item",
+        "items__variant",
     ).get(id=cart.id)
 
 
@@ -996,6 +1000,7 @@ def change_cart_item_quantity_for_telegram_user(
     return Cart.objects.select_related("table_session__table").prefetch_related(
         "items",
         "items__menu_item",
+        "items__variant",
     ).get(id=cart.id)
 
 
@@ -1029,6 +1034,7 @@ def remove_cart_item_for_telegram_user(
     return Cart.objects.select_related("table_session__table").prefetch_related(
         "items",
         "items__menu_item",
+        "items__variant",
     ).get(id=cart.id)
 
 
@@ -1057,7 +1063,9 @@ def checkout_active_cart_for_telegram_user(
         telegram_id=telegram_id,
     )
     cart_items = list(
-        cart.items.select_related("menu_item__partner", "menu_item__category__parent")
+        cart.items.select_related(
+            "menu_item__partner", "menu_item__category__parent", "variant"
+        )
     )
     if not cart_items:
         raise OrderFlowError(_("Корзина пуста. Добавьте позиции перед оформлением."))
@@ -1066,7 +1074,8 @@ def checkout_active_cart_for_telegram_user(
             _("Корзина собрана не для стола. Оформите самовывоз или отсканируйте QR-код стола.")
         )
     not_sold = [
-        item.item_name for item in cart_items if not item.menu_item.is_sold_in(Order.Channel.TABLE)
+        name for item, name in zip(cart_items, line_names_in(cart_items), strict=True)
+        if not item.menu_item.is_sold_in(Order.Channel.TABLE)
     ]
     if not_sold:
         raise OrderFlowError(_(
@@ -1132,7 +1141,7 @@ def stale_choice_message(cart_items) -> str | None:
         if choice is None or choice.key != line.choice_key:
             return _(
                 "«{name}» больше нельзя заказать так — уберите её из корзины и выберите заново.",
-                name=line.item_name,
+                name=line_name_in(line),
             )
     return None
 

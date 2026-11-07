@@ -1,5 +1,6 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from apps.menu.translations import line_names_in, translated
 from core.i18n import _
 
 CART_CALLBACK = "cart:refresh"
@@ -60,7 +61,7 @@ def build_menu_keyboard(
             prefix = "• " if str(category.id) == str(active_id) else marker
             row.append(
                 InlineKeyboardButton(
-                    text=f"{prefix}{category.name}",
+                    text=f"{prefix}{translated(category, 'name')}",
                     callback_data=f"menucat:{category.id}",
                 )
             )
@@ -83,17 +84,21 @@ def build_menu_keyboard(
             if item_choices is not None and (item_choices.variants or item_choices.groups):
                 price = min(variant.price for variant in item_choices.variants) \
                     if item_choices.variants else item.price
+                name = translated(item, "name")
                 text = (
-                    _("➕ {name} — от {price} грн", name=item.name, price=price)
+                    _("➕ {name} — от {price} грн", name=name, price=price)
                     if item_choices.variants
-                    else _("➕ {name} — {price} грн", name=item.name, price=price)
+                    else _("➕ {name} — {price} грн", name=name, price=price)
                 )
                 rows.append([InlineKeyboardButton(text=text, callback_data=f"mo:{item.public_id}")])
                 continue
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=_("➕ {name} — {price} грн", name=item.name, price=item.price),
+                        text=_(
+                            "➕ {name} — {price} грн", name=translated(item, "name"),
+                            price=item.price,
+                        ),
                         callback_data=f"menuadd:{item.public_id}",
                     )
                 ]
@@ -124,14 +129,16 @@ def build_cart_keyboard(
     rows: list[list[InlineKeyboardButton]] = []
     has_items = bool(cart is not None and cart.items.all())
     if cart is not None:
-        for item in cart.items.all():
+        lines = list(cart.items.all())
+        for item, name in zip(lines, line_names_in(lines), strict=True):
             # By the line's own id: one item may have lines with different
-            # variants and add-ons (catalog step 2).
+            # variants and add-ons (catalog step 2), named in the guest's
+            # language (step 4).
             line = item.id.hex
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=f"➖ {item.item_name}",
+                        text=f"➖ {name}",
                         callback_data=f"cart:item:sub:{line}",
                     ),
                     InlineKeyboardButton(

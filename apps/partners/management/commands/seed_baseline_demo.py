@@ -51,6 +51,7 @@ from apps.menu.models import (
     ModifierGroup,
 )
 from apps.menu.stock import count_stock
+from apps.menu.translations import fields_of, set_translation, translation_languages
 from apps.orders.kitchen import issue_screen_link
 from apps.orders.models import KitchenScreen
 from apps.partners.management import demo_data as demo
@@ -845,6 +846,26 @@ class Command(BaseCommand):
             group.modifiers.exclude(name__in=names).delete()
             group.categories.set([categories[name] for name in group_seed.categories])
             group.items.set([items[public_id] for public_id in group_seed.items])
+        self._seed_translations(partner)
+
+    @staticmethod
+    def _seed_translations(partner: Partner) -> None:
+        """The demo glossary for the guest languages the venue has on, except
+        its main one (catalog step 4); a text without an entry stays as it is."""
+
+        languages = translation_languages(partner.id)
+        models = (MenuCategory, MenuBadge, MenuItem, MenuItemAttribute, MenuItemVariant,
+                  ModifierGroup, Modifier)
+        for model in models:
+            for row in model.objects.filter(partner=partner):
+                row.translations = {}
+                for language in languages:
+                    glossary = demo.TRANSLATIONS.get(language, {})
+                    for field in fields_of(model):
+                        text = glossary.get(getattr(row, field) or "")
+                        if text:
+                            set_translation(row, language, field, text)
+                row.save(update_fields=["translations", "updated_at"])
 
     @staticmethod
     def _seed_item(partner, category, category_seed, seed: demo.ItemSeed, order, own_badges):

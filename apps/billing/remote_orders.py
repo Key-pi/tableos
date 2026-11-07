@@ -59,6 +59,7 @@ from apps.billing.services import (
 )
 from apps.bonuses.services import get_redeemable_bonus_amount
 from apps.menu.catalog import first_not_on_sale
+from apps.menu.translations import line_names_in
 from apps.orders.models import Cart, Order
 from apps.orders.services import (
     CHANNEL_OFF_MESSAGES,
@@ -224,7 +225,7 @@ def _guest(partner_id, telegram_id: int, *, lock: bool = False) -> GuestProfile:
 
 def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = False) -> Cart:
     queryset = Cart.objects.prefetch_related(
-        "items__menu_item__partner", "items__menu_item__category__parent"
+        "items__menu_item__partner", "items__menu_item__category__parent", "items__variant"
     )
     if lock:
         queryset = queryset.select_for_update(of=("self",))
@@ -242,9 +243,10 @@ def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = 
                 channel=_(CHANNEL_TITLES[channel]),
             )
         )
+    lines = list(cart.items.all())
     not_sold = [
-        item.item_name
-        for item in cart.items.all()
+        name  # in the guest's language (catalog step 4)
+        for item, name in zip(lines, line_names_in(lines), strict=True)
         if not (item.menu_item.is_available and item.menu_item.is_sold_in(channel))
     ]
     if not_sold:
