@@ -1,6 +1,6 @@
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, Message, WebAppInfo
 from asgiref.sync import sync_to_async
 
 from apps.menu.models import MenuCategory
@@ -18,6 +18,7 @@ from bot.keyboards.main import build_main_keyboard
 from bot.keyboards.menu import build_menu_keyboard, refresh_cart_button
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
+from bot.services.mini_app import mini_app_link_for
 from bot.services.navigation import resolve_guest_navigation_state
 from bot.utils.html import escape_html
 from core.i18n import N_, _
@@ -135,6 +136,9 @@ def _categories_with_items(partner_id, channel):
     ]
 
 
+MINI_APP_BUTTON = N_("📱 Открыть меню в приложении")
+
+
 async def send_menu_view(
     *, target, bot: Bot, category_id: str | None = None, user=None, edit: bool = True
 ) -> None:
@@ -209,6 +213,12 @@ async def send_menu_view(
         cart=cart,
         choose_way=[] if channel is not None else choose_way_buttons(content),
     )
+    link = await sync_to_async(mini_app_link_for)(bot.token, partner.id)
+    if link:
+        # PQ-048: the same menu with photos in the Mini App; the bot stays.
+        keyboard.inline_keyboard.insert(
+            0, [InlineKeyboardButton(text=_(MINI_APP_BUTTON), web_app=WebAppInfo(url=link))]
+        )
     if isinstance(target, CallbackQuery) and edit:
         updated = await _safe_edit_menu_message(
             target.message,

@@ -1,9 +1,19 @@
 from django.contrib import admin, messages
+from django.urls import reverse
+from django.utils.html import format_html
 
 from apps.billing.admin_actions import run_with_reason
 from apps.billing.models import Bill, BillItem
 from apps.billing.services import BillingServiceError, cancel_order, create_bill_from_orders
-from apps.orders.models import Cart, CartItem, Order, OrderItem, OrderStatusHistory
+from apps.orders.kitchen import issue_screen_link, missing_screen_warnings
+from apps.orders.models import (
+    Cart,
+    CartItem,
+    KitchenScreen,
+    Order,
+    OrderItem,
+    OrderStatusHistory,
+)
 from apps.orders.services import OrderFlowError, transition_order_status
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
@@ -340,3 +350,59 @@ class OrderStatusHistoryAdmin(ScopedAdminMixin):
         "note",
         "created_at",
     )
+
+
+@admin.register(KitchenScreen)
+class KitchenScreenAdmin(ScopedAdminMixin):
+    """Kitchen and bar screens (PQ-048, stage 3). The link works like a
+    password: it is shown once, when the screen is made or a new one is
+    issued, and a new link switches the old one off."""
+
+    admin_section = AdminSection.TABLES
+    list_display = ("name", "partner", "shows", "is_active", "link_issued_at", "last_seen_at")
+    list_filter = ("partner", "shows", "is_active")
+    search_fields = ("name", "partner__name")
+    fields = (
+        "partner", "name", "shows", "language", "is_active",
+        "link_help", "link_issued_at", "last_seen_at",
+    )
+    readonly_fields = ("link_help", "link_issued_at", "last_seen_at")
+    actions = ("issue_link_action",)
+
+    @admin.display(description=_lazy("Ссылка"))
+    def link_help(self, obj):
+        return _(
+            "Ссылку видно один раз: после создания экрана или по действию «Выдать новую "
+            "ссылку» в списке экранов. Новая ссылка отключает старую — так и поступайте, "
+            "если планшет потерялся."
+        )
+
+    def _show_link(self, request, screen: KitchenScreen) -> None:
+        token = issue_screen_link(screen)
+        url = f"{request.build_absolute_uri(reverse('webapp:kitchen'))}#{token}"
+        messages.success(
+            request,
+            format_html(
+                _(
+                    "Экран «{}»: откройте эту ссылку на планшете (её видно только сейчас, "
+                    "прежняя больше не работает): <a href=\"{}\">{}</a>"
+                ),
+                screen.name, url, url,
+            ),
+        )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not change:
+            self._show_link(request, obj)
+
+    def changelist_view(self, request, extra_context=None):
+        if request.method == "GET":
+            for warning in missing_screen_warnings(self.get_partner_scope_id(request)):
+                messages.warning(request, warning)
+        return super().changelist_view(request, extra_context)
+
+    @admin.action(description=_lazy("Выдать новую ссылку"), permissions=["change"])
+    def issue_link_action(self, request, queryset):
+        for screen in queryset:
+            self._show_link(request, screen)

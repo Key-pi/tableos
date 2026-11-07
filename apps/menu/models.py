@@ -1,20 +1,56 @@
 import secrets
 from decimal import Decimal
 
-from django.core.validators import MinValueValidator
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
+from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
+
+MENU_PHOTO_EXTENSIONS = ("jpg", "jpeg", "png", "webp")
+
+
+def menu_photo_path(item: "MenuItem", filename: str) -> str:
+    # A new name on every upload: the old link may stay in a guest's cache.
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+    return f"menu/{item.partner_id.hex}/{secrets.token_hex(8)}.{extension}"
+
+
+def validate_menu_photo_size(photo) -> None:
+    limit = settings.MENU_PHOTO_MAX_BYTES
+    if photo.size > limit:
+        raise ValidationError(
+            _("Фото больше {size} МБ — уменьшите его.", size=limit // (1024 * 1024) or 1)
+        )
 
 
 class MenuCategory(PartnerBoundModel):
     """Logical menu section used to group items inside a partner catalog."""
 
+    class Station(models.TextChoices):
+        # Where the category is made, for the kitchen/bar screens (PQ-048).
+        ANY = "", _lazy("Не указано (на всех экранах)")
+        BAR = "bar", _lazy("Бар")
+        KITCHEN = "kitchen", _lazy("Кухня")
+
     name = models.CharField(max_length=255, verbose_name=_lazy("Название"))
     sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
     is_active = models.BooleanField(default=True, verbose_name=_lazy("Показывать"))
+    station = models.CharField(
+        max_length=16,
+        choices=Station.choices,
+        blank=True,
+        default=Station.ANY,
+        verbose_name=_lazy("Где готовят"),
+        help_text=_lazy(
+            "Для экранов кухни и бара: позиции категории видит экран этого места. "
+            "Не указано — все экраны.",
+        ),
+    )
 
     class Meta:
         verbose_name = _lazy("категория меню")
@@ -52,6 +88,19 @@ class MenuItem(PartnerBoundModel):
         decimal_places=2,
         validators=[MinValueValidator(Decimal("0.01"))],
         verbose_name=_lazy("Цена"),
+    )
+    image = models.ImageField(
+        upload_to=menu_photo_path,
+        blank=True,
+        validators=[
+            FileExtensionValidator(MENU_PHOTO_EXTENSIONS),
+            validate_menu_photo_size,
+        ],
+        verbose_name=_lazy("Фото"),
+        help_text=_lazy(
+            "JPG, PNG или WebP до 5 МБ; сохраняется уменьшенным (WebP, до 1200 px). "
+            "Без фото берётся ссылка ниже.",
+        ),
     )
     image_url = models.URLField(blank=True, verbose_name=_lazy("Ссылка на фото"))
     item_type = models.CharField(
@@ -96,10 +145,40 @@ class MenuItem(PartnerBoundModel):
     def __str__(self) -> str:
         return f"{self.partner.name} / {self.name}"
 
+    @property
+    def photo_url(self) -> str:
+        """The uploaded photo, else the link (PQ-048)."""
+
+        if self.image:
+            return self.image.url
+        return self.image_url
+
     def is_sold_in(self, channel: str) -> bool:
         return bool(getattr(self, self.CHANNEL_FIELDS[channel]))
 
     def save(self, *args, **kwargs):
         if not self.public_id:
             self.public_id = secrets.token_hex(4)
-        return super().save(*args, **kwargs)
+        replaced = ""
+        if self.image and not getattr(self.image, "_committed", True):
+            # A new upload: kept as a small WebP only (apps/menu/photos.py).
+            from apps.menu.photos import compress_menu_photo
+
+            if self.pk:
+                replaced = (
+                    MenuItem.objects.filter(pk=self.pk).values_list("image", flat=True).first()
+                    or ""
+                )
+            self.image.save("photo.webp", compress_menu_photo(self.image.file), save=False)
+        elif self.pk and not self.image:
+            replaced = (
+                MenuItem.objects.filter(pk=self.pk).values_list("image", flat=True).first() or ""
+            )
+        result = super().save(*args, **kwargs)
+        if replaced and replaced != self.image.name:
+            # The old photo goes once the new one is saved.
+            from django.db import transaction
+
+            storage = self.image.storage
+            transaction.on_commit(lambda: storage.delete(replaced))
+        return result

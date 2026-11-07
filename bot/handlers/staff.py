@@ -13,6 +13,7 @@ from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Message,
+    WebAppInfo,
 )
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ValidationError
@@ -58,6 +59,7 @@ from apps.billing.services import (
     user_can_adjust_bills,
     void_bill,
 )
+from apps.billing.staff_actions import bill_change_rights
 from apps.billing.table_bills import (
     cancel_billing_request,
     create_personal_bills_for_table,
@@ -133,7 +135,9 @@ from bot.keyboards.staff import (
 )
 from bot.services.content import BotContent
 from bot.services.context import resolve_partner_for_bot_token
+from bot.services.mini_app import staff_screen_link_for
 from bot.services.network import update_points_count
+from bot.services.staff_rights import STAFF_OPERATIONS_ROLES
 from bot.states.staff_sale import StaffBillStates, StaffQuickSaleStates
 from bot.utils.html import escape_html
 from core.i18n import N_, _, variants
@@ -447,13 +451,8 @@ def _is_staff_overview_message(message: Message | None, title: str) -> bool:
 TRACKING_PROMPT = N_("📦 ТТН для заказа")
 
 
-_STAFF_OPERATIONS_ROLES = frozenset(
-    {
-        "owner",
-        "manager",
-        "cashier",
-    }
-)
+# The same roles as the Mini App's staff screen (bot/services/staff_rights.py).
+_STAFF_OPERATIONS_ROLES = STAFF_OPERATIONS_ROLES
 
 
 def _module_enabled(employee: EmployeeProfile, check) -> bool:
@@ -1101,14 +1100,7 @@ _OPEN_BILL_STATUSES = frozenset(
 def _bill_change_flags(bill: Bill, actor_user) -> tuple[bool, bool]:
     """Return (can_edit, can_void) for the bill card buttons (PQ-028)."""
 
-    if bill.status not in _OPEN_BILL_STATUSES:
-        return False, False
-    if not user_can_adjust_bills(actor_user, bill.partner_id):
-        return False, False
-    has_active_lines = any(item.is_active for item in bill.items.all())
-    can_edit = has_active_lines and bill.bonus_spent_amount == 0
-    can_void = bill.paid_amount == 0
-    return can_edit, can_void
+    return bill_change_rights(bill, actor_user)
 
 
 def _build_bill_card_message(bill: Bill, actor_user):
@@ -1627,8 +1619,11 @@ def _staff_home_text(partner, employee) -> str:
     )
 
 
-def _staff_home_keyboard(employee):
-    return build_staff_home_keyboard(
+STAFF_SCREEN_BUTTON = N_("📱 Рабочий экран")
+
+
+def _staff_home_keyboard(employee, screen_link: str = ""):
+    markup = build_staff_home_keyboard(
         can_quick_sale=_can_use_quick_sale(employee),
         can_view_day_report=_can_view_day_report(employee),
         can_manage_billing=_can_manage_billing(employee),
@@ -1636,6 +1631,21 @@ def _staff_home_keyboard(employee):
         can_view_tables=_can_view_tables(employee),
         can_invite=_can_invite(employee),
     )
+    if screen_link and _can_view_open_orders(employee):
+        # PQ-048: orders and calls on one screen that refreshes itself.
+        markup.inline_keyboard.insert(
+            0,
+            [
+                InlineKeyboardButton(
+                    text=_(STAFF_SCREEN_BUTTON), web_app=WebAppInfo(url=screen_link)
+                )
+            ],
+        )
+    return markup
+
+
+async def _staff_screen_link(bot: Bot, partner) -> str:
+    return await sync_to_async(staff_screen_link_for)(bot.token, partner.id)
 
 
 @router.message(Command("staff"))
@@ -1648,7 +1658,8 @@ async def staff_help_handler(message: Message, bot: Bot) -> None:
         return
 
     await message.answer(
-        _staff_home_text(partner, employee), reply_markup=_staff_home_keyboard(employee)
+        _staff_home_text(partner, employee),
+        reply_markup=_staff_home_keyboard(employee, await _staff_screen_link(bot, partner)),
     )
 
 
@@ -1662,7 +1673,7 @@ async def staff_home_callback_handler(callback: CallbackQuery, bot: Bot) -> None
     await _safe_edit_message_text(
         callback.message,
         _staff_home_text(partner, employee),
-        reply_markup=_staff_home_keyboard(employee),
+        reply_markup=_staff_home_keyboard(employee, await _staff_screen_link(bot, partner)),
     )
     await callback.answer()
 

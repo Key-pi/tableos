@@ -112,6 +112,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                 "fields": (
                     "module_orders_enabled",
                     "module_cart_enabled",
+                    "module_webapp_enabled",
                     "module_billing_enabled",
                 ),
             },
@@ -120,11 +121,17 @@ class PartnerBotSettingsInline(admin.StackedInline):
             _lazy("Модули · Операции и отчёты"),
             {
                 "description": (
-                    _lazy("Вызов персонала требует столы. Быстрые продажи требуют меню.")
+                    _lazy(
+                        "Вызов персонала требует столы. Быстрые продажи требуют меню. "
+                        "Экран кухни и бара требует заказы; сами экраны — в разделе "
+                        "«Экраны кухни и бара».",
+                    )
                 ),
                 "fields": (
                     "module_staff_call_enabled",
                     "module_quick_sale_enabled",
+                    "module_staff_screen_enabled",
+                    "module_kitchen_screen_enabled",
                     "module_reports_enabled",
                 ),
             },

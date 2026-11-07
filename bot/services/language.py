@@ -42,14 +42,23 @@ def staff_language_choice(partner_id, telegram_id: int) -> str:
 
 
 def language_context(
-    partner: Partner, telegram_id: int | None, telegram_language: str | None
+    partner: Partner,
+    telegram_id: int | None,
+    telegram_language: str | None,
+    *,
+    staff_choice: str | None = None,
 ) -> tuple[str, dict[tuple[str, str], str]]:
-    """The language to answer this person in and the venue's own texts."""
+    """The language to answer this person in and the venue's own texts.
 
-    guest_choice = staff_choice = ""
+    ``staff_choice``: the language of this venue's staff profile when the
+    caller has already loaded it (``staff_language_choice`` otherwise)."""
+
+    guest_choice = ""
     if telegram_id is not None:
         guest_choice = guest_language_choice(partner.id, telegram_id)
-        staff_choice = staff_language_choice(partner.id, telegram_id)
+        if staff_choice is None:
+            staff_choice = staff_language_choice(partner.id, telegram_id)
+    staff_choice = staff_choice or ""
     language = choose_language(
         partner_bot_settings(partner),
         guest_choice=guest_choice,

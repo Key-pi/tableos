@@ -18,7 +18,6 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from apps.partners.models import BotInstance, Partner
 from apps.partners.networks import UpdatePoint, resolve_update_point, serves_network
-from bot.services.runtime import get_runtime_config_by_token
 from core.i18n import _
 
 POINT_CALLBACK_PREFIX = "point:"
@@ -116,20 +115,17 @@ def _picked(callback_data: str):
 
 
 def network_update_point(
-    bot_token: str, facts: UpdateFacts
+    bot_token: str, facts: UpdateFacts, *, bot_instance: BotInstance | None = None
 ) -> tuple[BotInstance, UpdatePoint] | None:
     """The venue of this update when the bot serves a network; None for a
     venue's own bot (the usual path). Raises like ``resolve_partner_for_bot_token``
-    when the bot was switched off."""
+    when the bot was switched off. ``bot_instance``: the bot already read for
+    this update (``bot/services/context.py:load_update_bot``)."""
 
-    from bot.services.context import BotRuntimeDisabledError
+    from bot.services.context import load_update_bot
 
-    config = get_runtime_config_by_token(bot_token)
-    bot_instance = (
-        BotInstance.objects.select_related("partner").filter(id=config.bot_instance_id).first()
-    )
-    if bot_instance is None or not bot_instance.is_active:
-        raise BotRuntimeDisabledError("Bot instance is no longer available.")
+    if bot_instance is None:
+        bot_instance = load_update_bot(bot_token)
     if not serves_network(bot_instance):
         return None
     # A button of a venue-choice message is the guest's pick, not "the

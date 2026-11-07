@@ -20,7 +20,7 @@ COPY . .
 
 # Production runs as this unprivileged user (docker-compose.prod.yml).
 RUN useradd --create-home --uid 10001 app \
-    && mkdir -p /app/staticfiles \
-    && chown -R app /app/staticfiles
+    && mkdir -p /app/staticfiles /app/media \
+    && chown -R app /app/staticfiles /app/media
 
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

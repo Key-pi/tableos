@@ -69,7 +69,7 @@ Admin по-русски:
 - строки темы Unfold — `LOCALE_PATHS` → `locale/ru/LC_MESSAGES/theme.po`,
   `django.mo` собирает `infrastructure/scripts/messages.py compile`, gettext
   не нужен;
-- проверка — `core/tests_admin_language.py`.
+- проверка — `tests/core/test_admin_language.py`.
 
 Продакшен (AA-038, `docs/engineering/DEPLOYMENT.md`): `docker-compose.prod.yml`
 задаёт `core.settings.production` всем процессам. Модуль отказывается
@@ -187,9 +187,13 @@ apps.notifications.tasks` — цикл, разорванный только им
    всех и выходит нормально. Причина (нагрузочный тест 2026-10-25, AA-043):
    все обращения бота к базе идут через один поток `sync_to_async`, процесс
    занимает одно ядро.
-2. На **каждое обновление** `bot/middlewares/partner_runtime.py` вызывает
-   `bot/services/context.py:resolve_partner_for_bot_token`, который заново
-   загружает `BotInstance` и `Partner`. Обновление отключённого экземпляра
+2. На **каждое обновление** `bot/middlewares/partner_runtime.py` за одно
+   обращение к потоку базы (`_start_of_update`) заново загружает
+   `BotInstance` с `Partner` и настройками одним запросом
+   (`bot/services/context.py:load_update_bot`), решает, бот ли это сети
+   (`bot/services/network.py:network_update_point`), проверяет партнёра
+   (`checked_partner`) и язык (нагрузочный тест 2026-11-05: раньше бот
+   читался дважды и было три перехода в поток). Обновление отключённого экземпляра
    бота молча отбрасывается; приостановленный партнёр получает
    `Работа бота приостановлена, ожидайте обновлений.` (сообщением или
    всплывающим ответом на callback). Опрос выключенного бота сервис
@@ -528,7 +532,7 @@ apps.notifications.tasks` — цикл, разорванный только им
 
 Порядок блокировок: `StaffInvite → EmployeeProfile` (возвращаемый бывший
 сотрудник). Гонки двух нажатий и двух подтверждений проверены на PostgreSQL
-(`apps/employees/test_invites.py:ClaimRaceTests`). Удалять приглашения в
+(`tests/apps/employees/test_invites.py:ClaimRaceTests`). Удалять приглашения в
 Admin нельзя — их отменяет действие «Отменить ссылку».
 
 ### Уведомления и рассылки
@@ -598,6 +602,49 @@ Admin нельзя — их отменяет действие «Отменить
 сети, доступа к Admin или своего профиля. Адрес точки (`Partner.address`)
 владелец задаёт в карточке заведения.
 
+Фото позиций меню (PQ-048, [MINI_APP.md](MINI_APP.md)). Владелец загружает фото
+в Admin (`MenuItem.image`, JPG/PNG/WebP, предел `MENU_PHOTO_MAX_BYTES`), без фото
+берётся ссылка (`MenuItem.photo_url`). При загрузке фото ужимается до WebP с
+длинной стороной до 1200 px (`apps/menu/photos.py:compress_menu_photo`,
+`MenuItem.save`), прежний файл удаляется; загруженные раньше —
+`manage.py compress_menu_photos`. Файлы лежат в `MEDIA_ROOT` (в продакшене —
+папка хоста `MEDIA_DIR`), каждый под новым случайным именем. В продакшене их
+отдаёт Caddy по `/media/` (DEPLOYMENT.md, обязательно);
+`core/media.py:serve_media` — запасной путь для разработки (только картинки
+внутри `MEDIA_ROOT`, долгий кэш).
+
+Telegram Mini App для гостя (PQ-048, этап 1, [MINI_APP.md](MINI_APP.md)) —
+адаптер `webapp/`, как бот и Admin: страница `/app/<бот>/` и JSON API, которое
+вызывает те же сервисы корзины, заказа и оплаты, что и бот. Каждый запрос
+несёт `initData` Telegram; `webapp/auth.py:validate_init_data` проверяет
+подпись токеном этого бота и срок (сутки), `webapp/context.py:guest_request` —
+бота, точку (у бота сети — выбор гостя), её статус и модуль
+`module_webapp_enabled`. Mini App предлагается только при `WEBAPP_BASE_URL`
+на HTTPS (`apps/partners/mini_app.py`): кнопкой меню чата (ставит и снимает
+сервис ботов, сверяясь с тем, что показывает Telegram, —
+`getChatMenuButton`) и первой кнопкой в сообщении меню бота.
+Этап 2 — рабочий экран персонала `/app/<бот>/staff/`, свой модуль
+`module_staff_screen_enabled` (не зависит от гостевого Mini App и корзины)
+(`webapp/staff_views.py`): открытые заказы и вызовы, обновление раз в 8 с
+(пока ничего не изменилось — короткий ответ `unchanged` по отпечатку
+`_state_version`),
+те же действия, что в карточке заказа бота
+(`apps/billing/staff_actions.py:staff_order_actions`), через те же сервисы;
+сотрудник проверяется на каждом запросе (`webapp/staff_context.py`). По правам
+рабочего режима (`bot/services/staff_rights.py`) — счета, столы, изменение и
+аннулирование счёта, возвраты (`webapp/staff_billing.py`), быстрая продажа и
+отчёт дня (`webapp/staff_sales.py`).
+Этап 3 — экран кухни и бара `/app/screen/` без Telegram
+(`webapp/kitchen_views.py`, модуль `module_kitchen_screen_enabled`): общий
+планшет по ссылке из Admin (`KitchenScreen`, хранится хеш секрета), принятые
+заказы точки, «Взять в работу» и «Готово» через
+`apps/orders/kitchen.py` → `transition_order_status`; при разделённых бар и
+кухне (`MenuCategory.station`) каждый экран отмечает свою часть
+(`OrderStationReady`), заказ «Готов», когда отмечены все; блокировка — строка
+заказа; место без работающего экрана считается «не указано»
+(`covered_stations`). Быстрая продажа с экрана сохраняется один раз на ключ
+(`WalkInSale.request_key`).
+
 ## Состояния и защиты, которые реально соблюдаются
 
 | Понятие | Механизм перехода | Долговечная защита или блокировка сейчас |
@@ -619,23 +666,23 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 747 тестов после персонала сети в боте (PQ-047), зелёные на SQLite и на
+- 854 тестов после исправления отдачи фото WebP (PQ-048), зелёные на SQLite и на
   PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
-  (`apps/notifications/test_delivery.py`); параллельная смена статуса заказа
-  (`apps/orders/test_concurrency.py`); параллельные сканы QR, два гостя
+  (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
+  (`tests/apps/orders/test_concurrency.py`); параллельные сканы QR, два гостя
   сканируют пустой стол, оплата визита во время присоединения гостя,
   блокировка стола против проверки внешнего ключа (AA-040)
-  (`apps/tables/test_concurrency.py`); параллельное распределение по счёту,
+  (`tests/apps/tables/test_concurrency.py`); параллельное распределение по счёту,
   оплата бонусами, последняя оплата, аннулирование против оплаты и отмена
-  против выставления счёта (`apps/billing/test_concurrency.py`); два
+  против выставления счёта (`tests/apps/billing/test_concurrency.py`); два
   сотрудника вводят ТТН одной посылки
-  (`apps/billing/test_shipping_concurrency.py`); автоотмена против
-  подтверждения перевода (`apps/billing/test_unpaid_concurrency.py`); два
-  возврата одной строки (`apps/billing/test_refund_concurrency.py`); планы
+  (`tests/apps/billing/test_shipping_concurrency.py`); автоотмена против
+  подтверждения перевода (`tests/apps/billing/test_unpaid_concurrency.py`); два
+  возврата одной строки (`tests/apps/billing/test_refund_concurrency.py`); планы
   запросов открытых заказов и счетов используют частичные индексы (AA-045,
-  `apps/orders/test_open_indexes.py`). Тест
-  миграции (`apps/tables/test_visit_migration.py`) прогоняет заполнение
+  `tests/apps/orders/test_open_indexes.py`). Тест
+  миграции (`tests/apps/tables/test_visit_migration.py`) прогоняет заполнение
   визитов назад и вперёд.
 - Записанные прогоны — в
   [`../engineering/TESTING.md`](../engineering/TESTING.md).

@@ -282,6 +282,7 @@ def register_walk_in_sale(
     comment: str = "",
     created_by=None,
     redeem_bonus: bool = False,
+    request_key: str = "",
 ) -> WalkInSale:
     total = _parse_positive_money(amount, label=_("Сумма быстрой продажи"))
     if guest is not None and guest.partner_id != partner_id:
@@ -299,6 +300,7 @@ def register_walk_in_sale(
         amount=total,
         comment=comment,
         created_by=created_by,
+        request_key=request_key,
     )
 
     # Redemption uses the balance the guest walked in with (before this sale's
@@ -427,7 +429,12 @@ def preview_walk_in_sale_by_customer_code(
     )
 
 
-@transaction.atomic
+def walk_in_sale_by_request_key(partner_id, request_key: str) -> WalkInSale | None:
+    if not request_key:
+        return None
+    return WalkInSale.objects.filter(partner_id=partner_id, request_key=request_key).first()
+
+
 def register_walk_in_sale_from_menu_items_by_customer_code(
     *,
     partner_id,
@@ -436,6 +443,39 @@ def register_walk_in_sale_from_menu_items_by_customer_code(
     comment: str = "",
     created_by=None,
     redeem_bonus: bool = False,
+    request_key: str = "",
+) -> WalkInSale:
+    """A sale from menu items. With ``request_key`` it is saved once: a
+    repeated request returns the sale already saved, with no second accrual
+    or spend. Two copies at the same moment: the second waits on the unique
+    key, its work is rolled back and it gets the first sale."""
+
+    saved = walk_in_sale_by_request_key(partner_id, request_key)
+    if saved is not None:
+        return saved
+    try:
+        with transaction.atomic():
+            return _register_walk_in_sale_from_menu_items(
+                partner_id=partner_id, customer_code=customer_code, items=items,
+                comment=comment, created_by=created_by, redeem_bonus=redeem_bonus,
+                request_key=request_key,
+            )
+    except IntegrityError:
+        saved = walk_in_sale_by_request_key(partner_id, request_key)
+        if saved is None:
+            raise
+        return saved
+
+
+def _register_walk_in_sale_from_menu_items(
+    *,
+    partner_id,
+    customer_code: str,
+    items: list[dict],
+    comment: str,
+    created_by,
+    redeem_bonus: bool,
+    request_key: str,
 ) -> WalkInSale:
     preview = preview_walk_in_sale_by_customer_code(
         partner_id=partner_id,
@@ -451,6 +491,7 @@ def register_walk_in_sale_from_menu_items_by_customer_code(
         comment=comment,
         created_by=created_by,
         redeem_bonus=redeem_bonus,
+        request_key=request_key,
     )
     WalkInSaleItem.objects.bulk_create(
         [

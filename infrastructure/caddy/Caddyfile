@@ -1,0 +1,16 @@
+# Caddy in front of Botera Shop (docs/engineering/DEPLOYMENT.md, step 4).
+# Replace the domain and, if MEDIA_DIR differs, the photo folder.
+shop.example.com {
+	encode gzip zstd
+
+	# Photos of menu items (PQ-048): straight from the folder, never via Django.
+	handle_path /media/* {
+		root * /srv/botera-shop/media
+		header Cache-Control "public, max-age=2592000, immutable"
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8000
+	}
+}

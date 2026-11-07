@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.contrib import admin
 from django.http import HttpRequest, HttpResponse
-from django.urls import path
+from django.urls import include, path
 
 from apps.orders.models import Order
 from apps.partners.admin_network import switch_admin_point
@@ -9,6 +9,7 @@ from apps.partners.models import BotInstance, Partner
 from apps.tables.models import Table
 from apps.users.views import set_admin_language
 from core.i18n import _
+from core.media import serve_media
 from core.security.login_throttle import throttle_login
 
 
@@ -103,4 +104,8 @@ urlpatterns = [
     path("admin/point/<str:partner_hex>/", switch_admin_point, name="admin-point"),
     path("admin/", admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
+    # PQ-048: the Telegram Mini App.
+    path("app/", include("webapp.urls")),
+    # PQ-048: photos of menu items uploaded in Admin.
+    path("media/<path:path>", serve_media, name="media"),
 ]

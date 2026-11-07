@@ -94,6 +94,10 @@ services:
         --access-logfile - --forwarded-allow-ips '*'
     ports:
       - "127.0.0.1:${WEB_PORT_ON_HOST:-8000}:8000"
+    # Photos of menu items uploaded in Admin (PQ-048). A folder of the host:
+    # Caddy sends them at /media/ itself, so they never take a web worker.
+    volumes:
+      - ${MEDIA_DIR:-/srv/botera-shop/media}:/app/media
     healthcheck:
       test:
         - CMD

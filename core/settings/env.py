@@ -51,6 +51,9 @@ class AppSettings(BaseSettings):
         default=250,
         validation_alias="NOTIFICATIONS_BROADCAST_BATCH_SIZE",
     )
+    # Public HTTPS address of this site for the Telegram Mini App (PQ-048),
+    # e.g. https://shop.example.com; empty — the bot shows no Mini App button.
+    webapp_base_url: str = Field(default="", validation_alias="WEBAPP_BASE_URL")
 
     @field_validator("timezone", mode="before")
     @classmethod

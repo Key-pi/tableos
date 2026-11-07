@@ -15,7 +15,7 @@
 
 ``update`` добавляет новые тексты с пустым переводом и убирает те, которых
 в коде больше нет; готовые переводы сохраняет. Тест
-``core/tests_i18n_catalog.py`` требует, чтобы ``check`` был пуст.
+``tests/core/test_i18n_catalog.py`` требует, чтобы ``check`` был пуст.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ import sys
 from dataclasses import dataclass, field
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
-SOURCE_DIRS = ("apps", "bot", "core")
+SOURCE_DIRS = ("apps", "bot", "core", "webapp")
 CODE_CATALOG = "django.po"
 TARGET_LANGUAGES = ("uk", "en")
 LANGUAGES = ("uk", "ru", "en")

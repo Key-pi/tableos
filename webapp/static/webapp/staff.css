@@ -1,0 +1,47 @@
+/* Staff screen of the Mini App (PQ-048, stage 2); on top of guest.css.
+   Built for a phone and a tablet at the bar: on a wide screen the orders
+   stand in columns. */
+.staff-head { background: var(--section); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.staff-head h1 { margin: 0; font-size: 18px; }
+.staff-head .who { color: var(--hint); font-size: 13px; }
+.filters { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; background: var(--section); border-bottom: 1px solid var(--separator); scrollbar-width: none; }
+.filters::-webkit-scrollbar { display: none; }
+.count { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
+.chip[aria-pressed="true"] .count { background: var(--accent-text); color: var(--accent); }
+
+.board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; }
+@media (min-width: 720px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .board { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.order { background: var(--section); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; border-left: 4px solid transparent; }
+.order.new { border-left-color: var(--danger); }
+.order.fresh { animation: flash 1.6s ease-out 2; }
+@keyframes flash { 50% { background: color-mix(in srgb, var(--accent) 18%, var(--section)); } }
+.order .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.order .num { font-weight: 700; font-size: 16px; }
+.order .place { font-weight: 600; }
+.order .meta { color: var(--hint); font-size: 13px; }
+.order .status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg2); white-space: nowrap; }
+.order.new .status { background: var(--danger); color: #fff; }
+.order ul { margin: 2px 0; padding-left: 18px; }
+.order li { margin: 1px 0; }
+.row { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; padding: 2px 0; }
+.row b { white-space: nowrap; }
+.row .meta { text-align: right; }
+.sheet .status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg2); }
+.order .note { color: var(--hint); font-size: 13px; overflow-wrap: anywhere; }
+.order a { color: var(--link); }
+.acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.act { border: 0; border-radius: 10px; padding: 9px 12px; font-weight: 600; background: var(--bg2); color: var(--text); flex: 1 1 auto; min-width: 110px; }
+.act.primary { background: var(--accent); color: var(--accent-text); }
+.act.danger { background: none; color: var(--danger); border: 1px solid var(--separator); }
+.act[disabled] { opacity: 0.5; }
+
+.call { background: var(--section); border-radius: var(--radius); padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-left: 4px solid var(--danger); }
+.call .what { font-weight: 600; }
+
+.sheet-back { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 30; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { background: var(--bg); width: 100%; max-width: 520px; border-radius: 16px 16px 0 0; padding: 18px 16px calc(16px + env(safe-area-inset-bottom)); }
+.sheet p { margin: 0 0 14px; }
+.sheet .acts { margin-top: 12px; }
+.chip.fresh { animation: flash 1.6s ease-out 3; }

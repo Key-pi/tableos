@@ -386,7 +386,7 @@ AA-027 подтверждена запуском изолированной фу
 ### AA-023 — связи заказа редактируются в Admin
 
 - **Категория / серьёзность / уверенность:** `BUG / ADMIN_BYPASS`, Medium, High.
-- **Доказательство:** `apps/orders/admin.py:OrderAdmin.readonly_fields` защищает статус, деньги и метки времени, но не `guest`, `table`, `table_session` (и `comment`). `core/tests_admin.py:test_order_admin_hides_lifecycle_and_derived_fields` проверяет только поля жизненного цикла и производные.
+- **Доказательство:** `apps/orders/admin.py:OrderAdmin.readonly_fields` защищает статус, деньги и метки времени, но не `guest`, `table`, `table_session` (и `comment`). `tests/core/test_admin.py:test_order_admin_hides_lifecycle_and_derived_fields` проверяет только поля жизненного цикла и производные.
 - **Текущее поведение:** пользователь арендатора с правом изменения заказов может перенести заказ на другого гостя, стол или сессию того же партнёра, включая уже выставленный или оплаченный заказ.
 - **Почему важно:** от этих связей зависят контекст счёта, допуск к личному счёту, получатель бонусов и расчёт сессии; B2 намеревался защитить поля связей.
 - **Целевое поведение:** поля связей только для чтения после создания; любое переназначение — явная команда сервиса-владельца.
@@ -674,7 +674,7 @@ PostgreSQL 16.
 - **Решено (PQ-035):** реквизиты меняет только владелец или
   суперпользователь (`ScopedAdminMixin.owner_only_fields`), владельцам приходит
   сообщение «Безопасность» даже с выключенными уведомлениями; тесты
-  `apps/partners/test_transfer_details_owner_only.py`.
+  `tests/apps/partners/test_transfer_details_owner_only.py`.
 
 ### AA-036 — повышение до владельца через «Доступ к Admin»
 
@@ -694,7 +694,7 @@ PostgreSQL 16.
     предлагаются, строки прав проверяются;
   - профиль с правами шире его прав он не трогает.
 
-  Тесты: `apps/users/test_owner_protection.py`.
+  Тесты: `tests/apps/users/test_owner_protection.py`.
 
 ### AA-037 — неограниченные неоплаченные удалённые заказы
 
@@ -712,8 +712,8 @@ PostgreSQL 16.
     `transfer_wait_minutes` (по умолчанию 60, не меньше 15; 0 — не
     отменять), отменяет задача beat. Блокировки `Bill → Order`,
     перепроверка под ними.
-  - **Тесты:** `apps/billing/test_unpaid_limits.py`; гонка с подтверждением
-    — `apps/billing/test_unpaid_concurrency.py` (PostgreSQL, проверено
+  - **Тесты:** `tests/apps/billing/test_unpaid_limits.py`; гонка с подтверждением
+    — `tests/apps/billing/test_unpaid_concurrency.py` (PostgreSQL, проверено
     мутацией).
 
 ### AA-038 — нет продакшен-конфигурации
@@ -757,7 +757,7 @@ PostgreSQL 16.
   - `runbot --wait`;
   - `backup.sh` — копия базы создаётся.
 
-  Тесты: `core/tests_production.py`.
+  Тесты: `tests/core/test_production.py`.
 - **Осталось вне репозитория:** мониторинг ошибок и доступности, копии вне
   сервера и проверка восстановления, двухфакторный вход, ротация логов
   Docker.
@@ -792,7 +792,7 @@ PostgreSQL 16.
    - ошибки бонусов и уведомлений;
    - строки темы Unfold (`locale/ru`).
 
-   Тест — `core/tests_admin_language.py`. Попутно: прямая ссылка
+   Тест — `tests/core/test_admin_language.py`. Попутно: прямая ссылка
    не-суперпользователя на объект только для платформы (аккаунт Telegram)
    давала ошибку 500, теперь отвечает 404
    (`ScopedAdminMixin.get_queryset`).
@@ -815,7 +815,7 @@ PostgreSQL 16.
 
 ### AA-040 — deadlock «оплата закрывает визит» против «гость подсаживается»
 
-- **Доказательство:** `apps/tables/test_concurrency.py:VisitCloseVersusJoinConcurrencyTests`
+- **Доказательство:** `tests/apps/tables/test_concurrency.py:VisitCloseVersusJoinConcurrencyTests`
   проходит в одиночном прогоне, но под нагрузкой (полный прогон SQLite
   параллельно) падает с `DeadlockDetected` при `COMMIT`: оба процесса ждут
   `FOR KEY SHARE` на строке `tables_table`. Воспроизводится и на коде до
@@ -836,7 +836,7 @@ PostgreSQL 16.
   - Проверку внешних ключей эта блокировка не задерживает.
   - Ключ стола активация не меняет.
 - **Тесты:**
-  - `apps/tables/test_concurrency.py:TableLockVersusForeignKeyCheckTests`
+  - `tests/apps/tables/test_concurrency.py:TableLockVersusForeignKeyCheckTests`
     воспроизводит ситуацию детерминированно: до исправления падал 3 из 3,
     после — зелёный.
   - Прежний тест под нагрузкой: до исправления падал в 2 из 12 прогонов,
@@ -864,7 +864,7 @@ PostgreSQL 16.
   исключают выставленные заказы подзапросом `NOT EXISTS` по заказу (индекс
   внешнего ключа `order_id`), а не списком из Python. Поведение то же.
   На базе за год — 16–18 мс на вызов.
-- **Тесты:** `apps/billing/tests.py:BillableOrdersHistoryTests` — без
+- **Тесты:** `tests/apps/billing/test_billing.py:BillableOrdersHistoryTests` — без
   исправления падают все три (отдельный запрос истории счетов).
 
 ### AA-042 — совпадение номера заказа или счёта обрывало оформление
@@ -880,7 +880,7 @@ PostgreSQL 16.
   `apps/billing/models.py:Bill._new_public_id` тянут номер заново, если у
   партнёра он уже есть (как `GuestProfile._generate_customer_code`). Формат
   номера не изменился.
-- **Тесты:** `apps/orders/test_public_id.py` — без исправления два теста
+- **Тесты:** `tests/apps/orders/test_public_id.py` — без исправления два теста
   падают с `IntegrityError`.
 
 ### AA-043 — бот занимал одно ядро при любом сервере
@@ -897,7 +897,7 @@ PostgreSQL 16.
   ровно в одном процессе — Telegram допускает один опрос токена). Compose —
   `BOT_PROCESSES` (по умолчанию 1, в примере продакшена 2). На стенде с 3
   процессами 30 партнёров — 0,8–1,2 с.
-- **Тесты:** `bot/tests_runbot_shards.py` — каждый бот ровно в одном процессе,
+- **Тесты:** `tests/bot/test_runbot_shards.py` — каждый бот ровно в одном процессе,
   распределение не зависит от порядка и других ботов, дочерние процессы
   запускаются с нужными параметрами, самостоятельное завершение дочернего
   процесса — ошибка команды.
@@ -923,7 +923,7 @@ PostgreSQL 16.
     один процесс, около 250 МБ).
   - На стенде (25 партнёров, задержка Telegram 40 мс, 2 процесса): 95%
     уведомлений — 0,14 с.
-- **Тесты:** `apps/notifications/test_telegram_connection.py` — без
+- **Тесты:** `tests/apps/notifications/test_telegram_connection.py` — без
   исправления две доставки подряд идут через разные сессии и закрывают их.
 
 ### AA-045 — открытые заказы и счета искались по всей истории партнёра
@@ -942,7 +942,7 @@ PostgreSQL 16.
   черновик, выставлен, частично оплачен). Условия повторяют фильтры
   запросов, поэтому PostgreSQL может их использовать. На базе за год индексы
   создаются за 5 с и занимают 104 КБ и 16 КБ.
-- **Тесты:** `apps/orders/test_open_indexes.py` (только PostgreSQL): план
+- **Тесты:** `tests/apps/orders/test_open_indexes.py` (только PostgreSQL): план
   каждого из четырёх запросов использует индекс; без миграций тесты падают.
 
 ### AA-046 — списки счетов и заказов в Admin делали запросы на каждую строку
@@ -957,7 +957,7 @@ PostgreSQL 16.
   `apps/billing/services.py:remaining_amount_of_loaded_bill` по уже
   загруженным данным (та же формула, только чтение; действия, которые платят,
   по-прежнему берут `get_bill_remaining_amount` с перечитыванием).
-- **Тесты:** `apps/billing/test_admin_lists.py` — число запросов страницы не
+- **Тесты:** `tests/apps/billing/test_admin_lists.py` — число запросов страницы не
   зависит от числа строк (без исправления 69 против 24 и 20 против 10),
   остаток в списке совпадает с `get_bill_remaining_amount`.
 
@@ -978,7 +978,7 @@ PostgreSQL 16.
     запись (`apps/partners/signals.py`), так что правка в Admin действует со
     следующего обновления. Статус партнёра, права сотрудников, заказы, счета,
     оплаты, бонусы и визиты не кэшируются.
-- **Тесты:** `bot/tests_update_queries.py` — без исправления падают
+- **Тесты:** `tests/bot/test_update_queries.py` — без исправления падают
   повторный запрос партнёра в обработчике и повторное чтение текстов;
   сброс при сохранении и удалении, раздельность по партнёрам.
 
@@ -996,7 +996,7 @@ PostgreSQL 16.
   не ловили: они идут с `LANGUAGE_CODE = "ru"` (`core/test_runner.py`).
 - **Решено:** `core/i18n.py:gettext` для `ru` возвращает текст кода (после
   своего текста владельца), не обращаясь к каталогу.
-- **Тесты:** `core/tests_i18n.py:CatalogTests` — русский при
+- **Тесты:** `tests/core/test_i18n.py:CatalogTests` — русский при
   `LANGUAGE_CODE = "uk"` (без исправления падает), свой текст владельца
   по-прежнему сильнее.
 
@@ -1015,8 +1015,8 @@ PostgreSQL 16.
   без выбора меню только для просмотра с кнопками способов; подсказка меню и
   подпись корзины — по способу; пустые для способа категории скрыты;
   счётчики и Telegram ID убраны; «Без геолокации» возвращает клавиатуру.
-- **Тесты:** `apps/orders/test_ordering_channel.py` (без исправления падает
-  уход из-за стола), `bot/tests_guest_flow.py`.
+- **Тесты:** `tests/apps/orders/test_ordering_channel.py` (без исправления падает
+  уход из-за стола), `tests/bot/test_guest_flow.py`.
 
 ## Проход персонала по боту — 2026-11-04
 
@@ -1041,12 +1041,12 @@ PostgreSQL 16.
   автоматические счета без подписи, запрос без заметки; сотрудник-исполнитель
   исключён из получателей (`actor_user`); `GuestProfile.staff_label`; все
   списки — одним сообщением со страницами.
-- **Тесты:** `bot/tests_staff_flow.py`,
-  `apps/orders/test_notifications.py` (без исправления падает уведомление
+- **Тесты:** `tests/bot/test_staff_flow.py`,
+  `tests/apps/orders/test_notifications.py` (без исправления падает уведомление
   исполнителю).
 - **Вызов персонала (PQ-044):** «🏃 Иду» — `GuestCall`,
   `take_guest_call`. Тест на две одновременные попытки
-  (`apps/notifications/test_guest_call.py:TakeGuestCallRaceTests`, только
+  (`tests/apps/notifications/test_guest_call.py:TakeGuestCallRaceTests`, только
   PostgreSQL) без блокировки падает; он же нашёл, что присоединённый к
   заблокированной строке сотрудник после ожидания блокировки остаётся из
   старого снимка — теперь читается отдельно после блокировки.

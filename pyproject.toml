@@ -16,6 +16,8 @@ dependencies = [
   "django-unfold>=0.39.0",
   # Production web server and static files for Admin (AA-038, DEPLOYMENT.md).
   "gunicorn>=23.0",
+  # Photos of menu items uploaded in Admin (ImageField, PQ-048).
+  "Pillow>=11.0",
   "psycopg[binary]>=3.2.0",
   "pydantic-settings>=2.6.0",
   # IANA timezone data for zoneinfo where the OS has none or drops legacy
@@ -32,7 +34,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["apps", "bot", "core"]
+packages = ["apps", "bot", "core", "webapp"]
 
 [tool.ruff]
 line-length = 100

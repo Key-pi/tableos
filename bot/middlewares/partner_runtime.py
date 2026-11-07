@@ -10,8 +10,9 @@ from bot.services.content import BotContent
 from bot.services.context import (
     BotRuntimeDisabledError,
     PartnerSuspendedError,
+    checked_partner,
+    load_update_bot,
     partner_for_this_update,
-    resolve_partner_for_bot_token,
 )
 from bot.services.language import language_context
 from bot.services.network import (
@@ -41,23 +42,19 @@ class PartnerRuntimeMiddleware(BaseMiddleware):
     ) -> Any:
         bot = data["bot"]
         try:
-            network = await sync_to_async(network_update_point)(bot.token, _facts(event))
-        except BotRuntimeDisabledError:
-            return None
-        if network is not None:
-            return await self._network_update(handler, event, data, *network)
-        try:
-            partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+            network, partner, suspended, (language, overrides) = await sync_to_async(
+                _start_of_update
+            )(bot.token, _facts(event), data.get("event_from_user"))
         except BotRuntimeDisabledError:
             # Polling transport remains alive until the process is restarted,
             # but a live deactivation must not process or acknowledge updates.
             return None
-        except PartnerSuspendedError as exc:
-            language, overrides = await self._language(exc.partner, data)
+        if network is not None:
+            return await self._network_update(handler, event, data, *network)
+        if suspended:
             with texts(language, overrides):
                 await self._answer_suspended_update(event)
             return None
-        language, overrides = await self._language(partner, data)
         data["language"] = language
         with texts(language, overrides), partner_for_this_update(bot.token, partner):
             return await handler(event, data)
@@ -107,14 +104,7 @@ class PartnerRuntimeMiddleware(BaseMiddleware):
 
     @staticmethod
     async def _language(partner, data: dict[str, Any]):
-        if partner is None:
-            return default_language(), {}
-        user = data.get("event_from_user")
-        return await sync_to_async(language_context)(
-            partner,
-            getattr(user, "id", None),
-            getattr(user, "language_code", None),
-        )
+        return await sync_to_async(_language_for)(partner, data.get("event_from_user"))
 
     @staticmethod
     async def _answer_suspended_update(event: TelegramObject) -> None:
@@ -126,6 +116,30 @@ class PartnerRuntimeMiddleware(BaseMiddleware):
         message = getattr(event, "message", None)
         if message is not None:
             await message.answer(_(SUSPENDED_PARTNER_MESSAGE))
+
+
+def _language_for(partner, user):
+    if partner is None:
+        return default_language(), {}
+    return language_context(
+        partner, getattr(user, "id", None), getattr(user, "language_code", None)
+    )
+
+
+def _start_of_update(bot_token: str, facts: UpdateFacts, user):
+    """One trip to the database thread at the start of an update: the bot
+    (read once), a network's venue or the checked partner, and the language
+    (load test 2026-11-05). Returns (network, partner, suspended, language)."""
+
+    bot_instance = load_update_bot(bot_token)
+    network = network_update_point(bot_token, facts, bot_instance=bot_instance)
+    if network is not None:
+        return network, None, False, (None, None)
+    try:
+        partner = checked_partner(bot_token, bot_instance)
+    except PartnerSuspendedError as exc:
+        return None, exc.partner, True, _language_for(exc.partner, user)
+    return None, partner, False, _language_for(partner, user)
 
 
 def _chat_id(event) -> int | None:

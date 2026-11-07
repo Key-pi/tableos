@@ -102,9 +102,11 @@ _GROUPS = (
     ("staff", re.compile(r"^bot/(handlers|keyboards)/staff")),
     ("notifications", re.compile(r"^apps/notifications/")),
     ("guest", re.compile(r"^bot/")),
+    ("webapp", re.compile(r"^webapp/")),
 )
 GROUP_LABELS = {
     "guest": N_("Гостю в боте"),
+    "webapp": N_("Гостю в Mini App"),
     "staff": N_("Персоналу в боте"),
     "notifications": N_("Уведомления"),
     "services": N_("Ответы и ошибки"),

@@ -1,0 +1,57 @@
+"""Texts of the Mini App page, sent with the state in the guest's language
+(PQ-040). Texts the bot already has keep the same catalog entries."""
+
+from core.i18n import N_, _
+
+UI_TEXTS = {
+    "loading": N_("Загружаем…"),
+    "open_in_telegram": N_("Откройте это меню из бота в Telegram."),
+    "error": N_("Что-то пошло не так. Попробуйте ещё раз."),
+    "retry": N_("Повторить"),
+    "pick_point": N_("Выберите заведение"),
+    "change_point": N_("Сменить заведение"),
+    "search": N_("Поиск по меню"),
+    "nothing_found": N_("Ничего не нашли."),
+    "menu_empty": N_("Меню пока пустое."),
+    "choose_way": N_("Как получите заказ?"),
+    "choose_way_first": N_("Сначала выберите, как получите заказ."),
+    "not_sold_here": N_("Недоступно для этого способа"),
+    "add": N_("Добавить"),
+    "cart": N_("Корзина"),
+    "cart_empty": N_("Корзина пуста."),
+    "to_checkout": N_("Оформить"),
+    "clear_cart": N_("Очистить"),
+    "back": N_("Назад"),
+    "total": N_("Итого"),
+    "items_total": N_("Позиции"),
+    "delivery_fee": N_("Доставка"),
+    "bonuses": N_("Бонусы"),
+    "use_bonuses": N_("Списать бонусы"),
+    "bonus_balance": N_("Бонусов на счету"),
+    "to_pay": N_("К оплате"),
+    "phone": N_("Телефон"),
+    "phone_hint": N_("Номер для связи по заказу"),
+    "address": N_("Адрес доставки"),
+    "address_hint": N_("Улица, дом, подъезд, квартира"),
+    "carrier": N_("Служба доставки"),
+    "destination": N_("Куда отправить"),
+    "destination_hint": N_("Город, номер отделения или почтомата, ФИО и телефон получателя"),
+    "shipping_cost": N_("Пересылка"),
+    "time": N_("Когда"),
+    "payment": N_("Оплата"),
+    "pay_transfer": N_("💳 Переводом сейчас"),
+    "pay_on_receipt": N_("💵 При получении"),
+    "transfer_details": N_("Реквизиты для перевода"),
+    "i_paid": N_("Я оплатил(а)"),
+    "confirm_order": N_("Подтвердить заказ"),
+    "order_to_table": N_("Заказать к столу"),
+    "table": N_("Стол {number}"),
+    "placed": N_("Заказ оформлен"),
+    "close": N_("Закрыть"),
+    "status_in_bot": N_("Статус заказа придёт сообщением в чат бота."),
+    "currency": N_("грн"),
+}
+
+
+def ui_texts() -> dict[str, str]:
+    return {key: _(msgid) for key, msgid in UI_TEXTS.items()}

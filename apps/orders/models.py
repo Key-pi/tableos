@@ -4,6 +4,7 @@ from django.db import models
 from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
+from core.i18n import LANGUAGE_NAMES, LANGUAGES
 from core.i18n import gettext_lazy as _lazy
 
 
@@ -404,3 +405,88 @@ class CartItem(PartnerBoundModel):
 
     def __str__(self) -> str:
         return f"{self.item_name} x{self.quantity}"
+
+
+class KitchenScreen(PartnerBoundModel):
+    """A shared tablet at the bar or in the kitchen (PQ-048, stage 3).
+
+    It opens by a link from Admin without Telegram; the link works like a
+    password, so only its hash is kept (``apps/orders/kitchen.py``)."""
+
+    class Shows(models.TextChoices):
+        ALL = "all", _lazy("Всё")
+        BAR = "bar", _lazy("Только бар")
+        KITCHEN = "kitchen", _lazy("Только кухня")
+
+    name = models.CharField(
+        max_length=80,
+        verbose_name=_lazy("Название"),
+        help_text=_lazy("Например: «Бар» или «Кухня»."),
+    )
+    shows = models.CharField(
+        max_length=16,
+        choices=Shows.choices,
+        default=Shows.ALL,
+        verbose_name=_lazy("Что показывает"),
+        help_text=_lazy(
+            "«Всё» — один экран на всё. Бар и кухня — по отметке «Где готовят» у "
+            "категорий меню; заказ готов, когда свою часть отметили все.",
+        ),
+    )
+    language = models.CharField(
+        max_length=8,
+        choices=[(code, LANGUAGE_NAMES[code]) for code in LANGUAGES],
+        default="uk",  # the platform's language (PQ-040)
+        verbose_name=_lazy("Язык экрана"),
+    )
+    is_active = models.BooleanField(default=True, verbose_name=_lazy("Работает"))
+    token_hash = models.CharField(
+        max_length=64, blank=True, editable=False, db_index=True,
+        verbose_name=_lazy("Отпечаток ссылки"),
+    )
+    link_issued_at = models.DateTimeField(
+        null=True, blank=True, editable=False, verbose_name=_lazy("Ссылка выдана")
+    )
+    last_seen_at = models.DateTimeField(
+        null=True, blank=True, editable=False, verbose_name=_lazy("Последний раз на связи")
+    )
+
+    class Meta:
+        verbose_name = _lazy("экран кухни и бара")
+        verbose_name_plural = _lazy("Экраны кухни и бара")
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class OrderStationReady(PartnerBoundModel):
+    """One screen's part of an order is done; the order is «Готов» when every
+    part is (``apps/orders/kitchen.py:mark_ready``)."""
+
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name="station_marks",
+        verbose_name=_lazy("Заказ"),
+    )
+    station = models.CharField(
+        max_length=16, choices=KitchenScreen.Shows.choices, verbose_name=_lazy("Где готовили")
+    )
+    screen = models.ForeignKey(
+        KitchenScreen,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        verbose_name=_lazy("Экран"),
+    )
+
+    class Meta:
+        verbose_name = _lazy("готовность части заказа")
+        verbose_name_plural = _lazy("Готовность частей заказов")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order", "station"], name="unique_order_station_ready"
+            )
+        ]

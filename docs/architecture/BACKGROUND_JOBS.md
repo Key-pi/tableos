@@ -78,7 +78,7 @@ B4 реализует этот договор только записью дос
 
 ## Матрица тестов
 
-Покрыто `apps/notifications/test_delivery.py` (B4); пункт 2 выполняется
+Покрыто `tests/apps/notifications/test_delivery.py` (B4); пункт 2 выполняется
 только на PostgreSQL.
 
 1. постановка только после коммита;

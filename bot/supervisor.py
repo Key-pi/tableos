@@ -23,16 +23,20 @@ import signal
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
+from uuid import UUID
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramConflictError, TelegramUnauthorizedError
-from aiogram.methods import GetUpdates, TelegramMethod
+from aiogram.methods import GetChatMenuButton, GetUpdates, SetChatMenuButton, TelegramMethod
+from aiogram.types import MenuButtonDefault, MenuButtonWebApp, WebAppInfo
 from aiogram.utils.backoff import Backoff, BackoffConfig
 from asgiref.sync import sync_to_async
 from django.db import close_old_connections
 
+from apps.partners.mini_app import menu_buttons
 from apps.partners.models import BotInstance
 from apps.partners.services import record_bot_runtime_states
 from bot.main import create_dispatcher
@@ -97,6 +101,11 @@ class BotSupervisor:
         self.rejected: dict[str, str] = {}
         self.states: dict[str, str] = {}
         self._recorded: dict[str, str] = {}
+        # The chat menu button each running bot shows (PQ-048): our Mini App
+        # button (url, text) or None for anything else. Learnt from Telegram
+        # (getChatMenuButton) the first time a bot is seen in this process.
+        self._menu_buttons: dict[str, tuple[str, str] | None] = {}
+        self._menu_calls = asyncio.Semaphore(10)
         # Bots whose first poll Telegram answered.
         self._confirmed: set[str] = set()
         self._scan_states: dict[str, str] = {}
@@ -157,6 +166,47 @@ class BotSupervisor:
         for instance_id, state in self._scan_states.items():
             self.states[instance_id] = self._state_of(instance_id, state)
         await self._record()
+        await self._sync_menu_buttons()
+
+    async def _sync_menu_buttons(self) -> None:
+        """The chat menu button opens the Mini App where its module is on
+        (PQ-048). What a bot shows now is asked from Telegram, not kept from
+        an earlier process: after a deploy a button no longer wanted (module
+        off, address changed or removed) is still taken down. A button that
+        is not ours (commands, the owner's own web app) is left alone."""
+
+        if not self.running:
+            return
+        wanted = await sync_to_async(menu_buttons)(list(self.running))
+        await asyncio.gather(
+            *(self._sync_menu_button(instance_id, button) for instance_id, button in wanted.items())
+        )
+
+    async def _sync_menu_button(self, instance_id: str, button: tuple[str, str] | None) -> None:
+        running = self.running.get(instance_id)
+        if running is None:
+            return
+        async with self._menu_calls:
+            if instance_id not in self._menu_buttons:
+                try:
+                    shown = await running.bot(GetChatMenuButton())
+                except Exception:  # noqa: BLE001 — asked again at the next check
+                    logger.warning("Menu button of @%s not read", running.config.username)
+                    return
+                self._menu_buttons[instance_id] = _our_button(shown, instance_id)
+            if self._menu_buttons[instance_id] == button:
+                return
+            menu_button = (
+                MenuButtonWebApp(text=button[1], web_app=WebAppInfo(url=button[0]))
+                if button is not None
+                else MenuButtonDefault()
+            )
+            try:
+                await running.bot(SetChatMenuButton(menu_button=menu_button))
+            except Exception:  # noqa: BLE001 — retried at the next check
+                logger.warning("Menu button of @%s not set", running.config.username)
+                return
+            self._menu_buttons[instance_id] = button
 
     def _state_of(self, instance_id: str, scanned: str) -> str:
         """What Admin shows: a refused token, a conflict, running (once
@@ -204,6 +254,7 @@ class BotSupervisor:
             await asyncio.wait(running.updates, timeout=10)
         await running.bot.session.close()
         self._confirmed.discard(instance_id)
+        self._menu_buttons.pop(instance_id, None)
         logger.info("Stopped @%s", running.config.username)
 
     async def _poll(self, running: RunningBot) -> None:
@@ -289,3 +340,15 @@ class BotSupervisor:
 
     def stop(self) -> None:
         self._stop.set()
+
+
+def _our_button(shown, instance_id: str) -> tuple[str, str] | None:
+    """The Mini App button of this bot, under any address it was ever
+    given (``/app/<bot>/``); None for any other button."""
+
+    web_app = getattr(shown, "web_app", None)
+    if web_app is None:
+        return None
+    if not urlsplit(web_app.url).path.endswith(f"/app/{UUID(instance_id).hex}/"):
+        return None
+    return (web_app.url, shown.text)
