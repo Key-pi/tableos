@@ -174,6 +174,24 @@ class SeedBaselineDemoTests(TestCase):
         for item in MenuItem.objects.all():
             item.full_clean()
 
+    def test_the_shop_says_catalogue_in_its_own_words(self):
+        # The owner's own texts (PQ-040) instead of «menu» in the bot.
+        from apps.partners.models import BotText
+        from bot.services.content import BotContent
+        from bot.services.language import language_context
+        from core.i18n import texts
+
+        _seed()
+        shop = Partner.objects.get(slug=SHOP)
+        own = BotText.objects.filter(partner=shop)
+        self.assertTrue(own.exists())
+        for text in own:
+            text.full_clean()
+        language, overrides = language_context(shop, None, "uk")
+        with texts(language, overrides):
+            self.assertEqual(BotContent.for_partner(shop).button_menu_label, "🪴 Каталог")
+        self.assertFalse(BotText.objects.exclude(partner=shop).exists())
+
     def test_rerun_is_idempotent(self):
         _seed()
         counts = (

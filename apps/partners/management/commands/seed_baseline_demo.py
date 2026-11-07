@@ -53,7 +53,15 @@ from apps.menu.models import (
 from apps.orders.kitchen import issue_screen_link
 from apps.orders.models import KitchenScreen
 from apps.partners.management import demo_data as demo
-from apps.partners.models import BotInstance, Network, OpeningHours, Partner, PartnerBotSettings
+from apps.partners.models import (
+    BotInstance,
+    BotText,
+    Network,
+    OpeningHours,
+    Partner,
+    PartnerBotSettings,
+    text_key,
+)
 from apps.tables.models import Table
 from apps.users.constants import AdminAccessPreset
 from apps.users.models import AdminAccessProfile, GuestProfile, TelegramAccount
@@ -369,6 +377,18 @@ class Command(BaseCommand):
         self._seed_tables(partner, demo.TABLES[partner.slug])
         self._seed_menu(partner, demo.MENUS[partner.slug])
         self._seed_bonus_programs(partner, demo.BONUSES[partner.slug])
+        self._seed_own_texts(partner)
+
+    @staticmethod
+    def _seed_own_texts(partner: Partner) -> None:
+        for language, msgid, text in demo.OWN_TEXTS.get(partner.slug, ()):
+            own = BotText.objects.filter(
+                partner=partner, language=language, key=text_key(msgid)
+            ).first() or BotText(partner=partner, language=language)
+            own.msgid = msgid
+            own.text = text
+            own.full_clean()
+            own.save()
 
     @staticmethod
     def _seed_traffic_sources(partner: Partner) -> None:

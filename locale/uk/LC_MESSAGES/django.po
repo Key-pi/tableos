@@ -7997,24 +7997,24 @@ msgid "Загружаем…"
 msgstr "Завантажуємо…"
 
 #: webapp/texts.py
-msgid "Откройте это меню из бота в Telegram."
-msgstr "Відкрийте це меню з бота в Telegram."
+msgid "Откройте эту страницу из бота в Telegram."
+msgstr "Відкрийте цю сторінку з бота в Telegram."
 
 #: webapp/texts.py
 msgid "Выберите заведение"
 msgstr "Оберіть заклад"
 
 #: webapp/texts.py
-msgid "Поиск по меню"
-msgstr "Пошук у меню"
+msgid "Поиск"
+msgstr "Пошук"
 
 #: webapp/texts.py
 msgid "Ничего не нашли."
 msgstr "Нічого не знайшли."
 
 #: webapp/texts.py
-msgid "Меню пока пустое."
-msgstr "Меню поки порожнє."
+msgid "Здесь пока пусто."
+msgstr "Тут поки порожньо."
 
 #: webapp/texts.py
 msgid "Как получите заказ?"

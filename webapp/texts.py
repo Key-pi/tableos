@@ -5,14 +5,14 @@ from core.i18n import N_, _
 
 UI_TEXTS = {
     "loading": N_("Загружаем…"),
-    "open_in_telegram": N_("Откройте это меню из бота в Telegram."),
+    "open_in_telegram": N_("Откройте эту страницу из бота в Telegram."),
     "error": N_("Что-то пошло не так. Попробуйте ещё раз."),
     "retry": N_("Повторить"),
     "pick_point": N_("Выберите заведение"),
     "change_point": N_("Сменить заведение"),
-    "search": N_("Поиск по меню"),
+    "search": N_("Поиск"),
     "nothing_found": N_("Ничего не нашли."),
-    "menu_empty": N_("Меню пока пустое."),
+    "menu_empty": N_("Здесь пока пусто."),
     "choose_way": N_("Как получите заказ?"),
     "choose_way_first": N_("Сначала выберите, как получите заказ."),
     "not_sold_here": N_("Недоступно для этого способа"),

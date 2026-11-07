@@ -37,8 +37,18 @@
       var box = event.target.parentNode;
       if (!box) return;
       box.removeChild(event.target);
-      box.textContent = placeholder;
+      if (placeholder) box.appendChild(placeholder); else box.textContent = "";
     };
+  }
+
+  // Without a photo: the first letter of the name on a soft colour of its
+  // own — fits a cafe, a shop and a service alike (owner, 2026-11-07).
+  function initial(name) {
+    var text = String(name || "").trim();
+    var hue = 0;
+    for (var i = 0; i < text.length; i++) hue = (hue * 31 + text.charCodeAt(i)) % 360;
+    return el("span", { class: "initial", text: (Array.from(text)[0] || "•").toUpperCase(),
+                        style: "--hue:" + hue });
   }
 
   function el(tag, attrs) {
@@ -449,9 +459,9 @@
     if (item.photo) {
       photo.appendChild(el("img", { src: item.photo, alt: "", loading: "lazy",
                                     style: "width:100%;height:100%;object-fit:cover;display:block",
-                                    onerror: photoMissing("🍽") }));
+                                    onerror: photoMissing(initial(item.name)) }));
     } else {
-      photo.textContent = "🍽";
+      photo.appendChild(initial(item.name));
     }
     return el("div", { class: "card" + (off || (category && category.closed) ? " off" : "") },
       photo,
@@ -475,7 +485,7 @@
       var gallery = el("div", { class: "gallery" });
       photos.forEach(function (url) {
         var frame = el("div", { class: "frame" });
-        frame.appendChild(el("img", { src: url, alt: "", loading: "lazy", onerror: photoMissing("🍽") }));
+        frame.appendChild(el("img", { src: url, alt: "", loading: "lazy", onerror: photoMissing(initial(item.name)) }));
         gallery.appendChild(frame);
       });
       page.appendChild(gallery);

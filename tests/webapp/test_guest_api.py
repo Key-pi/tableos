@@ -164,6 +164,14 @@ class SignInTests(MiniAppFixture):
 
 
 class MenuAndCartTests(MiniAppFixture):
+    def test_the_page_speaks_to_any_business(self):
+        # A shop, not only a cafe (owner, 2026-11-07): no «menu» in the
+        # words every venue sees; an owner can still put their own.
+        texts = self.call("state")[1]["texts"]
+        self.assertEqual(texts["search"], "Пошук")
+        for key in ("search", "menu_empty", "open_in_telegram"):
+            self.assertNotIn("меню", texts[key].lower(), key)
+
     def test_the_menu_with_photos_and_where_items_are_sold(self):
         status, body = self.call("menu")
         self.assertEqual(status, 200)
