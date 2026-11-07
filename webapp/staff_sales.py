@@ -20,6 +20,7 @@ from apps.bonuses.services import (
 )
 from apps.menu.options import catalog_choices, has_choices, needs_choice, price_from
 from apps.menu.repositories import MenuItemRepository
+from apps.menu.stock import stock_on
 from bot.services.staff_rights import can_quick_sale, can_view_day_report
 from core.i18n import N_, _
 from webapp.context import WebAppDenied
@@ -96,6 +97,7 @@ def sale_menu_view(request, staff: StaffRequest, body: dict) -> dict:
     )
     # Variants and add-ons as the guest chooses them (owner, 2026-11-07).
     choices = catalog_choices(staff.partner, items)
+    stock = stock_on(staff.partner.id)
     for item in items:
         # A subcategory with its parent: «Одежда › Футболки» (catalog, 2026-11-07).
         category = categories.setdefault(
@@ -112,6 +114,16 @@ def sale_menu_view(request, staff: StaffRequest, body: dict) -> dict:
         }
         if entry["choice"] != "none":
             entry.update(_choices_json(choices[item.id]))
+        if stock and item.track_stock:
+            # How many are left, for the staff (catalog step 3, owner
+            # 2026-11-07): by variant when it has them; the till may sell
+            # below zero.
+            variants = choices[item.id].variants
+            if variants:
+                for row, variant in zip(entry["variants"], variants, strict=True):
+                    row["left"] = variant.stock_quantity
+            else:
+                entry["left"] = item.stock_quantity
         category["items"].append(entry)
     return {"categories": list(categories.values())}
 

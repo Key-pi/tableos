@@ -147,6 +147,7 @@ STAFF_TEXTS = {
     "refund": N_("↩️ Возврат"),
     "refunded": N_("уже возвращено"),
     "refund_amounts": N_("Гостю вернётся {money} грн и {bonus} бонусов."),
+    "restock": N_("Вернуть товар на склад"),
     "refund_reason": N_("Причина возврата?"),
     "refund_method": N_("Как вернёте деньги гостю?"),
     "pick_lines": N_("Отметьте, что вернуть."),
@@ -166,6 +167,7 @@ STAFF_TEXTS = {
     "sale_confirm": N_("Провести продажу"),
     # Variants and add-ons in the sale (catalog step 2), as the guest's page.
     "price_from": N_("от {price}"),
+    "left": N_("ост. {count}"),
     "variant": N_("Вариант"),
     "required": N_("обязательно"),
     "any_number": N_("можно несколько"),

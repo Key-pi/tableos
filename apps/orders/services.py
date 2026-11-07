@@ -11,6 +11,7 @@ from apps.employees.models import EmployeeProfile
 from apps.menu.catalog import first_not_on_sale
 from apps.menu.models import MenuItem, MenuItemVariant
 from apps.menu.options import ChoiceError, catalog_choices, needs_choice, resolve_choice
+from apps.menu.stock import StockError, check_room, release_order, reserve_for_order
 from apps.notifications.models import StaffNotification
 from apps.notifications.services import deliver_staff_notification, send_guest_order_status_update
 from apps.orders.models import Cart, CartItem, Order, OrderItem, OrderStatusHistory
@@ -322,6 +323,13 @@ def create_order(
             quantity=1,
         )
 
+    # Stock (catalog step 3): the order takes its goods now; not enough of
+    # something stops the whole checkout.
+    try:
+        reserve_for_order(order)
+    except StockError as exc:
+        raise OrderFlowError(str(exc)) from exc
+
     order.subtotal_amount = subtotal
     order.total_amount = subtotal
     order.save(update_fields=["subtotal_amount", "total_amount", "updated_at"])
@@ -356,7 +364,11 @@ def transition_order_status(
     to_status: str,
     actor_user: User | None = None,
     note: str = "",
+    restock: bool = True,
 ) -> Order:
+    """``restock=False`` — a canceled order does not give its goods back
+    (a refund decides that itself, apps/billing/services.py:refund_bill_lines)."""
+
     try:
         order = Order.objects.select_for_update().get(
             id=order.id,
@@ -421,6 +433,8 @@ def transition_order_status(
         if order.accepted_at is not None:
             update_fields.append("accepted_at")
     order.save(update_fields=update_fields)
+    if to_status == Order.Status.CANCELED and restock:
+        release_order(order, actor_user)  # the goods go back (catalog step 3)
 
     OrderStatusHistory.objects.create(
         partner_id=order.partner_id,
@@ -781,6 +795,10 @@ def add_items_to_cart_for_telegram_user(
 
     for item_payload in items_payload:
         menu_item = item_payload["menu_item"]
+        try:
+            check_room(menu_item, None, _in_cart(cart, menu_item, None) + item_payload["quantity"])
+        except StockError as exc:
+            raise OrderFlowError(str(exc)) from exc
         _add_choice(cart, resolve_choice(menu_item, choices=choices[menu_item.id]),
                     item_payload["quantity"])
 
@@ -846,6 +864,15 @@ def ordering_channel_for_telegram_user(*, partner_id: UUID | str, telegram_id: i
     return _only_way_of_ordering(partner_id)
 
 
+def _in_cart(cart: Cart, menu_item, variant) -> int:
+    """How many of this item (and variant) the cart holds, whatever the add-ons."""
+
+    return sum(
+        CartItem.objects.filter(cart=cart, menu_item=menu_item, variant=variant)
+        .values_list("quantity", flat=True)
+    )
+
+
 def _add_choice(cart: Cart, choice, quantity: int) -> CartItem:
     """One more of this choice: the same item with the same variant and
     add-ons adds up, another choice is another line (catalog step 2)."""
@@ -903,7 +930,8 @@ def add_menu_item_for_telegram_user(
         )
     try:
         choice = resolve_choice(menu_item, variant_id, modifier_ids)
-    except ChoiceError as exc:
+        check_room(menu_item, choice.variant, _in_cart(cart, menu_item, choice.variant) + 1)
+    except (ChoiceError, StockError) as exc:
         raise OrderFlowError(str(exc)) from exc
     _add_choice(cart, choice, 1)
     _refresh_cart_totals(cart)
@@ -950,6 +978,14 @@ def change_cart_item_quantity_for_telegram_user(
     cart_item = _cart_line(cart, item_public_id=item_public_id, line_id=line_id)
 
     new_quantity = cart_item.quantity + delta
+    if delta > 0:
+        try:
+            check_room(
+                cart_item.menu_item, cart_item.variant,
+                _in_cart(cart, cart_item.menu_item, cart_item.variant) + delta,
+            )
+        except StockError as exc:
+            raise OrderFlowError(str(exc)) from exc
     if new_quantity <= 0:
         cart_item.delete()
     else:

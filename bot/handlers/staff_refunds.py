@@ -7,8 +7,12 @@ the money went back:
     strf:<order>:<mask>              choose lines (toggle one bit per press)
     strr:<order>:<mask>              choose the reason
     strm:<order>:<mask>:<r>          choose how the money went back
-    strc:<order>:<mask>:<r>:<m>      confirm, with the amounts
-    strk:<order>:<mask>:<r>:<m>      do it
+    strc:<order>:<mask>:<r>:<m>[:1]  confirm, with the amounts
+    strk:<order>:<mask>:<r>:<m>[:1]  do it
+
+``:1`` — «вернуть на склад» ticked (catalog step 3, owner 2026-11-07): the
+tick is offered only when the lines can put goods back in stock
+(``refund_can_restock``) and is off until the staff press it.
 
 The service (apps/billing/services.py:refund_bill_lines) rechecks the right,
 the bill and the lines under its locks, so a stale screen cannot refund twice.
@@ -26,6 +30,7 @@ from apps.billing.services import (
     get_order_refund_lines,
     preview_refund,
     refund_bill_lines,
+    refund_can_restock,
     user_can_adjust_bills,
 )
 from apps.orders.models import Order
@@ -122,7 +127,10 @@ def _method_screen(order: Order, mask: int, reason: str):
     )
 
 
-def _confirm_screen(order: Order, lines, mask: int, reason: str, method: str, amounts):
+def _confirm_screen(
+    order: Order, lines, mask: int, reason: str, method: str, amounts, *,
+    can_restock: bool = False, restock: bool = False,
+):
     money, bonus = amounts
     chosen = _selected(lines, mask)
     text = [_header(order)]
@@ -133,8 +141,16 @@ def _confirm_screen(order: Order, lines, mask: int, reason: str, method: str, am
         text.append(_("Бонусы вернутся: {bonus}", bonus=bonus))
     text.append(_("Причина: {label}", label=str(Refund.ReasonCode(REASONS[reason]).label)))
     text.append(_("Кешбэк за возвращённое снимется. Гость получит сообщение."))
-    rows = [
-        _button(_("✅ Вернуть"), f"strk:{order.public_id}:{mask:x}:{reason}:{method}"),
+    base = f"{order.public_id}:{mask:x}:{reason}:{method}"
+    restock = restock and can_restock
+    rows = []
+    if can_restock:
+        rows.append(_button(
+            _("☑️ Вернуть на склад") if restock else _("⬜ Вернуть на склад"),
+            f"strc:{base}" if restock else f"strc:{base}:1",
+        ))
+    rows += [
+        _button(_("✅ Вернуть"), f"strk:{base}:1" if restock else f"strk:{base}"),
         _button(_("← Назад"), f"strm:{order.public_id}:{mask:x}:{reason}"),
     ]
     return "\n".join(text), InlineKeyboardMarkup(inline_keyboard=rows)
@@ -150,11 +166,14 @@ def _parse(data: str):
         return None
     reason = parts[3] if len(parts) > 3 else ""
     method = parts[4] if len(parts) > 4 else ""
+    restock = parts[5] if len(parts) > 5 else ""
     if mask < 0 or mask >= 1 << MAX_LINES:
         return None
     if reason and reason not in REASONS or method and method not in METHODS:
         return None
-    return parts[0], parts[1], mask, reason, method
+    if restock not in ("", "1") or len(parts) > 6:
+        return None
+    return parts[0], parts[1], mask, reason, method, restock == "1"
 
 
 def _load(partner_id, public_id: str):
@@ -169,7 +188,7 @@ async def staff_refund_callback(callback: CallbackQuery, bot: Bot) -> None:
     if parsed is None:
         await callback.answer(_("Неизвестное действие."), show_alert=True)
         return
-    step, public_id, mask, reason, method = parsed
+    step, public_id, mask, reason, method, restock = parsed
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
     except OrderFlowError as exc:
@@ -206,7 +225,11 @@ async def staff_refund_callback(callback: CallbackQuery, bot: Bot) -> None:
     elif step == "strc":
         ids = [line.id for line in _selected(lines, mask)]
         amounts = await sync_to_async(preview_refund)(bill, ids)
-        text, markup = _confirm_screen(order, lines, mask, reason, method, amounts)
+        can_restock = await sync_to_async(refund_can_restock)(bill, ids)
+        text, markup = _confirm_screen(
+            order, lines, mask, reason, method, amounts,
+            can_restock=can_restock, restock=restock,
+        )
     else:
         ids = [line.id for line in _selected(lines, mask)]
         try:
@@ -216,6 +239,7 @@ async def staff_refund_callback(callback: CallbackQuery, bot: Bot) -> None:
                 actor=employee.user,
                 reason_code=REASONS[reason],
                 method=METHODS[method],
+                restock=restock,
             )
         except (BillingServiceError, OrderFlowError) as exc:
             await callback.answer(str(exc), show_alert=True)

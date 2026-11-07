@@ -300,6 +300,15 @@ class PartnerBotSettings(TimeStampedModel):
             "персонал — в быстрой продаже. Требует меню.",
         ),
     )
+    module_stock_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Остатки"),
+        help_text=_lazy(
+            "Сколько товара в наличии у позиций и вариантов с отметкой «Учитывать остаток»: "
+            "заказ списывает при оформлении, отмена возвращает, быстрая продажа списывает; "
+            "гость видит «нет в наличии» и «осталось мало». Требует меню.",
+        ),
+    )
     module_tables_enabled = models.BooleanField(
         default=True,
         verbose_name=_lazy("Столы и QR-сессии"),

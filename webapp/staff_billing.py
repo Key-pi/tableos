@@ -32,6 +32,7 @@ from apps.billing.services import (
     preview_refund,
     record_payment,
     refund_bill_lines,
+    refund_can_restock,
     remove_bill_lines,
     user_can_adjust_bills,
     void_bill,
@@ -341,8 +342,12 @@ def _chosen_lines(body: dict, lines) -> list[str]:
 @staff_api("POST")
 def refund_preview_view(request, staff: StaffRequest, body: dict) -> dict:
     _order, bill, lines = _refund_order(staff, _text(body, "order"))
-    money, bonus = preview_refund(bill, _chosen_lines(body, lines))
-    return {"money": _money(money), "bonus": _money(bonus)}
+    chosen = _chosen_lines(body, lines)
+    money, bonus = preview_refund(bill, chosen)
+    # «Вернуть на склад» is offered only when it would put something back
+    # (catalog step 3, owner 2026-11-07).
+    return {"money": _money(money), "bonus": _money(bonus),
+            "can_restock": refund_can_restock(bill, chosen)}
 
 
 @staff_api("POST")
@@ -354,6 +359,7 @@ def refund_do_view(request, staff: StaffRequest, body: dict) -> dict:
     refund = refund_bill_lines(
         bill=bill, bill_item_ids=_chosen_lines(body, lines), actor=staff.employee.user,
         reason_code=reason, method=method, reason_text=_text(body, "comment"),
+        restock=body.get("restock") is True,
     )
     return {
         "ok": True,

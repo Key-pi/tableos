@@ -51,6 +51,7 @@ from apps.menu.catalog import (
 )
 from apps.menu.options import catalog_choices, has_choices, needs_choice, price_from
 from apps.menu.repositories import MenuItemRepository
+from apps.menu.stock import item_state, state_of, stock_on
 from apps.orders.models import Order
 from apps.orders.services import (
     OrderFlowError,
@@ -285,7 +286,7 @@ def point_view(request, guest: GuestRequest, body: dict) -> dict:
     return {"ok": True}
 
 
-def _category_json(category, items, *, now, showcase: bool, choices) -> dict:
+def _category_json(category, items, *, now, showcase: bool, choices, stock: bool = False) -> dict:
     closed = closed_category(category, now)
     return {
         "id": category.id.hex,
@@ -295,7 +296,8 @@ def _category_json(category, items, *, now, showcase: bool, choices) -> dict:
         "closed": closed is not None,
         "schedule": schedule_label(closed or category),
         "items": [
-            _item_json(item, showcase=showcase, choices=choices[item.id]) for item in items
+            _item_json(item, showcase=showcase, choices=choices[item.id], stock=stock)
+            for item in items
         ],
     }
 
@@ -323,7 +325,7 @@ def _choices_json(choices) -> dict:
     }
 
 
-def _item_json(item, *, showcase: bool, choices) -> dict:
+def _item_json(item, *, showcase: bool, choices, stock: bool = False) -> dict:
     # Variants and add-ons (module «Варианты и добавки»): «required» — the
     # card opens the item to choose; «optional» — add-ons can be added there.
     if needs_choice(item, choices):
@@ -344,6 +346,11 @@ def _item_json(item, *, showcase: bool, choices) -> dict:
     }
     if choice != "none":
         data.update(_choices_json(choices))
+    if stock and item.track_stock:
+        # Stock (catalog step 3): «out» or «low», never the number (owner).
+        data["stock"] = item_state(item, choices.variants, on=True)
+        for variant_json, variant in zip(data.get("variants", []), choices.variants, strict=True):
+            variant_json["stock"] = state_of(variant.stock_quantity)
     if showcase:
         # The showcase module (owner, 2026-11-07): only while it is on.
         data.update(
@@ -373,17 +380,20 @@ def menu_view(request, guest: GuestRequest, body: dict) -> dict:
         items = items.prefetch_related("custom_badges", "photos", "attributes")
     items = list(items)
     choices = catalog_choices(venue, items)
+    stock = stock_on(venue.id)
     now = local_now(venue)
     categories = []
     for branch in catalog_tree(venue.id, items):
         top = _category_json(
-            branch["category"], branch["items"], now=now, showcase=showcase, choices=choices
+            branch["category"], branch["items"], now=now, showcase=showcase, choices=choices,
+            stock=stock,
         )
         top["parent"] = None
         categories.append(top)
         for child in branch["children"]:
             sub = _category_json(
-                child["category"], child["items"], now=now, showcase=showcase, choices=choices
+                child["category"], child["items"], now=now, showcase=showcase,
+                choices=choices, stock=stock,
             )
             sub["parent"] = top["id"]
             categories.append(sub)

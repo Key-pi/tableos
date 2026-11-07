@@ -121,6 +121,7 @@ SETTINGS = {
         "staff_call_waiter_enabled": True,
         "staff_call_bartender_enabled": True,
         "staff_call_hookah_enabled": True,
+        "module_stock_enabled": True,
         "language_ru": True, "language_en": True,
     },
     # The second point: tables and pickup (paid on the spot), a bar screen.
@@ -137,6 +138,7 @@ SETTINGS = {
         "staff_call_waiter_enabled": True,
         "staff_call_bartender_enabled": False,
         "staff_call_hookah_enabled": True,
+        "module_stock_enabled": False,
         "language_ru": True, "language_en": True,
     },
     # A restaurant: tables, pickup and delivery, kitchen screens; staff in the bot.
@@ -156,6 +158,8 @@ SETTINGS = {
         "staff_call_waiter_enabled": True,
         "staff_call_bartender_enabled": True,
         "staff_call_hookah_enabled": False,
+        # Beans in packs are counted; the kitchen is not.
+        "module_stock_enabled": True,
         "language_ru": False, "language_en": True,
     },
     # A shop: no tables; pickup, courier and post; the till and the staff screen.
@@ -179,6 +183,7 @@ SETTINGS = {
         "staff_call_waiter_enabled": False,
         "staff_call_bartender_enabled": False,
         "staff_call_hookah_enabled": False,
+        "module_stock_enabled": True,
         "language_ru": False, "language_en": False,
     },
 }
@@ -362,6 +367,9 @@ class ItemSeed:
     barcode: str = ""
     attributes: tuple[tuple[str, str], ...] = ()
     shipping: bool | None = None  # None — as the category says
+    # Stock (catalog step 3): None — not counted; else the item's level, or
+    # one per variant. Set once, as a count; seeding again keeps the levels.
+    stock: tuple[int, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -457,8 +465,8 @@ PODIL_MENU = MenuSeed(
         CategorySeed("Мерч і аксесуари", 60, shipping=True, items=(
             ItemSeed("SMKMR001", "Футболка Night Owl", D(650), "Чорна, з совою на спині.",
                      variants=V(("S", 650), ("M", 650), ("L", 650), ("XL", 650)), sku="NO-TS",
-                     attributes=(("Матеріал", "бавовна 100%"),)),
-            ItemSeed("SMKMR002", "Особистий мундштук", D(120), sku="NO-MP"),
+                     attributes=(("Матеріал", "бавовна 100%"),), stock=(6, 9, 2, 0)),
+            ItemSeed("SMKMR002", "Особистий мундштук", D(120), sku="NO-MP", stock=(25,)),
             ItemSeed("SMKMR003", "Подарунковий сертифікат", D(500), sku="NO-GC",
                      variants=V(("500 грн", 500), ("1000 грн", 1000), ("2000 грн", 2000))),
         )),
@@ -556,11 +564,11 @@ CAFE_MENU = MenuSeed(
         # Packs instead of weight (catalog step 2).
         CategorySeed("Кава в зернах", 70, old_name="Кава в зернах і чай", items=(
             ItemSeed("CAFBN001", "Кава в зернах Ефіопія Іргачеффе", D(320),
-                     variants=V(("250 г", 320), ("1 кг", 1150))),
+                     variants=V(("250 г", 320), ("1 кг", 1150)), stock=(14, 3)),
             ItemSeed("CAFBN002", "Кава в зернах Бразилія Сантос", D(290),
-                     variants=V(("250 г", 290), ("1 кг", 1020))),
+                     variants=V(("250 г", 290), ("1 кг", 1020)), stock=(0, 6)),
             ItemSeed("CAFBN003", "Чай листовий", D(180),
-                     variants=V(("100 г", 180), ("250 г", 400))),
+                     variants=V(("100 г", 180), ("250 г", 400)), stock=(20, 8)),
         )),
     ),
     groups=(
@@ -603,55 +611,60 @@ SHOP_MENU = MenuSeed(
                               ("L, горщик Ø24 см", 1290)),
                    badges=("hit",), own_badges=("Для початківців",),
                    attributes=(("Світло", "напівтінь"), ("Полив", "раз на 2–3 тижні"),
-                               ("Для тварин", "токсична"))),
+                               ("Для тварин", "токсична")), stock=(12, 7, 2)),
             _plant("PLTEZ002", "Сансев'єрія", 290, code="SN", number=2,
                    variants=V(("S, горщик Ø12 см", 290), ("M, горщик Ø17 см", 520),
                               ("L, горщик Ø24 см", 980)),
                    own_badges=("Для початківців",),
-                   attributes=(("Світло", "будь-яке"), ("Полив", "раз на 3 тижні"))),
+                   attributes=(("Світло", "будь-яке"), ("Полив", "раз на 3 тижні")),
+                   stock=(10, 6, 3)),
             _plant("PLTEZ003", "Потос золотий", 250, code="PT", number=3,
                    variants=V(("S, горщик Ø12 см", 250), ("M, горщик Ø17 см", 450)),
                    badges=("new",),
-                   attributes=(("Світло", "розсіяне"), ("Полив", "щотижня"))),
+                   attributes=(("Світло", "розсіяне"), ("Полив", "щотижня")), stock=(15, 0)),
         )),
         # Large plants travel by courier only, not by post.
         CategorySeed("Великі рослини", 12, parent="Рослини", table=False, shipping=False, items=(
             _plant("PLTBG001", "Монстера делікатесна", 1450, code="MN", number=11,
                    variants=V(("M, горщик Ø21 см", 1450), ("L, горщик Ø27 см", 2600)),
-                   attributes=(("Висота", "70–120 см"), ("Світло", "яскраве розсіяне"))),
+                   attributes=(("Висота", "70–120 см"), ("Світло", "яскраве розсіяне")),
+                   stock=(3, 1)),
             _plant("PLTBG002", "Фікус ліровидний", 2900, code="FL", number=12,
-                   old_price=D(3400), attributes=(("Висота", "120 см"),)),
+                   old_price=D(3400), attributes=(("Висота", "120 см"),), stock=(2,)),
             _plant("PLTBG003", "Стреліція Ніколая", 3200, code="ST", number=13,
-                   badges=("limited",), attributes=(("Висота", "140 см"),)),
+                   badges=("limited",), attributes=(("Висота", "140 см"),), stock=(0,)),
         )),
         CategorySeed("Сукуленти й кактуси", 13, parent="Рослини", table=False, shipping=True,
                      items=(
             _plant("PLTSC001", "Ехеверія", 120, code="EH", number=21, portion="6 cm",
-                   own_badges=("Безпечна для тварин",)),
+                   own_badges=("Безпечна для тварин",), stock=(30,)),
             _plant("PLTSC002", "Набір сукулентів, 3 шт", 330, code="SET3", number=22,
-                   badges=("hit",)),
-            _plant("PLTSC003", "Маміллярія", 150, code="MM", number=23, portion="8 cm"),
+                   badges=("hit",), stock=(9,)),
+            _plant("PLTSC003", "Маміллярія", 150, code="MM", number=23, portion="8 cm",
+                   stock=(4,)),
         )),
         CategorySeed("Догляд", 20, table=False, shipping=True),
         CategorySeed("Ґрунти й дренаж", 21, parent="Догляд", table=False, shipping=True, items=(
             _plant("PLTSL001", "Ґрунт універсальний", 95, code="SOIL", number=31,
-                   variants=V(("2 л", 95), ("5 л", 190), ("10 л", 330)), badges=("eco",)),
+                   variants=V(("2 л", 95), ("5 л", 190), ("10 л", 330)), badges=("eco",),
+                   stock=(40, 25, 10)),
             _plant("PLTSL002", "Ґрунт для сукулентів", 110, code="SOILS", number=32,
-                   variants=V(("2 л", 110), ("5 л", 220))),
+                   variants=V(("2 л", 110), ("5 л", 220)), stock=(18, 12)),
             _plant("PLTSL003", "Керамзит дренажний", 60, code="DRN", number=33,
-                   variants=V(("1 л", 60), ("3 л", 150))),
+                   variants=V(("1 л", 60), ("3 л", 150)), stock=(30, 14)),
         )),
         CategorySeed("Добрива й засоби", 22, parent="Догляд", table=False, shipping=True, items=(
             _plant("PLTCR001", "Добриво для декоративно-листяних", 180, code="FRT", number=41,
-                   portion="250 ml"),
-            _plant("PLTCR002", "Обприскувач", 220, code="SPR", number=42, portion="500 ml"),
+                   portion="250 ml", stock=(16,)),
+            _plant("PLTCR002", "Обприскувач", 220, code="SPR", number=42, portion="500 ml",
+                   stock=(7,)),
         )),
         CategorySeed("Горщики й кашпо", 30, table=False, shipping=True, items=(
             _plant("PLTPT001", "Кашпо керамічне", 450, code="POTC", number=51,
                    variants=V(("Ø12 см", 450), ("Ø17 см", 650), ("Ø21 см", 890)),
-                   badges=("handmade",)),
+                   badges=("handmade",), stock=(9, 5, 2)),
             _plant("PLTPT002", "Кашпо бетонне", 520, code="POTB", number=52,
-                   variants=V(("Ø15 см", 520), ("Ø20 см", 760))),
+                   variants=V(("Ø15 см", 520), ("Ø20 см", 760)), stock=(6, 0)),
         )),
         CategorySeed("Подарункові сертифікати", 40, table=False, shipping=True, items=(
             _plant("PLTGC001", "Подарунковий сертифікат", 500, code="GC", number=61,
@@ -681,6 +694,7 @@ MODULE_NAMES = (
     ("module_kitchen_screen_enabled", "экран кухни и бара"),
     ("module_showcase_enabled", "витрина"),
     ("module_options_enabled", "варианты и добавки"),
+    ("module_stock_enabled", "остатки"),
     ("module_staff_call_enabled", "вызов персонала"),
     ("module_quick_sale_enabled", "быстрая продажа"),
     ("module_billing_enabled", "счета"),

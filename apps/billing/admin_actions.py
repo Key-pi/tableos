@@ -88,18 +88,32 @@ class RefundForm(forms.Form):
     reason_text = forms.CharField(
         label=_lazy("Комментарий (необязательно)"), required=False, max_length=255
     )
+    # Catalog step 3 (owner, 2026-11-07): only when it would put goods back.
+    restock = forms.BooleanField(
+        label=_lazy("Вернуть товар на склад"),
+        required=False,
+        help_text=_lazy("Отметьте, если товар вернулся и его можно продать снова."),
+    )
+
+    def __init__(self, *args, can_restock: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not can_restock:
+            del self.fields["restock"]
 
 
 def run_refund(modeladmin, request, queryset, *, action_name: str, perform):
     """Refund the selected bill lines, one refund per bill (PQ-037).
 
-    ``perform(bill, items, reason_code, method, reason_text)`` calls the
-    billing command, which checks the owner-granted right.
+    ``perform(bill, items, reason_code, method, reason_text, restock)`` calls
+    the billing command, which checks the owner-granted right.
     """
 
+    from apps.billing.services import refund_can_restock
+
     items = list(queryset.select_related("bill"))
+    can_restock = any(refund_can_restock(item.bill, [item.id]) for item in items)
     if request.POST.get("apply"):
-        form = RefundForm(request.POST)
+        form = RefundForm(request.POST, can_restock=can_restock)
         if form.is_valid():
             by_bill: dict = {}
             for item in items:
@@ -113,6 +127,7 @@ def run_refund(modeladmin, request, queryset, *, action_name: str, perform):
                         form.cleaned_data["reason_code"],
                         form.cleaned_data["method"],
                         form.cleaned_data["reason_text"],
+                        form.cleaned_data.get("restock", False),
                     )
                 except Exception as exc:  # noqa: BLE001 - shown to the admin user
                     modeladmin.message_user(
@@ -137,7 +152,7 @@ def run_refund(modeladmin, request, queryset, *, action_name: str, perform):
                 )
             return None
     else:
-        form = RefundForm()
+        form = RefundForm(can_restock=can_restock)
     return TemplateResponse(
         request,
         "admin/billing/adjustment_reason.html",

@@ -19,6 +19,9 @@ UI_TEXTS = {
     "not_now": N_("Сейчас не продаётся"),
     "sold_when": N_("Продаётся {when}"),
     "sku": N_("Артикул"),
+    # Stock (catalog step 3): never the number (owner, 2026-11-07).
+    "sold_out": N_("Нет в наличии"),
+    "few_left": N_("Осталось мало"),
     # Variants and add-ons (catalog step 2).
     "price_from": N_("от {price}"),
     "variant": N_("Вариант"),

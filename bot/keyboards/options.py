@@ -16,6 +16,7 @@ from decimal import Decimal
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from apps.menu.stock import LOW_STOCK
 from bot.keyboards.menu import CART_CALLBACK, cart_button_text
 from core.i18n import _
 
@@ -55,16 +56,24 @@ def decode(data: str) -> tuple[str, Pick | None]:
     return parts[1], Pick(variant, int(parts[3], 16))
 
 
-def starting_pick(choices) -> Pick:
-    """The first variant and the first add-on of each required single
-    choice, as in the Mini App; the guest changes what they want."""
+def starting_pick(choices, *, stock: bool = False) -> Pick:
+    """The first variant (in stock, when stock is counted — ``stock``) and
+    the first add-on of each required single choice, as in the Mini App; the
+    guest changes what they want."""
 
+    variant = None
+    if choices.variants:
+        on_sale = [
+            index for index, row in enumerate(choices.variants)
+            if not stock or row.stock_quantity > 0
+        ]
+        variant = on_sale[0] if on_sale else 0
     mask = 0
     for index, (entry, modifier) in enumerate(add_ons(choices)):
         group = entry.group
         if group.min_choices > 0 and group.max_choices == 1 and modifier is entry.modifiers[0]:
             mask |= 1 << index
-    return Pick(0 if choices.variants else None, mask)
+    return Pick(variant, mask)
 
 
 def valid(choices, pick: Pick) -> bool:
@@ -152,20 +161,40 @@ STAFF_OPEN = "so"
 STAFF_ADD = "sa"
 
 
+def _variant_text(variant, mark: str, *, staff: bool, stock: bool) -> str:
+    text = f"{mark} {variant.name} · {variant.price}"
+    if not stock:
+        return text
+    if staff:
+        # The staff see how many are left (the till may go below zero).
+        return text + _(" · ост. {count}", count=variant.stock_quantity)
+    if variant.stock_quantity <= LOW_STOCK:
+        return text + _(" · осталось мало")
+    return text
+
+
 def build_choice_keyboard(
-    item, choices, pick: Pick, *, back_callback: str, cart=None, staff: bool = False
+    item, choices, pick: Pick, *, back_callback: str, cart=None, staff: bool = False,
+    stock: bool = False,
 ):
     """Variants, each group with its add-ons, «Добавить · сумма», the cart
-    (guests) and back to the menu or the sale."""
+    (guests) and back to the menu or the sale. ``stock`` — the item's stock
+    is counted (catalog step 3): a guest cannot pick a variant with nothing
+    left and never sees the number; the staff see it."""
 
     open_prefix, add_prefix = (STAFF_OPEN, STAFF_ADD) if staff else (OPEN, ADD)
 
     rows: list[list[InlineKeyboardButton]] = []
     variant_buttons = []
     for index, variant in enumerate(choices.variants):
+        if stock and not staff and variant.stock_quantity <= 0:
+            variant_buttons.append(InlineKeyboardButton(
+                text=_("✖ {name} — нет в наличии", name=variant.name), callback_data=NOOP
+            ))
+            continue
         mark = "✅" if pick.variant == index else "○"
         variant_buttons.append(InlineKeyboardButton(
-            text=f"{mark} {variant.name} · {variant.price}",
+            text=_variant_text(variant, mark, staff=staff, stock=stock),
             callback_data=encode(open_prefix, item.public_id, Pick(index, pick.mask)),
         ))
     rows += _rows_of_two(variant_buttons)

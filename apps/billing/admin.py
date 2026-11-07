@@ -390,13 +390,14 @@ class BillItemAdmin(ScopedAdminMixin):
             request,
             queryset.filter(is_active=True),
             action_name="refund_selected_lines",
-            perform=lambda bill, items, code, method, text: refund_bill_lines(
+            perform=lambda bill, items, code, method, text, restock: refund_bill_lines(
                 bill=bill,
                 bill_item_ids=[item.id for item in items],
                 actor=request.user,
                 reason_code=code,
                 method=method,
                 reason_text=text,
+                restock=restock,
             ),
         )
 

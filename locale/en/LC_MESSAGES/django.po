@@ -140,7 +140,7 @@ msgstr "Traffic source"
 msgid "Источники переходов"
 msgstr "Traffic sources"
 
-#: apps/analytics/models.py apps/billing/models.py
+#: apps/analytics/models.py apps/billing/models.py apps/menu/admin.py apps/menu/models.py
 msgid "Источник"
 msgstr "Source"
 
@@ -320,7 +320,7 @@ msgstr "Items stay in the bill history and the total is recalculated. A bill can
 msgid "Убрано позиций"
 msgstr "Items removed"
 
-#: apps/billing/admin_actions.py apps/billing/models.py
+#: apps/billing/admin_actions.py apps/billing/models.py apps/menu/models.py
 msgid "Причина"
 msgstr "Reason"
 
@@ -331,6 +331,14 @@ msgstr "Comment (optional)"
 #: apps/billing/admin_actions.py
 msgid "Как вернули деньги"
 msgstr "How the money was returned"
+
+#: apps/billing/admin_actions.py webapp/staff_views.py
+msgid "Вернуть товар на склад"
+msgstr "Put the goods back in stock"
+
+#: apps/billing/admin_actions.py
+msgid "Отметьте, если товар вернулся и его можно продать снова."
+msgstr "Tick it if the goods came back and can be sold again."
 
 #: apps/billing/admin_actions.py
 msgid "Счёт #{public_id}: возвращено {money_amount} грн, бонусов {bonus_returned}, снято кешбэка {cashback_revoked}."
@@ -524,7 +532,7 @@ msgstr "bill request"
 msgid "Запросы счёта"
 msgstr "Bill requests"
 
-#: apps/billing/models.py apps/bonuses/models.py apps/notifications/models.py apps/orders/models.py
+#: apps/billing/models.py apps/bonuses/models.py apps/menu/models.py apps/notifications/models.py apps/orders/models.py
 msgid "Заказ"
 msgstr "Order"
 
@@ -720,7 +728,7 @@ msgstr "bill change"
 msgid "Изменения счетов"
 msgstr "Bill changes"
 
-#: apps/billing/models.py
+#: apps/billing/models.py webapp/texts.py
 msgid "Нет в наличии"
 msgstr "Out of stock"
 
@@ -1608,7 +1616,7 @@ msgstr "Manual"
 msgid "Программа"
 msgstr "Program"
 
-#: apps/bonuses/models.py bot/keyboards/staff.py
+#: apps/bonuses/models.py apps/menu/models.py bot/keyboards/staff.py
 msgid "Быстрая продажа"
 msgstr "Quick sale"
 
@@ -2004,6 +2012,14 @@ msgstr "Showcase"
 msgid "Порция, старая цена, метки, артикул; ниже — ещё фото и характеристики."
 msgstr "Portion, old price, labels, SKU; below — more photos and characteristics."
 
+#: apps/menu/admin.py apps/partners/models.py
+msgid "Остатки"
+msgstr "Stock"
+
+#: apps/menu/admin.py
+msgid "Остаток уменьшается, когда гость оформляет заказ и при быстрой продаже; отмена заказа возвращает товар. Новое число здесь — пересчёт, он попадает в «Движение остатков». У позиции с вариантами остаток — у каждого варианта."
+msgstr "Stock goes down when a guest places an order and on a quick sale; a cancelled order puts the goods back. A new number here is a stock count and goes to «Stock movements». An item with variants keeps stock per variant."
+
 #: apps/menu/admin.py
 msgid "Гость выбирает добавки, пока включён модуль «Варианты и добавки». Группа без добавок в наличии не показывается."
 msgstr "Guests choose add-ons while the “Variants and add-ons” module is on. A group with no add-ons in stock is not shown."
@@ -2313,6 +2329,22 @@ msgid "Штрихкод"
 msgstr "Barcode"
 
 #: apps/menu/models.py
+msgid "Учитывать остаток"
+msgstr "Track stock"
+
+#: apps/menu/models.py
+msgid "Заказ списывает при оформлении, отмена возвращает. У позиции с вариантами остаток — у каждого варианта."
+msgstr "An order takes stock when placed, a cancel puts it back. An item with variants keeps stock per variant."
+
+#: apps/menu/models.py
+msgid "Остаток"
+msgstr "In stock"
+
+#: apps/menu/models.py
+msgid "Сколько есть сейчас. Меньше нуля — продано на кассе больше, чем по учёту: поправьте."
+msgstr "How many there are now. Below zero means the till sold more than the records show: correct it."
+
+#: apps/menu/models.py
 msgid "позиция меню"
 msgstr "menu item"
 
@@ -2371,6 +2403,10 @@ msgstr "Characteristics"
 #: apps/menu/models.py
 msgid "Как увидит гость: 250 мл, M, червона, 500 г."
 msgstr "As the guest will see it: 250 ml, M, red, 500 g."
+
+#: apps/menu/models.py
+msgid "Когда у позиции включено «Учитывать остаток»."
+msgstr "When the item has «Track stock» on."
 
 #: apps/menu/models.py
 msgid "вариант позиции"
@@ -2444,6 +2480,42 @@ msgstr "0 — free."
 msgid "добавка"
 msgstr "add-on"
 
+#: apps/menu/models.py
+msgid "Отмена заказа"
+msgstr "Order cancelled"
+
+#: apps/menu/models.py
+msgid "Возврат на склад"
+msgstr "Back in stock"
+
+#: apps/menu/models.py
+msgid "Пересчёт в Admin"
+msgstr "Count in Admin"
+
+#: apps/menu/models.py apps/users/models.py
+msgid "Изменение"
+msgstr "Change"
+
+#: apps/menu/models.py
+msgid "Остаток после"
+msgstr "Stock after"
+
+#: apps/menu/models.py
+msgid "Номер источника"
+msgstr "Source number"
+
+#: apps/menu/models.py
+msgid "Кто"
+msgstr "Who"
+
+#: apps/menu/models.py
+msgid "движение остатка"
+msgstr "stock movement"
+
+#: apps/menu/models.py
+msgid "Движение остатков"
+msgstr "Stock movements"
+
 #: apps/menu/options.py
 msgid "Варианты и добавки сейчас не выбираются."
 msgstr "Variants and add-ons cannot be chosen now."
@@ -2471,6 +2543,30 @@ msgstr "“{group}”: choose at least {count}."
 #: apps/menu/options.py bot/handlers/menu.py bot/handlers/staff.py
 msgid "«{group}»: не больше {count}."
 msgstr "“{group}”: at most {count}."
+
+#: apps/menu/stock.py
+msgid "«{name}» нет в наличии."
+msgstr "«{name}» is out of stock."
+
+#: apps/menu/stock.py
+msgid "Больше «{name}» нет в наличии."
+msgstr "There is no more «{name}» in stock."
+
+#: apps/menu/stock.py
+msgid "«{name}» закончился — уберите его из корзины."
+msgstr "«{name}» has sold out — remove it from the cart."
+
+#: apps/menu/stock.py
+msgid "«{name}» осталось меньше, чем в корзине — уменьшите количество."
+msgstr "Fewer «{name}» are left than in the cart — reduce the quantity."
+
+#: apps/menu/stock.py
+msgid "Сначала включите у позиции «Учитывать остаток»."
+msgstr "First turn on «Track stock» for the item."
+
+#: apps/menu/stock.py
+msgid "Позиция не найдена."
+msgstr "Item not found."
 
 #: apps/notifications/admin.py
 msgid "Отправить выбранные рассылки"
@@ -4037,6 +4133,10 @@ msgid "Варианты позиции со своей ценой (размер,
 msgstr "Item variants with their own price (size, colour, pack: 250 ml, M, 500 g) and add-on groups (syrups, sauces, “no onion”). Guests choose them when ordering, staff in the quick sale. Requires the menu."
 
 #: apps/partners/models.py
+msgid "Сколько товара в наличии у позиций и вариантов с отметкой «Учитывать остаток»: заказ списывает при оформлении, отмена возвращает, быстрая продажа списывает; гость видит «нет в наличии» и «осталось мало». Требует меню."
+msgstr "How many are in stock for items and variants marked «Track stock»: an order takes them when placed, a cancel puts them back, a quick sale takes them; guests see «out of stock» and «only a few left». Needs the menu."
+
+#: apps/partners/models.py
 msgid "Столы и QR-сессии"
 msgstr "Tables and QR sessions"
 
@@ -5005,10 +5105,6 @@ msgid "Добавление"
 msgstr "Add"
 
 #: apps/users/models.py
-msgid "Изменение"
-msgstr "Change"
-
-#: apps/users/models.py
 msgid "Удаление"
 msgstr "Delete"
 
@@ -5111,6 +5207,14 @@ msgstr "To order, choose below how you will get it."
 #: bot/handlers/menu.py bot/services/content.py webapp/views.py
 msgid "За столом — отсканируйте QR-код на столе."
 msgstr "At a table — scan the QR code on the table."
+
+#: bot/handlers/menu.py
+msgid " — нет в наличии"
+msgstr " — out of stock"
+
+#: bot/handlers/menu.py bot/keyboards/options.py
+msgid " · осталось мало"
+msgstr " · only a few left"
 
 #: bot/handlers/menu.py
 msgid "{name} — от {price} грн"
@@ -6424,6 +6528,10 @@ msgstr "The quick sale draft is out of date. Start again."
 msgid "Для быстрой продажи сначала добавьте активные категории меню."
 msgstr "Add active menu categories before making quick sales."
 
+#: bot/handlers/staff.py bot/keyboards/options.py
+msgid " · ост. {count}"
+msgstr " · left {count}"
+
 #: bot/handlers/staff.py webapp/staff_views.py webapp/texts.py
 msgid "от {price}"
 msgstr "from {price}"
@@ -7111,6 +7219,14 @@ msgid "Кешбэк за возвращённое снимется. Гость �
 msgstr "Cashback for the refunded items is taken back. The guest gets a message."
 
 #: bot/handlers/staff_refunds.py
+msgid "☑️ Вернуть на склад"
+msgstr "☑️ Put back in stock"
+
+#: bot/handlers/staff_refunds.py
+msgid "⬜ Вернуть на склад"
+msgstr "⬜ Put back in stock"
+
+#: bot/handlers/staff_refunds.py
 msgid "✅ Вернуть"
 msgstr "✅ Refund"
 
@@ -7223,6 +7339,10 @@ msgstr "several allowed"
 #: bot/keyboards/options.py webapp/staff_views.py webapp/texts.py
 msgid "до {count}"
 msgstr "up to {count}"
+
+#: bot/keyboards/options.py
+msgid "✖ {name} — нет в наличии"
+msgstr "✖ {name} — out of stock"
 
 #: bot/keyboards/options.py
 msgid "➕ Добавить · {price} грн"
@@ -7932,6 +8052,10 @@ msgstr "The guest earns bonuses: {bonus}"
 msgid "Провести продажу"
 msgstr "Record the sale"
 
+#: webapp/staff_views.py
+msgid "ост. {count}"
+msgstr "left {count}"
+
 #: webapp/staff_views.py webapp/texts.py
 msgid "Добавить · {price}"
 msgstr "Add · {price}"
@@ -8031,6 +8155,10 @@ msgstr "Not on sale now"
 #: webapp/texts.py
 msgid "Продаётся {when}"
 msgstr "Sold {when}"
+
+#: webapp/texts.py
+msgid "Осталось мало"
+msgstr "Only a few left"
 
 #: webapp/texts.py
 msgid "В корзине: {count}"

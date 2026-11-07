@@ -50,6 +50,7 @@ from apps.menu.models import (
     Modifier,
     ModifierGroup,
 )
+from apps.menu.stock import count_stock
 from apps.orders.kitchen import issue_screen_link
 from apps.orders.models import KitchenScreen
 from apps.partners.management import demo_data as demo
@@ -849,6 +850,11 @@ class Command(BaseCommand):
     def _seed_item(partner, category, category_seed, seed: demo.ItemSeed, order, own_badges):
         portion, unit = _portion(seed.portion)
         shipping = category_seed.shipping if seed.shipping is None else seed.shipping
+        # Stock is set once (catalog step 3): seeding again keeps the levels
+        # orders and counts changed.
+        was_counted = MenuItem.objects.filter(
+            partner=partner, public_id=seed.public_id, track_stock=True
+        ).exists()
         item, _ = MenuItem.objects.update_or_create(
             partner=partner,
             public_id=seed.public_id,
@@ -870,6 +876,7 @@ class Command(BaseCommand):
                 "badges": list(seed.badges),
                 "sku": seed.sku,
                 "barcode": seed.barcode,
+                "track_stock": seed.stock is not None,
             },
         )
         item.custom_badges.set([own_badges[name] for name in seed.own_badges])
@@ -879,15 +886,22 @@ class Command(BaseCommand):
                               sort_order=position)
             for position, (name, value) in enumerate(seed.attributes, start=1)
         )
-        names = []
+        names, new_levels = [], []
+        levels = list(seed.stock or ())
         for position, (name, price) in enumerate(seed.variants, start=1):
-            MenuItemVariant.objects.update_or_create(
+            variant, created = MenuItemVariant.objects.update_or_create(
                 item=item,
                 name=name,
                 defaults={"price": price, "sort_order": position, "is_available": True},
             )
             names.append(name)
+            if seed.stock is not None and (created or not was_counted):
+                new_levels.append((variant, levels[position - 1]))
         item.variants.exclude(name__in=names).delete()
+        if seed.stock is not None and not seed.variants and not was_counted:
+            new_levels.append((None, levels[0]))
+        for variant, level in new_levels:
+            count_stock(item=item, variant=variant, quantity=level)
         return item
 
     @staticmethod

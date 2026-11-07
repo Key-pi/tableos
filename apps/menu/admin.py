@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
+from django.forms.models import BaseInlineFormSet
 
 from apps.menu.catalog import BUILTIN_BADGES, WEEKDAYS
 from apps.menu.models import (
@@ -11,7 +12,9 @@ from apps.menu.models import (
     MenuItemVariant,
     Modifier,
     ModifierGroup,
+    StockMovement,
 )
+from apps.menu.stock import count_stock
 from apps.orders.kitchen import missing_screen_warnings
 from apps.partners.models import PartnerBotSettings
 from apps.users.constants import AdminSection
@@ -116,7 +119,31 @@ class MenuBadgeAdmin(ScopedAdminMixin):
     search_fields = ("name",)
 
 
-class MenuItemForm(forms.ModelForm):
+class StockSeenMixin(forms.Form):
+    """The level the page showed, so saving tells a count (a new number)
+    from a level an order changed while the page was open (catalog step 3)."""
+
+    stock_seen = forms.IntegerField(required=False, widget=forms.HiddenInput)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["stock_seen"].initial = self.instance.stock_quantity if self.instance.pk else 0
+
+    def counted_level(self) -> int | None:
+        """The new level when the owner typed one, else None."""
+
+        if "stock_quantity" not in self.cleaned_data:
+            return None
+        level = self.cleaned_data["stock_quantity"] or 0
+        seen = self.cleaned_data.get("stock_seen")
+        if seen is None:
+            seen = 0 if self.instance._state.adding else None
+        if seen is None:
+            return level if "stock_quantity" in self.changed_data else None
+        return level if level != seen else None
+
+
+class MenuItemForm(StockSeenMixin, forms.ModelForm):
     badges = ChoiceListField(
         choices=[
             (code, f"{emoji} {_lazy(name)}") for code, (emoji, name) in BUILTIN_BADGES.items()
@@ -131,7 +158,63 @@ class MenuItemForm(forms.ModelForm):
             "item_type", "is_available", "sort_order", "available_at_table",
             "available_for_pickup", "available_for_delivery", "available_for_shipping",
             "portion", "portion_unit", "old_price", "badges", "custom_badges", "sku", "barcode",
+            "track_stock", "stock_quantity",
         )
+
+
+def _without_stock(row) -> list[str]:
+    """Every field but the level: an Admin page never writes back a level an
+    order changed while it was open (catalog step 3)."""
+
+    return [
+        field.name for field in row._meta.concrete_fields
+        if not field.primary_key and field.name != "stock_quantity"
+    ]
+
+
+class StockVariantFormSet(BaseInlineFormSet):
+    """Variants with their level: a new number is a count (``count_stock``,
+    after the page is saved), the rest saves without the level."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.counts: list = []
+        self.keep_level: set = set()
+
+    def save_existing(self, form, obj, commit=True):
+        if not self.instance.track_stock:
+            return super().save_existing(form, obj, commit=commit)
+        level = form.counted_level()
+        obj = form.save(commit=False)
+        if level is not None:
+            self.counts.append((obj, level))
+        self.keep_level.add(obj.pk)
+        if commit:
+            self.save_instance(obj)
+        return obj
+
+    def save_instance(self, obj) -> None:
+        """How ``ScopedAdminMixin.save_formset`` saves a row."""
+
+        if obj.pk in self.keep_level:
+            obj.save(update_fields=_without_stock(obj))
+        else:
+            obj.save()
+
+    def save_new(self, form, commit=True):
+        level = form.counted_level()
+        if not self.instance.track_stock or not level:
+            return super().save_new(form, commit=commit)
+        form.instance.stock_quantity = 0
+        obj = super().save_new(form, commit=commit)
+        self.counts.append((obj, level))
+        return obj
+
+
+class StockVariantForm(StockSeenMixin, forms.ModelForm):
+    class Meta:
+        model = MenuItemVariant
+        fields = ("name", "price", "is_available", "sort_order", "stock_quantity")
 
 
 class MenuItemPhotoInline(SectionInlineMixin, admin.TabularInline):
@@ -157,9 +240,18 @@ class MenuItemVariantInline(SectionInlineMixin, admin.TabularInline):
     extra = 0
 
 
+class MenuItemVariantStockInline(MenuItemVariantInline):
+    """The same with each variant's level (module «Остатки»)."""
+
+    fields = ("name", "price", "is_available", "sort_order", "stock_quantity", "stock_seen")
+    form = StockVariantForm
+    formset = StockVariantFormSet
+
+
 SHOWCASE_FIELDS = (
     "portion", "portion_unit", "old_price", "badges", "custom_badges", "sku", "barcode",
 )
+STOCK_FIELDS = ("track_stock", "stock_quantity", "stock_seen")
 
 
 def module_on_for(admin_page, request, field: str) -> bool:
@@ -209,31 +301,118 @@ class MenuItemAdmin(VenueFormMixin, ScopedAdminMixin):
             ),
             "fields": SHOWCASE_FIELDS,
         }),
+        (_lazy("Остатки"), {
+            "description": _lazy(
+                "Остаток уменьшается, когда гость оформляет заказ и при быстрой продаже; "
+                "отмена заказа возвращает товар. Новое число здесь — пересчёт, он попадает "
+                "в «Движение остатков». У позиции с вариантами остаток — у каждого варианта."
+            ),
+            "fields": STOCK_FIELDS,
+        }),
     )
 
     def showcase_on_for(self, request) -> bool:
         return module_on_for(self, request, "module_showcase_enabled")
 
+    def stock_on_for(self, request) -> bool:
+        return module_on_for(self, request, "module_stock_enabled")
+
+    def _parts_off(self, request) -> list[tuple]:
+        """The modules' parts of the page that are off for this venue."""
+
+        off = []
+        if not self.showcase_on_for(request):
+            off.append(SHOWCASE_FIELDS)
+        if not self.stock_on_for(request):
+            off.append(STOCK_FIELDS)
+        return off
+
     def get_exclude(self, request, obj=None):
         exclude = list(super().get_exclude(request, obj) or ())
-        if not self.showcase_on_for(request):
-            exclude += [name for name in SHOWCASE_FIELDS if name not in exclude]
+        for fields in self._parts_off(request):
+            exclude += [name for name in fields if name not in exclude]
         return tuple(exclude) or None
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = super().get_fieldsets(request, obj)
-        if self.is_platform_admin(request) and not self.showcase_on_for(request):
+        if self.is_platform_admin(request):
+            off = self._parts_off(request)
             return [(name, options) for name, options in fieldsets
-                    if tuple(options.get("fields", ())) != SHOWCASE_FIELDS]
+                    if tuple(options.get("fields", ())) not in off]
         return [(name, options) for name, options in fieldsets if options.get("fields")]
 
     def get_inlines(self, request, obj):
         inlines = []
         if module_on_for(self, request, "module_options_enabled"):
-            inlines.append(MenuItemVariantInline)
+            inlines.append(
+                MenuItemVariantStockInline if self.stock_on_for(request) else MenuItemVariantInline
+            )
         if self.showcase_on_for(request):
             inlines += [MenuItemPhotoInline, MenuItemAttributeInline]
         return inlines
+
+    def save_model(self, request, obj, form, change):
+        # The level is changed by a count only (catalog step 3): the rest of
+        # the page saves without it, a new number is counted after.
+        level = form.counted_level() if obj.track_stock else None
+        counted = level is not None
+        if counted or (change and obj.track_stock):
+            if change:
+                obj.save(update_fields=_without_stock(obj))
+            else:
+                obj.stock_quantity = 0
+                super().save_model(request, obj, form, change)
+        else:
+            super().save_model(request, obj, form, change)
+        if counted:
+            count_stock(item=obj, variant=None, quantity=level, actor=request.user)
+
+    def save_related(self, request, form, formsets, change):
+        if form.instance.track_stock:
+            # Items, then variants in id order, as orders lock them.
+            list(
+                MenuItemVariant.objects.select_for_update(no_key=True)
+                .filter(item=form.instance).order_by("id").values_list("id", flat=True)
+            )
+        super().save_related(request, form, formsets, change)
+        for formset in formsets:
+            for variant, level in getattr(formset, "counts", ()):
+                count_stock(item=form.instance, variant=variant, quantity=level,
+                            actor=request.user)
+
+
+@admin.register(StockMovement)
+class StockMovementAdmin(ScopedAdminMixin):
+    """«Движение остатков»: what took or gave back stock, read only (catalog
+    step 3). A count is made on the item's page."""
+
+    admin_section = AdminSection.MENU
+    allow_partner_add = False
+    allow_partner_delete = False
+    list_display = (
+        "created_at", "item", "variant", "delta", "balance_after", "reason", "source_label",
+        "actor", "partner",
+    )
+    list_filter = ("partner", "reason")
+    search_fields = ("item__name", "variant__name", "source_id")
+    readonly_fields = (
+        "item", "variant", "delta", "balance_after", "reason", "source_type", "source_id",
+        "actor", "created_at",
+    )
+    fields = readonly_fields
+
+    @admin.display(description=_lazy("Источник"))
+    def source_label(self, obj):
+        return f"{obj.source_type} {obj.source_id}".strip()
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class ModifierInline(SectionInlineMixin, admin.TabularInline):

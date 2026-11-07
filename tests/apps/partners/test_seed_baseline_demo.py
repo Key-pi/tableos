@@ -16,8 +16,15 @@ from apps.analytics.models import TrafficSource
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import get_bonus_ledger_balance
 from apps.employees.models import EmployeeProfile
-from apps.menu.models import MenuCategory, MenuItem, MenuItemVariant, ModifierGroup
+from apps.menu.models import (
+    MenuCategory,
+    MenuItem,
+    MenuItemVariant,
+    ModifierGroup,
+    StockMovement,
+)
 from apps.menu.options import choices_for, needs_choice
+from apps.menu.stock import LOW_STOCK, count_stock
 from apps.orders.kitchen import screen_by_token
 from apps.orders.models import KitchenScreen
 from apps.partners.models import BotInstance, Network, OpeningHours, Partner, PartnerBotSettings
@@ -122,6 +129,31 @@ class SeedBaselineDemoTests(TestCase):
         self.assertTrue(User.objects.get(username="platform_admin").is_superuser)
         for env_name in ("DEMO_CAFE_BOT_TOKEN", "DEMO_SHOP_BOT_TOKEN", "DEMO_TELEGRAM_ID"):
             self.assertIn(env_name, output)
+
+    def test_stock_where_it_is_counted(self):
+        _seed()
+        self.assertEqual(
+            {slug: _settings(slug).module_stock_enabled for slug in (PODIL, OBOLON, CAFE, SHOP)},
+            {PODIL: True, OBOLON: False, CAFE: True, SHOP: True},
+        )
+        shirt = MenuItem.objects.get(public_id="SMKMR001")
+        self.assertTrue(shirt.track_stock)
+        levels = dict(shirt.variants.values_list("name", "stock_quantity"))
+        self.assertEqual(levels["XL"], 0)  # sold out
+        self.assertTrue(0 < levels["L"] <= LOW_STOCK)  # little left
+        self.assertFalse(MenuItem.objects.get(public_id="SMKMR003").track_stock)  # certificates
+        self.assertEqual(MenuItem.objects.get(public_id="PLTBG003").stock_quantity, 0)
+        self.assertTrue(MenuItem.objects.get(public_id="CAFBN002").track_stock)
+        # The levels start as counts in «Движение остатков».
+        self.assertTrue(StockMovement.objects.filter(item=shirt, reason="count").exists())
+
+    def test_seeding_again_keeps_the_levels(self):
+        _seed()
+        mouthpiece = MenuItem.objects.get(public_id="SMKMR002")
+        count_stock(item=mouthpiece, variant=None, quantity=3)
+        _seed()
+        mouthpiece.refresh_from_db()
+        self.assertEqual(mouthpiece.stock_quantity, 3)
 
     def test_the_night_owl_network(self):
         _seed()

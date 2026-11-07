@@ -11,10 +11,12 @@
   --section: var(--tg-theme-section-bg-color, var(--bg));
   --separator: var(--tg-theme-section-separator-color, rgba(128, 128, 128, 0.18));
   --danger: var(--tg-theme-destructive-text-color, #e5484d);
+  --warning: #d97706;
   --radius: 14px;
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; }
 body {
   background: var(--bg2);
@@ -167,6 +169,11 @@ input, textarea { font: inherit; color: var(--text); }
 .choice input { width: 20px; height: 20px; margin: 0; accent-color: var(--accent); flex: none; }
 .choice .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .choice .muted { flex: none; }
+.choice.out { opacity: 0.55; cursor: default; }
+.choice .grow .muted, .choice .grow .few { font-size: 13px; }
+.few, .stock-note { color: var(--warning); }
+.stock-note { font-size: 12px; font-weight: 500; }
+.item-body .stock-note { font-size: 14px; }
 .add-picked { width: 100%; border: 0; border-radius: 12px; padding: 14px; font-size: 16px; font-weight: 600; background: var(--accent); color: var(--accent-text); cursor: pointer; margin-top: 4px; }
 .in-cart-note { font-size: 13px; text-align: center; }
 

@@ -27,6 +27,7 @@ from apps.bonuses.services import (
     sync_bonus_balance_from_ledger,
 )
 from apps.employees.models import EmployeeProfile
+from apps.menu.stock import return_for_refund, returnable
 from apps.orders.models import Order, OrderItem
 from apps.orders.services import transition_order_status
 from apps.partners.networks import acts_for_partner, owns_partner
@@ -1221,6 +1222,21 @@ def preview_refund(bill: Bill, bill_item_ids) -> tuple[Decimal, Decimal]:
     return money, bonus
 
 
+def refund_can_restock(bill: Bill, bill_item_ids) -> bool:
+    """Whether «вернуть на склад» would put any of these open lines back in
+    stock (catalog step 3): the screens offer the tick only then (read only)."""
+
+    item_ids = {str(item_id) for item_id in bill_item_ids}
+    lines = [
+        line
+        for line in BillItem.objects.filter(
+            partner_id=bill.partner_id, bill_id=bill.id, is_active=True, refund_line__isnull=True
+        ).select_related("order_item")
+        if str(line.id) in item_ids
+    ]
+    return returnable(lines)
+
+
 @transaction.atomic
 def refund_bill_lines(
     *,
@@ -1230,6 +1246,7 @@ def refund_bill_lines(
     reason_code: str,
     method: str,
     reason_text: str = "",
+    restock: bool = False,
 ) -> Refund:
     """Give money (and bonuses) back for lines of a paid bill (PQ-037).
 
@@ -1241,6 +1258,10 @@ def refund_bill_lines(
     recorded as not taken). An order whose every line is refunded is
     canceled unless it was already completed. The money itself goes back to
     the guest by hand; the guest gets a message after commit.
+
+    ``restock`` — the staff ticked «вернуть на склад» (catalog step 3): the
+    refunded goods go back in stock; without it nothing does, not even when
+    the refund cancels the order.
 
     Who: the owner, or staff with the owner-granted bill right
     (``user_can_adjust_bills``), as for bill changes (PQ-028).
@@ -1415,7 +1436,10 @@ def refund_bill_lines(
                 to_status=Order.Status.CANCELED,
                 actor_user=actor,
                 note=_("Полный возврат по счёту #{public_id}.", public_id=bill.public_id),
+                restock=False,
             )
+    if restock:
+        return_for_refund(selected, actor)
 
     refund.cashback_revoked = revoked
     refund.cashback_not_revoked = not_revoked

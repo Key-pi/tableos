@@ -21,12 +21,16 @@ def _data(markup):
     return [button.callback_data for button in _buttons(markup)]
 
 
-class StaffRefundBotTests(PickupBotFixture):
+class StaffRefundBotFixture(PickupBotFixture):
+    # Stock of «Компот» counted (catalog step 3): 5 before the order.
+    counted = False
+
     def setUp(self):
         super().setUp()
         self._set_phone()
         PartnerBotSettings.objects.filter(partner=self.partner).update(
-            pickup_pay_transfer=False, pickup_pay_on_receipt=True
+            pickup_pay_transfer=False, pickup_pay_on_receipt=True,
+            module_stock_enabled=self.counted,
         )
         MenuItem.objects.create(
             partner=self.partner,
@@ -34,6 +38,8 @@ class StaffRefundBotTests(PickupBotFixture):
             public_id="PB000002",
             name="Компот",
             price="50.00",
+            track_stock=self.counted,
+            stock_quantity=5,
         )
         add_items_to_cart_for_telegram_user(
             partner_id=self.partner.id, telegram_id=GUEST, raw_items="PB000002x1"
@@ -63,6 +69,8 @@ class StaffRefundBotTests(PickupBotFixture):
         args = callback.message.edit_text.call_args
         return args.args[0], _data(args.kwargs["reply_markup"])
 
+
+class StaffRefundBotTests(StaffRefundBotFixture):
     def test_paid_order_card_offers_a_refund(self):
         order = Order.objects.select_related("partner", "guest__telegram_account").get(
             id=self.order.id
@@ -126,3 +134,49 @@ class StaffRefundBotTests(PickupBotFixture):
         callback = self._callback(f"guestorder:{pid}")
         async_to_sync(profile.my_orders_callback)(callback, self.bot)
         self.assertIn("Возвращено: 350.00 грн", callback.message.edit_text.call_args.args[0])
+
+
+class StaffRefundStockBotTests(StaffRefundBotFixture):
+    """«Вернуть на склад» on the confirm screen (catalog step 3, owner
+    2026-11-07): off until the staff tick it; the tick travels in the data."""
+
+    counted = True
+
+    def _compot_mask(self):
+        callback = self._staff(f"strf:{self.order.public_id}:0")
+        markup = callback.message.edit_text.call_args.kwargs["reply_markup"]
+        compot = next(b.callback_data for b in _buttons(markup) if "Компот" in b.text)
+        return compot.rsplit(":", 1)[1]
+
+    def _stock(self):
+        return MenuItem.objects.get(public_id="PB000002").stock_quantity
+
+    def test_off_until_ticked(self):
+        pid, m = self.order.public_id, self._compot_mask()
+        self.assertEqual(self._stock(), 4)
+        callback = self._staff(f"strc:{pid}:{m}:os:c")
+        markup = callback.message.edit_text.call_args.kwargs["reply_markup"]
+        tick = next(b for b in _buttons(markup) if "склад" in b.text)
+        self.assertEqual(
+            (tick.text, tick.callback_data), ("⬜ Вернуть на склад", f"strc:{pid}:{m}:os:c:1")
+        )
+        self.assertIn(f"strk:{pid}:{m}:os:c", _data(markup))
+        callback = self._staff(tick.callback_data)
+        markup = callback.message.edit_text.call_args.kwargs["reply_markup"]
+        self.assertIn("☑️ Вернуть на склад", [b.text for b in _buttons(markup)])
+        self.assertIn(f"strk:{pid}:{m}:os:c:1", _data(markup))
+        self.assertIn(f"strc:{pid}:{m}:os:c", _data(markup))  # untick
+        self._staff(f"strk:{pid}:{m}:os:c:1")
+        self.assertEqual(self._stock(), 5)
+
+    def test_not_ticked_stays_out(self):
+        pid, m = self.order.public_id, self._compot_mask()
+        self._staff(f"strk:{pid}:{m}:os:c")
+        self.assertEqual(Refund.objects.count(), 1)
+        self.assertEqual(self._stock(), 4)
+
+    def test_every_button_fits_telegram(self):
+        pid, m = self.order.public_id, self._compot_mask()
+        for data in _data(self._staff(f"strc:{pid}:{m}:os:c:1").message.edit_text.call_args
+                          .kwargs["reply_markup"]):
+            self.assertLessEqual(len(data.encode()), 64, data)

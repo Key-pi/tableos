@@ -14,6 +14,7 @@ from apps.menu.catalog import (
 )
 from apps.menu.options import catalog_choices, choices_for, line_name
 from apps.menu.repositories import MenuItemRepository
+from apps.menu.stock import counted, item_state, stock_on
 from apps.orders.models import Order
 from apps.orders.services import (
     OrderFlowError,
@@ -104,7 +105,21 @@ def _ordering_hint(content, *, channel, session) -> list[str]:
     return lines
 
 
-def _item_line(item, *, showcase: bool, choices=None) -> str:
+# Stock (catalog step 3, owner 2026-11-07): never the number.
+STOCK_SUFFIX = {
+    "out": N_(" — нет в наличии"),
+    "low": N_(" · осталось мало"),
+}
+
+
+def _item_line(item, *, showcase: bool, choices=None, stock: str = "") -> str:
+    line = _price_line(item, showcase=showcase, choices=choices)
+    if stock in STOCK_SUFFIX:
+        line += _(STOCK_SUFFIX[stock])
+    return line
+
+
+def _price_line(item, *, showcase: bool, choices=None) -> str:
     variants = choices.variants if choices is not None else []
     if variants:
         # Variants with their own price (catalog step 2): from the lowest.
@@ -130,7 +145,7 @@ def _item_line(item, *, showcase: bool, choices=None) -> str:
 
 def _render_menu_category_view(
     *, partner, content, category, menu_items, session, channel=None, closed_when: str = "",
-    showcase: bool = False, choices=None,
+    showcase: bool = False, choices=None, stock=None,
 ) -> str:
     lines = [content.menu_header(partner_name=partner.name)]
     name = getattr(category, "full_name", category.name)
@@ -147,7 +162,10 @@ def _render_menu_category_view(
     else:
         for item in menu_items:
             item_choices = choices.get(item.id) if choices else None
-            lines.append(_item_line(item, showcase=showcase, choices=item_choices))
+            lines.append(_item_line(
+                item, showcase=showcase, choices=item_choices,
+                stock=stock.get(item.id, "") if stock else "",
+            ))
             if item.description:
                 lines.append(f"<i>{escape_html(_trim_menu_description(item.description))}</i>")
             lines.append("")
@@ -173,6 +191,17 @@ def _menu_tree(partner, channel, showcase: bool):
     if showcase:
         items = items.prefetch_related("custom_badges")
     return catalog_tree(partner.id, list(items))
+
+
+def _stock_states(partner, items, choices) -> dict:
+    """{item id: "out" | "low" | ""} while the stock module is on."""
+
+    if not stock_on(partner.id):
+        return {}
+    return {
+        item.id: item_state(item, choices[item.id].variants, on=True)
+        for item in items if item.track_stock
+    }
 
 
 def _pick(tree, category_id):
@@ -244,6 +273,7 @@ async def send_menu_view(
     closed = await sync_to_async(closed_category)(category)
     closed_when = schedule_label(closed) if closed is not None else ""
     choices = await sync_to_async(catalog_choices)(partner, menu_items)
+    stock = await sync_to_async(_stock_states)(partner, menu_items, choices)
     cart = None
     if channel is not None:
         cart = await sync_to_async(get_active_cart_for_telegram_user)(
@@ -260,6 +290,7 @@ async def send_menu_view(
         closed_when=closed_when,
         showcase=showcase,
         choices=choices,
+        stock=stock,
     )
     keyboard = build_menu_keyboard(
         categories=[entry["category"] for entry in tree],
@@ -272,6 +303,7 @@ async def send_menu_view(
         cart=cart,
         choose_way=[] if channel is not None else choose_way_buttons(content),
         choices=choices,
+        sold_out={item_id for item_id, state in stock.items() if state == "out"},
     )
     link = await sync_to_async(mini_app_link_for)(bot.token, partner.id)
     if link:
@@ -388,7 +420,8 @@ async def _choice_context(callback: CallbackQuery, bot: Bot):
     if item is None:
         await callback.answer(_("Эта позиция сейчас недоступна."), show_alert=True)
         return None
-    return partner, item, choices, pick
+    stock = await sync_to_async(counted)(item)
+    return partner, item, choices, pick, stock
 
 
 @router.callback_query(F.data.startswith("mo:"))
@@ -401,9 +434,9 @@ async def menu_choice_callback(callback: CallbackQuery, bot: Bot) -> None:
     context = await _choice_context(callback, bot)
     if context is None:
         return
-    partner, item, choices, pick = context
+    partner, item, choices, pick, stock = context
     if pick is None or not valid(choices, pick):
-        pick = starting_pick(choices)
+        pick = starting_pick(choices, stock=stock)
     group = over_limit(choices, pick)
     if group is not None:
         await callback.answer(
@@ -415,7 +448,7 @@ async def menu_choice_callback(callback: CallbackQuery, bot: Bot) -> None:
         partner_id=partner.id, telegram_id=callback.from_user.id
     )
     keyboard = build_choice_keyboard(
-        item, choices, pick, back_callback=f"menucat:{item.category_id}", cart=cart
+        item, choices, pick, back_callback=f"menucat:{item.category_id}", cart=cart, stock=stock
     )
     await _safe_edit_menu_message(
         callback.message, _render_choice_view(item, choices, pick), reply_markup=keyboard
@@ -430,7 +463,7 @@ async def menu_choice_add_callback(callback: CallbackQuery, bot: Bot) -> None:
     context = await _choice_context(callback, bot)
     if context is None:
         return
-    partner, item, choices, pick = context
+    partner, item, choices, pick, stock = context
     if pick is None or not valid(choices, pick):
         await callback.answer(_("Меню изменилось — выберите заново."), show_alert=True)
         return
@@ -448,7 +481,7 @@ async def menu_choice_add_callback(callback: CallbackQuery, bot: Bot) -> None:
         return
     await callback.answer(_("Добавлено в корзину."))
     keyboard = build_choice_keyboard(
-        item, choices, pick, back_callback=f"menucat:{item.category_id}", cart=cart
+        item, choices, pick, back_callback=f"menucat:{item.category_id}", cart=cart, stock=stock
     )
     try:
         await callback.message.edit_reply_markup(reply_markup=keyboard)

@@ -64,6 +64,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
                     "module_menu_enabled",
                     "module_showcase_enabled",
                     "module_options_enabled",
+                    "module_stock_enabled",
                 ),
             },
         ),

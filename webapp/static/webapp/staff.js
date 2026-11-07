@@ -305,6 +305,10 @@
       var chosen = {};
       var back = el("div", { class: "sheet-back", onclick: function (event) { if (event.target === back) back.remove(); } });
       var amounts = el("div", { class: "note" });
+      // «Вернуть на склад» (catalog step 3): off until ticked, shown only
+      // when the chosen lines can put goods back.
+      var restockBox = el("input", { type: "checkbox" });
+      var restock = el("label", { class: "switch", hidden: true }, el("span", { text: T.restock }), restockBox);
       var list = el("div");
       info.lines.forEach(function (line) {
         var box = el("input", { type: "checkbox", disabled: line.refunded, onchange: function (event) {
@@ -316,20 +320,24 @@
       });
       function ids() { return Object.keys(chosen); }
       function preview() {
-        if (!ids().length) { amounts.textContent = ""; return; }
+        if (!ids().length) { amounts.textContent = ""; restock.hidden = true; return; }
         api("refund_preview", { order: info.order, lines: ids() }).then(function (answer) {
-          if (answer.ok) amounts.textContent = t("refund_amounts", { money: answer.data.money, bonus: answer.data.bonus });
+          if (!answer.ok) return;
+          amounts.textContent = t("refund_amounts", { money: answer.data.money, bonus: answer.data.bonus });
+          restock.hidden = !answer.data.can_restock;
+          if (restock.hidden) restockBox.checked = false;
         });
       }
       back.appendChild(el("div", { class: "sheet", role: "dialog", style: "max-height:85vh;overflow:auto" },
-        el("p", null, el("b", { text: T.refund + " · #" + info.order })), list, amounts,
+        el("p", null, el("b", { text: T.refund + " · #" + info.order })), list, amounts, restock,
         el("div", { class: "acts" },
           el("button", { type: "button", class: "act", text: T.back, onclick: function () { back.remove(); } }),
           el("button", { type: "button", class: "act primary", text: T.next, onclick: function () {
             if (!ids().length) { toast(T.pick_lines); return; }
             chooser(T.refund_reason, info.reasons, true, function (reason, comment) {
               chooser(T.refund_method, info.methods, false, function (method) {
-                api("refund_do", { order: info.order, lines: ids(), reason: reason, method: method, comment: comment })
+                api("refund_do", { order: info.order, lines: ids(), reason: reason, method: method, comment: comment,
+                                   restock: !restock.hidden && restockBox.checked })
                   .then(function (answer) { back.remove(); after(answer, function () { return load(true); }); });
               });
             });
@@ -791,7 +799,10 @@
         variants.appendChild(el("label", { class: "choice" },
           el("input", { type: "radio", name: "sale-variant", checked: pick.variant === variant.id,
                         onchange: function () { pick.variant = variant.id; refresh(); } }),
-          el("span", { class: "grow", text: variant.name }), el("span", { class: "muted", text: money(variant.price) })));
+          el("span", { class: "grow", text: variant.name }),
+          // How many are left (catalog step 3); the till may sell below zero.
+          "left" in variant ? el("span", { class: "muted", text: t("left", { count: variant.left }) + " · " }) : null,
+          el("span", { class: "muted", text: money(variant.price) })));
       });
       box.appendChild(variants);
     }
@@ -872,7 +883,8 @@
               el("button", { type: "button", text: "+", onclick: function () { saleChange(item.id, null, [], 1); } }));
         grid.appendChild(el("div", { class: "call", style: "border-left-color:" + (quantity ? "var(--accent)" : "transparent") },
           el("div", null, el("div", { class: "what", text: item.name }),
-             el("div", { class: "meta", text: price + (quantity && item.choice !== "none" ? " · ×" + quantity : "") })),
+             el("div", { class: "meta", text: price + ("left" in item ? " · " + t("left", { count: item.left }) : "")
+                                              + (quantity && item.choice !== "none" ? " · ×" + quantity : "") })),
           control));
       });
     });

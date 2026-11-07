@@ -45,11 +45,12 @@ def build_menu_keyboard(
     subcategories=(),
     active_subcategory_id=None,
     choices=None,
+    sold_out=(),
 ) -> InlineKeyboardMarkup:
     """Top categories, the subcategories of the chosen one, then the items to
     add (only once the guest chose a way of ordering — ``has_session``; none
     while the category is out of its time), else the buttons that choose the
-    way."""
+    way. Nothing to add for an item with nothing left (``sold_out``, ids)."""
 
     rows: list[list[InlineKeyboardButton]] = []
 
@@ -74,6 +75,8 @@ def build_menu_keyboard(
 
     if has_session and supports_cart:
         for item in items:
+            if item.id in sold_out:
+                continue
             # An item with variants or add-ons opens its choice first
             # (catalog step 2, bot/keyboards/options.py).
             item_choices = (choices or {}).get(item.id)

@@ -16,6 +16,7 @@ from apps.bonuses.strategies import (
 )
 from apps.menu.models import MenuItem
 from apps.menu.options import ChoiceError, catalog_choices, resolve_choice
+from apps.menu.stock import take_for_walk_in_sale
 from apps.orders.models import Order
 from apps.partners.models import NetworkWallet
 from apps.partners.networks import shared_bonus_scope
@@ -509,6 +510,8 @@ def _register_walk_in_sale_from_menu_items(
             for item in preview.items
         ]
     )
+    # Stock (catalog step 3): the till takes its goods, below zero if need be.
+    take_for_walk_in_sale(sale)
     return sale
 
 

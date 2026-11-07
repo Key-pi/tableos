@@ -87,6 +87,7 @@ from apps.menu.options import (
     resolve_choice,
 )
 from apps.menu.repositories import MenuItemRepository
+from apps.menu.stock import counted, stock_on
 from apps.notifications.models import StaffNotification
 from apps.notifications.repositories import StaffNotificationRepository
 from apps.notifications.services import (
@@ -1272,15 +1273,20 @@ def _compose_staff_sale_view(
         .select_related("category")[:12]
     )
     choices = catalog_choices(partner_id, category_items)
+    stock = stock_on(partner_id)
     draft_keys = [key for key, quantity in items_map.items() if quantity > 0]
 
     def item_button(item):
+        label = item.name
+        if stock and item.track_stock and not choices[item.id].variants:
+            # The staff see how many are left (catalog step 3, owner 2026-11-07).
+            label += _(" · ост. {count}", count=item.stock_quantity)
         if not has_choices(item, choices[item.id]):
-            return (str(item.id), item.name, f"{Decimal(item.price):.2f}")
+            return (str(item.id), label, f"{Decimal(item.price):.2f}")
         price = f"{Decimal(price_from(item, choices[item.id])):.2f}"
         if choices[item.id].variants:
             price = _("от {price}", price=price)
-        return (str(item.id), item.name, price, f"so:{item.public_id}")
+        return (str(item.id), label, price, f"so:{item.public_id}")
 
     def draft_button(index, item):
         if "|" not in draft_keys[index]:
@@ -3339,7 +3345,8 @@ async def _staff_sale_choice_context(callback: CallbackQuery, bot: Bot, state: F
     if item is None:
         await callback.answer(_("Эта позиция сейчас недоступна."), show_alert=True)
         return None
-    return preview_data, item, choices, pick
+    stock = await sync_to_async(counted)(item)
+    return preview_data, item, choices, pick, stock
 
 
 @router.callback_query(
@@ -3352,7 +3359,7 @@ async def staff_sale_choice_handler(callback: CallbackQuery, bot: Bot, state: FS
     context = await _staff_sale_choice_context(callback, bot, state)
     if context is None:
         return
-    _preview_data, item, choices, pick = context
+    _preview_data, item, choices, pick, stock = context
     if pick is None or not choice_pick_valid(choices, pick):
         pick = starting_pick(choices)
     group = over_limit(choices, pick)
@@ -3372,7 +3379,7 @@ async def staff_sale_choice_handler(callback: CallbackQuery, bot: Bot, state: FS
         ))),
     ])
     keyboard = build_choice_keyboard(
-        item, choices, pick, back_callback="staffsale:pback", staff=True
+        item, choices, pick, back_callback="staffsale:pback", staff=True, stock=stock
     )
     try:
         await callback.message.edit_text(text, reply_markup=keyboard)
@@ -3391,7 +3398,7 @@ async def staff_sale_choice_add_handler(
     context = await _staff_sale_choice_context(callback, bot, state)
     if context is None:
         return
-    preview_data, item, choices, pick = context
+    preview_data, item, choices, pick, _stock = context
     if pick is None or not choice_pick_valid(choices, pick):
         await callback.answer(_("Меню изменилось — выберите заново."), show_alert=True)
         return

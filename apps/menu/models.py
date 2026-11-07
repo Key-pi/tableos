@@ -264,6 +264,18 @@ class MenuItem(PartnerBoundModel):
     )
     sku = models.CharField(max_length=64, blank=True, verbose_name=_lazy("Артикул"))
     barcode = models.CharField(max_length=64, blank=True, verbose_name=_lazy("Штрихкод"))
+    # Stock (catalog step 3, module «Остатки»): counted only with the tick;
+    # an item with variants counts each variant (MenuItemVariant.stock_quantity).
+    track_stock = models.BooleanField(
+        default=False, verbose_name=_lazy("Учитывать остаток"),
+        help_text=_lazy("Заказ списывает при оформлении, отмена возвращает. У позиции с "
+                        "вариантами остаток — у каждого варианта."),
+    )
+    stock_quantity = models.IntegerField(
+        default=0, verbose_name=_lazy("Остаток"),
+        help_text=_lazy("Сколько есть сейчас. Меньше нуля — продано на кассе больше, чем "
+                        "по учёту: поправьте."),
+    )
 
     CHANNEL_FIELDS = {
         "table": "available_at_table",
@@ -412,6 +424,10 @@ class MenuItemVariant(PartnerBoundModel):
     )
     is_available = models.BooleanField(default=True, verbose_name=_lazy("В наличии"))
     sort_order = models.PositiveIntegerField(default=100, verbose_name=_lazy("Порядок"))
+    stock_quantity = models.IntegerField(
+        default=0, verbose_name=_lazy("Остаток"),
+        help_text=_lazy("Когда у позиции включено «Учитывать остаток»."),
+    )
 
     class Meta:
         verbose_name = _lazy("вариант позиции")
@@ -509,3 +525,46 @@ class Modifier(PartnerBoundModel):
         if self.group_id and not self.partner_id:
             self.partner_id = self.group.partner_id
         return super().save(*args, **kwargs)
+
+
+class StockMovement(PartnerBoundModel):
+    """One change of an item's or variant's stock (catalog step 3): who or
+    what changed it and what is left. The source is named by its type and id
+    (an order, a quick sale, a refund), as in the bonus journal, so the menu
+    does not depend on orders and billing."""
+
+    class Reason(models.TextChoices):
+        ORDER = "order", _lazy("Заказ")
+        CANCEL = "cancel", _lazy("Отмена заказа")
+        QUICK_SALE = "quick_sale", _lazy("Быстрая продажа")
+        REFUND = "refund", _lazy("Возврат на склад")
+        COUNT = "count", _lazy("Пересчёт в Admin")
+
+    item = models.ForeignKey(
+        MenuItem, on_delete=models.CASCADE, related_name="stock_movements",
+        verbose_name=_lazy("Позиция"),
+    )
+    # A deleted variant takes its movements along: what an order took of it
+    # cannot go back to the item's own stock by mistake.
+    variant = models.ForeignKey(
+        MenuItemVariant, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="stock_movements", verbose_name=_lazy("Вариант"),
+    )
+    delta = models.IntegerField(verbose_name=_lazy("Изменение"))
+    balance_after = models.IntegerField(verbose_name=_lazy("Остаток после"))
+    reason = models.CharField(max_length=16, choices=Reason.choices, verbose_name=_lazy("Причина"))
+    source_type = models.CharField(max_length=32, blank=True, verbose_name=_lazy("Источник"))
+    source_id = models.CharField(max_length=64, blank=True, verbose_name=_lazy("Номер источника"))
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name=_lazy("Кто"),
+    )
+
+    class Meta:
+        verbose_name = _lazy("движение остатка")
+        verbose_name_plural = _lazy("Движение остатков")
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["source_type", "source_id"])]
+
+    def __str__(self) -> str:
+        return f"{self.item.name}: {self.delta:+d}"

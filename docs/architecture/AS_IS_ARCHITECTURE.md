@@ -279,7 +279,18 @@ apps.notifications.tasks` — цикл, разорванный только им
 строки заказа включает выбор, цена — его сумму (`OrderItem.variant`,
 `OrderItem.modifiers` — для отчётов и остатков), поэтому счёт, экран кухни и
 возвраты не менялись. При оформлении выбор проверяется заново
-(`apps/orders/services.py:stale_choice_message`).
+(`apps/orders/services.py:stale_choice_message`). Модуль «Остатки»
+(`module_stock_enabled`, позиции с `track_stock`; у позиции с вариантами —
+остаток варианта): заказ списывает при оформлении
+(`apps/menu/stock.py:reserve_for_order` из `create_order`), отмена
+возвращает (`release_order` из `transition_order_status`), корзина не берёт
+больше, чем есть (`check_room`), быстрая продажа списывает и может уйти ниже
+нуля (`take_for_walk_in_sale`), возврат кладёт на склад только с отметкой
+персонала (`refund_bill_lines(restock=True)`, `refund_can_restock`). Каждое
+изменение — `StockMovement` с остатком после; гость видит только «нет в
+наличии» и «осталось мало» (`state_of`), персонал — число. Admin: новое
+число на странице позиции — пересчёт (`count_stock`), сохранение остального
+поле остатка не пишет; «Движение остатков» — только чтение.
 
 1. `/start table_<номер>_<токен>` → `tables/services.py:activate_table_session`
    (в боте `visit_choice="ask"`). Каждая сессия принадлежит **визиту стола**
@@ -689,7 +700,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 940 тестов после правок демо-магазина, зелёные на SQLite и на
+- 984 теста после остатков каталога, зелёные на SQLite и на
   PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа

@@ -299,6 +299,11 @@
     if (!state.can_order) action = null;
     else if (category && category.closed) action = el("span", { class: "note", text: T.not_now });
     else if (off) action = el("span", { class: "note", text: T.not_sold_here });
+    // Stock (catalog step 3): nothing left — a note instead of «+»; what is
+    // already in the cart can still be taken out.
+    else if (item.stock === "out" && !(quantity > 0 && item.choice === "none")) {
+      action = el("span", { class: "note", text: T.sold_out });
+    }
     else if (item.choice && item.choice !== "none") {
       if (onPage) return null;
       action = el("span", { class: "pick" },
@@ -324,6 +329,11 @@
     return action;
   }
 
+  // «Осталось мало», never the number (owner, 2026-11-07).
+  function stockNote(item) {
+    return item.stock === "low" ? el("div", { class: "stock-note", text: T.few_left }) : null;
+  }
+
   function badgesRow(item) {
     if (!item.badges || !item.badges.length) return null;
     var row = el("div", { class: "badges" });
@@ -345,7 +355,8 @@
   // picked to start with; the guest changes what they want.
   function startingPick(item) {
     var pick = { variant: null, options: {} };
-    if (item.variants && item.variants.length) pick.variant = item.variants[0].id;
+    var onSale = (item.variants || []).filter(function (variant) { return variant.stock !== "out"; });
+    if (onSale.length) pick.variant = onSale[0].id;
     (item.groups || []).forEach(function (group) {
       if (group.min > 0 && group.max === 1 && group.options.length) pick.options[group.options[0].id] = true;
     });
@@ -381,10 +392,14 @@
     if (item.variants && item.variants.length) {
       var variants = el("fieldset", { class: "choice-group" }, el("legend", { text: T.variant }));
       item.variants.forEach(function (variant) {
-        variants.appendChild(el("label", { class: "choice" },
+        var out = variant.stock === "out";
+        variants.appendChild(el("label", { class: "choice" + (out ? " out" : "") },
           el("input", { type: "radio", name: "variant", value: variant.id, checked: pick.variant === variant.id,
+                        disabled: out,
                         onchange: function () { pick.variant = variant.id; onChange(); } }),
-          el("span", { class: "grow", text: variant.name }),
+          el("span", { class: "grow" }, variant.name,
+            out ? el("span", { class: "muted", text: " · " + T.sold_out }) : null,
+            variant.stock === "low" ? el("span", { class: "few", text: " · " + T.few_left }) : null),
           el("span", { class: "muted", text: money(variant.price) })));
       });
       box.appendChild(variants);
@@ -463,12 +478,14 @@
     } else {
       photo.appendChild(initial(item.name));
     }
-    return el("div", { class: "card" + (off || (category && category.closed) ? " off" : "") },
+    var dim = off || (category && category.closed) || item.stock === "out";
+    return el("div", { class: "card" + (dim ? " off" : "") },
       photo,
       el("div", { class: "body" },
         badgesRow(item),
         el("div", { class: "name", onclick: open, text: item.name }),
         item.portion ? el("div", { class: "portion", text: item.portion }) : null,
+        stockNote(item),
         item.description ? el("div", { class: "desc", onclick: open, text: item.description }) : null,
         el("div", { class: "foot" }, priceLine(item), action)));
   }
@@ -494,12 +511,13 @@
     if (badgesRow(item)) body.appendChild(badgesRow(item));
     body.appendChild(el("h1", { text: item.name }));
     if (item.portion) body.appendChild(el("div", { class: "portion", text: item.portion }));
+    if (stockNote(item)) body.appendChild(stockNote(item));
     if (category && category.closed) {
       body.appendChild(el("div", { class: "schedule", text: "🕐 " + t("sold_when", { when: category.schedule }) }));
     }
     body.appendChild(el("div", { class: "foot" }, priceLine(item), itemAction(item, category, true)));
     if (item.description) body.appendChild(el("p", { class: "full-desc", text: item.description }));
-    var orderable = state.can_order && !(category && category.closed)
+    var orderable = state.can_order && !(category && category.closed) && item.stock !== "out"
       && !(state.cart.channel && item.sold_in.indexOf(state.cart.channel) === -1);
     if (item.choice && item.choice !== "none" && orderable) {
       var addButton = el("button", { type: "button", class: "add-picked",

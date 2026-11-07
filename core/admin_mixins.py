@@ -239,7 +239,13 @@ class ScopedAdminMixin(admin.ModelAdmin):
             deleted_object.delete()
 
         for instance in instances:
-            instance.save()
+            # A formset may save its rows its own way (the menu never writes
+            # back a stock level an order changed meanwhile).
+            save_instance = getattr(formset, "save_instance", None)
+            if save_instance is not None:
+                save_instance(instance)
+            else:
+                instance.save()
 
         formset.save_m2m()
 
