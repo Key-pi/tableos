@@ -44,7 +44,9 @@ flowchart LR
 `docker-compose.yml` объявляет `db`, `redis` (оба с healthcheck), разовый
 `init` (`infrastructure/docker/init.sh`: проверка `BOT_TOKEN_ENCRYPTION_KEY`,
 `migrate`, `seed_baseline_demo --keep-existing`, если `DEMO_SEED` не
-`false`), затем `web` (Django `runserver`), `worker` (очередь `default`,
+`false`; демо — четыре заведения с разными настройками: сеть Night Owl из
+двух точек, одна со всеми модулями, кафе Riverstone и магазин растений
+«Зелена полиця», `apps/partners/management/demo_data.py`), затем `web` (Django `runserver`), `worker` (очередь `default`,
 `WORKER_CONCURRENCY` процессов), `broadcasts` (очередь `broadcasts`, один
 процесс `--pool=solo`), `beat` и `bot` (`manage.py runbot --wait --processes ${BOT_PROCESSES:-1}`); они
 стартуют только после успешного `init`. Хосты базы и Redis внутри Docker
@@ -687,7 +689,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 932 теста после вариантов и добавок каталога (PQ-049), зелёные на SQLite и на
+- 938 тестов после нового демо-сида, зелёные на SQLite и на
   PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа

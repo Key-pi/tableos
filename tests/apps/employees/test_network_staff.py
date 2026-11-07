@@ -106,6 +106,38 @@ class NetworkStaffTests(TestCase):
         self.assertEqual(staff_in(self.kharkiv, OWNER_TG), real)
         self.assertIsNone(real.mirrored_from)
 
+    def test_the_copies_follow_a_new_telegram_of_the_person(self):
+        # The owner moved to another Telegram account in their own profile
+        # (found by the demo seed, 2026-11-07): the bot of the other venues
+        # must know them by the new one, not the old one.
+        sync_network_staff(self.network.id)
+        own = EmployeeProfile.objects.get(user=self.owner)
+        own.telegram_account = TelegramAccount.objects.create(telegram_id=9910099)
+        own.save()
+        sync_network_staff(self.network.id)
+        for venue in (self.kharkiv, self.odesa):
+            self.assertIsNone(staff_in(venue, OWNER_TG), venue.name)
+            self.assertEqual(staff_in(venue, 9910099).mirrored_from, own, venue.name)
+
+    def test_a_new_telegram_that_has_a_real_profile_there_switches_the_copy_off(self):
+        sync_network_staff(self.network.id)
+        waiter_account = TelegramAccount.objects.create(telegram_id=WAITER_TG)
+        waiter = EmployeeProfile.objects.create(
+            partner=self.kharkiv, telegram_account=waiter_account,
+            user=User.objects.create_user(
+                username="kharkiv_waiter", password="x", partner=self.kharkiv,
+                role=User.Role.WAITER,
+            ),
+        )
+        own = EmployeeProfile.objects.get(user=self.owner)
+        own.telegram_account = waiter_account
+        own.save()
+        sync_network_staff(self.network.id)
+        self.assertEqual(staff_in(self.kharkiv, WAITER_TG), waiter)  # theirs, not touched
+        old_copy = EmployeeProfile.objects.get(partner=self.kharkiv, mirrored_from=own)
+        self.assertFalse(old_copy.is_active)
+        self.assertEqual(staff_in(self.odesa, WAITER_TG).mirrored_from, own)
+
     def test_syncing_twice_changes_nothing(self):
         sync_network_staff(self.network.id)
         count = EmployeeProfile.objects.count()

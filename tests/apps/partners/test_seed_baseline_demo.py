@@ -1,5 +1,10 @@
-"""Demo data used by Docker and for manual testing (`seed_baseline_demo`)."""
+"""Demo data used by Docker and for manual testing (`seed_baseline_demo`).
 
+Four venues set up differently (owner, 2026-11-07): Night Owl · Поділ with
+everything on, Night Owl · Оболонь in its network, Riverstone Cafe and the
+plant shop «Зелена полиця»."""
+
+import re
 from decimal import Decimal
 from io import StringIO
 from unittest.mock import patch
@@ -11,15 +16,22 @@ from apps.analytics.models import TrafficSource
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import get_bonus_ledger_balance
 from apps.employees.models import EmployeeProfile
-from apps.menu.models import MenuCategory, MenuItem
-from apps.partners.models import BotInstance, OpeningHours, Partner, PartnerBotSettings
+from apps.menu.models import MenuCategory, MenuItem, MenuItemVariant, ModifierGroup
+from apps.menu.options import choices_for, needs_choice
+from apps.orders.kitchen import screen_by_token
+from apps.orders.models import KitchenScreen
+from apps.partners.models import BotInstance, Network, OpeningHours, Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.users.models import GuestProfile, TelegramAccount, User
 from bot.services.runtime import load_active_bot_configs
 
 CAFE_TOKEN = "111111111:AAEcafecafecafecafecafecafecafe"
 HOOKAH_TOKEN = "222222222:AAEhookahhookahhookahhookahhook"
+SHOP_TOKEN = "333333333:AAEshopshopshopshopshopshopshops"
 TESTER_ID = 555000111
+PODIL, OBOLON, CAFE, SHOP = (
+    "night-owl-hookah", "night-owl-obolon", "riverstone-cafe", "green-shelf-plants"
+)
 
 
 def _seed(**options) -> str:
@@ -29,6 +41,8 @@ def _seed(**options) -> str:
         "hookah_bot_username": "",
         "cafe_bot_token": "",
         "cafe_bot_username": "",
+        "shop_bot_token": "",
+        "shop_bot_username": "",
         "telegram_id": "",
         "telegram_username": "",
     }
@@ -37,12 +51,16 @@ def _seed(**options) -> str:
     return out.getvalue()
 
 
+def _settings(slug) -> PartnerBotSettings:
+    return PartnerBotSettings.objects.get(partner__slug=slug)
+
+
 # The seed hashes a password for every demo user; a fast hasher keeps this quick.
 @override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"])
 class SeedBaselineDemoTests(TestCase):
     def test_demo_menu_is_ukrainian_and_old_names_are_renamed_in_place(self):
         _seed()
-        cafe = Partner.objects.get(slug="riverstone-cafe")
+        cafe = Partner.objects.get(slug=CAFE)
         MenuCategory.objects.filter(partner=cafe, name="Сніданки").update(name="Завтраки")
         BonusProgram.objects.filter(partner=cafe, name="Кешбек 5%").update(name="Cashback 5%")
 
@@ -58,62 +76,132 @@ class SeedBaselineDemoTests(TestCase):
             "Кешбек 5%",
         )
 
-    def test_fresh_seed_builds_both_venues_with_pickup_and_inactive_bots(self):
+    def test_four_venues_set_up_differently(self):
         output = _seed()
 
-        hookah = Partner.objects.get(slug="night-owl-hookah")
-        cafe = Partner.objects.get(slug="riverstone-cafe")
-        for partner in (hookah, cafe):
-            settings = PartnerBotSettings.objects.get(partner=partner)
-            self.assertTrue(settings.module_pickup_enabled)
-            self.assertTrue(settings.transfer_payment_details)
-            bot = partner.bot_instances.get()
+        self.assertEqual(
+            set(Partner.objects.values_list("slug", flat=True)), {PODIL, OBOLON, CAFE, SHOP}
+        )
+        for slug in (PODIL, OBOLON, CAFE, SHOP):
+            _settings(slug).full_clean()
+        # Night Owl · Поділ: everything on.
+        podil = _settings(PODIL)
+        modules = [f.name for f in podil._meta.concrete_fields if f.name.startswith("module_")]
+        self.assertEqual([name for name in modules if not getattr(podil, name)], [])
+        self.assertTrue(
+            podil.staff_call_waiter_enabled and podil.staff_call_bartender_enabled
+            and podil.staff_call_hookah_enabled
+        )
+        # The cafe: tables and delivery, no post, staff in the bot, no Russian.
+        cafe = _settings(CAFE)
+        self.assertTrue(cafe.module_tables_enabled and cafe.module_delivery_enabled)
+        self.assertFalse(cafe.module_shipping_enabled or cafe.module_staff_screen_enabled)
+        self.assertEqual((cafe.language_ru, cafe.language_en), (False, True))
+        lunch = MenuCategory.objects.get(partner__slug=CAFE, name="Бізнес-ланч")
+        self.assertEqual(lunch.available_weekdays, [0, 1, 2, 3, 4])
+        # The shop: no tables, kitchen or calls; pickup, courier and post.
+        shop = _settings(SHOP)
+        self.assertFalse(
+            shop.module_tables_enabled or shop.module_kitchen_screen_enabled
+            or shop.module_staff_call_enabled
+        )
+        self.assertTrue(shop.module_shipping_enabled and shop.module_quick_sale_enabled)
+        self.assertFalse(Table.objects.filter(partner__slug=SHOP).exists())
+        self.assertFalse(OpeningHours.objects.filter(partner__slug=SHOP, scope="").exists())
+        self.assertEqual(OpeningHours.objects.filter(partner__slug=PODIL).count(), 14)
+        self.assertIn(
+            "доставка: ежедневно 10:00–22:00, 60 грн, бесплатно от 800 грн", output
+        )
+        # Bots: none runnable yet; the second point has none of its own.
+        for slug in (PODIL, CAFE, SHOP):
+            bot = BotInstance.objects.get(partner__slug=slug)
             self.assertFalse(bot.is_active)
             self.assertEqual(bot.token_status_label, "placeholder")
-        self.assertEqual(OpeningHours.objects.filter(partner=hookah).count(), 7)
-        cafe_settings = PartnerBotSettings.objects.get(partner=cafe)
-        self.assertTrue(cafe_settings.module_delivery_enabled)
-        self.assertEqual(cafe_settings.delivery_fee, Decimal("60.00"))
-        self.assertFalse(PartnerBotSettings.objects.get(partner=hookah).module_delivery_enabled)
-        # Shipping by post (PQ-034): only the cafe, only its beans and tea.
-        self.assertTrue(cafe_settings.module_shipping_enabled)
-        self.assertFalse(PartnerBotSettings.objects.get(partner=hookah).module_shipping_enabled)
-        shipped = set(
-            MenuItem.objects.filter(partner=cafe, available_for_shipping=True).values_list(
-                "public_id", flat=True
-            )
-        )
-        self.assertEqual(shipped, {"CAFBN001", "CAFBN002", "CAFBN003"})
-        self.assertFalse(
-            MenuItem.objects.filter(partner=hookah, available_for_shipping=True).exists()
-        )
-        self.assertIn(
-            "доставка: включена, ежедневно 10:00–22:00, 60 грн, бесплатно от 800 грн", output
-        )
-        # The cafe has no common hours (pickup always open), only delivery hours.
-        self.assertFalse(OpeningHours.objects.filter(partner=cafe, scope="").exists())
+        self.assertFalse(BotInstance.objects.filter(partner__slug=OBOLON).exists())
+        self.assertEqual(load_active_bot_configs(), [])
+        self.assertTrue(User.objects.get(username="platform_admin").is_superuser)
+        for env_name in ("DEMO_CAFE_BOT_TOKEN", "DEMO_SHOP_BOT_TOKEN", "DEMO_TELEGRAM_ID"):
+            self.assertIn(env_name, output)
+
+    def test_the_night_owl_network(self):
+        _seed()
+        network = Network.objects.get()
         self.assertEqual(
-            OpeningHours.objects.filter(partner=cafe, scope="delivery").count(), 7
+            set(network.points.values_list("slug", flat=True)), {PODIL, OBOLON}
         )
-        self.assertFalse(
-            MenuItem.objects.get(partner=hookah, public_id="SMKHK001").available_for_pickup
+        self.assertEqual(network.bonus_mode, Network.BonusMode.SHARED)
+        self.assertEqual(network.bot.partner.slug, PODIL)
+        # The network's owners and its manager work in the second point too.
+        copies = EmployeeProfile.objects.filter(
+            partner__slug=OBOLON, mirrored_from__isnull=False, is_active=True
+        )
+        self.assertEqual(
+            sorted(copies.values_list("mirrored_from__user__username", flat=True)),
+            ["smoke_manager_1", "smoke_owner_1", "smoke_owner_2"],
         )
         self.assertTrue(
-            MenuItem.objects.get(partner=cafe, public_id="CAFBR001").available_for_pickup
+            TrafficSource.objects.get(partner__slug=PODIL, code="nightowl").whole_network
         )
-        self.assertTrue(User.objects.get(username="platform_admin").is_superuser)
-        self.assertIn("DEMO_CAFE_BOT_TOKEN", output)
-        self.assertIn("DEMO_TELEGRAM_ID", output)
-        # No bot is runnable yet, so `runbot` has nothing to start.
-        self.assertEqual(load_active_bot_configs(), [])
+        # Its own menu; the kitchen part has no screen there.
+        self.assertTrue(MenuItem.objects.filter(partner__slug=OBOLON, public_id="OBLHK001"))
+        self.assertEqual(
+            list(KitchenScreen.objects.filter(partner__slug=OBOLON).values_list("shows",
+                                                                               flat=True)),
+            ["bar"],
+        )
+
+    def test_the_catalogue_shows_every_step(self):
+        _seed()
+        # Subcategories and a schedule past midnight.
+        mixes = MenuCategory.objects.get(partner__slug=PODIL, name="Фірмові мікси")
+        self.assertEqual(mixes.parent.name, "Кальяни")
+        alcohol = MenuCategory.objects.get(partner__slug=PODIL, name="Алкоголь")
+        self.assertGreater(alcohol.available_from, alcohol.available_until)
+        # Variants and add-ons, through a category and its parent.
+        zz = MenuItem.objects.select_related("category__parent").get(public_id="PLTEZ001")
+        choices = choices_for(zz)
+        self.assertEqual(len(choices.variants), 3)
+        self.assertEqual(
+            [entry.group.name for entry in choices.groups], ["Кашпо", "Пересадка", "Подарунок"]
+        )
+        steak = MenuItem.objects.select_related("category").get(public_id="CAFMN004")
+        self.assertTrue(needs_choice(steak))  # doneness is required
+        # The shop's showcase: SKU and barcode everywhere, large plants not by post.
+        shop_items = MenuItem.objects.filter(partner__slug=SHOP)
+        self.assertFalse(shop_items.filter(sku="").exists() or shop_items.filter(barcode=""))
+        self.assertFalse(MenuItem.objects.get(public_id="PLTBG001").available_for_shipping)
+        self.assertTrue(MenuItem.objects.get(public_id="PLTEZ001").available_for_shipping)
+        for item in MenuItem.objects.all():
+            item.full_clean()
 
     def test_rerun_is_idempotent(self):
         _seed()
+        counts = (
+            MenuItemVariant.objects.count(), ModifierGroup.objects.count(),
+            KitchenScreen.objects.count(), EmployeeProfile.objects.count(),
+        )
         _seed()
-        cafe = Partner.objects.get(slug="riverstone-cafe")
+        cafe = Partner.objects.get(slug=CAFE)
         self.assertEqual(Table.objects.filter(partner=cafe).count(), 12)
         self.assertEqual(EmployeeProfile.objects.filter(partner=cafe).count(), 8)
         self.assertEqual(BotInstance.objects.filter(partner=cafe).count(), 1)
+        self.assertEqual(Network.objects.count(), 1)
+        self.assertEqual(
+            (
+                MenuItemVariant.objects.count(), ModifierGroup.objects.count(),
+                KitchenScreen.objects.count(), EmployeeProfile.objects.count(),
+            ),
+            counts,
+        )
+
+    def test_kitchen_screen_links_are_shown_once_and_work(self):
+        output = _seed()
+        tokens = re.findall(r"/app/screen/#(\S+)", output)
+        self.assertEqual(len(tokens), KitchenScreen.objects.count())
+        self.assertTrue(all(screen_by_token(token) for token in tokens))
+        output = _seed()
+        self.assertNotIn("/app/screen/#", output)
+        self.assertIn("ссылка выдана раньше", output)
 
     def test_tokens_and_tester_make_everything_testable(self):
         output = _seed(
@@ -121,6 +209,8 @@ class SeedBaselineDemoTests(TestCase):
             cafe_bot_username="@my_cafe_test_bot",
             hookah_bot_token=HOOKAH_TOKEN,
             hookah_bot_username="my_hookah_test_bot",
+            shop_bot_token=SHOP_TOKEN,
+            shop_bot_username="my_shop_test_bot",
             telegram_id=str(TESTER_ID),
             telegram_username="@tester",
         )
@@ -128,26 +218,28 @@ class SeedBaselineDemoTests(TestCase):
         configs = load_active_bot_configs()
         self.assertEqual(
             sorted(config.username for config in configs),
-            ["my_cafe_test_bot", "my_hookah_test_bot"],
+            ["my_cafe_test_bot", "my_hookah_test_bot", "my_shop_test_bot"],
         )
         tester = TelegramAccount.objects.get(telegram_id=TESTER_ID)
         self.assertEqual(tester.username, "tester")
-        for slug, owner in (
-            ("riverstone-cafe", "cafe_owner_1"),
-            ("night-owl-hookah", "smoke_owner_1"),
-        ):
+        for slug, owner in ((CAFE, "cafe_owner_1"), (PODIL, "smoke_owner_1"),
+                            (SHOP, "plant_owner_1")):
             employee = EmployeeProfile.objects.get(partner__slug=slug, user__username=owner)
             self.assertEqual(employee.telegram_account, tester)
             self.assertTrue(employee.notify_on_order_created)
             guest = GuestProfile.objects.get(partner__slug=slug, telegram_account=tester)
-            self.assertEqual(guest.loyalty_balance, Decimal("500.00"))
             self.assertEqual(
                 get_bonus_ledger_balance(partner_id=guest.partner_id, guest_id=guest.id),
                 Decimal("500.00"),
             )
+        # In the second point the tester works as the network's owner.
+        copy = EmployeeProfile.objects.get(partner__slug=OBOLON, telegram_account=tester)
+        self.assertEqual(copy.mirrored_from.user.username, "smoke_owner_1")
+        self.assertTrue(copy.is_active)
         self.assertIn("https://t.me/my_cafe_test_bot?start=table_1_river_tbl_01", output)
         self.assertIn("https://t.me/my_cafe_test_bot?start=src_instagram", output)
-        self.assertEqual(TrafficSource.objects.filter(partner__slug="riverstone-cafe").count(), 2)
+        # The second point's tables open the network's bot.
+        self.assertIn("https://t.me/my_hookah_test_bot?start=table_1_obolon_tbl_01", output)
 
         # Rerun: no second credit, binding kept.
         _seed(
@@ -155,11 +247,10 @@ class SeedBaselineDemoTests(TestCase):
             cafe_bot_username="my_cafe_test_bot",
             telegram_id=str(TESTER_ID),
         )
-        self.assertEqual(BonusTransaction.objects.filter(guest__telegram_account=tester).count(), 2)
+        self.assertEqual(BonusTransaction.objects.filter(guest__telegram_account=tester).count(), 3)
         self.assertEqual(
-            EmployeeProfile.objects.get(
-                partner__slug="riverstone-cafe", user__username="cafe_owner_1"
-            ).telegram_account,
+            EmployeeProfile.objects.get(partner__slug=CAFE, user__username="cafe_owner_1")
+            .telegram_account,
             tester,
         )
         # A real token is not dropped when it is no longer passed.
@@ -193,18 +284,34 @@ class SeedBaselineDemoTests(TestCase):
 
     def test_keep_existing_on_empty_database_seeds_everything(self):
         _seed(keep_existing=True)
-        self.assertEqual(
-            Partner.objects.filter(slug__in=["riverstone-cafe", "night-owl-hookah"]).count(), 2
-        )
+        self.assertEqual(Partner.objects.count(), 4)
         self.assertTrue(MenuItem.objects.filter(public_id="CAFBR001").exists())
+        self.assertEqual(Network.objects.get().points.count(), 2)
 
-    def test_same_token_for_both_venues_is_refused_before_any_change(self):
+    def test_keep_existing_adds_a_missing_venue_and_its_network(self):
+        # A database seeded before the shop and the second point existed:
+        # Docker's start adds them and makes the network.
+        _seed()
+        Partner.objects.filter(slug__in=[OBOLON, SHOP]).delete()
+        Partner.objects.filter(slug=PODIL).update(network=None)
+        Network.objects.all().delete()
+
+        output = _seed(keep_existing=True)
+
+        self.assertIn(f"({OBOLON}, создано)", output)
+        self.assertIn(f"({SHOP}, создано)", output)
+        self.assertIn(f"({PODIL}, уже было)", output)
+        network = Network.objects.get()
+        self.assertEqual(set(network.points.values_list("slug", flat=True)), {PODIL, OBOLON})
+        self.assertEqual(network.bot.partner.slug, PODIL)
+
+    def test_same_token_for_two_venues_is_refused_before_any_change(self):
         with self.assertRaisesMessage(CommandError, "Один и тот же токен"):
             _seed(
                 cafe_bot_token=CAFE_TOKEN,
                 cafe_bot_username="a_cafe_bot",
-                hookah_bot_token=CAFE_TOKEN,
-                hookah_bot_username="a_hookah_bot",
+                shop_bot_token=CAFE_TOKEN,
+                shop_bot_username="a_shop_bot",
             )
         self.assertFalse(Partner.objects.exists())
 

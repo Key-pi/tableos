@@ -92,6 +92,23 @@ def _bring_in_step(copy: EmployeeProfile, own: EmployeeProfile) -> None:
         user.save(update_fields=user_changed)
 
 
+def _follow_telegram(copy: EmployeeProfile, own: EmployeeProfile) -> bool:
+    """The copy takes the person's current Telegram (they may have moved to
+    another account in their own profile). False — a real staff profile in
+    that venue already has it: theirs is not touched, the copy is not needed."""
+
+    if copy.telegram_account_id == own.telegram_account_id:
+        return True
+    taken = EmployeeProfile.objects.filter(
+        partner_id=copy.partner_id, telegram_account_id=own.telegram_account_id
+    ).exclude(pk=copy.pk)
+    if taken.exists():
+        return False
+    copy.telegram_account_id = own.telegram_account_id
+    copy.save(update_fields=["telegram_account", "updated_at"])
+    return True
+
+
 def _make_copy(own: EmployeeProfile, venue_id) -> None:
     account = own.telegram_account
     with transaction.atomic():
@@ -125,7 +142,7 @@ def sync_network_staff(network_id) -> None:
     )
     for copy in copies.select_related("user", "mirrored_from"):
         own = wanted.pop((copy.mirrored_from_id, copy.partner_id), None)
-        if own is None:
+        if own is None or not _follow_telegram(copy, own):
             _switch_off(copy)
         else:
             _bring_in_step(copy, own)

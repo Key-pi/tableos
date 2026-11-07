@@ -1,18 +1,25 @@
-"""Demo data for local testing: two venues, staff, tables, menu, bonuses.
+"""Demo data for local testing: four venues set up differently.
+
+What the venues are — ``apps/partners/management/demo_data.py``: Night Owl
+(two points in one network, one of them with everything on), Riverstone Cafe
+and the house-plant shop «Зелена полиця».
 
 Every option also reads an environment variable (see ``.env.example``), so the
 Docker ``init`` service seeds from ``.env`` with no arguments:
 
-- ``DEMO_CAFE_BOT_TOKEN`` / ``DEMO_HOOKAH_BOT_TOKEN`` — BotFather tokens; the
-  bot username is looked up with ``getMe`` unless ``DEMO_*_BOT_USERNAME`` is
-  set. Without a token the venue's bot stays inactive.
-- ``DEMO_TELEGRAM_ID`` — your own Telegram user id: it becomes the first owner
-  of both venues (``/staff`` works for you) and gets start bonuses as a guest.
+- ``DEMO_HOOKAH_BOT_TOKEN`` / ``DEMO_CAFE_BOT_TOKEN`` / ``DEMO_SHOP_BOT_TOKEN``
+  — BotFather tokens; the bot username is looked up with ``getMe`` unless
+  ``DEMO_*_BOT_USERNAME`` is set. Without a token the venue's bot stays
+  inactive. The Night Owl bot serves both points of the network.
+- ``DEMO_TELEGRAM_ID`` — your own Telegram user id: it becomes an owner of
+  every venue (the owner of the Night Owl network works in both points) and
+  gets start bonuses as a guest.
 
 ``--keep-existing`` (used by Docker on every start) creates a venue only when
 it is missing and otherwise only applies bot tokens and your Telegram binding,
-so changes made in Admin survive a restart. Without it the demo catalogue is
-reset to these defaults. ``docker compose down -v`` wipes everything.
+so changes made in Admin survive a restart. Without it the demo venues are
+reset to these defaults (photos uploaded in Admin are kept).
+``docker compose down -v`` wipes everything.
 """
 
 from __future__ import annotations
@@ -21,127 +28,41 @@ import json
 import os
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
-from datetime import time
 from decimal import Decimal
 
+from django.conf import settings as django_settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
+from django.urls import reverse
 
 from apps.analytics.models import TrafficSource
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import assert_bonus_balance_reconciled, sync_bonus_balance_from_ledger
 from apps.employees.models import EmployeeProfile
-from apps.menu.models import MenuCategory, MenuItem
-from apps.partners.models import BotInstance, OpeningHours, Partner, PartnerBotSettings
+from apps.employees.network_staff import sync_network_staff
+from apps.menu.models import (
+    MenuBadge,
+    MenuCategory,
+    MenuItem,
+    MenuItemAttribute,
+    MenuItemVariant,
+    Modifier,
+    ModifierGroup,
+)
+from apps.orders.kitchen import issue_screen_link
+from apps.orders.models import KitchenScreen
+from apps.partners.management import demo_data as demo
+from apps.partners.models import BotInstance, Network, OpeningHours, Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.users.constants import AdminAccessPreset
 from apps.users.models import AdminAccessProfile, GuestProfile, TelegramAccount
 from core.security.environment import is_production
 
-HOOKAH_SLUG = "night-owl-hookah"
-CAFE_SLUG = "riverstone-cafe"
+# Kept for imports elsewhere: the first two venues' slugs.
+HOOKAH_SLUG = demo.PODIL
+CAFE_SLUG = demo.CAFE
 START_BONUS_KEY = "demo-seed:start-bonus"
-
-
-@dataclass(frozen=True)
-class StaffSeed:
-    username: str
-    email: str
-    first_name: str
-    last_name: str
-    role: str
-    title: str
-    hourly_rate: Decimal
-    commission_rate: Decimal
-    telegram_id: int
-    telegram_username: str
-
-
-@dataclass(frozen=True)
-class TableSeed:
-    number: int
-    name: str
-    seats: int
-    qr_token: str
-
-
-@dataclass(frozen=True)
-class MenuItemSeed:
-    public_id: str
-    name: str
-    price: Decimal
-    sort_order: int
-    description: str = ""
-
-
-@dataclass(frozen=True)
-class VenueSeed:
-    slug: str
-    name: str
-    phone: str
-    bot_username: str
-    bot_display_name: str
-    token_option: str
-    username_option: str
-    env_name: str
-
-
-VENUES = (
-    VenueSeed(
-        slug=HOOKAH_SLUG,
-        name="Night Owl Hookah Lounge",
-        phone="+380671110101",
-        bot_username="night_owl_hookah_bot",
-        bot_display_name="Night Owl Hookah Bot",
-        token_option="hookah_bot_token",
-        username_option="hookah_bot_username",
-        env_name="DEMO_HOOKAH_BOT_TOKEN",
-    ),
-    VenueSeed(
-        slug=CAFE_SLUG,
-        name="Riverstone Cafe",
-        phone="+380672220202",
-        bot_username="riverstone_cafe_bot",
-        bot_display_name="Riverstone Cafe Bot",
-        token_option="cafe_bot_token",
-        username_option="cafe_bot_username",
-        env_name="DEMO_CAFE_BOT_TOKEN",
-    ),
-)
-
-# The owner whose Telegram is replaced by DEMO_TELEGRAM_ID in each venue.
-TESTER_OWNER_USERNAME = {HOOKAH_SLUG: "smoke_owner_1", CAFE_SLUG: "cafe_owner_1"}
-
-def _hours_text(partner: Partner, module: str) -> str:
-    from apps.partners.opening_hours import intervals_for
-
-    hours = intervals_for(partner, module)
-    if not hours:
-        return "открыто всегда"
-    return f"ежедневно {hours[0].opens_at:%H:%M}–{hours[0].closes_at:%H:%M}"
-
-
-def _payment_options(settings: PartnerBotSettings, module: str) -> str:
-    options = []
-    if getattr(settings, f"{module}_pay_transfer"):
-        options.append("переводом заранее")
-    if getattr(settings, f"{module}_pay_on_receipt"):
-        options.append("при получении")
-    return " или ".join(options) or "не настроена"
-
-
-BONUS_PROGRAM_NAMES = {
-    "Visit reward": "Бонус за візит",
-    "Cashback 5%": "Кешбек 5%",
-    "Walk-in cashback 5%": "Кешбек 5% на касі",
-    "Every 5th order bonus": "Бонус за кожне 5-те замовлення",
-}
-TRANSFER_DETAILS = (
-    "Карта 4149 0000 0000 0000 (демо), получатель ФОП Демо Демо. "
-    "В комментарии к переводу укажите ваш телефон."
-)
 
 
 def _env(name: str, default: str = "") -> str:
@@ -170,10 +91,36 @@ def fetch_bot_username(token: str) -> str:
     return username
 
 
+def _hours_text(partner: Partner, module: str) -> str:
+    from apps.partners.opening_hours import intervals_for
+
+    hours = intervals_for(partner, module)
+    if not hours:
+        return "открыто всегда"
+    return f"ежедневно {hours[0].opens_at:%H:%M}–{hours[0].closes_at:%H:%M}"
+
+
+def _payment_options(settings: PartnerBotSettings, module: str) -> str:
+    options = []
+    if getattr(settings, f"{module}_pay_transfer"):
+        options.append("переводом заранее")
+    if getattr(settings, f"{module}_pay_on_receipt"):
+        options.append("при получении")
+    return " или ".join(options) or "не настроена"
+
+
+def _portion(text: str):
+    if not text:
+        return None, ""
+    amount, unit = text.split()
+    return Decimal(amount), unit
+
+
 class Command(BaseCommand):
     help = (
-        "Демо-данные для локальной проверки: два заведения (кальянная и кафе), персонал, "
-        "столы, меню, бонусы, самовывоз; токены ботов и ваш Telegram ID — из .env."
+        "Демо-данные для локальной проверки: четыре заведения с разными настройками — "
+        "сеть Night Owl (две точки, одна со всеми модулями), кафе Riverstone и магазин "
+        "растений «Зелена полиця»; токены ботов и ваш Telegram ID — из .env."
     )
 
     def add_arguments(self, parser):
@@ -187,14 +134,18 @@ class Command(BaseCommand):
             default=_env("DEMO_STAFF_PASSWORD", "botera12345"),
             help="Пароль всех сотрудников демо-заведений.",
         )
-        parser.add_argument("--hookah-bot-token", default=_env("DEMO_HOOKAH_BOT_TOKEN"))
-        parser.add_argument("--hookah-bot-username", default=_env("DEMO_HOOKAH_BOT_USERNAME"))
-        parser.add_argument("--cafe-bot-token", default=_env("DEMO_CAFE_BOT_TOKEN"))
-        parser.add_argument("--cafe-bot-username", default=_env("DEMO_CAFE_BOT_USERNAME"))
+        for venue in demo.VENUES:
+            if venue.bot is None:
+                continue
+            key, env_name = venue.bot[0], venue.bot[1]
+            parser.add_argument(f"--{key}-bot-token", default=_env(env_name))
+            parser.add_argument(
+                f"--{key}-bot-username", default=_env(env_name.replace("_TOKEN", "_USERNAME"))
+            )
         parser.add_argument(
             "--telegram-id",
             default=_env("DEMO_TELEGRAM_ID"),
-            help="Ваш Telegram ID: станет владельцем обоих заведений и получит бонусы.",
+            help="Ваш Telegram ID: станет владельцем заведений и получит бонусы.",
         )
         parser.add_argument("--telegram-username", default=_env("DEMO_TELEGRAM_USERNAME"))
         parser.add_argument(
@@ -258,15 +209,18 @@ class Command(BaseCommand):
         """Venue slug → (token, bot username) for every token given."""
 
         bots: dict[str, tuple[str, str]] = {}
-        for venue in VENUES:
-            token = (options[venue.token_option] or "").strip()
+        for venue in demo.VENUES:
+            if venue.bot is None:
+                continue
+            key, env_name = venue.bot[0], venue.bot[1]
+            token = (options[f"{key}_bot_token"] or "").strip()
             if not token:
                 continue
             if not BotInstance.looks_like_valid_token(token):
                 raise CommandError(
-                    f"{venue.env_name}: это не похоже на токен бота (вид 123456:ABC...)."
+                    f"{env_name}: это не похоже на токен бота (вид 123456:ABC...)."
                 )
-            username = BotInstance.normalize_username(options[venue.username_option] or "")
+            username = BotInstance.normalize_username(options[f"{key}_bot_username"] or "")
             if not username:
                 username = fetch_bot_username(token)
             bots[venue.slug] = (token, username)
@@ -281,7 +235,7 @@ class Command(BaseCommand):
 
     def _seed(self, *, options, bots, tester_id, tester_username, start_bonuses) -> dict:
         keep_existing = options["keep_existing"]
-        report: dict = {"venues": [], "admin_created": False}
+        report: dict = {"venues": [], "admin_created": False, "network": None}
         report["admin_created"] = self._ensure_platform_admin(
             username=options["admin_username"].strip(),
             email=options["admin_email"].strip(),
@@ -296,18 +250,52 @@ class Command(BaseCommand):
                 tester.username = tester_username
                 tester.save(update_fields=["username", "updated_at"])
 
-        for venue in VENUES:
+        partners: dict[str, Partner] = {}
+        fresh: dict[str, bool] = {}
+        for venue in demo.VENUES:
             existed = Partner.objects.filter(slug=venue.slug).exists()
-            partner = self._ensure_partner(venue, keep_existing=keep_existing and existed)
-            if not (keep_existing and existed):
+            fresh[venue.slug] = not (keep_existing and existed)
+            partner = self._ensure_partner(venue, reset=fresh[venue.slug])
+            partners[venue.slug] = partner
+            screens = []
+            if fresh[venue.slug]:
                 self._seed_catalogue(partner, options["staff_password"])
-            bot = self._ensure_bot(partner, venue, bots.get(venue.slug))
-            tester_note = ""
-            if tester is not None:
-                tester_note = self._bind_tester(partner, tester, start_bonuses)
-            report["venues"].append(
-                {"partner": partner, "bot": bot, "created": not existed, "tester": tester_note}
+                screens = self._seed_screens(partner)
+            bot = (
+                self._ensure_bot(partner, venue, bots.get(venue.slug))
+                if venue.bot is not None else None
             )
+            report["venues"].append({
+                "venue": venue, "partner": partner, "bot": bot, "created": not existed,
+                "screens": screens, "tester": "",
+            })
+
+        # The Night Owl network: when one of its points is created or reset.
+        network = Network.objects.filter(points__slug=demo.PODIL).first()
+        if any(fresh[slug] for slug in demo.NETWORK_POINTS):
+            network = self._ensure_network(partners)
+        for venue in demo.VENUES:
+            if fresh[venue.slug]:
+                self._seed_staff_points(partners, venue.slug)
+                self._seed_traffic_sources(partners[venue.slug])
+
+        if tester is not None:
+            for entry in report["venues"]:
+                venue = entry["venue"]
+                if venue.tester_owner:
+                    entry["tester"] = self._bind_tester(
+                        entry["partner"], tester, start_bonuses, venue.tester_owner
+                    )
+        if network is not None:
+            sync_network_staff(network.id)
+            report["network"] = network
+            if tester is not None:
+                for entry in report["venues"]:
+                    if not entry["venue"].tester_owner and EmployeeProfile.objects.filter(
+                        partner=entry["partner"], telegram_account=tester,
+                        mirrored_from__isnull=False, is_active=True,
+                    ).exists():
+                        entry["tester"] = "вы — владелец сети (ваш профиль из Поділ)"
         return report
 
     @staticmethod
@@ -336,124 +324,112 @@ class Command(BaseCommand):
         return created
 
     @staticmethod
-    def _ensure_partner(venue: VenueSeed, *, keep_existing: bool) -> Partner:
+    def _ensure_partner(venue: demo.VenueSeed, *, reset: bool) -> Partner:
         partner, _ = Partner.objects.get_or_create(
             slug=venue.slug,
             defaults={
                 "name": venue.name,
                 "timezone": "Europe/Kyiv",
                 "contact_phone": venue.phone,
+                "address": venue.address,
                 "status": Partner.Status.ACTIVE,
             },
         )
-        if keep_existing:
+        if not reset:
             return partner
         partner.name = venue.name
         partner.timezone = "Europe/Kyiv"
         partner.contact_phone = venue.phone
+        partner.address = venue.address
         partner.status = Partner.Status.ACTIVE
         partner.save()
 
-        is_hookah = venue.slug == HOOKAH_SLUG
         settings, _ = PartnerBotSettings.objects.get_or_create(partner=partner)
-        settings.allow_menu_without_session = True
-        settings.module_menu_enabled = True
-        settings.module_tables_enabled = True
-        settings.module_cart_enabled = True
-        settings.module_orders_enabled = True
-        settings.module_billing_enabled = True
-        settings.module_staff_call_enabled = True
-        settings.module_quick_sale_enabled = True
-        settings.module_reports_enabled = True
-        # Riverstone delivers (60 грн, free from 800, minimum 200); Night Owl
-        # does not, so the two venues show both setups.
-        settings.module_delivery_enabled = not is_hookah
-        settings.delivery_fee = Decimal("60.00")
-        settings.delivery_free_from = Decimal("800.00")
-        settings.delivery_min_order = Decimal("200.00")
-        settings.module_pickup_enabled = True
-        # Payment options (PQ-033): Riverstone offers both, so the guest is
-        # asked how to pay; Night Owl takes only transfers in advance.
-        settings.pickup_pay_transfer = True
-        settings.pickup_pay_on_receipt = not is_hookah
-        settings.delivery_pay_transfer = True
-        settings.delivery_pay_on_receipt = not is_hookah
-        # Shipping by post (PQ-034): Riverstone sends coffee beans and tea by
-        # Нова Пошта or Укрпошта; the guest picks the carrier, the postage
-        # (carrier's tariff or 70 грн in the order, free from 1000) and the
-        # payment (transfer or cash on delivery). Night Owl does not ship.
-        settings.module_shipping_enabled = not is_hookah
-        settings.shipping_nova_poshta = True
-        settings.shipping_ukrposhta = True
-        settings.shipping_meest = False
-        settings.shipping_cost_carrier = True
-        settings.shipping_cost_fixed = True
-        settings.shipping_fee = Decimal("70.00")
-        settings.shipping_free_from = Decimal("1000.00")
-        settings.shipping_min_order = Decimal("0.00")
-        settings.shipping_pay_transfer = True
-        settings.shipping_pay_on_receipt = True
-        settings.transfer_payment_details = TRANSFER_DETAILS
-        # Languages (PQ-040): Ukrainian first; the guest's Telegram language
-        # (Russian, English) is offered too.
-        settings.default_language = "uk"
-        settings.language_uk = settings.language_ru = settings.language_en = True
-        settings.staff_call_waiter_enabled = True
-        settings.staff_call_bartender_enabled = True
-        settings.staff_call_hookah_enabled = is_hookah
+        # Everything off first: each venue switches on its own set.
+        for field in PartnerBotSettings._meta.concrete_fields:
+            if field.name.startswith("module_") or field.name.startswith("staff_call_"):
+                setattr(settings, field.name, False)
+        for name, value in {**demo.COMMON_SETTINGS, **demo.SETTINGS[venue.slug]}.items():
+            setattr(settings, name, value)
         settings.full_clean()
         settings.save()
 
-        # Night Owl works 18:00–04:00 (pickup is refused in the daytime: handy to
-        # see the "closed" message). Riverstone has no common hours (pickup is
-        # always open) but delivers only 10:00–22:00: hours per module.
         OpeningHours.objects.filter(partner=partner).delete()
-        if is_hookah:
-            OpeningHours.objects.bulk_create(
-                OpeningHours(partner=partner, weekday=day, opens_at=time(18), closes_at=time(4))
-                for day in range(7)
-            )
-        else:
-            OpeningHours.objects.bulk_create(
-                OpeningHours(
-                    partner=partner,
-                    scope=OpeningHours.Scope.DELIVERY,
-                    weekday=day,
-                    opens_at=time(10),
-                    closes_at=time(22),
-                )
-                for day in range(7)
-            )
+        OpeningHours.objects.bulk_create(
+            OpeningHours(partner=partner, scope=scope, weekday=day, opens_at=opens,
+                         closes_at=closes)
+            for scope, opens, closes in demo.HOURS[venue.slug]
+            for day in range(7)
+        )
         return partner
 
     def _seed_catalogue(self, partner: Partner, staff_password: str) -> None:
-        if partner.slug == HOOKAH_SLUG:
-            self._seed_staff(partner, self._smoke_staff(), staff_password)
-            self._seed_tables(partner, self._smoke_tables())
-            self._seed_smoke_menu(partner)
-            self._seed_bonus_programs(partner, include_milestone=False)
-        else:
-            self._seed_staff(partner, self._cafe_staff(), staff_password)
-            self._seed_tables(partner, self._cafe_tables())
-            self._seed_cafe_menu(partner)
-            self._seed_bonus_programs(partner, include_milestone=True)
-        self._seed_traffic_sources(partner)
+        self._seed_staff(partner, demo.STAFF[partner.slug], staff_password)
+        self._retire_staff(partner)
+        self._seed_tables(partner, demo.TABLES[partner.slug])
+        self._seed_menu(partner, demo.MENUS[partner.slug])
+        self._seed_bonus_programs(partner, demo.BONUSES[partner.slug])
 
     @staticmethod
     def _seed_traffic_sources(partner: Partner) -> None:
-        for code, name in (("instagram", "Instagram"), ("flyer", "Листовка у входа")):
+        for code, name, whole_network in demo.SOURCES[partner.slug]:
             TrafficSource.objects.update_or_create(
-                partner=partner, code=code, defaults={"name": name, "is_active": True}
+                partner=partner, code=code,
+                defaults={"name": name, "is_active": True, "whole_network": whole_network},
             )
 
     @staticmethod
-    def _ensure_bot(partner: Partner, venue: VenueSeed, token_and_username) -> BotInstance:
+    def _seed_screens(partner: Partner) -> list[tuple[KitchenScreen, str]]:
+        """Kitchen and bar screens; a new screen gets its link (printed once)."""
+
+        found = []
+        for name, shows in demo.SCREENS[partner.slug]:
+            screen, _ = KitchenScreen.objects.get_or_create(
+                partner=partner, name=name, defaults={"shows": shows}
+            )
+            screen.shows = shows
+            screen.is_active = True
+            screen.save()
+            token = "" if screen.token_hash else issue_screen_link(screen)
+            found.append((screen, token))
+        return found
+
+    @staticmethod
+    def _ensure_network(partners: dict[str, Partner]) -> Network:
+        podil, obolon = partners[demo.PODIL], partners[demo.OBOLON]
+        network = podil.network or obolon.network or Network(name=demo.NETWORK_NAME)
+        network.name = demo.NETWORK_NAME
+        network.bonus_mode = Network.BonusMode.SHARED
+        network.save()
+        for point in (podil, obolon):
+            if point.network_id != network.id:
+                point.network = network
+                point.save(update_fields=["network", "updated_at"])
+        # One bot for both points: Поділ's (Оболонь has none of its own).
+        network.bot = podil.bot_instances.order_by("created_at").first()
+        network.save()
+        return network
+
+    @staticmethod
+    def _seed_staff_points(partners: dict[str, Partner], slug: str) -> None:
+        """A manager's other points of the network (PQ-047)."""
+
+        for staff in demo.STAFF[slug]:
+            access = AdminAccessProfile.objects.filter(user__username=staff.username).first()
+            if access is not None:
+                access.extra_partners.set(
+                    [partners[point] for point in staff.extra_points if point in partners]
+                )
+
+    @staticmethod
+    def _ensure_bot(partner: Partner, venue: demo.VenueSeed, token_and_username) -> BotInstance:
+        _key, _env_name, default_username, display_name = venue.bot
         bot = partner.bot_instances.order_by("created_at").first()
         if bot is None:
             bot = BotInstance(
                 partner=partner,
-                username=venue.bot_username,
-                display_name=venue.bot_display_name,
+                username=default_username,
+                display_name=display_name,
                 mode=BotInstance.Mode.POLLING,
                 is_active=False,
             )
@@ -477,18 +453,18 @@ class Command(BaseCommand):
         return bot
 
     def _bind_tester(
-        self, partner: Partner, tester: TelegramAccount, start_bonuses: Decimal
+        self, partner: Partner, tester: TelegramAccount, start_bonuses: Decimal, owner_name: str
     ) -> str:
         notes = []
         bound_elsewhere = (
-            EmployeeProfile.objects.filter(partner=partner, telegram_account=tester)
+            EmployeeProfile.objects.filter(
+                partner=partner, telegram_account=tester, mirrored_from__isnull=True
+            )
             .select_related("user")
             .first()
         )
         owner = (
-            EmployeeProfile.objects.filter(
-                partner=partner, user__username=TESTER_OWNER_USERNAME[partner.slug]
-            )
+            EmployeeProfile.objects.filter(partner=partner, user__username=owner_name)
             .select_related("user")
             .first()
         )
@@ -551,82 +527,32 @@ class Command(BaseCommand):
                 f"{options['admin_password']}"
             )
         out(
-            "  владельцы заведений (видят только своё): smoke_owner_1, cafe_owner_1 / "
-            f"{options['staff_password']} (при первом создании)"
+            "  владельцы (видят только своё): smoke_owner_1 (сеть Night Owl — обе точки), "
+            f"cafe_owner_1, plant_owner_1 / {options['staff_password']} (при первом создании)"
         )
-        for venue in report["venues"]:
-            partner: Partner = venue["partner"]
-            bot: BotInstance = venue["bot"]
+        out(
+            "  менеджеры с Admin: smoke_manager_1 (Поділ и Оболонь), obolon_manager_1, "
+            "cafe_manager_1, plant_manager_1"
+        )
+        network = report["network"]
+        network_bot = network.bot if network is not None else None
+        webapp_base = (django_settings.WEBAPP_BASE_URL or "").rstrip("/")
+        for entry in report["venues"]:
+            self._print_venue(entry, url=url, webapp_base=webapp_base, network_bot=network_bot)
+        if network is not None:
             out("")
-            state = "создано" if venue["created"] else "уже было"
-            out(self.style.MIGRATE_HEADING(f"{partner.name} ({partner.slug}, {state})"))
-            if bot.is_active and bot.has_usable_token:
-                out(f"  бот: @{bot.username} — подключён, открыть: https://t.me/{bot.username}")
-            else:
-                env_name = next(v.env_name for v in VENUES if v.slug == partner.slug)
-                out(self.style.WARNING(f"  бот: не подключён — впишите токен в {env_name}"))
-            pickup = PartnerBotSettings.objects.filter(partner=partner).first()
-            if pickup is not None and pickup.module_pickup_enabled:
-                hours_text = _hours_text(partner, "pickup")
-                payment = _payment_options(pickup, "pickup")
-                out(f"  самовывоз: включён, {hours_text}, оплата: {payment}")
-            if pickup is not None and pickup.module_delivery_enabled:
-                fee = pickup.delivery_fee
-                free = pickup.delivery_free_from
-                out(
-                    f"  доставка: включена, {_hours_text(partner, 'delivery')}, {fee:.0f} грн"
-                    + (f", бесплатно от {free:.0f} грн" if free is not None else "")
-                    + f", минимальный заказ {pickup.delivery_min_order:.0f} грн"
-                    + f", оплата: {_payment_options(pickup, 'delivery')}"
-                )
-            if pickup is not None and pickup.module_shipping_enabled:
-                carriers = ", ".join(
-                    title
-                    for field, title in (
-                        ("shipping_nova_poshta", "Нова Пошта"),
-                        ("shipping_ukrposhta", "Укрпошта"),
-                        ("shipping_meest", "Meest"),
-                    )
-                    if getattr(pickup, field)
-                )
-                postage = []
-                if pickup.shipping_cost_carrier:
-                    postage.append("по тарифу перевозчика")
-                if pickup.shipping_cost_fixed:
-                    free = pickup.shipping_free_from
-                    postage.append(
-                        f"{pickup.shipping_fee:.0f} грн в заказе"
-                        + (f" (бесплатно от {free:.0f} грн)" if free is not None else "")
-                    )
-                payment = _payment_options(pickup, "shipping").replace(
-                    "при получении", "наложенный платёж"
-                )
-                out(
-                    f"  отправка почтой: включена, {carriers}; пересылка: "
-                    + " или ".join(postage)
-                    + f"; оплата: {payment}; только «Кофе в зёрнах и чай»"
-                )
-            if venue["tester"]:
-                out(f"  ваш Telegram: {venue['tester']}")
-            sources = TrafficSource.objects.filter(partner=partner, is_active=True)
-            if sources:
-                out("  источники переходов (счёт — в Admin → Analytics):")
-                for source in sources:
-                    link = (
-                        source.telegram_start_url(bot.username)
-                        if bot.is_active
-                        else f"/start {source.deep_link_payload}"
-                    )
-                    out(f"    {source.name}: {link}")
-            out("  столы (ссылка = содержимое QR-кода):")
-            for table in Table.objects.filter(partner=partner, is_active=True).order_by("number"):
-                link = (
-                    table.telegram_start_url(bot.username)
-                    if bot.is_active
-                    else f"/start {table.deep_link_payload}"
-                )
-                out(f"    {table.number:>2}. {table.name}: {link}")
-        if not any(venue["tester"] for venue in report["venues"]):
+            out(self.style.MIGRATE_HEADING(f"Сеть «{network.name}»"))
+            points = ", ".join(network.points.order_by("name").values_list("name", flat=True))
+            shared = network.bonus_mode == Network.BonusMode.SHARED
+            bonuses = "общие: один баланс в обеих точках" if shared else "раздельные"
+            out(f"  точки: {points}; бонусы — {bonuses}")
+            if network_bot is not None and network_bot.is_active:
+                out(f"  бот сети: @{network_bot.username} — гость сначала выбирает точку")
+            out(
+                "  владельцы smoke_owner_1, smoke_owner_2 и менеджер smoke_manager_1 работают "
+                "в обеих точках; отчёт по сети — Admin → «Сети заведений»"
+            )
+        if not any(entry["tester"] for entry in report["venues"]):
             out("")
             out(
                 self.style.WARNING(
@@ -635,10 +561,110 @@ class Command(BaseCommand):
                 )
             )
 
+    def _print_venue(self, entry: dict, *, url: str, webapp_base: str, network_bot) -> None:
+        out = self.stdout.write
+        partner: Partner = entry["partner"]
+        venue: demo.VenueSeed = entry["venue"]
+        bot: BotInstance | None = entry["bot"]
+        settings = PartnerBotSettings.objects.filter(partner=partner).first()
+        out("")
+        state = "создано" if entry["created"] else "уже было"
+        out(self.style.MIGRATE_HEADING(f"{partner.name} ({partner.slug}, {state})"))
+        if settings is not None:
+            modules = [title for field, title in demo.MODULE_NAMES if getattr(settings, field)]
+            out("  модули: " + ", ".join(modules))
+        link_bot = bot if bot is not None else network_bot
+        if bot is None:
+            name = f"@{network_bot.username}" if network_bot is not None else "—"
+            out(f"  бот: своего нет — работает бот сети {name}")
+        elif bot.is_active and bot.has_usable_token:
+            out(f"  бот: @{bot.username} — подключён, открыть: https://t.me/{bot.username}")
+        else:
+            out(self.style.WARNING(f"  бот: не подключён — впишите токен в {venue.bot[1]}"))
+        if settings is not None:
+            self._print_channels(partner, settings)
+            if settings.module_webapp_enabled:
+                out(
+                    "  Mini App: кнопка в боте"
+                    if webapp_base
+                    else "  Mini App: включён — для кнопки в боте нужен WEBAPP_BASE_URL (HTTPS)"
+                )
+        for screen, token in entry["screens"]:
+            base = webapp_base or url
+            if token:
+                out(f"  экран «{screen.name}»: {base}{reverse('webapp:kitchen')}#{token}"
+                    " (ссылка показывается один раз)")
+            else:
+                out(f"  экран «{screen.name}»: ссылка выдана раньше; новая — в Admin")
+        if entry["tester"]:
+            out(f"  ваш Telegram: {entry['tester']}")
+        active = link_bot is not None and link_bot.is_active
+        sources = TrafficSource.objects.filter(partner=partner, is_active=True)
+        if sources:
+            out("  источники переходов (счёт — в Admin → Analytics):")
+            for source in sources:
+                link = (
+                    source.telegram_start_url(link_bot.username) if active
+                    else f"/start {source.deep_link_payload}"
+                )
+                suffix = " (вся сеть)" if source.whole_network else ""
+                out(f"    {source.name}{suffix}: {link}")
+        tables = Table.objects.filter(partner=partner, is_active=True).order_by("number")
+        if tables:
+            out("  столы (ссылка = содержимое QR-кода):")
+            for table in tables:
+                link = (
+                    table.telegram_start_url(link_bot.username) if active
+                    else f"/start {table.deep_link_payload}"
+                )
+                out(f"    {table.number:>2}. {table.name}: {link}")
+
+    def _print_channels(self, partner: Partner, settings: PartnerBotSettings) -> None:
+        out = self.stdout.write
+        if settings.module_pickup_enabled:
+            out(
+                f"  самовывоз: {_hours_text(partner, 'pickup')}, "
+                f"оплата: {_payment_options(settings, 'pickup')}"
+            )
+        if settings.module_delivery_enabled:
+            free = settings.delivery_free_from
+            out(
+                f"  доставка: {_hours_text(partner, 'delivery')}, {settings.delivery_fee:.0f} грн"
+                + (f", бесплатно от {free:.0f} грн" if free is not None else "")
+                + f", минимальный заказ {settings.delivery_min_order:.0f} грн"
+                + f", оплата: {_payment_options(settings, 'delivery')}"
+            )
+        if settings.module_shipping_enabled:
+            carriers = ", ".join(
+                title
+                for field, title in (
+                    ("shipping_nova_poshta", "Нова Пошта"),
+                    ("shipping_ukrposhta", "Укрпошта"),
+                    ("shipping_meest", "Meest"),
+                )
+                if getattr(settings, field)
+            )
+            postage = []
+            if settings.shipping_cost_carrier:
+                postage.append("по тарифу перевозчика")
+            if settings.shipping_cost_fixed:
+                free = settings.shipping_free_from
+                postage.append(
+                    f"{settings.shipping_fee:.0f} грн в заказе"
+                    + (f" (бесплатно от {free:.0f} грн)" if free is not None else "")
+                )
+            payment = _payment_options(settings, "shipping").replace(
+                "при получении", "наложенный платёж"
+            )
+            out(
+                f"  отправка почтой: {carriers}; пересылка: " + " или ".join(postage)
+                + f"; оплата: {payment}"
+            )
+
     # -------------------------------------------------------------- catalogue
 
     @staticmethod
-    def _seed_staff(partner: Partner, staff_rows: list[StaffSeed], password: str) -> None:
+    def _seed_staff(partner: Partner, staff_rows: list[demo.StaffSeed], password: str) -> None:
         user_model = get_user_model()
         for staff in staff_rows:
             user, _ = user_model.objects.get_or_create(
@@ -658,7 +684,6 @@ class Command(BaseCommand):
             user.last_name = staff.last_name
             user.partner = partner
             user.role = staff.role
-            user.is_staff = False
             user.is_active = True
             user.set_password(password)
             user.save()
@@ -669,15 +694,16 @@ class Command(BaseCommand):
                     "username": staff.telegram_username,
                     "first_name": staff.first_name,
                     "last_name": staff.last_name,
-                    "language_code": "ru",
+                    "language_code": "uk",
                 },
             )
             telegram_account.username = staff.telegram_username
             telegram_account.first_name = staff.first_name
             telegram_account.last_name = staff.last_name
-            telegram_account.language_code = "ru"
+            telegram_account.language_code = "uk"
             telegram_account.save()
 
+            works_orders = staff.role in {"owner", "manager", "cashier"}
             EmployeeProfile.objects.update_or_create(
                 partner=partner,
                 user=user,
@@ -686,10 +712,9 @@ class Command(BaseCommand):
                     "title": staff.title,
                     "hourly_rate": staff.hourly_rate,
                     "commission_rate": staff.commission_rate,
-                    "bot_notifications_enabled": staff.role
-                    in {"owner", "manager", "cashier", "waiter", "hookah_master"},
-                    "notify_on_order_created": staff.role in {"owner", "manager", "cashier"},
-                    "notify_on_order_status_changed": staff.role in {"owner", "manager", "cashier"},
+                    "bot_notifications_enabled": True,
+                    "notify_on_order_created": works_orders,
+                    "notify_on_order_status_changed": works_orders,
                     "notify_on_guest_calls": staff.role
                     in {"owner", "manager", "cashier", "waiter", "hookah_master"},
                     "notify_on_billing_requests": staff.role
@@ -697,483 +722,176 @@ class Command(BaseCommand):
                     "is_active": True,
                 },
             )
+            owner = staff.role == "owner"
             AdminAccessProfile.objects.update_or_create(
                 user=user,
                 defaults={
                     "partner": partner,
                     "preset": (
-                        AdminAccessPreset.OWNER
-                        if staff.role == "owner"
+                        AdminAccessPreset.OWNER if owner
+                        else AdminAccessPreset.MANAGER if staff.admin
                         else AdminAccessPreset.CUSTOM
                     ),
-                    "is_partner_owner": staff.role == "owner",
-                    "can_access_admin": staff.role == "owner",
+                    "is_partner_owner": owner,
+                    "can_access_admin": owner or staff.admin,
                     "is_active": True,
                 },
             )
 
     @staticmethod
-    def _seed_tables(partner: Partner, table_rows: list[TableSeed]) -> None:
-        for table in table_rows:
+    def _retire_staff(partner: Partner) -> None:
+        for username in demo.RETIRED_STAFF.get(partner.slug, ()):
+            for access in AdminAccessProfile.objects.filter(
+                partner=partner, user__username=username, is_active=True
+            ):
+                access.is_active = False
+                access.save()
+            for employee in EmployeeProfile.objects.filter(
+                partner=partner, user__username=username, is_active=True
+            ):
+                employee.is_active = False
+                employee.save()
+
+    @staticmethod
+    def _seed_tables(partner: Partner, table_rows) -> None:
+        for number, name, seats, qr_token in table_rows:
             Table.objects.update_or_create(
                 partner=partner,
-                number=table.number,
-                defaults={
-                    "name": table.name,
-                    "seats": table.seats,
-                    "qr_token": table.qr_token,
-                    "is_active": True,
-                },
+                number=number,
+                defaults={"name": name, "seats": seats, "qr_token": qr_token, "is_active": True},
             )
 
     @staticmethod
-    def _ensure_category(
-        partner: Partner, name: str, sort_order: int, old_name: str = ""
-    ) -> MenuCategory:
-        # Demo data used to be in Russian: rename the old category in place so
-        # a re-run with --keep-existing leaves no empty duplicates.
-        if old_name and not MenuCategory.objects.filter(partner=partner, name=name).exists():
-            MenuCategory.objects.filter(partner=partner, name=old_name).update(name=name)
+    def _ensure_category(partner: Partner, seed: demo.CategorySeed, parent) -> MenuCategory:
+        # An earlier demo used other names: rename the old category in place
+        # so a re-run leaves no empty duplicates.
+        if seed.old_name and not MenuCategory.objects.filter(
+            partner=partner, name=seed.name
+        ).exists():
+            MenuCategory.objects.filter(partner=partner, name=seed.old_name).update(
+                name=seed.name
+            )
         category, _ = MenuCategory.objects.get_or_create(
-            partner=partner,
-            name=name,
-            defaults={"sort_order": sort_order, "is_active": True},
+            partner=partner, name=seed.name, defaults={"sort_order": seed.sort_order}
         )
-        category.sort_order = sort_order
+        category.parent = parent
+        category.sort_order = seed.sort_order
         category.is_active = True
+        category.station = seed.station
+        category.description = seed.description
+        category.available_from, category.available_until = seed.schedule or (None, None)
+        category.available_weekdays = list(seed.weekdays)
         category.save()
         return category
 
-    @staticmethod
-    def _seed_category_items(
-        partner: Partner,
-        category: MenuCategory,
-        *,
-        items: list[MenuItemSeed],
-        pickup: bool = True,
-        shipping: bool = False,
-    ) -> None:
-        for item in items:
-            MenuItem.objects.update_or_create(
+    def _seed_menu(self, partner: Partner, menu: demo.MenuSeed) -> None:
+        own_badges = {}
+        for order, (name, emoji) in enumerate(menu.own_badges):
+            badge, _ = MenuBadge.objects.update_or_create(
+                partner=partner, name=name, defaults={"emoji": emoji, "sort_order": order}
+            )
+            own_badges[name] = badge
+
+        categories: dict[str, MenuCategory] = {}
+        items: dict[str, MenuItem] = {}
+        for seed in menu.categories:
+            category = self._ensure_category(partner, seed, categories.get(seed.parent))
+            categories[seed.name] = category
+            for order, item_seed in enumerate(seed.items, start=1):
+                items[item_seed.public_id] = self._seed_item(
+                    partner, category, seed, item_seed, order * 10, own_badges
+                )
+
+        for order, group_seed in enumerate(menu.groups, start=1):
+            group, _ = ModifierGroup.objects.update_or_create(
                 partner=partner,
-                public_id=item.public_id,
+                name=group_seed.name,
                 defaults={
-                    "category": category,
-                    "name": item.name,
-                    "description": item.description,
-                    "price": item.price,
-                    "sort_order": item.sort_order,
-                    "item_type": MenuItem.ItemType.INTERNAL,
-                    "is_available": True,
-                    "available_at_table": True,
-                    "available_for_pickup": pickup,
-                    "available_for_delivery": pickup,
-                    "available_for_shipping": shipping,
+                    "min_choices": group_seed.min_choices,
+                    "max_choices": group_seed.max_choices,
+                    "is_active": True,
+                    "sort_order": order,
                 },
             )
-
-    def _seed_smoke_menu(self, partner: Partner) -> None:
-        hookahs = self._ensure_category(partner, "Кальяни", 10, "Кальяны")
-        signatures = self._ensure_category(partner, "Фірмові мікси", 20, "Фирменные миксы")
-        soft_drinks = self._ensure_category(
-            partner, "Безалкогольні напої", 30, "Безалкогольные напитки"
-        )
-        alcohol = self._ensure_category(partner, "Алкоголь", 40)
-
-        self._seed_category_items(
-            partner,
-            hookahs,
-            pickup=False,
-            items=[
-                MenuItemSeed("SMKHK001", "Класичний кальян", Decimal("450.00"), 10),
-                MenuItemSeed("SMKHK002", "Преміум кальян", Decimal("650.00"), 20),
-                MenuItemSeed("SMKHK003", "Кальян на фрукті", Decimal("820.00"), 30),
-            ],
-        )
-        self._seed_category_items(
-            partner,
-            signatures,
-            pickup=False,
-            items=[
-                MenuItemSeed(
-                    "SMKSG001",
-                    "Night Owl Mix",
-                    Decimal("720.00"),
-                    10,
-                    "Темний лист, цитрус, легкі прянощі.",
-                ),
-                MenuItemSeed(
-                    "SMKSG002",
-                    "Kyiv Sunset Mix",
-                    Decimal("760.00"),
-                    20,
-                    "Ягідний смак із вершковим післясмаком.",
-                ),
-            ],
-        )
-        self._seed_category_items(
-            partner,
-            soft_drinks,
-            items=[
-                MenuItemSeed("SMKDR001", "Домашній лимонад", Decimal("150.00"), 10),
-                MenuItemSeed("SMKDR002", "Еспресо", Decimal("95.00"), 20),
-                MenuItemSeed("SMKDR003", "Чайник крафтового чаю", Decimal("180.00"), 30),
-            ],
-        )
-        self._seed_category_items(
-            partner,
-            alcohol,
-            pickup=False,
-            items=[
-                MenuItemSeed("SMKAL001", "Aperol Spritz", Decimal("240.00"), 10),
-                MenuItemSeed("SMKAL002", "Negroni", Decimal("250.00"), 20),
-                MenuItemSeed("SMKAL003", "Whiskey Sour", Decimal("260.00"), 30),
-                MenuItemSeed("SMKAL004", "Келих домашнього вина", Decimal("190.00"), 40),
-            ],
-        )
-
-    def _seed_cafe_menu(self, partner: Partner) -> None:
-        breakfast = self._ensure_category(partner, "Сніданки", 10, "Завтраки")
-        salads = self._ensure_category(partner, "Салати", 20, "Салаты")
-        mains = self._ensure_category(partner, "Основні страви", 30, "Основные блюда")
-        desserts = self._ensure_category(partner, "Десерти", 40, "Десерты")
-        soft_drinks = self._ensure_category(partner, "Кава й чай", 50, "Кофе и чай")
-        alcohol = self._ensure_category(partner, "Алкоголь", 60)
-        # Goods that travel by post (PQ-034); the rest of the menu does not.
-        beans = self._ensure_category(partner, "Кава в зернах і чай", 70, "Кофе в зёрнах и чай")
-
-        self._seed_category_items(
-            partner,
-            breakfast,
-            items=[
-                MenuItemSeed("CAFBR001", "Сирники", Decimal("220.00"), 10),
-                MenuItemSeed("CAFBR002", "Яйця Бенедикт", Decimal("295.00"), 20),
-                MenuItemSeed("CAFBR003", "Гранола з йогуртом", Decimal("180.00"), 30),
-            ],
-        )
-        self._seed_category_items(
-            partner,
-            salads,
-            items=[
-                MenuItemSeed("CAFSL001", "Цезар з куркою", Decimal("260.00"), 10),
-                MenuItemSeed("CAFSL002", "Грецький салат", Decimal("210.00"), 20),
-            ],
-        )
-        self._seed_category_items(
-            partner,
-            mains,
-            items=[
-                MenuItemSeed("CAFMN001", "Курячий стейк", Decimal("340.00"), 10),
-                MenuItemSeed("CAFMN002", "Паста карбонара", Decimal("285.00"), 20),
-                MenuItemSeed("CAFMN003", "Лосось з овочами", Decimal("420.00"), 30),
-            ],
-        )
-        self._seed_category_items(
-            partner,
-            desserts,
-            items=[
-                MenuItemSeed("CAFDS001", "Чизкейк", Decimal("170.00"), 10),
-                MenuItemSeed("CAFDS002", "Наполеон", Decimal("165.00"), 20),
-            ],
-        )
-        self._seed_category_items(
-            partner,
-            soft_drinks,
-            items=[
-                MenuItemSeed("CAFDR001", "Капучино", Decimal("110.00"), 10),
-                MenuItemSeed("CAFDR002", "Флет вайт", Decimal("125.00"), 20),
-                MenuItemSeed("CAFDR003", "Чайник чаю", Decimal("140.00"), 30),
-            ],
-        )
-        self._seed_category_items(
-            partner,
-            alcohol,
-            pickup=False,
-            items=[
-                MenuItemSeed("CAFAL001", "Мімоза", Decimal("210.00"), 10),
-                MenuItemSeed("CAFAL002", "Біле домашнє вино", Decimal("195.00"), 20),
-                MenuItemSeed("CAFAL003", "Крафтове пиво", Decimal("165.00"), 30),
-            ],
-        )
-        self._seed_category_items(
-            partner,
-            beans,
-            shipping=True,
-            items=[
-                MenuItemSeed("CAFBN001", "Кава в зернах Ефіопія, 250 г", Decimal("320.00"), 10),
-                MenuItemSeed("CAFBN002", "Кава в зернах Бразилія, 250 г", Decimal("290.00"), 20),
-                MenuItemSeed("CAFBN003", "Чай листовий, 100 г", Decimal("180.00"), 30),
-            ],
-        )
+            names = []
+            for position, (name, price) in enumerate(group_seed.options, start=1):
+                Modifier.objects.update_or_create(
+                    group=group,
+                    name=name,
+                    defaults={"price": price, "sort_order": position, "is_available": True},
+                )
+                names.append(name)
+            group.modifiers.exclude(name__in=names).delete()
+            group.categories.set([categories[name] for name in group_seed.categories])
+            group.items.set([items[public_id] for public_id in group_seed.items])
 
     @staticmethod
-    def _seed_bonus_programs(partner: Partner, *, include_milestone: bool) -> None:
+    def _seed_item(partner, category, category_seed, seed: demo.ItemSeed, order, own_badges):
+        portion, unit = _portion(seed.portion)
+        shipping = category_seed.shipping if seed.shipping is None else seed.shipping
+        item, _ = MenuItem.objects.update_or_create(
+            partner=partner,
+            public_id=seed.public_id,
+            defaults={
+                "category": category,
+                "name": seed.name,
+                "description": seed.description,
+                "price": seed.price,
+                "sort_order": order,
+                "item_type": MenuItem.ItemType.INTERNAL,
+                "is_available": True,
+                "available_at_table": category_seed.table,
+                "available_for_pickup": category_seed.pickup,
+                "available_for_delivery": category_seed.pickup,
+                "available_for_shipping": shipping,
+                "portion": portion,
+                "portion_unit": unit,
+                "old_price": seed.old_price,
+                "badges": list(seed.badges),
+                "sku": seed.sku,
+                "barcode": seed.barcode,
+            },
+        )
+        item.custom_badges.set([own_badges[name] for name in seed.own_badges])
+        item.attributes.all().delete()
+        MenuItemAttribute.objects.bulk_create(
+            MenuItemAttribute(partner=partner, item=item, name=name, value=value,
+                              sort_order=position)
+            for position, (name, value) in enumerate(seed.attributes, start=1)
+        )
+        names = []
+        for position, (name, price) in enumerate(seed.variants, start=1):
+            MenuItemVariant.objects.update_or_create(
+                item=item,
+                name=name,
+                defaults={"price": price, "sort_order": position, "is_available": True},
+            )
+            names.append(name)
+        item.variants.exclude(name__in=names).delete()
+        return item
+
+    @staticmethod
+    def _seed_bonus_programs(partner: Partner, programs) -> None:
         # Guests see the names in «Бонусы»; rename the old English ones in place.
-        for old_name, new_name in BONUS_PROGRAM_NAMES.items():
+        for old_name, new_name in demo.OLD_BONUS_NAMES.items():
             if not BonusProgram.objects.filter(partner=partner, name=new_name).exists():
                 BonusProgram.objects.filter(partner=partner, name=old_name).update(name=new_name)
-        BonusProgram.objects.update_or_create(
-            partner=partner,
-            name="Бонус за візит",
-            defaults={
-                "trigger_event": BonusProgram.TriggerEvent.VISIT,
-                "program_type": BonusProgram.ProgramType.VISIT,
-                "strategy_code": "",
-                "fixed_amount": Decimal("20.00"),
-                "percent": Decimal("0.00"),
-                "min_order_total": Decimal("0.00"),
-                "milestone_order_count": 0,
-                "max_redeem_share": Decimal("30.00"),
-                "expires_in_days": 30,
-                "config": {"once_per_day": True},
-                "is_active": True,
-            },
-        )
-        BonusProgram.objects.update_or_create(
-            partner=partner,
-            name="Кешбек 5%",
-            defaults={
-                "trigger_event": BonusProgram.TriggerEvent.ORDER_COMPLETED,
-                "program_type": BonusProgram.ProgramType.CASHBACK,
-                "strategy_code": "",
-                "fixed_amount": Decimal("0.00"),
-                "percent": Decimal("5.00"),
-                "min_order_total": Decimal("100.00"),
-                "milestone_order_count": 0,
-                "max_redeem_share": Decimal("30.00"),
-                "expires_in_days": 90,
-                "config": {},
-                "is_active": True,
-            },
-        )
-        BonusProgram.objects.update_or_create(
-            partner=partner,
-            name="Кешбек 5% на касі",
-            defaults={
-                "trigger_event": BonusProgram.TriggerEvent.MANUAL_PURCHASE,
-                "program_type": BonusProgram.ProgramType.CASHBACK,
-                "strategy_code": "",
-                "fixed_amount": Decimal("0.00"),
-                "percent": Decimal("5.00"),
-                "min_order_total": Decimal("100.00"),
-                "milestone_order_count": 0,
-                "max_redeem_share": Decimal("30.00"),
-                "expires_in_days": 90,
-                "config": {},
-                "is_active": True,
-            },
-        )
-        if include_milestone:
+        for (name, trigger, kind, fixed, percent, min_total, milestone, days,
+             config) in programs:
             BonusProgram.objects.update_or_create(
                 partner=partner,
-                name="Бонус за кожне 5-те замовлення",
+                name=name,
                 defaults={
-                    "trigger_event": BonusProgram.TriggerEvent.ORDER_COMPLETED,
-                    "program_type": BonusProgram.ProgramType.MILESTONE,
+                    "trigger_event": trigger,
+                    "program_type": kind,
                     "strategy_code": "",
-                    "fixed_amount": Decimal("75.00"),
-                    "percent": Decimal("0.00"),
-                    "min_order_total": Decimal("0.00"),
-                    "milestone_order_count": 5,
+                    "fixed_amount": fixed,
+                    "percent": percent,
+                    "min_order_total": min_total,
+                    "milestone_order_count": milestone,
                     "max_redeem_share": Decimal("30.00"),
-                    "expires_in_days": 60,
-                    "config": {},
+                    "expires_in_days": days,
+                    "config": dict(config),
                     "is_active": True,
                 },
             )
-
-    @staticmethod
-    def _smoke_staff() -> list[StaffSeed]:
-        return [
-            StaffSeed(
-                "smoke_owner_1",
-                "owner1@nightowl.local",
-                "Ivan",
-                "Moroz",
-                "owner",
-                "Co-owner",
-                Decimal("0.00"),
-                Decimal("0.00"),
-                700100001,
-                "smoke_owner_1",
-            ),
-            StaffSeed(
-                "smoke_owner_2",
-                "owner2@nightowl.local",
-                "Oleh",
-                "Kravets",
-                "owner",
-                "Co-owner",
-                Decimal("0.00"),
-                Decimal("0.00"),
-                700100002,
-                "smoke_owner_2",
-            ),
-            StaffSeed(
-                "smoke_owner_3",
-                "owner3@nightowl.local",
-                "Anna",
-                "Shevchenko",
-                "owner",
-                "Co-owner",
-                Decimal("0.00"),
-                Decimal("0.00"),
-                700100003,
-                "smoke_owner_3",
-            ),
-            StaffSeed(
-                "smoke_manager_1",
-                "manager@nightowl.local",
-                "Maksym",
-                "Bondar",
-                "manager",
-                "Управляющий",
-                Decimal("220.00"),
-                Decimal("2.50"),
-                700100004,
-                "smoke_manager_1",
-            ),
-            StaffSeed(
-                "smoke_hookah_1",
-                "hookah@nightowl.local",
-                "Denys",
-                "Tkachenko",
-                "hookah_master",
-                "Кальянный мастер",
-                Decimal("180.00"),
-                Decimal("5.00"),
-                700100005,
-                "smoke_hookah_1",
-            ),
-        ]
-
-    @staticmethod
-    def _cafe_staff() -> list[StaffSeed]:
-        return [
-            StaffSeed(
-                "cafe_owner_1",
-                "owner1@riverstone.local",
-                "Svitlana",
-                "Petrenko",
-                "owner",
-                "Co-owner",
-                Decimal("0.00"),
-                Decimal("0.00"),
-                700200001,
-                "cafe_owner_1",
-            ),
-            StaffSeed(
-                "cafe_owner_2",
-                "owner2@riverstone.local",
-                "Taras",
-                "Melnyk",
-                "owner",
-                "Co-owner",
-                Decimal("0.00"),
-                Decimal("0.00"),
-                700200002,
-                "cafe_owner_2",
-            ),
-            StaffSeed(
-                "cafe_manager_1",
-                "manager@riverstone.local",
-                "Yuliia",
-                "Hnatiuk",
-                "manager",
-                "Hall Manager",
-                Decimal("230.00"),
-                Decimal("2.00"),
-                700200003,
-                "cafe_manager_1",
-            ),
-            StaffSeed(
-                "cafe_barman_1",
-                "barman@riverstone.local",
-                "Roman",
-                "Lysenko",
-                "cashier",
-                "Бармен",
-                Decimal("170.00"),
-                Decimal("3.00"),
-                700200004,
-                "cafe_barman_1",
-            ),
-            StaffSeed(
-                "cafe_waiter_1",
-                "waiter1@riverstone.local",
-                "Iryna",
-                "Koval",
-                "waiter",
-                "Официант",
-                Decimal("145.00"),
-                Decimal("4.00"),
-                700200005,
-                "cafe_waiter_1",
-            ),
-            StaffSeed(
-                "cafe_waiter_2",
-                "waiter2@riverstone.local",
-                "Nazar",
-                "Kushnir",
-                "waiter",
-                "Официант",
-                Decimal("145.00"),
-                Decimal("4.00"),
-                700200006,
-                "cafe_waiter_2",
-            ),
-            StaffSeed(
-                "cafe_waiter_3",
-                "waiter3@riverstone.local",
-                "Olha",
-                "Romanenko",
-                "waiter",
-                "Официант",
-                Decimal("145.00"),
-                Decimal("4.00"),
-                700200007,
-                "cafe_waiter_3",
-            ),
-            StaffSeed(
-                "cafe_waiter_4",
-                "waiter4@riverstone.local",
-                "Artem",
-                "Savchuk",
-                "waiter",
-                "Официант",
-                Decimal("145.00"),
-                Decimal("4.00"),
-                700200008,
-                "cafe_waiter_4",
-            ),
-        ]
-
-    @staticmethod
-    def _smoke_tables() -> list[TableSeed]:
-        return [
-            TableSeed(1, "Table 1", 4, "nightowl_tbl_01"),
-            TableSeed(2, "Table 2", 4, "nightowl_tbl_02"),
-            TableSeed(3, "Table 3", 4, "nightowl_tbl_03"),
-            TableSeed(4, "Table 4", 4, "nightowl_tbl_04"),
-            TableSeed(5, "Table 5", 6, "nightowl_tbl_05"),
-            TableSeed(6, "Table 6", 6, "nightowl_tbl_06"),
-            TableSeed(7, "Table 7", 8, "nightowl_tbl_07"),
-            TableSeed(8, "Bar", 6, "nightowl_bar_08"),
-        ]
-
-    @staticmethod
-    def _cafe_tables() -> list[TableSeed]:
-        return [
-            TableSeed(1, "Table 1", 2, "river_tbl_01"),
-            TableSeed(2, "Table 2", 2, "river_tbl_02"),
-            TableSeed(3, "Table 3", 2, "river_tbl_03"),
-            TableSeed(4, "Table 4", 4, "river_tbl_04"),
-            TableSeed(5, "Table 5", 4, "river_tbl_05"),
-            TableSeed(6, "Table 6", 4, "river_tbl_06"),
-            TableSeed(7, "Table 7", 4, "river_tbl_07"),
-            TableSeed(8, "Table 8", 4, "river_tbl_08"),
-            TableSeed(9, "Table 9", 6, "river_tbl_09"),
-            TableSeed(10, "Table 10", 6, "river_tbl_10"),
-            TableSeed(11, "Table 11", 6, "river_tbl_11"),
-            TableSeed(12, "Table 12", 8, "river_tbl_12"),
-        ]
