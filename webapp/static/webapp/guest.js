@@ -133,16 +133,37 @@
 
   // --- Telegram buttons (a plain button outside Telegram) --------------------
 
+  // Telegram for Android animates a new text of the main button but does not
+  // redraw the animation (its BotButtons.verifyDrawable leaves the text out):
+  // a text changed while the button is shown stays on the old one until the
+  // next change. The same setup sent once more ends the animation and draws
+  // the new text. One local message to the app, only on Android, only when
+  // the text of a shown button changes.
+  function redrawMainButton() {
+    var button = tg.MainButton;
+    if (tg.platform !== "android" || !(window.Telegram.WebView && window.Telegram.WebView.postEvent)) return;
+    window.setTimeout(function () {
+      if (!button.isVisible) return;
+      window.Telegram.WebView.postEvent("web_app_setup_main_button", false, {
+        is_visible: true, is_active: button.isActive, is_progress_visible: button.isProgressVisible,
+        text: button.text, color: button.color, text_color: button.textColor,
+        has_shine_effect: button.hasShineEffect && button.isActive && !button.isProgressVisible
+      });
+    }, 60);
+  }
+
   function setMain(text, handler, disabled) {
     if (tg && tg.MainButton) {
       if (mainHandler) tg.MainButton.offClick(mainHandler);
       mainHandler = null;
       if (!text) { tg.MainButton.hide(); return; }
+      var shown = tg.MainButton.isVisible, before = tg.MainButton.text;
       mainHandler = function () { if (!busy && !disabled) handler(); };
       tg.MainButton.setText(text);
       tg.MainButton.onClick(mainHandler);
       if (disabled) tg.MainButton.disable(); else tg.MainButton.enable();
       tg.MainButton.show();
+      if (shown && before !== tg.MainButton.text) redrawMainButton();
       return;
     }
     var old = document.querySelector(".bottom");
