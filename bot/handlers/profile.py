@@ -244,9 +244,11 @@ async def profile_bonuses_callback(callback: CallbackQuery, bot: Bot) -> None:
     except (IndexError, ValueError):
         page = 0
     active_programs = await sync_to_async(list)(active_bonus_programs_for_partner(partner.id))
-    recent_transactions = await sync_to_async(list)(
-        recent_bonus_transactions_for_guest(guest_profile.id, limit=25)
-    )
+    # The whole read in the sync call: the selector itself queries (the
+    # guest and the network's shared bonuses, PQ-047).
+    recent_transactions = await sync_to_async(
+        lambda: list(recent_bonus_transactions_for_guest(guest_profile.id, limit=25))
+    )()
     text, total_pages = _render_profile_bonuses(
         guest_profile=guest_profile,
         balance=await sync_to_async(bonus_balance)(guest_profile),
