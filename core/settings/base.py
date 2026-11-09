@@ -126,6 +126,8 @@ UNFOLD = {
         "navigation": "apps.users.admin_navigation.sidebar",
     },
     "TABS": "apps.users.admin_navigation.tabs",
+    # Admin step 2: a venue's start page — «Требует внимания», «Сегодня».
+    "DASHBOARD_CALLBACK": "apps.users.admin_dashboard.dashboard",
 }
 
 BOT_TOKEN_ENCRYPTION_KEY = app_settings.bot_token_encryption_key

@@ -372,8 +372,6 @@ def open_bill_requests(request):
     partner_id = _scope(request)
     if partner_id is None:
         return ""
-    request_model = apps.get_model("billing", "BillingRequest")
-    count = request_model.objects.filter(
-        partner_id=partner_id, status=request_model.Status.OPEN
-    ).count()
-    return count or ""
+    from apps.analytics.dashboard import guests_waiting_for_bill
+
+    return guests_waiting_for_bill(partner_id).count or ""

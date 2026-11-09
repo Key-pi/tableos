@@ -296,3 +296,41 @@ def count_stock(*, item, variant, quantity: int, actor=None) -> None:
     delta = int(quantity) - row.stock_quantity
     if delta:
         _record(row, key, delta, StockMovement.Reason.COUNT, ("admin", ""), actor)
+
+
+# --- for Admin: which counted items need attention (admin step 2, PQ-050) ----
+
+OUT = "out"
+LOW = "low"
+BELOW_ZERO = "below_zero"
+
+
+def with_stock_bounds(queryset, *, variants: bool = True):
+    """Items with the most and the least left: over their variants on sale,
+    else the item's own count (as the guest's card counts it). Without the
+    options module there are no variants to choose (``variants=False``)."""
+
+    from django.db.models import F, Max, Min, Q
+    from django.db.models.functions import Coalesce
+
+    if not variants:
+        return queryset.annotate(stock_most=F("stock_quantity"), stock_least=F("stock_quantity"))
+    shown = Q(variants__is_available=True)
+    return queryset.annotate(
+        stock_most=Coalesce(Max("variants__stock_quantity", filter=shown), "stock_quantity"),
+        stock_least=Coalesce(Min("variants__stock_quantity", filter=shown), "stock_quantity"),
+    )
+
+
+def items_in_stock_state(queryset, state: str, *, variants: bool = True):
+    """Counted items that are out (nothing of any variant on sale), low (up
+    to ``LOW_STOCK``) or below zero (a quick sale took more than was counted)."""
+
+    counted = with_stock_bounds(queryset.filter(track_stock=True), variants=variants)
+    if state == OUT:
+        return counted.filter(stock_most__lte=0)
+    if state == LOW:
+        return counted.filter(stock_most__gt=0, stock_most__lte=LOW_STOCK)
+    if state == BELOW_ZERO:
+        return counted.filter(stock_least__lt=0)
+    return queryset.none()

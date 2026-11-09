@@ -64,19 +64,19 @@ msgstr "Аналітика"
 msgid "День"
 msgstr "День"
 
-#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html templates/admin/index.html
 msgid "Выручка"
 msgstr "Виручка"
 
-#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html core/urls.py
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html core/urls.py templates/admin/index.html
 msgid "Заказов"
 msgstr "Замовлень"
 
-#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html templates/admin/index.html
 msgid "Продаж"
 msgstr "Продажів"
 
-#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html templates/admin/index.html
 msgid "Средний чек"
 msgstr "Середній чек"
 
@@ -92,7 +92,7 @@ msgstr "Повторних візитів"
 msgid "метрика за день"
 msgstr "метрика за день"
 
-#: apps/analytics/models.py
+#: apps/analytics/models.py templates/admin/index.html
 msgid "Метрики по дням"
 msgstr "Метрики за днями"
 
@@ -728,7 +728,7 @@ msgstr "зміна рахунку"
 msgid "Изменения счетов"
 msgstr "Зміни рахунків"
 
-#: apps/billing/models.py webapp/texts.py
+#: apps/billing/models.py apps/menu/admin.py webapp/texts.py
 msgid "Нет в наличии"
 msgstr "Немає в наявності"
 
@@ -1616,7 +1616,7 @@ msgstr "Вручну"
 msgid "Программа"
 msgstr "Програма"
 
-#: apps/bonuses/models.py apps/menu/models.py bot/keyboards/staff.py
+#: apps/bonuses/models.py apps/menu/models.py apps/users/admin_dashboard.py bot/keyboards/staff.py
 msgid "Быстрая продажа"
 msgstr "Швидкий продаж"
 
@@ -2008,6 +2008,18 @@ msgstr "Поза цим часом категорію видно гостям і
 msgid "Метки"
 msgstr "Мітки"
 
+#: apps/menu/admin.py apps/menu/models.py
+msgid "Остаток"
+msgstr "Залишок"
+
+#: apps/menu/admin.py webapp/texts.py
+msgid "Осталось мало"
+msgstr "Залишилось мало"
+
+#: apps/menu/admin.py
+msgid "Ниже нуля"
+msgstr "Нижче нуля"
+
 #: apps/menu/admin.py
 msgid "Где продаётся"
 msgstr "Де продається"
@@ -2020,7 +2032,7 @@ msgstr "Вітрина"
 msgid "Порция, старая цена, метки, артикул; ниже — ещё фото и характеристики."
 msgstr "Порція, стара ціна, мітки, артикул; нижче — ще фото й характеристики."
 
-#: apps/menu/admin.py apps/partners/models.py
+#: apps/menu/admin.py apps/partners/models.py apps/users/admin_dashboard.py
 msgid "Остатки"
 msgstr "Залишки"
 
@@ -2351,10 +2363,6 @@ msgstr "Враховувати залишок"
 #: apps/menu/models.py
 msgid "Заказ списывает при оформлении, отмена возвращает. У позиции с вариантами остаток — у каждого варианта."
 msgstr "Замовлення списує під час оформлення, скасування повертає. У позиції з варіантами залишок — у кожного варіанта."
-
-#: apps/menu/models.py
-msgid "Остаток"
-msgstr "Залишок"
 
 #: apps/menu/models.py
 msgid "Сколько есть сейчас. Меньше нуля — продано на кассе больше, чем по учёту: поправьте."
@@ -2796,7 +2804,7 @@ msgstr "Пропущено (гість більше не підходить)"
 msgid "Неизвестно (воркер остановился)"
 msgstr "Невідомо (воркер зупинився)"
 
-#: apps/notifications/models.py
+#: apps/notifications/models.py apps/users/admin_dashboard.py
 msgid "Рассылка"
 msgstr "Розсилка"
 
@@ -3410,7 +3418,7 @@ msgstr "Востаннє на зв'язку"
 msgid "экран кухни и бара"
 msgstr "екран кухні й бару"
 
-#: apps/orders/models.py
+#: apps/orders/models.py apps/users/admin_dashboard.py
 msgid "Экраны кухни и бара"
 msgstr "Екрани кухні й бару"
 
@@ -3758,7 +3766,7 @@ msgstr "Звіт"
 msgid "Отчёт по сети"
 msgstr "Звіт по мережі"
 
-#: apps/partners/admin.py apps/users/admin_navigation.py
+#: apps/partners/admin.py apps/users/admin_dashboard.py apps/users/admin_navigation.py templates/admin/index.html
 msgid "Сегодня"
 msgstr "Сьогодні"
 
@@ -4991,6 +4999,190 @@ msgstr "Збережіть профіль, щоб побачити права н
 #: apps/users/admin.py
 msgid "Прав на разделы пока нет."
 msgstr "Прав на розділи поки немає."
+
+#: apps/users/admin_dashboard.py
+msgid "{count} мин"
+msgstr "{count} хв"
+
+#: apps/users/admin_dashboard.py
+msgid "{count} ч"
+msgstr "{count} год"
+
+#: apps/users/admin_dashboard.py
+msgid "{count} дн."
+msgstr "{count} дн."
+
+#: apps/users/admin_dashboard.py
+msgid "Первый отменится автоматически через {left}."
+msgstr "Перше скасується автоматично через {left}."
+
+#: apps/users/admin_dashboard.py
+msgid "Первый уже отменяется автоматически."
+msgstr "Перше вже скасовується автоматично."
+
+#: apps/users/admin_dashboard.py
+msgid "Пока перевод не подтверждён, заказ не идёт в работу."
+msgstr "Поки переказ не підтверджено, замовлення не йде в роботу."
+
+#: apps/users/admin_dashboard.py
+msgid "Переводы ждут подтверждения: {count}"
+msgstr "Перекази чекають на підтвердження: {count}"
+
+#: apps/users/admin_dashboard.py
+msgid "Открыть заказы"
+msgstr "Відкрити замовлення"
+
+#: apps/users/admin_dashboard.py
+msgid "Гости ждут счёт: {count}"
+msgstr "Гості чекають на рахунок: {count}"
+
+#: apps/users/admin_dashboard.py
+msgid "Самый давний запрос — {age} назад."
+msgstr "Найдавніший запит — {age} тому."
+
+#: apps/users/admin_dashboard.py
+msgid "Открыть запросы"
+msgstr "Відкрити запити"
+
+#: apps/users/admin_dashboard.py
+msgid "Оплата при получении не отмечена: {count}"
+msgstr "Оплату при отриманні не позначено: {count}"
+
+#: apps/users/admin_dashboard.py
+msgid "Заказ у курьера, на почте или уже у гостя, а деньги не записаны. Самый давний — {age} назад."
+msgstr "Замовлення в кур'єра, на пошті або вже в гостя, а гроші не записані. Найдавніше — {age} тому."
+
+#: apps/users/admin_dashboard.py
+msgid "Новые заказы: {count}"
+msgstr "Нові замовлення: {count}"
+
+#: apps/users/admin_dashboard.py
+msgid "Самый давний ждёт {age}."
+msgstr "Найдавніше чекає {age}."
+
+#: apps/users/admin_dashboard.py
+msgid "Посылки ждут отправки: {count}"
+msgstr "Посилки чекають на відправлення: {count}"
+
+#: apps/users/admin_dashboard.py
+msgid "Приняты, но ТТН ещё нет. Самая давняя — {age} назад."
+msgstr "Прийняті, але ТТН ще немає. Найдавніша — {age} тому."
+
+#: apps/users/admin_dashboard.py
+msgid "Ниже нуля — пересчитайте: {count}"
+msgstr "Нижче нуля — перерахуйте: {count}"
+
+#: apps/users/admin_dashboard.py
+msgid "Нет в наличии: {count}"
+msgstr "Немає в наявності: {count}"
+
+#: apps/users/admin_dashboard.py
+msgid "Осталось мало: {count}"
+msgstr "Залишилось мало: {count}"
+
+#: apps/users/admin_dashboard.py
+msgid "Бот не отвечает гостям"
+msgstr "Бот не відповідає гостям"
+
+#: apps/users/admin_dashboard.py
+msgid "@{username}: {state}"
+msgstr "@{username}: {state}"
+
+#: apps/users/admin_dashboard.py
+msgid "Это бот сети — его настраивает владелец сети."
+msgstr "Це бот мережі — його налаштовує власник мережі."
+
+#: apps/users/admin_dashboard.py
+msgid "Открыть ботов"
+msgstr "Відкрити ботів"
+
+#: apps/users/admin_dashboard.py
+msgid "Открыть экраны"
+msgstr "Відкрити екрани"
+
+#: apps/users/admin_dashboard.py
+msgid "{amount} грн"
+msgstr "{amount} грн"
+
+#: apps/users/admin_dashboard.py
+msgid "Новая позиция"
+msgstr "Нова позиція"
+
+#: apps/users/admin_dashboard.py webapp/staff_views.py
+msgid "Пригласить сотрудника"
+msgstr "Запросити працівника"
+
+#: apps/users/admin_dashboard.py
+msgid "Источник переходов"
+msgstr "Джерело переходів"
+
+#: apps/users/admin_dashboard.py
+msgid "Новый стол"
+msgstr "Новий стіл"
+
+#: apps/users/admin_dashboard.py
+msgid "Подключите бота"
+msgstr "Підключіть бота"
+
+#: apps/users/admin_dashboard.py
+msgid "Создайте бота в @BotFather и вставьте его токен."
+msgstr "Створіть бота в @BotFather і вставте його токен."
+
+#: apps/users/admin_dashboard.py
+msgid "Добавьте позиции меню"
+msgstr "Додайте позиції меню"
+
+#: apps/users/admin_dashboard.py
+msgid "Без них гостю нечего заказать."
+msgstr "Без них гостю нічого замовити."
+
+#: apps/users/admin_dashboard.py
+msgid "Укажите реквизиты для перевода"
+msgstr "Вкажіть реквізити для переказу"
+
+#: apps/users/admin_dashboard.py
+msgid "Без реквизитов оплата переводом заранее гостям не предлагается."
+msgstr "Без реквізитів оплата переказом заздалегідь гостям не пропонується."
+
+#: apps/users/admin_dashboard.py
+msgid "Выберите способы оплаты"
+msgstr "Оберіть способи оплати"
+
+#: apps/users/admin_dashboard.py
+msgid "У включённого способа заказа нет ни оплаты переводом, ни оплаты при получении — оформить такой заказ гость не сможет."
+msgstr "У ввімкненого способу замовлення немає ні оплати переказом, ні оплати при отриманні — оформити таке замовлення гість не зможе."
+
+#: apps/users/admin_dashboard.py
+msgid "Укажите часы работы"
+msgstr "Вкажіть години роботи"
+
+#: apps/users/admin_dashboard.py
+msgid "Без них самовывоз и доставка принимаются круглосуточно."
+msgstr "Без них самовивіз і доставка приймаються цілодобово."
+
+#: apps/users/admin_dashboard.py
+msgid "Добавьте столы"
+msgstr "Додайте столи"
+
+#: apps/users/admin_dashboard.py
+msgid "У каждого стола свой QR-код — по нему гость заказывает за столом."
+msgstr "У кожного столу свій QR-код — за ним гість замовляє за столом."
+
+#: apps/users/admin_dashboard.py
+msgid "Добавьте сотрудников"
+msgstr "Додайте працівників"
+
+#: apps/users/admin_dashboard.py
+msgid "Кто будет принимать заказы в боте: пригласите их ссылкой."
+msgstr "Хто прийматиме замовлення в боті: запросіть їх посиланням."
+
+#: apps/users/admin_dashboard.py
+msgid "Заполните адрес и телефон"
+msgstr "Заповніть адресу й телефон"
+
+#: apps/users/admin_dashboard.py
+msgid "Гости видят их в профиле заведения и при самовывозе."
+msgstr "Гості бачать їх у профілі закладу та під час самовивозу."
 
 #: apps/users/admin_navigation.py
 msgid "Заказы и счета"
@@ -7832,6 +8024,34 @@ msgstr "Перевірка роботи"
 msgid "Демо-данные (логины, ссылки на столы):"
 msgstr "Демо-дані (логіни, посилання на столи):"
 
+#: templates/admin/index.html
+msgid "Требует внимания"
+msgstr "Потребує уваги"
+
+#: templates/admin/index.html
+msgid "Всё в порядке: ничего не ждёт"
+msgstr "Усе гаразд: нічого не чекає"
+
+#: templates/admin/index.html
+msgid "Что ещё настроить"
+msgstr "Що ще налаштувати"
+
+#: templates/admin/index.html
+msgid "Сделать"
+msgstr "Зробити"
+
+#: templates/admin/index.html
+msgid "Сейчас открыто: заказов {orders}, счетов {bills}."
+msgstr "Зараз відкрито: замовлень {orders}, рахунків {bills}."
+
+#: templates/admin/index.html
+msgid "Возвраты: −{amount}."
+msgstr "Повернення: −{amount}."
+
+#: templates/admin/index.html
+msgid "Быстрые действия"
+msgstr "Швидкі дії"
+
 #: templates/unfold/helpers/app_list.html
 msgid "Добавить: {name}"
 msgstr "Додати: {name}"
@@ -8181,10 +8401,6 @@ msgid "По сотрудникам"
 msgstr "За працівниками"
 
 #: webapp/staff_views.py
-msgid "Пригласить сотрудника"
-msgstr "Запросити працівника"
-
-#: webapp/staff_views.py
 msgid "С какой ролью? Ссылка будет одноразовой и проработает 24 часа."
 msgstr "З якою роллю? Посилання буде одноразовим і діятиме 24 години."
 
@@ -8251,10 +8467,6 @@ msgstr "Зараз не продається"
 #: webapp/texts.py
 msgid "Продаётся {when}"
 msgstr "Продається {when}"
-
-#: webapp/texts.py
-msgid "Осталось мало"
-msgstr "Залишилось мало"
 
 #: webapp/texts.py
 msgid "В корзине: {count}"

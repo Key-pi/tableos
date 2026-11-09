@@ -8,6 +8,7 @@ from unfold.widgets import (
     UnfoldAdminTextInputWidget,
 )
 
+from apps.menu import stock as stock_levels
 from apps.menu.catalog import BUILTIN_BADGES, WEEKDAYS
 from apps.menu.models import (
     MenuBadge,
@@ -20,6 +21,7 @@ from apps.menu.models import (
     ModifierGroup,
     StockMovement,
 )
+from apps.menu.options import options_on
 from apps.menu.stock import count_stock
 from apps.menu.translations import fields_of, set_translation, translation_languages
 from apps.orders.kitchen import missing_screen_warnings
@@ -388,6 +390,32 @@ def module_on_for(admin_page, request, field: str) -> bool:
     return PartnerBotSettings.objects.filter(partner_id=partner_id, **{field: True}).exists()
 
 
+class StockStateFilter(admin.SimpleListFilter):
+    """«Остаток» on the item list while stock is on; the start page links
+    here (admin step 2, PQ-050)."""
+
+    title = _lazy("Остаток")
+    parameter_name = "stock"
+
+    def __init__(self, request, params, model, model_admin):
+        self.model_admin = model_admin
+        super().__init__(request, params, model, model_admin)
+
+    def lookups(self, request, model_admin):
+        return (
+            (stock_levels.OUT, _lazy("Нет в наличии")),
+            (stock_levels.LOW, _lazy("Осталось мало")),
+            (stock_levels.BELOW_ZERO, _lazy("Ниже нуля")),
+        )
+
+    def queryset(self, request, queryset):
+        if self.value() is None:
+            return queryset
+        partner_id = self.model_admin.get_partner_scope_id(request)
+        variants = partner_id is None or options_on(partner_id)
+        return stock_levels.items_in_stock_state(queryset, self.value(), variants=variants)
+
+
 @admin.register(MenuItem)
 class MenuItemAdmin(TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
     admin_section = AdminSection.MENU
@@ -440,6 +468,12 @@ class MenuItemAdmin(TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
 
     def stock_on_for(self, request) -> bool:
         return module_on_for(self, request, "module_stock_enabled")
+
+    def get_list_filter(self, request):
+        list_filter = tuple(super().get_list_filter(request))
+        if not self.stock_on_for(request):
+            return list_filter
+        return (*list_filter, StockStateFilter)
 
     def _parts_off(self, request) -> list[tuple]:
         """The modules' parts of the page that are off for this venue."""

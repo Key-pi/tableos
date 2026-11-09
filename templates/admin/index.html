@@ -1,0 +1,163 @@
+{% extends 'admin/base.html' %}
+{% load i18n botera_i18n %}
+{% comment %}
+The start page (admin step 2, PQ-050). A venue sees «Требует внимания»,
+«Сегодня», quick actions and «Что ещё настроить» (apps/users/admin_dashboard.py);
+the platform sees Unfold's own start page, as before.
+{% endcomment %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+{% if venue_dashboard %}
+<style>
+    .vd { display: grid; gap: 24px; grid-template-columns: minmax(0, 1fr); }
+    @media (min-width: 1024px) { .vd { grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); } }
+    .vd-col { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+    .vd-h { font-weight: 600; font-size: 15px; margin: 0 0 12px; color: var(--color-font-important-light); }
+    .dark .vd-h { color: var(--color-font-important-dark); }
+    .vd-list { display: flex; flex-direction: column; gap: 10px; }
+    .vd-card { background: #fff; border: 1px solid var(--color-base-200); border-radius: 8px; padding: 16px; }
+    .dark .vd-card { background: var(--color-base-900); border-color: var(--color-base-800); }
+    .vd-alert { display: flex; gap: 14px; align-items: flex-start; border-left-width: 4px; }
+    .vd-alert .vd-icon { flex-shrink: 0; width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+    .vd-danger { border-left-color: var(--color-red-600); }
+    .vd-danger .vd-icon { background: var(--color-red-50); color: var(--color-red-600); }
+    .vd-warning { border-left-color: var(--color-orange-500); }
+    .vd-warning .vd-icon { background: var(--color-orange-50); color: var(--color-orange-600); }
+    .vd-info { border-left-color: var(--color-blue-500); }
+    .vd-info .vd-icon { background: var(--color-blue-50); color: var(--color-blue-600); }
+    .dark .vd-danger .vd-icon { background: color-mix(in srgb, var(--color-red-500) 20%, transparent); }
+    .dark .vd-warning .vd-icon { background: color-mix(in srgb, var(--color-orange-500) 20%, transparent); }
+    .dark .vd-info .vd-icon { background: color-mix(in srgb, var(--color-blue-500) 20%, transparent); }
+    .vd-title { font-weight: 600; font-size: 15px; color: var(--color-font-important-light); }
+    .dark .vd-title { color: var(--color-font-important-dark); }
+    .vd-text { margin-top: 2px; color: var(--color-font-subtle-light); }
+    .dark .vd-text { color: var(--color-font-subtle-dark); }
+    .vd-links { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
+    .vd-links a, .vd-more { color: var(--color-primary-600); font-weight: 500; }
+    .vd-links a:hover, .vd-more:hover { text-decoration: underline; }
+    .vd-clear { display: flex; gap: 12px; align-items: center; color: var(--color-green-700); font-weight: 500; }
+    .dark .vd-clear { color: var(--color-green-400); }
+    .vd-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+    .vd-tile-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--color-font-subtle-light); }
+    .dark .vd-tile-label { color: var(--color-font-subtle-dark); }
+    .vd-tile-value { font-size: 22px; font-weight: 600; color: var(--color-font-important-light); font-variant-numeric: tabular-nums; }
+    .dark .vd-tile-value { color: var(--color-font-important-dark); }
+    .vd-note { margin-top: 12px; color: var(--color-font-subtle-light); }
+    .vd-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .vd-action { display: flex; gap: 10px; align-items: center; min-height: 48px; padding: 10px 12px; border: 1px solid var(--color-base-200); border-radius: 8px; color: var(--color-font-important-light); font-weight: 500; }
+    .vd-action:hover { border-color: var(--color-primary-600); color: var(--color-primary-600); }
+    .dark .vd-action { border-color: var(--color-base-700); color: var(--color-font-important-dark); }
+    .vd-action .material-symbols-outlined { color: var(--color-primary-600); }
+    .vd-step { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-top: 1px solid var(--color-base-200); }
+    .vd-step:first-child { border-top: 0; padding-top: 0; }
+    .dark .vd-step { border-color: var(--color-base-800); }
+    .vd-step .material-symbols-outlined { color: var(--color-base-400); }
+</style>
+
+<div class="vd">
+    <div class="vd-col">
+        {% if venue_dashboard.alerts or venue_dashboard.all_clear %}
+            <section>
+                <h2 class="vd-h">{% tr "Требует внимания" %}</h2>
+                <div class="vd-list">
+                    {% for alert in venue_dashboard.alerts %}
+                        <div class="vd-card vd-alert vd-{{ alert.tone }}">
+                            <span class="material-symbols-outlined vd-icon">{{ alert.icon }}</span>
+                            <div class="min-w-0">
+                                <div class="vd-title">{{ alert.title }}</div>
+                                {% if alert.text %}<div class="vd-text">{{ alert.text }}</div>{% endif %}
+                                {% if alert.links %}
+                                    <div class="vd-links">
+                                        {% for label, url in alert.links %}<a href="{{ url }}">{{ label }} →</a>{% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% empty %}
+                        <div class="vd-card vd-clear">
+                            <span class="material-symbols-outlined">check_circle</span>
+                            {% tr "Всё в порядке: ничего не ждёт" %}
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endif %}
+
+        {% if venue_dashboard.setup %}
+            <section>
+                <h2 class="vd-h">{% tr "Что ещё настроить" %}</h2>
+                <div class="vd-card">
+                    {% for step in venue_dashboard.setup %}
+                        <div class="vd-step">
+                            <span class="material-symbols-outlined">radio_button_unchecked</span>
+                            <div class="min-w-0">
+                                <div class="vd-title">{{ step.title }}</div>
+                                <div class="vd-text">{{ step.text }}</div>
+                                {% if step.link %}<div class="vd-links"><a href="{{ step.link }}">{% tr "Сделать" %} →</a></div>{% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endif %}
+    </div>
+
+    <div class="vd-col">
+        {% with today=venue_dashboard.today %}
+            {% if today %}
+                <section>
+                    <h2 class="vd-h">{% tr "Сегодня" %}</h2>
+                    <div class="vd-card">
+                        <div class="vd-tiles">
+                            <div>
+                                <div class="vd-tile-label">{% tr "Выручка" %}</div>
+                                <div class="vd-tile-value">{{ today.revenue }}</div>
+                            </div>
+                            <div>
+                                <div class="vd-tile-label">{% tr "Средний чек" %}</div>
+                                <div class="vd-tile-value">{{ today.average }}</div>
+                            </div>
+                            <div>
+                                <div class="vd-tile-label">{% tr "Заказов" %}</div>
+                                <div class="vd-tile-value">{{ today.orders }}</div>
+                            </div>
+                            <div>
+                                <div class="vd-tile-label">{% tr "Продаж" %}</div>
+                                <div class="vd-tile-value">{{ today.sales }}</div>
+                            </div>
+                        </div>
+                        <div class="vd-note">
+                            {% tr "Сейчас открыто: заказов {orders}, счетов {bills}." orders=today.open_orders bills=today.open_bills %}
+                            {% if today.refunds %}{% tr "Возвраты: −{amount}." amount=today.refunds %}{% endif %}
+                        </div>
+                        <div class="vd-links"><a class="vd-more" href="{{ today.link }}">{% tr "Метрики по дням" %} →</a></div>
+                    </div>
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        {% if venue_dashboard.actions %}
+            <section>
+                <h2 class="vd-h">{% tr "Быстрые действия" %}</h2>
+                <div class="vd-actions">
+                    {% for action in venue_dashboard.actions %}
+                        <a class="vd-action" href="{{ action.link }}">
+                            <span class="material-symbols-outlined">{{ action.icon }}</span>
+                            <span>{{ action.title }}</span>
+                        </a>
+                    {% endfor %}
+                </div>
+            </section>
+        {% endif %}
+    </div>
+</div>
+{% else %}
+    {% include "unfold/helpers/dashboard_default.html" %}
+{% endif %}
+{% endblock %}

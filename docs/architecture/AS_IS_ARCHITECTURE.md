@@ -127,7 +127,7 @@ whitenoise и кэш в Redis. Сервисы:
 
 ```text
 bot           -> все доменные приложения
-analytics     -> billing, bonuses, orders, partners, tables, users
+analytics     -> billing, bonuses, employees, menu, orders, partners, tables, users
 billing       -> bonuses, employees, notifications, orders, partners, tables, users
 orders        -> billing, employees, menu, notifications, partners, tables, users
 tables        -> billing, bonuses, notifications, orders, users
@@ -136,7 +136,7 @@ bonuses       -> menu, orders, partners, users
 partners      -> bonuses, employees, menu, tables, users (Admin и наполнение демо-данными)
 menu          -> users
 employees     -> users
-users         -> billing, orders, partners (только меню Admin, apps.get_model)
+users         -> analytics, orders, partners (только меню и стартовая страница Admin)
 core          -> partners, users (core/admin_mixins.py); orders, partners, tables (core/urls.py)
 ```
 
@@ -642,6 +642,27 @@ PQ-050): все страницы — `core/admin_mixins.py:BoteraModelAdmin` (е
 показывается. Суперпользователь видит ещё группу «Платформа» (служебные
 таблицы, Telegram-аккаунты, группы) и «Все приложения».
 
+Стартовая страница заведения («Сегодня», шаг 2, PQ-050) —
+`apps/users/admin_dashboard.py:dashboard` (`UNFOLD["DASHBOARD_CALLBACK"]`),
+рисует `templates/admin/index.html`; счёт — только чтение,
+`apps/analytics/dashboard.py`. «Требует внимания», деньги первыми: переводы
+ждут подтверждения (через сколько первый отменится по
+`transfer_wait_minutes`), гости ждут счёт (`BillingRequest` «открыт» и «счёт
+подготовлен»), оплата при получении не отмечена (заказ «в пути» или
+«завершён», `paid_at` пуст), новые заказы (без ждущих перевода; красным —
+если самый давний ждёт больше 10 минут), посылки без ТТН, остатки (ниже нуля,
+нет в наличии, мало — `apps/menu/stock.py:items_in_stock_state`, фильтр
+«Остаток» в списке позиций), бот не отвечает (выключен или сервис ботов его не
+запустил), экраны кухни без работающего экрана. Каждая карточка ведёт в список
+ровно того, что посчитано. «Сегодня» — `build_daily_operations_report` (как
+отчёт дня в боте): выручка, средний чек (как в `PartnerDailyMetric`), заказы,
+продажи, открытые заказы и счета. Быстрые действия и «Что ещё настроить»
+(бот, меню, реквизиты, способы оплаты, часы, столы, сотрудники, адрес и
+телефон — `setup_steps`). Каждая часть видна только тому, кто может открыть
+страницу, куда она ведёт, и пока включён её модуль; реквизиты — только
+владельцу. Счётчик «Счета» в меню считает те же запросы. Платформа видит
+стартовую страницу Unfold, как раньше.
+
 Сети заведений (PQ-047, этап 1, [NETWORKS.md](NETWORKS.md)). Точка остаётся
 партнёром. `Partner.network` объединяет точки, `AdminAccessProfile.extra_partners`
 даёт менеджеру другие точки той же сети. Какие точки открывает человек,
@@ -732,7 +753,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1030 тестов после исправления страницы оплаты в Admin, зелёные на SQLite и на
+- 1054 теста после стартовой страницы Admin, зелёные на SQLite и на
   PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
