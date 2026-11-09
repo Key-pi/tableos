@@ -334,6 +334,7 @@ class TableAdmin(ScopedAdminMixin):
 @admin.register(TableSession)
 class TableSessionAdmin(ScopedAdminMixin):
     admin_section = AdminSection.TABLES
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = ("table", "guest", "visit", "partner", "status", "started_at", "closed_at")
@@ -381,6 +382,7 @@ class TableVisitAdmin(ScopedAdminMixin):
     """Table visits (ADR-0007): read-only; closing goes through the owner service."""
 
     admin_section = AdminSection.TABLES
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = ("table", "partner", "status", "started_at", "closed_at", "closed_by")

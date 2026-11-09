@@ -528,7 +528,7 @@ msgstr "Примітка"
 msgid "запрос счёта"
 msgstr "запит рахунку"
 
-#: apps/billing/models.py
+#: apps/billing/models.py apps/users/admin_navigation.py
 msgid "Запросы счёта"
 msgstr "Запити рахунку"
 
@@ -580,7 +580,7 @@ msgstr "Хто прибрав"
 msgid "строка счёта"
 msgstr "рядок рахунку"
 
-#: apps/billing/models.py
+#: apps/billing/models.py apps/users/admin_navigation.py
 msgid "Строки счетов"
 msgstr "Рядки рахунків"
 
@@ -724,7 +724,7 @@ msgstr "Дані зміни"
 msgid "изменение счёта"
 msgstr "зміна рахунку"
 
-#: apps/billing/models.py
+#: apps/billing/models.py apps/users/admin_navigation.py
 msgid "Изменения счетов"
 msgstr "Зміни рахунків"
 
@@ -2040,7 +2040,7 @@ msgstr "До чого пропонувати"
 msgid "Категория — для всех её позиций и подкатегорий; позиции — по одной."
 msgstr "Категорія — для всіх її позицій і підкатегорій; позиції — по одній."
 
-#: apps/menu/apps.py apps/partners/models.py apps/users/constants.py
+#: apps/menu/apps.py apps/partners/models.py apps/users/admin_navigation.py apps/users/constants.py
 msgid "Меню"
 msgstr "Меню"
 
@@ -3758,7 +3758,7 @@ msgstr "Звіт"
 msgid "Отчёт по сети"
 msgstr "Звіт по мережі"
 
-#: apps/partners/admin.py
+#: apps/partners/admin.py apps/users/admin_navigation.py
 msgid "Сегодня"
 msgstr "Сьогодні"
 
@@ -4044,7 +4044,7 @@ msgstr "Часовий пояс"
 msgid "Контактный телефон"
 msgstr "Контактний телефон"
 
-#: apps/partners/models.py
+#: apps/partners/models.py apps/users/admin_navigation.py
 msgid "Сеть"
 msgstr "Мережа"
 
@@ -4064,7 +4064,7 @@ msgstr "Гість мережі бачить її, коли обирає зак�
 msgid "заведение"
 msgstr "заклад"
 
-#: apps/partners/models.py apps/users/admin.py apps/users/models.py core/database/models.py
+#: apps/partners/models.py apps/users/admin.py apps/users/admin_navigation.py apps/users/models.py core/database/models.py
 msgid "Заведение"
 msgstr "Заклад"
 
@@ -4991,6 +4991,66 @@ msgstr "Збережіть профіль, щоб побачити права н
 #: apps/users/admin.py
 msgid "Прав на разделы пока нет."
 msgstr "Прав на розділи поки немає."
+
+#: apps/users/admin_navigation.py
+msgid "Заказы и счета"
+msgstr "Замовлення і рахунки"
+
+#: apps/users/admin_navigation.py
+msgid "Гости и бонусы"
+msgstr "Гості й бонуси"
+
+#: apps/users/admin_navigation.py
+msgid "Маркетинг"
+msgstr "Маркетинг"
+
+#: apps/users/admin_navigation.py
+msgid "Персонал"
+msgstr "Персонал"
+
+#: apps/users/admin_navigation.py
+msgid "Входы в Admin"
+msgstr "Входи в Admin"
+
+#: apps/users/admin_navigation.py
+msgid "Отчёты"
+msgstr "Звіти"
+
+#: apps/users/admin_navigation.py
+msgid "Отчёт сети"
+msgstr "Звіт мережі"
+
+#: apps/users/admin_navigation.py
+msgid "Настройки"
+msgstr "Налаштування"
+
+#: apps/users/admin_navigation.py
+msgid "Настройки бота"
+msgstr "Налаштування бота"
+
+#: apps/users/admin_navigation.py
+msgid "Платформа"
+msgstr "Платформа"
+
+#: apps/users/admin_navigation.py
+msgid "Визиты"
+msgstr "Візити"
+
+#: apps/users/admin_navigation.py
+msgid "Сессии"
+msgstr "Сесії"
+
+#: apps/users/admin_navigation.py
+msgid "Доставки"
+msgstr "Доставки"
+
+#: apps/users/admin_navigation.py
+msgid "Уведомления персонала"
+msgstr "Сповіщення персоналу"
+
+#: apps/users/admin_navigation.py
+msgid "Сообщения гостям"
+msgstr "Повідомлення гостям"
 
 #: apps/users/apps.py
 msgid "Пользователи и гости"
@@ -7771,6 +7831,10 @@ msgstr "Перевірка роботи"
 #: core/urls.py
 msgid "Демо-данные (логины, ссылки на столы):"
 msgstr "Демо-дані (логіни, посилання на столи):"
+
+#: templates/unfold/helpers/app_list.html
+msgid "Добавить: {name}"
+msgstr "Додати: {name}"
 
 #: webapp/context.py
 msgid "Это меню больше не работает. Откройте меню из бота ещё раз."

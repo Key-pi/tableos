@@ -117,6 +117,15 @@ UNFOLD = {
     "SITE_SUBHEADER": "apps.partners.admin_network.site_subheader",
     "SITE_DROPDOWN": "apps.partners.admin_network.site_dropdown",
     "ENVIRONMENT": "apps.partners.admin_network.header_badge",
+    # Admin step 1 (2026-11-09): the menu by the venue's tasks, «+» next to
+    # pages one adds to, related pages as tabs; every table by app — for the
+    # platform only.
+    "SIDEBAR": {
+        "show_search": "apps.users.admin_navigation.show_all_applications",
+        "show_all_applications": "apps.users.admin_navigation.show_all_applications",
+        "navigation": "apps.users.admin_navigation.sidebar",
+    },
+    "TABS": "apps.users.admin_navigation.tabs",
 }
 
 BOT_TOKEN_ENCRYPTION_KEY = app_settings.bot_token_encryption_key

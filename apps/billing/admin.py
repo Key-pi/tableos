@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from unfold.admin import TabularInline
 
 from apps.billing.admin_actions import run_refund, run_with_reason
 from apps.billing.forms import PaymentAdminForm
@@ -32,7 +33,7 @@ from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
 
 
-class BillOrderInline(admin.TabularInline):
+class BillOrderInline(TabularInline):
     model = BillOrder
     extra = 0
     can_delete = False
@@ -42,7 +43,7 @@ class BillOrderInline(admin.TabularInline):
         return False
 
 
-class BillItemInline(admin.TabularInline):
+class BillItemInline(TabularInline):
     model = BillItem
     extra = 0
     can_delete = False
@@ -67,7 +68,7 @@ class BillItemInline(admin.TabularInline):
         return False
 
 
-class BillAdjustmentInline(admin.TabularInline):
+class BillAdjustmentInline(TabularInline):
     model = BillAdjustment
     extra = 0
     can_delete = False
@@ -89,7 +90,7 @@ class BillAdjustmentInline(admin.TabularInline):
         return False
 
 
-class RefundInline(admin.TabularInline):
+class RefundInline(TabularInline):
     """Refunds of the bill (PQ-037); made with the bill line action."""
 
     model = Refund
@@ -115,7 +116,7 @@ class RefundInline(admin.TabularInline):
         return False
 
 
-class PaymentInline(admin.TabularInline):
+class PaymentInline(TabularInline):
     model = Payment
     extra = 0
     can_delete = False
@@ -129,6 +130,7 @@ class PaymentInline(admin.TabularInline):
 @admin.register(BillingRequest)
 class BillingRequestAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BILLING
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = (
@@ -358,6 +360,7 @@ class BillAdmin(ScopedAdminMixin):
 @admin.register(BillOrder)
 class BillOrderAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BILLING
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = ("bill", "order", "partner", "created_at")
@@ -369,6 +372,7 @@ class BillOrderAdmin(ScopedAdminMixin):
 @admin.register(BillItem)
 class BillItemAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BILLING
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = (
@@ -447,6 +451,7 @@ class BillItemAdmin(ScopedAdminMixin):
 @admin.register(BillAdjustment)
 class BillAdjustmentAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BILLING
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = (
@@ -521,7 +526,7 @@ class PaymentAdmin(ScopedAdminMixin):
         obj.created_by = payment.created_by
 
 
-class RefundLineInline(admin.TabularInline):
+class RefundLineInline(TabularInline):
     model = RefundLine
     extra = 0
     can_delete = False

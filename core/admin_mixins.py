@@ -1,7 +1,14 @@
 from __future__ import annotations
 
-from django.contrib import admin
+from django.contrib.admin import display
+from django.contrib.admin.options import IS_POPUP_VAR
 from django.core.exceptions import PermissionDenied
+from django.http import HttpResponseRedirect
+from django.urls import reverse
+from django.utils.functional import lazy
+from django.utils.safestring import SafeString, mark_safe
+from unfold.admin import ModelAdmin as UnfoldModelAdmin
+from unfold.admin import checkbox as unfold_checkbox
 
 from apps.partners.models import Partner
 from apps.partners.networks import admin_partner_ids
@@ -66,7 +73,26 @@ def is_partner_owner_or_superuser(user) -> bool:
     return profile is not None and profile.is_partner_owner
 
 
-class ScopedAdminMixin(admin.ModelAdmin):
+def _toggle_all_checkbox() -> SafeString:
+    return mark_safe(unfold_checkbox.render("action_toggle_all", 1))
+
+
+class BoteraModelAdmin(UnfoldModelAdmin):
+    """Every Admin page of Botera Shop: Unfold's ModelAdmin (admin step 1,
+    2026-11-09) — its widgets, action buttons and filters, not only its page
+    styles."""
+
+    warn_unsaved_form = True
+    list_filter_submit = True
+
+    # Unfold renders the «select all» box once, at import, in that moment's
+    # language; drawn per request it follows each user's language (PQ-040).
+    @display(description=lazy(_toggle_all_checkbox, SafeString)())
+    def action_checkbox(self, obj):
+        return super().action_checkbox(obj)
+
+
+class ScopedAdminMixin(BoteraModelAdmin):
     """Reusable admin guard that scopes partner data and section permissions."""
 
     admin_section: str = ""
@@ -79,6 +105,15 @@ class ScopedAdminMixin(admin.ModelAdmin):
     owner_only_fields: tuple[str, ...] = ()
     allow_partner_add = True
     allow_partner_delete = True
+    # A table that belongs to another page (order lines, status history, bill
+    # lines…): not in a venue's menu or index; it opens as a tab of that page
+    # (apps/users/admin_navigation.py). Rights to open it stay the section's.
+    service_table: bool = False
+    # A venue has one record here (its card, its bot settings): its list
+    # opens that record's form.
+    single_record: bool = False
+    # Columns that only tell venues apart: Admin of a venue shows one venue.
+    partner_columns: tuple[str, ...] = ("partner",)
 
     def is_platform_admin(self, request) -> bool:
         return request.user.is_superuser
@@ -91,6 +126,8 @@ class ScopedAdminMixin(admin.ModelAdmin):
     def has_module_permission(self, request):
         if self.platform_only:
             return self.is_platform_admin(request)
+        if self.service_table and not self.is_platform_admin(request):
+            return False
         return has_admin_section_permission(request.user, self.admin_section, "view")
 
     def has_view_permission(self, request, obj=None):
@@ -146,6 +183,31 @@ class ScopedAdminMixin(admin.ModelAdmin):
         if partner_scope_id is None:
             return queryset.none()
         return queryset.filter(**{self.partner_filter: partner_scope_id})
+
+    def get_list_display(self, request):
+        list_display = super().get_list_display(request)
+        if self.is_platform_admin(request):
+            return list_display
+        return tuple(column for column in list_display if column not in self.partner_columns)
+
+    def changelist_view(self, request, extra_context=None):
+        if (
+            self.single_record
+            and request.method == "GET"
+            and not self.is_platform_admin(request)
+            and IS_POPUP_VAR not in request.GET
+            and self.has_view_permission(request)
+        ):
+            pks = list(self.get_queryset(request).values_list("pk", flat=True)[:2])
+            if len(pks) == 1:
+                opts = self.model._meta
+                return HttpResponseRedirect(
+                    reverse(
+                        f"{self.admin_site.name}:{opts.app_label}_{opts.model_name}_change",
+                        args=(pks[0],),
+                    )
+                )
+        return super().changelist_view(request, extra_context)
 
     def get_list_filter(self, request):
         list_filters = super().get_list_filter(request)

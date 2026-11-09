@@ -1,0 +1,93 @@
+{% load i18n unfold botera_i18n %}
+{% comment %}
+Unfold 0.110 helpers/app_list.html with one change (admin step 1, 2026-11-09):
+an item with ``add_link`` gets «+» next to it (apps/users/admin_navigation.py),
+so a record is added from the menu without opening its list first.
+{% endcomment %}
+
+{% if sidebar_navigation %}
+    <div id="nav-sidebar-apps" class="h-0 grow overflow-auto scrollbar-default-hover">
+        {% for group in sidebar_navigation %}
+            {% if group.items %}
+                {% has_nav_item_active group.items as has_active %}
+
+                <div class="hidden mb-1.5 has-[ol]:has-[li]:block" {% if group.collapsible %}x-data="{navigationOpen: {% if has_active %}true{% else %}false{% endif %}}"{% endif %}>
+                    {% if group.separator %}
+                        <hr class="border-t border-base-200 mx-6 my-2 dark:border-base-800" />
+                    {% endif %}
+
+                    {% if group.title %}
+                        <h2 class="font-semibold flex flex-row group items-center mb-1 mx-3 py-1.5 px-3 select-none text-font-important-light text-sm dark:text-font-important-dark {% if group.collapsible %}cursor-pointer hover:text-primary-600 dark:hover:text-primary-500{% endif %}" {% if group.collapsible %}x-on:click="navigationOpen = !navigationOpen"{% endif %}>
+                            {{ group.title }}
+
+                            {% include "unfold/helpers/app_list_badge.html" with item=group %}
+
+                            {% if group.collapsible %}
+                                <span class="material-symbols-outlined ml-auto transition-transform group-hover:text-primary-600 dark:group-hover:text-primary-500 rtl:ml-0 rtl:mr-auto rtl:-scale-x-100" x-bind:class="{'rotate-90 rtl:-rotate-90': navigationOpen}">
+                                    chevron_right
+                                </span>
+                            {% endif %}
+                        </h2>
+                    {% endif %}
+
+                    <ol class="flex flex-col px-6" {% if group.collapsible %}x-show="navigationOpen"{% endif %}>
+                        {% for item in group.items %}
+                            {% if item.has_permission %}
+                                <li {% if item.items|is_list %}x-data="{'subnavigationOpen': {% if item.items|has_active_item %}true{% else %}false{% endif %} }"{% endif %}>
+                                    <div class="flex items-center -mx-3">
+                                    <a {% if item.items|is_list and item.items|length > 0 %}x-on:click="subnavigationOpen = !subnavigationOpen"{% else %}href="{% if item.link_callback %}{{ item.link_callback }}{% else %}{{ item.link }}{% endif %}"{% endif %} class="cursor-pointer flex grow min-w-0 h-[38px] items-center px-3 rounded-default hover:text-primary-600 dark:hover:text-primary-500 {% if item.active %}bg-base-100 font-semibold text-primary-600 dark:bg-white/[.06] dark:text-primary-500 active{% endif %}" {% if item.link_attrs %}{% include "unfold/helpers/attrs.html" with attrs=item.link_attrs %}{% endif %}>
+                                        {% if item.icon_template %}
+                                            {% include item.icon_template with item=item %}
+                                        {% elif item.icon %}
+                                            <span class="material-symbols-outlined md-18 mr-3 w-[18px] rtl:mr-0 rtl:ml-3">
+                                                {{ item.icon }}
+                                            </span>
+                                        {% endif %}
+
+                                        <span>{{ item.title|safe }}</span>
+
+                                        {% include "unfold/helpers/app_list_badge.html" with item=item %}
+
+                                        {% if item.items|is_list and item.items|length > 0 %}
+                                            <span class="material-symbols-outlined ml-auto select-none transition-all group-hover:text-primary-600 dark:group-hover:text-primary-500 rtl:ml-0 rtl:mr-auto rtl:-scale-x-100" x-bind:class="{'rotate-90 rtl:-rotate-90': subnavigationOpen}">
+                                                chevron_right
+                                            </span>
+                                        {% endif %}
+                                    </a>
+                                    {% if item.add_link %}
+                                        {% tr "Добавить: {name}" name=item.title as add_label %}
+                                        <a href="{{ item.add_link }}" class="sidebar-add-link flex shrink-0 h-[38px] w-[38px] items-center justify-center rounded-default text-font-subtle-light hover:bg-base-100 hover:text-primary-600 dark:text-font-subtle-dark dark:hover:bg-white/[.06] dark:hover:text-primary-500" title="{{ add_label }}" aria-label="{{ add_label }}">
+                                            <span class="material-symbols-outlined md-18">add</span>
+                                        </a>
+                                    {% endif %}
+                                    </div>
+
+                                    {% if item.items|is_list %}
+                                        <ul class="border-s-2 border-base-200 flex flex-col gap-0.5 ms-2 my-2 dark:border-base-800" x-show="subnavigationOpen">
+                                            {% for subitem in item.items %}
+                                                {% if subitem.has_permission %}
+                                                    <li class="ms-5">
+                                                        <a href="{% if subitem.link_callback %}{{ subitem.link_callback }}{% else %}{{ subitem.link }}{% endif %}" class="block rounded-default -mx-3 px-3 py-1.5 hover:text-primary-600 dark:hover:text-primary-500 {% if subitem.active %}bg-base-100 font-medium text-primary-600 dark:bg-white/[.06] dark:text-primary-500{% endif %}">
+                                                            {{ subitem.title }}
+                                                        </a>
+                                                    </li>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </ul>
+                                    {% endif %}
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                    </ol>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    {% include "unfold/helpers/app_list_all.html" %}
+{% else %}
+    <p>
+        {% trans "You don’t have permission to view or edit anything." as error_message %}
+        {% include "unfold/helpers/messages/error.html" with error=error_message %}
+    </p>
+{% endif %}

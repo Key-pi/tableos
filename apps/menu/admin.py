@@ -1,6 +1,12 @@
 from django import forms
 from django.contrib import admin, messages
 from django.forms.models import BaseInlineFormSet
+from unfold.admin import TabularInline
+from unfold.widgets import (
+    UnfoldAdminCheckboxSelectMultipleWidget,
+    UnfoldAdminTextareaWidget,
+    UnfoldAdminTextInputWidget,
+)
 
 from apps.menu.catalog import BUILTIN_BADGES, WEEKDAYS
 from apps.menu.models import (
@@ -97,7 +103,10 @@ def translated_form(form_class, model, languages):
                 label=f"{model_field.verbose_name} · {LANGUAGE_NAMES[language]}",
                 required=False,
                 max_length=model_field.max_length,
-                widget=forms.Textarea(attrs={"rows": 2}) if long_text else forms.TextInput,
+                widget=(
+                    UnfoldAdminTextareaWidget(attrs={"rows": 2}) if long_text
+                    else UnfoldAdminTextInputWidget
+                ),
             )
     return type(form_class.__name__, (TranslationsFormMixin, form_class), attrs)
 
@@ -175,7 +184,7 @@ class VenueFormMixin:
 class MenuCategoryForm(forms.ModelForm):
     available_weekdays = ChoiceListField(
         choices=[(index, _lazy(day)) for index, day in enumerate(WEEKDAYS)],
-        coerce=int, required=False, widget=forms.CheckboxSelectMultiple,
+        coerce=int, required=False, widget=UnfoldAdminCheckboxSelectMultipleWidget,
         label=_lazy("Дни продажи"), help_text=_lazy("Ничего не отмечено — каждый день."),
     )
 
@@ -263,7 +272,7 @@ class MenuItemForm(StockSeenMixin, forms.ModelForm):
         choices=[
             (code, f"{emoji} {_lazy(name)}") for code, (emoji, name) in BUILTIN_BADGES.items()
         ],
-        required=False, widget=forms.CheckboxSelectMultiple, label=_lazy("Метки"),
+        required=False, widget=UnfoldAdminCheckboxSelectMultipleWidget, label=_lazy("Метки"),
     )
 
     class Meta:
@@ -332,21 +341,21 @@ class StockVariantForm(StockSeenMixin, forms.ModelForm):
         fields = ("name", "price", "is_available", "sort_order", "stock_quantity")
 
 
-class MenuItemPhotoInline(SectionInlineMixin, admin.TabularInline):
+class MenuItemPhotoInline(SectionInlineMixin, TabularInline):
     admin_section = AdminSection.MENU
     model = MenuItemPhoto
     fields = ("image", "sort_order")
     extra = 0
 
 
-class MenuItemAttributeInline(TranslatedInlineMixin, SectionInlineMixin, admin.TabularInline):
+class MenuItemAttributeInline(TranslatedInlineMixin, SectionInlineMixin, TabularInline):
     admin_section = AdminSection.MENU
     model = MenuItemAttribute
     fields = ("name", "value", "sort_order")
     extra = 0
 
 
-class MenuItemVariantInline(TranslatedInlineMixin, SectionInlineMixin, admin.TabularInline):
+class MenuItemVariantInline(TranslatedInlineMixin, SectionInlineMixin, TabularInline):
     """Variants with their own price (module «Варианты и добавки»)."""
 
     admin_section = AdminSection.MENU
@@ -530,7 +539,7 @@ class StockMovementAdmin(ScopedAdminMixin):
         return False
 
 
-class ModifierInline(TranslatedInlineMixin, SectionInlineMixin, admin.TabularInline):
+class ModifierInline(TranslatedInlineMixin, SectionInlineMixin, TabularInline):
     admin_section = AdminSection.MENU
     model = Modifier
     fields = ("name", "price", "is_available", "sort_order")

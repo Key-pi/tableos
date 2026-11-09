@@ -1,4 +1,5 @@
 from django.contrib import admin
+from unfold.admin import TabularInline
 
 from apps.bonuses.forms import WalkInSaleAdminForm
 from apps.bonuses.models import BonusProgram, BonusTransaction, WalkInSale, WalkInSaleItem
@@ -8,7 +9,7 @@ from core.admin_mixins import ScopedAdminMixin
 from core.i18n import gettext_lazy as _lazy
 
 
-class WalkInSaleItemInline(admin.TabularInline):
+class WalkInSaleItemInline(TabularInline):
     model = WalkInSaleItem
     extra = 0
     can_delete = False

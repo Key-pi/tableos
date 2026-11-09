@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
 from django.urls import reverse
 from django.utils.html import format_html
+from unfold.admin import TabularInline
 
 from apps.billing.admin_actions import run_with_reason
 from apps.billing.models import Bill, BillItem
@@ -21,7 +22,7 @@ from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
 
 
-class CartItemInline(admin.TabularInline):
+class CartItemInline(TabularInline):
     model = CartItem
     extra = 0
     can_delete = False
@@ -40,7 +41,7 @@ class CartItemInline(admin.TabularInline):
         return False
 
 
-class OrderItemInline(admin.TabularInline):
+class OrderItemInline(TabularInline):
     model = OrderItem
     extra = 0
     can_delete = False
@@ -60,7 +61,7 @@ class OrderItemInline(admin.TabularInline):
         return False
 
 
-class OrderStatusHistoryInline(admin.TabularInline):
+class OrderStatusHistoryInline(TabularInline):
     model = OrderStatusHistory
     extra = 0
     can_delete = False
@@ -264,6 +265,7 @@ class OrderAdmin(ScopedAdminMixin):
 @admin.register(OrderItem)
 class OrderItemAdmin(ScopedAdminMixin):
     admin_section = AdminSection.ORDERS
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = ("item_name", "partner", "order", "quantity", "unit_price")
@@ -286,6 +288,7 @@ class OrderItemAdmin(ScopedAdminMixin):
 @admin.register(Cart)
 class CartAdmin(ScopedAdminMixin):
     admin_section = AdminSection.ORDERS
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = (
@@ -315,6 +318,7 @@ class CartAdmin(ScopedAdminMixin):
 @admin.register(CartItem)
 class CartItemAdmin(ScopedAdminMixin):
     admin_section = AdminSection.ORDERS
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = ("item_name", "partner", "cart", "quantity", "unit_price")
@@ -336,6 +340,7 @@ class CartItemAdmin(ScopedAdminMixin):
 @admin.register(OrderStatusHistory)
 class OrderStatusHistoryAdmin(ScopedAdminMixin):
     admin_section = AdminSection.ORDERS
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = ("order", "partner", "from_status", "to_status", "changed_by", "created_at")

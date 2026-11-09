@@ -528,7 +528,7 @@ msgstr "Note"
 msgid "запрос счёта"
 msgstr "bill request"
 
-#: apps/billing/models.py
+#: apps/billing/models.py apps/users/admin_navigation.py
 msgid "Запросы счёта"
 msgstr "Bill requests"
 
@@ -580,7 +580,7 @@ msgstr "Removed by"
 msgid "строка счёта"
 msgstr "bill line"
 
-#: apps/billing/models.py
+#: apps/billing/models.py apps/users/admin_navigation.py
 msgid "Строки счетов"
 msgstr "Bill lines"
 
@@ -724,7 +724,7 @@ msgstr "Change data"
 msgid "изменение счёта"
 msgstr "bill change"
 
-#: apps/billing/models.py
+#: apps/billing/models.py apps/users/admin_navigation.py
 msgid "Изменения счетов"
 msgstr "Bill changes"
 
@@ -2040,7 +2040,7 @@ msgstr "Offer with"
 msgid "Категория — для всех её позиций и подкатегорий; позиции — по одной."
 msgstr "A category covers all its items and subcategories; items are picked one by one."
 
-#: apps/menu/apps.py apps/partners/models.py apps/users/constants.py
+#: apps/menu/apps.py apps/partners/models.py apps/users/admin_navigation.py apps/users/constants.py
 msgid "Меню"
 msgstr "Menu"
 
@@ -3758,7 +3758,7 @@ msgstr "Report"
 msgid "Отчёт по сети"
 msgstr "Network report"
 
-#: apps/partners/admin.py
+#: apps/partners/admin.py apps/users/admin_navigation.py
 msgid "Сегодня"
 msgstr "Today"
 
@@ -4044,7 +4044,7 @@ msgstr "Time zone"
 msgid "Контактный телефон"
 msgstr "Contact phone"
 
-#: apps/partners/models.py
+#: apps/partners/models.py apps/users/admin_navigation.py
 msgid "Сеть"
 msgstr "Network"
 
@@ -4064,7 +4064,7 @@ msgstr "Guests of the network see it when they pick a venue."
 msgid "заведение"
 msgstr "venue"
 
-#: apps/partners/models.py apps/users/admin.py apps/users/models.py core/database/models.py
+#: apps/partners/models.py apps/users/admin.py apps/users/admin_navigation.py apps/users/models.py core/database/models.py
 msgid "Заведение"
 msgstr "Venue"
 
@@ -4991,6 +4991,66 @@ msgstr "Save the profile to see the set's rights."
 #: apps/users/admin.py
 msgid "Прав на разделы пока нет."
 msgstr "No section rights yet."
+
+#: apps/users/admin_navigation.py
+msgid "Заказы и счета"
+msgstr "Orders and bills"
+
+#: apps/users/admin_navigation.py
+msgid "Гости и бонусы"
+msgstr "Guests and bonuses"
+
+#: apps/users/admin_navigation.py
+msgid "Маркетинг"
+msgstr "Marketing"
+
+#: apps/users/admin_navigation.py
+msgid "Персонал"
+msgstr "Staff"
+
+#: apps/users/admin_navigation.py
+msgid "Входы в Admin"
+msgstr "Admin logins"
+
+#: apps/users/admin_navigation.py
+msgid "Отчёты"
+msgstr "Reports"
+
+#: apps/users/admin_navigation.py
+msgid "Отчёт сети"
+msgstr "Network report"
+
+#: apps/users/admin_navigation.py
+msgid "Настройки"
+msgstr "Settings"
+
+#: apps/users/admin_navigation.py
+msgid "Настройки бота"
+msgstr "Bot settings"
+
+#: apps/users/admin_navigation.py
+msgid "Платформа"
+msgstr "Platform"
+
+#: apps/users/admin_navigation.py
+msgid "Визиты"
+msgstr "Visits"
+
+#: apps/users/admin_navigation.py
+msgid "Сессии"
+msgstr "Sessions"
+
+#: apps/users/admin_navigation.py
+msgid "Доставки"
+msgstr "Deliveries"
+
+#: apps/users/admin_navigation.py
+msgid "Уведомления персонала"
+msgstr "Staff notifications"
+
+#: apps/users/admin_navigation.py
+msgid "Сообщения гостям"
+msgstr "Guest messages"
 
 #: apps/users/apps.py
 msgid "Пользователи и гости"
@@ -7771,6 +7831,10 @@ msgstr "Health check"
 #: core/urls.py
 msgid "Демо-данные (логины, ссылки на столы):"
 msgstr "Demo data (logins, table links):"
+
+#: templates/unfold/helpers/app_list.html
+msgid "Добавить: {name}"
+msgstr "Add: {name}"
 
 #: webapp/context.py
 msgid "Это меню больше не работает. Откройте меню из бота ещё раз."

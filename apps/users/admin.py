@@ -1,7 +1,11 @@
 from django import forms
 from django.contrib import admin
+from django.contrib.auth.admin import GroupAdmin as DjangoGroupAdmin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
+from unfold.admin import ModelAdmin, TabularInline
+from unfold.forms import AdminPasswordChangeForm
 
 from apps.partners.models import Partner
 from apps.users.constants import (
@@ -19,6 +23,7 @@ from apps.users.models import (
     User,
 )
 from core.admin_mixins import (
+    BoteraModelAdmin,
     ScopedAdminMixin,
     get_admin_access_profile,
     is_partner_owner_or_superuser,
@@ -93,7 +98,7 @@ class AdminSectionPermissionFormSet(forms.BaseInlineFormSet):
             raise _rights_error(excess)
 
 
-class AdminSectionPermissionInline(admin.TabularInline):
+class AdminSectionPermissionInline(TabularInline):
     model = AdminSectionPermission
     extra = 0
     fields = (
@@ -129,9 +134,19 @@ class AdminSectionPermissionInline(admin.TabularInline):
         return super().has_delete_permission(request, obj)
 
 
+# Django's groups, for the platform only, on Unfold's pages (admin step 1).
+admin.site.unregister(Group)
+
+
+@admin.register(Group)
+class GroupAdmin(DjangoGroupAdmin, BoteraModelAdmin):
+    pass
+
+
 @admin.register(User)
 class UserAdmin(ScopedAdminMixin, DjangoUserAdmin):
     admin_section = AdminSection.ADMIN_ACCESS
+    change_password_form = AdminPasswordChangeForm
     partner_filter = "partner_id"
     scope_partner_field = "partner"
     form = AdminUserChangeForm
@@ -350,7 +365,7 @@ class AdminAccessProfileAdmin(ScopedAdminMixin):
                 if network_id is not None
                 else Partner.objects.none()
             )
-            return admin.ModelAdmin.formfield_for_manytomany(self, db_field, request, **kwargs)
+            return ModelAdmin.formfield_for_manytomany(self, db_field, request, **kwargs)
         return super().formfield_for_manytomany(db_field, request, **kwargs)
 
     def has_change_permission(self, request, obj=None):

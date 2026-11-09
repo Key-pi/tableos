@@ -16,6 +16,7 @@ from core.i18n import gettext_lazy as _lazy
 @admin.register(NotificationPreference)
 class NotificationPreferenceAdmin(ScopedAdminMixin):
     admin_section = AdminSection.NOTIFICATIONS
+    service_table = True
     list_display = (
         "guest",
         "partner",
@@ -73,6 +74,7 @@ class BroadcastDeliveryAdmin(ScopedAdminMixin):
     """Read-only per-guest delivery log of broadcasts (PQ-014)."""
 
     admin_section = AdminSection.NOTIFICATIONS
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = ("campaign", "guest", "status", "finished_at", "partner")
@@ -106,6 +108,7 @@ class BroadcastDeliveryAdmin(ScopedAdminMixin):
 @admin.register(StaffNotification)
 class StaffNotificationAdmin(ScopedAdminMixin):
     admin_section = AdminSection.NOTIFICATIONS
+    service_table = True
     allow_partner_add = False
     allow_partner_delete = False
     list_display = (

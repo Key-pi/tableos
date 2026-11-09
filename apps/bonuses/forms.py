@@ -1,4 +1,5 @@
 from django import forms
+from unfold.widgets import UnfoldAdminTextInputWidget
 
 from apps.bonuses.models import WalkInSale
 from apps.users.models import GuestProfile
@@ -11,6 +12,7 @@ class WalkInSaleAdminForm(forms.ModelForm):
     customer_code_input = forms.CharField(
         label=_lazy("Код клиента"),
         required=True,
+        widget=UnfoldAdminTextInputWidget,
         help_text=(
             _lazy(
                 "Код клиента из профиля гостя в боте. Быстрая продажа записывается только на "

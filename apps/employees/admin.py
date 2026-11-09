@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
+from unfold.widgets import UnfoldAdminSelectWidget
 
 from apps.employees.forms import EmployeeProfileAdminForm
 from apps.employees.invites import (
@@ -199,6 +200,7 @@ class StaffInviteAdmin(ScopedAdminMixin):
                 self.fields["role"] = forms.ChoiceField(
                     label=_lazy("Роль"),
                     choices=[(role, User.Role(role).label) for role in roles],
+                    widget=UnfoldAdminSelectWidget,
                 )
 
         return RoleForm

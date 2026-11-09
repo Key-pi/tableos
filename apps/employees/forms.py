@@ -1,4 +1,5 @@
 from django import forms
+from unfold.widgets import UnfoldAdminIntegerFieldWidget, UnfoldAdminTextInputWidget
 
 from apps.employees.models import EmployeeProfile
 from apps.users.models import AdminAccessProfile, TelegramAccount
@@ -22,10 +23,12 @@ def _is_owner_or_superuser(user) -> bool:
 class EmployeeProfileAdminForm(forms.ModelForm):
     telegram_id = forms.IntegerField(
         required=False,
+        widget=UnfoldAdminIntegerFieldWidget,
         help_text=_lazy("Telegram ID сотрудника для уведомлений в боте."),
     )
     telegram_username = forms.CharField(
         required=False,
+        widget=UnfoldAdminTextInputWidget,
         help_text=_lazy("Опционально: username сотрудника без @."),
     )
 

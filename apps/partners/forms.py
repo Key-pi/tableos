@@ -1,4 +1,10 @@
 from django import forms
+from unfold.widgets import (
+    UnfoldAdminPasswordToggleWidget,
+    UnfoldAdminSelectWidget,
+    UnfoldAdminTextareaWidget,
+    UnfoldAdminTextInputWidget,
+)
 
 from apps.partners.bot_texts import GROUP_LABELS, editable_texts
 from apps.partners.models import BotInstance, BotText, text_key
@@ -10,6 +16,7 @@ class BotInstanceAdminForm(forms.ModelForm):
     username = forms.CharField(
         label=_lazy("Имя бота (без @)"),
         required=True,
+        widget=UnfoldAdminTextInputWidget,
         help_text=(
             _lazy(
                 "Имя бота в Telegram без @, например smoke_lounge_bot. По нему строятся ссылки "
@@ -20,7 +27,7 @@ class BotInstanceAdminForm(forms.ModelForm):
     raw_token = forms.CharField(
         label=_lazy("Токен бота"),
         required=False,
-        widget=forms.PasswordInput(render_value=True),
+        widget=UnfoldAdminPasswordToggleWidget(render_value=True),
         help_text=_lazy("Вставьте токен от @BotFather. Он хранится зашифрованным."),
     )
 
@@ -90,12 +97,12 @@ class BotTextForm(forms.ModelForm):
 
     scope_partner_id = None  # set by the admin for a venue's own staff
 
-    msgid = forms.ChoiceField(label=_lazy("Текст в каталоге"))
+    msgid = forms.ChoiceField(label=_lazy("Текст в каталоге"), widget=UnfoldAdminSelectWidget)
 
     class Meta:
         model = BotText
         fields = ("partner", "language", "msgid", "text")
-        widgets = {"text": forms.Textarea(attrs={"rows": 4})}
+        widgets = {"text": UnfoldAdminTextareaWidget(attrs={"rows": 4})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

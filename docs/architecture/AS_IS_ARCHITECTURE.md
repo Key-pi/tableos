@@ -136,6 +136,7 @@ bonuses       -> menu, orders, partners, users
 partners      -> bonuses, employees, menu, tables, users (Admin и наполнение демо-данными)
 menu          -> users
 employees     -> users
+users         -> billing, orders, partners (только меню Admin, apps.get_model)
 core          -> partners, users (core/admin_mixins.py); orders, partners, tables (core/urls.py)
 ```
 
@@ -617,6 +618,30 @@ Admin нельзя — их отменяет действие «Отменить
 не показывает суперпользователей, а в `OrderAdmin` поля `guest`, `table` и
 `table_session` только для чтения.
 
+Admin построена на Unfold целиком (шаг 1 приведения Admin в порядок,
+PQ-050): все страницы — `core/admin_mixins.py:BoteraModelAdmin` (его
+наследует `ScopedAdminMixin`), inline — `unfold.admin.TabularInline` /
+`StackedInline`, у объявленных вручную полей форм — виджеты Unfold.
+Меню слева — по задачам заведения, а не по приложениям Django
+(`apps/users/admin_navigation.py:sidebar`, `UNFOLD["SIDEBAR"]`): «Сегодня»,
+«Заказы и счета», «Меню», «Гости и бонусы», «Маркетинг», «Персонал»,
+«Отчёты», «Настройки». Пункт виден, если открыть страницу позволяют её права
+(`has_module_permission`), а страница модуля — пока модуль включён
+(`PartnerBotSettings.module_*_enabled`). Рядом с пунктом, куда можно добавить
+запись, — «+» (`add_link`, есть право `add`; рисует
+`templates/unfold/helpers/app_list.html` — копия шаблона Unfold 0.110 с этой
+добавкой). У «Заказов» — число новых, у «Счетов» — открытых запросов счёта.
+Служебные таблицы (`ScopedAdminMixin.service_table`: строки и история
+заказа, корзины, строки, связи и изменения счетов, запросы счёта, сессии и
+визиты столов, доставки рассылок, уведомления персонала, настройки сообщений
+гостей) не в меню и не на главной заведения; права на них прежние, они
+открываются вкладками своей страницы (`admin_navigation.py:tabs`,
+`UNFOLD["TABS"]`) — вкладка видна, если её можно открыть. Карточка
+заведения и настройки бота (`single_record`) открываются сразу формой своей
+записи. Колонка «Заведение» (`partner_columns`) в списках заведения не
+показывается. Суперпользователь видит ещё группу «Платформа» (служебные
+таблицы, Telegram-аккаунты, группы) и «Все приложения».
+
 Сети заведений (PQ-047, этап 1, [NETWORKS.md](NETWORKS.md)). Точка остаётся
 партнёром. `Partner.network` объединяет точки, `AdminAccessProfile.extra_partners`
 даёт менеджеру другие точки той же сети. Какие точки открывает человек,
@@ -707,7 +732,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1009 тестов после исправления кнопки «Бонусы», зелёные на SQLite и на
+- 1027 тестов после меню Admin по задачам, зелёные на SQLite и на
   PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа

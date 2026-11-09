@@ -8,6 +8,11 @@ owner-granted permission and records a BillAdjustment.
 from django import forms
 from django.contrib import messages
 from django.template.response import TemplateResponse
+from unfold.widgets import (
+    UnfoldAdminSelectWidget,
+    UnfoldAdminTextInputWidget,
+    UnfoldBooleanSwitchWidget,
+)
 
 from apps.billing.models import BillAdjustment, Refund
 from core.i18n import _
@@ -18,11 +23,13 @@ class AdjustmentReasonForm(forms.Form):
     reason_code = forms.ChoiceField(
         label=_lazy("Причина"),
         choices=BillAdjustment.ReasonCode.choices,
+        widget=UnfoldAdminSelectWidget,
     )
     reason_text = forms.CharField(
         label=_lazy("Комментарий (необязательно)"),
         required=False,
         max_length=255,
+        widget=UnfoldAdminTextInputWidget,
     )
 
 
@@ -83,16 +90,23 @@ def run_with_reason(
 
 
 class RefundForm(forms.Form):
-    reason_code = forms.ChoiceField(label=_lazy("Причина"), choices=Refund.ReasonCode.choices)
-    method = forms.ChoiceField(label=_lazy("Как вернули деньги"), choices=Refund.Method.choices)
+    reason_code = forms.ChoiceField(
+        label=_lazy("Причина"), choices=Refund.ReasonCode.choices, widget=UnfoldAdminSelectWidget
+    )
+    method = forms.ChoiceField(
+        label=_lazy("Как вернули деньги"), choices=Refund.Method.choices,
+        widget=UnfoldAdminSelectWidget,
+    )
     reason_text = forms.CharField(
-        label=_lazy("Комментарий (необязательно)"), required=False, max_length=255
+        label=_lazy("Комментарий (необязательно)"), required=False, max_length=255,
+        widget=UnfoldAdminTextInputWidget,
     )
     # Catalog step 3 (owner, 2026-11-07): only when it would put goods back.
     restock = forms.BooleanField(
         label=_lazy("Вернуть товар на склад"),
         required=False,
         help_text=_lazy("Отметьте, если товар вернулся и его можно продать снова."),
+        widget=UnfoldBooleanSwitchWidget,
     )
 
     def __init__(self, *args, can_restock: bool = False, **kwargs):

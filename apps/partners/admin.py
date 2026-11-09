@@ -6,6 +6,7 @@ from django.core.paginator import Paginator
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from django.utils.html import format_html
+from unfold.admin import StackedInline, TabularInline
 
 from apps.analytics.selectors import network_summary
 from apps.notifications.services import notify_owners_about_transfer_details_change
@@ -23,12 +24,12 @@ from apps.partners.models import (
 )
 from apps.partners.networks import admin_partner_ids, owns_partner
 from apps.users.constants import AdminSection
-from core.admin_mixins import ScopedAdminMixin
+from core.admin_mixins import BoteraModelAdmin, ScopedAdminMixin
 from core.i18n import LANGUAGE_NAMES, _, texts
 from core.i18n import gettext_lazy as _lazy
 
 
-class OpeningHoursInline(admin.TabularInline):
+class OpeningHoursInline(TabularInline):
     """Venue hours in the venue timezone; closing before opening = past midnight.
 
     No rows means always open. Pickup orders are accepted only within hours.
@@ -46,7 +47,7 @@ class OpeningHoursInline(admin.TabularInline):
     )
 
 
-class PartnerBotSettingsInline(admin.StackedInline):
+class PartnerBotSettingsInline(StackedInline):
     model = PartnerBotSettings
     extra = 0
     max_num = 1
@@ -176,6 +177,7 @@ class PartnerBotSettingsInline(admin.StackedInline):
 @admin.register(Partner)
 class PartnerAdmin(ScopedAdminMixin):
     admin_section = AdminSection.PARTNER_PROFILE
+    single_record = True
     partner_filter = "id"
     scope_partner_field = None
     allow_partner_add = False
@@ -292,6 +294,7 @@ def _alert_owners_if_transfer_details_changed(form, obj, actor) -> None:
 @admin.register(PartnerBotSettings)
 class PartnerBotSettingsAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BOT_CONTENT
+    single_record = True
     # Guests pay to these details: only the owner sees and changes them.
     owner_only_fields = ("transfer_payment_details",)
     platform_only_fields = ("extra_config",)
@@ -453,7 +456,7 @@ class BotTextAdmin(ScopedAdminMixin):
 
 
 @admin.register(Network)
-class NetworkAdmin(admin.ModelAdmin):
+class NetworkAdmin(BoteraModelAdmin):
     """Networks of venues (PQ-047). The platform creates them and puts
     venues in (Partner.network); an owner or manager of several venues sees
     the network report here."""
