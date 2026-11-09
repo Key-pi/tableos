@@ -7,11 +7,13 @@ from core.i18n import _
 class PaymentAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["method"].choices = [
-            choice
-            for choice in self.fields["method"].choices
-            if choice[0] != Payment.Method.BONUSES
-        ]
+        # A recorded payment opens view-only: Admin builds the form without
+        # any of its fields (all read-only).
+        method = self.fields.get("method")
+        if method is not None:
+            method.choices = [
+                choice for choice in method.choices if choice[0] != Payment.Method.BONUSES
+            ]
 
     class Meta:
         model = Payment
