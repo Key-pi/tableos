@@ -60,10 +60,12 @@ CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = "DENY"
 
 # Static files (Admin) are served by the web process itself.
+# Right after SecurityMiddleware, as WhiteNoise asks.
+_SECURITY = MIDDLEWARE.index("django.middleware.security.SecurityMiddleware")
 MIDDLEWARE = [
-    MIDDLEWARE[0],
+    *MIDDLEWARE[: _SECURITY + 1],
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    *MIDDLEWARE[1:],
+    *MIDDLEWARE[_SECURITY + 1 :],
 ]
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},

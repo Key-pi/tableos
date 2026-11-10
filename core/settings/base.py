@@ -37,6 +37,8 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # First: the platform's load page counts every request and its time (PQ-051).
+    "core.middleware.LoadCounterMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -133,6 +135,11 @@ UNFOLD = {
 }
 
 BOT_TOKEN_ENCRYPTION_KEY = app_settings.bot_token_encryption_key
+# The platform's load page (PQ-051): requests and bot updates are counted
+# (not in tests); the number of partners the load test showed one server
+# holds — 35 on the 2026-11-05 stand (docs/engineering/LOAD_TESTING.md).
+LOAD_COUNTER_ENABLED = "test" not in sys.argv
+PLATFORM_CAPACITY_PARTNERS = 35
 REDIS_URL = app_settings.redis_url
 
 CELERY_BROKER_URL = app_settings.celery_broker_url or app_settings.redis_url
@@ -169,6 +176,11 @@ CELERY_BEAT_SCHEDULE = {
     "forget-old-network-message-points": {
         "task": "partners.forget_old_message_points",
         "schedule": timedelta(days=1),
+    },
+    # The platform's load page (PQ-051): a snapshot a minute, kept 8 days.
+    "record-system-snapshot": {
+        "task": "analytics.record_system_snapshot",
+        "schedule": timedelta(minutes=1),
     },
     "refresh-daily-partner-metrics": {
         "task": "analytics.refresh_daily_partner_metrics",

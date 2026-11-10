@@ -105,6 +105,7 @@ GROUPS = (
 
 # Seen by the platform only: tables that belong to other pages.
 PLATFORM_GROUP = (_lazy("Платформа"), (
+    Page("analytics.systemsnapshot", "monitor_heart", title=_lazy("Нагрузка")),
     Page("users.telegramaccount", "alternate_email"),
     Page("auth.group", "groups"),
     Page("orders.cart", "shopping_cart"),

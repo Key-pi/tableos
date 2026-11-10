@@ -2,10 +2,12 @@ from datetime import timedelta
 
 from django import forms
 from django.contrib import admin
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
+from django.template.response import TemplateResponse
 from django.utils import timezone
 
-from apps.analytics.models import PartnerDailyMetric, SourceVisit, TrafficSource
+from apps.analytics.models import PartnerDailyMetric, SourceVisit, SystemSnapshot, TrafficSource
 from apps.partners.models import Partner
 from apps.partners.networks import bot_for_partner, network_bot
 from apps.users.constants import AdminSection
@@ -193,3 +195,37 @@ class ScopedSourceFilter(admin.RelatedFieldListFilter):
             (source.pk, str(source))
             for source in TrafficSource.objects.filter(partner_id=partner_scope_id)
         ]
+
+
+@admin.register(SystemSnapshot)
+class SystemSnapshotAdmin(ScopedAdminMixin):
+    """«Нагрузка» — the platform's page (PQ-051): the list of snapshots is
+    replaced by now, warnings and charts (``apps/analytics/system_load.py``)."""
+
+    platform_only = True
+    partner_filter = None
+    scope_partner_field = None
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def changelist_view(self, request, extra_context=None):
+        from apps.analytics.system_load import load_report
+
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        report = load_report(period=request.GET.get("period", "day"))
+        context = {
+            **self.admin_site.each_context(request),
+            "title": _("Нагрузка"),
+            "opts": self.model._meta,
+            "report": report,
+            "refresh_seconds": 60,
+        }
+        return TemplateResponse(request, "admin/analytics/systemsnapshot/load.html", context)

@@ -56,6 +56,10 @@ msgstr "Переходи"
 msgid "Новые гости"
 msgstr "Нові гості"
 
+#: apps/analytics/admin.py apps/analytics/models.py apps/users/admin_navigation.py
+msgid "Нагрузка"
+msgstr "Навантаження"
+
 #: apps/analytics/apps.py apps/users/constants.py
 msgid "Аналитика"
 msgstr "Аналітика"
@@ -160,6 +164,82 @@ msgstr "Перехід за джерелом"
 msgid "Переходы по источникам"
 msgstr "Переходи за джерелами"
 
+#: apps/analytics/models.py
+msgid "Минута"
+msgstr "Хвилина"
+
+#: apps/analytics/models.py
+msgid "Процессор, %"
+msgstr "Процесор, %"
+
+#: apps/analytics/models.py
+msgid "Процессор занят, тиков"
+msgstr "Процесор зайнятий, тіків"
+
+#: apps/analytics/models.py
+msgid "Процессор всего, тиков"
+msgstr "Процесор усього, тіків"
+
+#: apps/analytics/models.py
+msgid "Ядер"
+msgstr "Ядер"
+
+#: apps/analytics/models.py
+msgid "Средняя загрузка за минуту"
+msgstr "Середнє навантаження за хвилину"
+
+#: apps/analytics/models.py
+msgid "Память, %"
+msgstr "Пам'ять, %"
+
+#: apps/analytics/models.py
+msgid "Диск, %"
+msgstr "Диск, %"
+
+#: apps/analytics/models.py
+msgid "Соединений с базой"
+msgstr "З'єднань з базою"
+
+#: apps/analytics/models.py
+msgid "Соединений с базой можно"
+msgstr "З'єднань з базою можна"
+
+#: apps/analytics/models.py
+msgid "Размер базы, байт"
+msgstr "Розмір бази, байт"
+
+#: apps/analytics/models.py
+msgid "Самый долгий запрос, с"
+msgstr "Найдовший запит, с"
+
+#: apps/analytics/models.py apps/analytics/system_load.py
+msgid "Очередь задач"
+msgstr "Черга завдань"
+
+#: apps/analytics/models.py
+msgid "Очередь рассылок"
+msgstr "Черга розсилок"
+
+#: apps/analytics/models.py
+msgid "Запросов сайта"
+msgstr "Запитів сайту"
+
+#: apps/analytics/models.py
+msgid "Ответ сайта, мс"
+msgstr "Відповідь сайту, мс"
+
+#: apps/analytics/models.py
+msgid "Обновлений бота"
+msgstr "Оновлень бота"
+
+#: apps/analytics/models.py
+msgid "Ответ бота, мс"
+msgstr "Відповідь бота, мс"
+
+#: apps/analytics/models.py
+msgid "снимок нагрузки"
+msgstr "знімок навантаження"
+
 #: apps/analytics/services.py
 msgid "{closed_at} • {bill_context} • {kind} • {total_amount} грн • {bill_payment_method}"
 msgstr "{closed_at} • {bill_context} • {kind} • {total_amount} грн • {bill_payment_method}"
@@ -227,6 +307,186 @@ msgstr "стіл {number}"
 #: apps/analytics/services.py apps/billing/services.py apps/orders/services.py
 msgid "заказ без привязки к столу"
 msgstr "замовлення без прив'язки до столу"
+
+#: apps/analytics/system_load.py
+msgid "Сутки"
+msgstr "Доба"
+
+#: apps/analytics/system_load.py
+msgid "Неделя"
+msgstr "Тиждень"
+
+#: apps/analytics/system_load.py
+msgid "{size} ГБ"
+msgstr "{size} ГБ"
+
+#: apps/analytics/system_load.py
+msgid "{size} МБ"
+msgstr "{size} МБ"
+
+#: apps/analytics/system_load.py
+msgid "Фоновые задачи не работают: последний снимок {minutes} мин назад — проверьте worker и beat."
+msgstr "Фонові завдання не працюють: останній знімок {minutes} хв тому — перевірте worker і beat."
+
+#: apps/analytics/system_load.py
+msgid "Процессор загружен на {percent}% в среднем за 5 минут."
+msgstr "Процесор завантажений на {percent}% у середньому за 5 хвилин."
+
+#: apps/analytics/system_load.py
+msgid "Память занята на {percent}%."
+msgstr "Пам'ять зайнята на {percent}%."
+
+#: apps/analytics/system_load.py
+msgid "Диск заполнен на {percent}% — освободите место или увеличьте диск."
+msgstr "Диск заповнений на {percent}% — звільніть місце або збільште диск."
+
+#: apps/analytics/system_load.py
+msgid "Заняты {used} из {limit} соединений с базой."
+msgstr "Зайнято {used} з {limit} з'єднань з базою."
+
+#: apps/analytics/system_load.py
+msgid "Самый долгий запрос к базе идёт уже {seconds} с."
+msgstr "Найдовший запит до бази триває вже {seconds} с."
+
+#: apps/analytics/system_load.py
+msgid "В очереди задач {count} — уведомления запаздывают."
+msgstr "У черзі завдань {count} — сповіщення запізнюються."
+
+#: apps/analytics/system_load.py
+msgid "Не работают боты: {count} — причина в разделе «Боты»."
+msgstr "Не працюють боти: {count} — причина в розділі «Боти»."
+
+#: apps/analytics/system_load.py
+msgid "Работающих партнёров {partners} из {capacity}, которые сервер держал на нагрузочном тесте, — пора готовить сервер мощнее."
+msgstr "Активних партнерів {partners} з {capacity}, яких сервер тримав на навантажувальному тесті, — час готувати потужніший сервер."
+
+#: apps/analytics/system_load.py
+msgid "Процессор и память, %"
+msgstr "Процесор і пам'ять, %"
+
+#: apps/analytics/system_load.py
+msgid "Процессор"
+msgstr "Процесор"
+
+#: apps/analytics/system_load.py
+msgid "Память"
+msgstr "Пам'ять"
+
+#: apps/analytics/system_load.py
+msgid "Нагрузка в минуту"
+msgstr "Навантаження за хвилину"
+
+#: apps/analytics/system_load.py
+msgid "Запросы сайта и Mini App"
+msgstr "Запити сайту та Mini App"
+
+#: apps/analytics/system_load.py
+msgid "Обновления ботов"
+msgstr "Оновлення ботів"
+
+#: apps/analytics/system_load.py
+msgid "Время ответа, мс"
+msgstr "Час відповіді, мс"
+
+#: apps/analytics/system_load.py
+msgid "Сайт и Mini App"
+msgstr "Сайт і Mini App"
+
+#: apps/analytics/system_load.py apps/partners/models.py apps/users/constants.py
+msgid "Боты"
+msgstr "Боти"
+
+#: apps/analytics/system_load.py
+msgid "мс"
+msgstr "мс"
+
+#: apps/analytics/system_load.py
+msgid "Очереди фоновых задач"
+msgstr "Черги фонових завдань"
+
+#: apps/analytics/system_load.py
+msgid "Уведомления и задачи"
+msgstr "Сповіщення та завдання"
+
+#: apps/analytics/system_load.py apps/notifications/models.py
+msgid "Рассылки"
+msgstr "Розсилки"
+
+#: apps/analytics/system_load.py
+msgid "ядер: {count}"
+msgstr "ядер: {count}"
+
+#: apps/analytics/system_load.py
+msgid "Диск"
+msgstr "Диск"
+
+#: apps/analytics/system_load.py
+msgid "Соединения с базой"
+msgstr "З'єднання з базою"
+
+#: apps/analytics/system_load.py
+msgid "база: {size}"
+msgstr "база: {size}"
+
+#: apps/analytics/system_load.py
+msgid "Запросы в минуту"
+msgstr "Запити за хвилину"
+
+#: apps/analytics/system_load.py
+msgid "ответ: {ms} мс"
+msgstr "відповідь: {ms} мс"
+
+#: apps/analytics/system_load.py
+msgid "Обновления ботов в минуту"
+msgstr "Оновлення ботів за хвилину"
+
+#: apps/analytics/system_load.py
+msgid "рассылки: {count}"
+msgstr "розсилки: {count}"
+
+#: apps/analytics/system_load.py
+msgid "{running} работают"
+msgstr "{running} працюють"
+
+#: apps/analytics/system_load.py
+msgid "с ошибкой: {count}"
+msgstr "з помилкою: {count}"
+
+#: apps/analytics/system_load.py
+msgid "Работающих партнёров"
+msgstr "Активних партнерів"
+
+#: apps/analytics/system_load.py
+msgid "сервер держал {capacity}"
+msgstr "сервер тримав {capacity}"
+
+#: apps/analytics/system_load.py
+msgid "Заказов сегодня"
+msgstr "Замовлень сьогодні"
+
+#: apps/analytics/system_load.py
+msgid "по всем партнёрам"
+msgstr "по всіх партнерах"
+
+#: apps/analytics/templates/admin/analytics/systemsnapshot/load.html
+msgid "Что требует внимания"
+msgstr "Що потребує уваги"
+
+#: apps/analytics/templates/admin/analytics/systemsnapshot/load.html
+msgid "Всё в порядке."
+msgstr "Усе гаразд."
+
+#: apps/analytics/templates/admin/analytics/systemsnapshot/load.html
+msgid "Снимок раз в минуту, последний — {time}."
+msgstr "Знімок щохвилини, останній — {time}."
+
+#: apps/analytics/templates/admin/analytics/systemsnapshot/load.html
+msgid "Снимков ещё нет: фоновая задача делает их раз в минуту."
+msgstr "Знімків ще немає: фонове завдання робить їх щохвилини."
+
+#: apps/analytics/templates/admin/analytics/systemsnapshot/load.html
+msgid "Страница обновляется сама."
+msgstr "Сторінка оновлюється сама."
 
 #: apps/billing/admin.py
 msgid "Отметить запросы обработанными"
@@ -2797,10 +3057,6 @@ msgid "Сообщения о бонусах"
 msgstr "Повідомлення про бонуси"
 
 #: apps/notifications/models.py
-msgid "Рассылки"
-msgstr "Розсилки"
-
-#: apps/notifications/models.py
 msgid "настройки сообщений гостя"
 msgstr "налаштування повідомлень гостя"
 
@@ -4335,10 +4591,6 @@ msgstr "Стан із"
 #: apps/partners/models.py
 msgid "бот"
 msgstr "бот"
-
-#: apps/partners/models.py apps/users/constants.py
-msgid "Боты"
-msgstr "Боти"
 
 #: apps/partners/models.py
 msgid "Выключен"

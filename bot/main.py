@@ -16,6 +16,7 @@ from bot.handlers.staff import router as staff_router
 from bot.handlers.staff_invites import router as staff_invites_router
 from bot.handlers.staff_refunds import router as staff_refunds_router
 from bot.handlers.start import router as start_router
+from bot.middlewares.load_counter import LoadCounterMiddleware
 from bot.middlewares.message_points import MessagePointMiddleware
 from bot.middlewares.partner_runtime import PartnerRuntimeMiddleware
 from bot.services.runtime import BotRuntimeConfig, register_runtime_configs
@@ -23,6 +24,8 @@ from bot.services.runtime import BotRuntimeConfig, register_runtime_configs
 
 def create_dispatcher() -> Dispatcher:
     dispatcher = Dispatcher()
+    # First: counts every update and its time for the load page (PQ-051).
+    dispatcher.update.outer_middleware(LoadCounterMiddleware())
     dispatcher.update.outer_middleware(PartnerRuntimeMiddleware())
     dispatcher.include_router(start_router)
     dispatcher.include_router(points_router)

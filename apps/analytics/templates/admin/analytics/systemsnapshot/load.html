@@ -1,0 +1,83 @@
+{% extends "admin/base_site.html" %}
+{% load botera_i18n %}
+{% comment %}
+«Нагрузка» — the platform's load page (PQ-051, apps/analytics/system_load.py):
+now, warnings in red, charts for a day or a week. Reloads itself every minute.
+{% endcomment %}
+
+{% block extrahead %}{{ block.super }}
+<meta http-equiv="refresh" content="{{ refresh_seconds }}">
+<style>
+    .ld { display: flex; flex-direction: column; gap: 24px; }
+    .ld-card { background: #fff; border: 1px solid var(--color-base-200); border-radius: 8px; padding: 16px; min-width: 0; }
+    .dark .ld-card { background: var(--color-base-900); border-color: var(--color-base-800); }
+    .ld-h { font-weight: 600; font-size: 15px; margin: 0 0 12px; color: var(--color-font-important-light); }
+    .dark .ld-h { color: var(--color-font-important-dark); }
+    .ld-sub { color: var(--color-font-subtle-light); }
+    .dark .ld-sub { color: var(--color-font-subtle-dark); }
+    .ld-warn { display: flex; flex-direction: column; gap: 8px; }
+    .ld-warn div { border-left: 4px solid var(--color-red-600); background: var(--color-red-50); color: var(--color-red-700); padding: 10px 14px; border-radius: 6px; font-weight: 500; }
+    .dark .ld-warn div { background: color-mix(in srgb, var(--color-red-500) 18%, transparent); color: var(--color-red-300); }
+    .ld-ok { color: var(--color-green-700); font-weight: 500; }
+    .dark .ld-ok { color: var(--color-green-400); }
+    .ld-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    @media (min-width: 900px) { .ld-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+    .ld-tile-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--color-font-subtle-light); }
+    .dark .ld-tile-label { color: var(--color-font-subtle-dark); }
+    .ld-tile-value { font-size: 22px; font-weight: 600; color: var(--color-font-important-light); font-variant-numeric: tabular-nums; }
+    .dark .ld-tile-value { color: var(--color-font-important-dark); }
+    .ld-periods { display: flex; gap: 8px; }
+    .ld-periods a { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--color-base-200); font-weight: 500; }
+    .dark .ld-periods a { border-color: var(--color-base-700); }
+    .ld-periods a.on { background: var(--color-primary-600); border-color: var(--color-primary-600); color: #fff; }
+    .ld-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: -6px 0 8px; color: var(--color-font-subtle-light); font-size: 13px; }
+    .dark .ld-legend { color: var(--color-font-subtle-dark); }
+    .ld-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .ld-legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .ld-charts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    @media (min-width: 900px) { .ld-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ld">
+  <div class="ld-card">
+    <p class="ld-h">{% tr "Что требует внимания" %}</p>
+    {% if report.warnings %}
+      <div class="ld-warn">{% for warning in report.warnings %}<div>{{ warning }}</div>{% endfor %}</div>
+    {% else %}
+      <p class="ld-ok">{% tr "Всё в порядке." %}</p>
+    {% endif %}
+    <p class="ld-sub" style="margin-top: 10px;">
+      {% if report.latest %}{% tr "Снимок раз в минуту, последний — {time}." time=report.latest.taken_at|time:"H:i" %}{% else %}{% tr "Снимков ещё нет: фоновая задача делает их раз в минуту." %}{% endif %}
+      {% tr "Страница обновляется сама." %}
+    </p>
+  </div>
+
+  <div class="ld-tiles">
+    {% for label, value, note in report.tiles %}
+      <div class="ld-card">
+        <div class="ld-tile-label">{{ label }}</div>
+        <div class="ld-tile-value">{{ value }}</div>
+        {% if note %}<div class="ld-sub">{{ note }}</div>{% endif %}
+      </div>
+    {% endfor %}
+  </div>
+
+  <div class="ld-periods">
+    {% for key, title in report.periods %}
+      <a href="?period={{ key }}"{% if key == report.period %} class="on"{% endif %}>{{ title }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="ld-charts">
+    {% for chart in report.charts %}
+      <div class="ld-card">
+        <p class="ld-h">{{ chart.title }}</p>
+        <div class="ld-legend">{% for label, color in chart.legend %}<span><i style="background: {{ color }};"></i>{{ label }}</span>{% endfor %}</div>
+        {% include "unfold/components/chart/line.html" with data=chart.data height=220 %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

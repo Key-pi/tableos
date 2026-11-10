@@ -5,9 +5,12 @@ The user's choice (``User.language``) or, without one, the platform language
 ``core`` does not import the users app.
 """
 
+import time
+
 from django.urls import reverse
 from django.utils import translation
 
+from core import load_counter
 from core.i18n import default_language, normalize_language
 from core.labels import one_venue
 
@@ -48,3 +51,21 @@ class VenueLabelsMiddleware:
         # it returns through the middleware).
         with one_venue():
             return self.get_response(request)
+
+
+class LoadCounterMiddleware:
+    """Counts requests and their time for the platform's load page (PQ-051,
+    ``core/load_counter.py``); files and the health check are not counted."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if not load_counter.enabled() or request.path.startswith(load_counter.SKIPPED_PREFIXES):
+            return self.get_response(request)
+        started = time.perf_counter()
+        try:
+            return self.get_response(request)
+        finally:
+            if load_counter.record("http", time.perf_counter() - started):
+                load_counter.counter.flush()

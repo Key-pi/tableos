@@ -164,3 +164,45 @@ class SourceVisit(PartnerBoundModel):
 
     def __str__(self) -> str:
         return f"{self.source} / {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class SystemSnapshot(models.Model):
+    """The platform's load, a snapshot a minute (PQ-051): the server, the
+    database, the task queues and the traffic of the last minute. Written by
+    beat ``analytics.record_system_snapshot``, kept 8 days; empty values —
+    could not be read (no /proc, SQLite, Redis down)."""
+
+    taken_at = models.DateTimeField(unique=True, verbose_name=_lazy("Минута"))
+    cpu_percent = models.FloatField(null=True, verbose_name=_lazy("Процессор, %"))
+    cpu_busy = models.BigIntegerField(null=True, verbose_name=_lazy("Процессор занят, тиков"))
+    cpu_total = models.BigIntegerField(null=True, verbose_name=_lazy("Процессор всего, тиков"))
+    cpu_count = models.PositiveSmallIntegerField(null=True, verbose_name=_lazy("Ядер"))
+    load_1 = models.FloatField(null=True, verbose_name=_lazy("Средняя загрузка за минуту"))
+    memory_percent = models.FloatField(null=True, verbose_name=_lazy("Память, %"))
+    disk_percent = models.FloatField(null=True, verbose_name=_lazy("Диск, %"))
+    db_connections = models.PositiveIntegerField(
+        null=True, verbose_name=_lazy("Соединений с базой")
+    )
+    db_max_connections = models.PositiveIntegerField(
+        null=True, verbose_name=_lazy("Соединений с базой можно")
+    )
+    db_size = models.BigIntegerField(null=True, verbose_name=_lazy("Размер базы, байт"))
+    longest_query_seconds = models.FloatField(
+        null=True, verbose_name=_lazy("Самый долгий запрос, с")
+    )
+    queue_default = models.PositiveIntegerField(null=True, verbose_name=_lazy("Очередь задач"))
+    queue_broadcasts = models.PositiveIntegerField(
+        null=True, verbose_name=_lazy("Очередь рассылок")
+    )
+    http_requests = models.PositiveIntegerField(default=0, verbose_name=_lazy("Запросов сайта"))
+    http_avg_ms = models.FloatField(null=True, verbose_name=_lazy("Ответ сайта, мс"))
+    bot_updates = models.PositiveIntegerField(default=0, verbose_name=_lazy("Обновлений бота"))
+    bot_avg_ms = models.FloatField(null=True, verbose_name=_lazy("Ответ бота, мс"))
+
+    class Meta:
+        verbose_name = _lazy("снимок нагрузки")
+        verbose_name_plural = _lazy("Нагрузка")
+        ordering = ["-taken_at"]
+
+    def __str__(self) -> str:
+        return f"{self.taken_at:%Y-%m-%d %H:%M}"

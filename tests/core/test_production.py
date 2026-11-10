@@ -43,6 +43,28 @@ class ProductionSettingsTests(TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("loaded", result.stdout)
 
+    def test_middleware_order(self):
+        # The load counter first (PQ-051), WhiteNoise right after Security.
+        base = {
+            "PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(REPO),
+            "DJANGO_SETTINGS_MODULE": "core.settings.production",
+            "DJANGO_SECRET_KEY": GOOD_KEY, "BOT_TOKEN_ENCRYPTION_KEY": FERNET,
+            "DJANGO_ALLOWED_HOSTS": "shop.example.com", "POSTGRES_PASSWORD": "a-real-password",
+        }
+        with tempfile.TemporaryDirectory() as empty_dir:
+            result = subprocess.run(
+                [sys.executable, "-c",
+                 "import django; django.setup(); from django.conf import settings; "
+                 "print(','.join(settings.MIDDLEWARE[:3]))"],
+                cwd=empty_dir, env=base, capture_output=True, text=True,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip().split(","), [
+            "core.middleware.LoadCounterMiddleware",
+            "django.middleware.security.SecurityMiddleware",
+            "whitenoise.middleware.WhiteNoiseMiddleware",
+        ])
+
     def test_unsafe_values_are_refused(self):
         for env, message in (
             ({"DJANGO_SECRET_KEY": None}, "DJANGO_SECRET_KEY"),
