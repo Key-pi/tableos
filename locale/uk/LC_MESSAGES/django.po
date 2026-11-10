@@ -244,6 +244,18 @@ msgstr "Скасувати запити"
 msgid "Отменено запросов счёта: {updated}."
 msgstr "Скасовано запитів рахунку: {updated}."
 
+#: apps/billing/admin.py
+msgid "Суммы"
+msgstr "Суми"
+
+#: apps/billing/admin.py apps/orders/admin.py
+msgid "Время"
+msgstr "Час"
+
+#: apps/billing/admin.py
+msgid "Внешняя касса"
+msgstr "Зовнішня каса"
+
 #: apps/billing/admin.py bot/keyboards/staff.py webapp/staff_billing.py
 msgid "Выдать счёт"
 msgstr "Виставити рахунок"
@@ -312,7 +324,7 @@ msgstr "Рахунок анулюється, його замовлення зн�
 msgid "Аннулировано счетов"
 msgstr "Анульовано рахунків"
 
-#: apps/billing/admin.py
+#: apps/billing/admin.py apps/billing/models.py
 msgid "Счёт #{public_id}"
 msgstr "Рахунок #{public_id}"
 
@@ -664,7 +676,7 @@ msgstr "Готівка"
 msgid "Карта (терминал)"
 msgstr "Картка (термінал)"
 
-#: apps/billing/models.py apps/orders/models.py
+#: apps/billing/models.py apps/orders/models.py apps/partners/admin.py
 msgid "Перевод"
 msgstr "Переказ"
 
@@ -2028,15 +2040,15 @@ msgstr "Про запити рахунку"
 msgid "Заказы за столом"
 msgstr "Замовлення за столом"
 
-#: apps/employees/models.py apps/menu/models.py apps/orders/models.py apps/partners/bot_texts.py apps/partners/models.py bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py
+#: apps/employees/models.py apps/menu/models.py apps/orders/models.py apps/partners/admin.py apps/partners/bot_texts.py apps/partners/models.py bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py
 msgid "Самовывоз"
 msgstr "Самовивіз"
 
-#: apps/employees/models.py apps/menu/models.py apps/notifications/models.py apps/orders/models.py apps/orders/services.py apps/partners/models.py bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py webapp/texts.py
+#: apps/employees/models.py apps/menu/models.py apps/notifications/models.py apps/orders/admin.py apps/orders/models.py apps/orders/services.py apps/partners/admin.py apps/partners/models.py bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py webapp/texts.py
 msgid "Доставка"
 msgstr "Доставка"
 
-#: apps/employees/models.py apps/menu/models.py apps/orders/models.py apps/partners/bot_texts.py apps/partners/models.py
+#: apps/employees/models.py apps/menu/models.py apps/orders/admin.py apps/orders/models.py apps/partners/bot_texts.py apps/partners/models.py
 msgid "Отправка почтой"
 msgstr "Відправлення поштою"
 
@@ -2444,7 +2456,7 @@ msgstr "Тип"
 msgid "В наличии"
 msgstr "У наявності"
 
-#: apps/menu/models.py apps/orders/models.py webapp/views.py
+#: apps/menu/models.py apps/orders/models.py apps/partners/admin.py webapp/views.py
 msgid "За столом"
 msgstr "За столом"
 
@@ -3258,6 +3270,10 @@ msgstr "Розсилка не дійшла до жодного гостя."
 msgid "Номер ТТН"
 msgstr "Номер ТТН"
 
+#: apps/orders/admin.py webapp/staff_views.py webapp/texts.py
+msgid "Оплата"
+msgstr "Оплата"
+
 #: apps/orders/admin.py
 msgid "Заказ #{public_id}: {status}."
 msgstr "Замовлення #{public_id}: {status}."
@@ -3322,7 +3338,7 @@ msgstr "Частина замовлень уже в рахунку: їхні п�
 msgid "Отменено заказов"
 msgstr "Скасовано замовлень"
 
-#: apps/orders/admin.py
+#: apps/orders/admin.py apps/orders/models.py
 msgid "Заказ #{public_id}"
 msgstr "Замовлення #{public_id}"
 
@@ -3346,7 +3362,7 @@ msgstr "Екран «{}»: відкрийте це посилання на пл�
 msgid "Выдать новую ссылку"
 msgstr "Видати нове посилання"
 
-#: apps/orders/apps.py apps/orders/models.py apps/partners/models.py apps/users/constants.py
+#: apps/orders/apps.py apps/orders/models.py apps/partners/admin.py apps/partners/models.py apps/users/constants.py
 msgid "Заказы"
 msgstr "Замовлення"
 
@@ -3855,44 +3871,52 @@ msgid "Часы работы (время заведения; закрытие р
 msgstr "Години роботи (час закладу; закриття раніше за відкриття — після опівночі; порожньо — завжди відчинено)"
 
 #: apps/partners/admin.py
-msgid "Модули · Базовые"
-msgstr "Модулі · Базові"
+msgid "Каталог"
+msgstr "Каталог"
 
 #: apps/partners/admin.py
-msgid "Профиль гостя и бонусный баланс считаются базовой частью продукта. Меню нужно для заказов, корзины и быстрых продаж."
-msgstr "Профіль гостя й бонусний баланс — базова частина продукту. Меню потрібне для замовлень, кошика й швидких продажів."
+msgid "Меню и то, что к нему добавляется. Витрина, варианты с добавками и остатки требуют меню. Профиль гостя и бонусы работают всегда."
+msgstr "Меню й те, що до нього додається. Вітрина, варіанти з добавками й залишки потребують меню. Профіль гостя й бонуси працюють завжди."
 
 #: apps/partners/admin.py
-msgid "Модули · Сценарии заказа"
-msgstr "Модулі · Сценарії замовлення"
+msgid "Корзина требует меню и заказы. Счета требуют заказы; запрос счёта гостем работает только при включённых столах. Быстрые продажи требуют меню."
+msgstr "Кошик потребує меню й замовлень. Рахунки потребують замовлень; запит рахунку гостем працює лише з увімкненими столами. Швидкі продажі потребують меню."
 
 #: apps/partners/admin.py
-msgid "Столы, самовывоз, доставка и отправка почтой — независимые сценарии. Можно включить любой набор; для заказов нужен хотя бы один. У каждого удалённого сценария включите способы оплаты: переводом заранее (на реквизиты ниже) и/или при получении; если включены оба, гость выбирает. У отправки так же включаются службы и варианты оплаты пересылки — гость выбирает из включённых. Часы работы (для самовывоза и доставки) — в карточке партнёра."
-msgstr "Столи, самовивіз, доставка й відправлення поштою — незалежні сценарії. Можна ввімкнути будь-який набір; для замовлень потрібен хоча б один. Для кожного віддаленого сценарію ввімкніть способи оплати: переказом заздалегідь (на реквізити нижче) та/або при отриманні; якщо ввімкнено обидва, гість вибирає. У відправлення так само вмикаються служби й варіанти оплати пересилання — гість вибирає з увімкнених. Години роботи (для самовивозу й доставки) — у картці партнера."
+msgid "Гость сканирует QR-код стола и заказывает с места. Столы и их QR-коды — в разделе «Столы». Вызов персонала требует столы."
+msgstr "Гість сканує QR-код столу й замовляє з місця. Столи та їхні QR-коди — у розділі «Столи». Виклик персоналу потребує столів."
 
 #: apps/partners/admin.py
-msgid "Модули · Заказы и оплата"
-msgstr "Модулі · Замовлення й оплата"
+msgid "Гость заказывает заранее и забирает сам. Включите хотя бы один способ оплаты; если включены оба, гость выбирает. Часы самовывоза — в разделе «Часы работы»."
+msgstr "Гість замовляє заздалегідь і забирає сам. Увімкніть хоча б один спосіб оплати; якщо увімкнено обидва, гість обирає. Години самовивозу — у розділі «Години роботи»."
 
 #: apps/partners/admin.py
-msgid "Корзина требует меню и заказы. Счета требуют заказы; запрос счёта гостем работает только при включённых столах."
-msgstr "Кошик потребує меню й замовлень. Рахунки потребують замовлень; запит рахунку гостем працює лише з увімкненими столами."
+msgid "Заказ везёт курьер. Включите хотя бы один способ оплаты; если включены оба, гость выбирает. Часы доставки — в разделе «Часы работы»."
+msgstr "Замовлення везе кур'єр. Увімкніть хоча б один спосіб оплати; якщо увімкнено обидва, гість обирає. Години доставки — у розділі «Години роботи»."
+
+#: apps/partners/admin.py bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py
+msgid "Почта"
+msgstr "Пошта"
 
 #: apps/partners/admin.py
-msgid "Модули · Операции и отчёты"
-msgstr "Модулі · Операції та звіти"
+msgid "Отправка почтой: гость выбирает службу и способ оплаты пересылки из включённых. Без номера ТТН заказ не станет «отправлен»."
+msgstr "Відправлення поштою: гість обирає службу й спосіб оплати пересилання з увімкнених. Без номера ТТН замовлення не стане «відправлено»."
 
 #: apps/partners/admin.py
-msgid "Вызов персонала требует столы. Быстрые продажи требуют меню. Экран кухни и бара требует заказы; сами экраны — в разделе «Экраны кухни и бара»."
-msgstr "Виклик персоналу потребує столів. Швидкі продажі потребують меню. Екран кухні й бару потребує замовлень; самі екрани — у розділі «Екрани кухні й бару»."
+msgid "Оплата переводом заранее — для самовывоза, доставки и почты. Гость видит эти реквизиты при оформлении; менять их может только владелец."
+msgstr "Оплата переказом заздалегідь — для самовивозу, доставки й пошти. Гість бачить ці реквізити під час оформлення; змінювати їх може лише власник."
 
 #: apps/partners/admin.py
-msgid "Поведение бота"
-msgstr "Поведінка бота"
+msgid "Экраны"
+msgstr "Екрани"
 
 #: apps/partners/admin.py
-msgid "Языки"
-msgstr "Мови"
+msgid "Mini App открывается внутри Telegram: меню и корзина для гостя, рабочий экран для персонала. Экран кухни и бара требует заказы; сами экраны — в разделе «Экраны кухни и бара»."
+msgstr "Mini App відкривається всередині Telegram: меню й кошик для гостя, робочий екран для персоналу. Екран кухні й бару потребує замовлень; самі екрани — у розділі «Екрани кухні й бару»."
+
+#: apps/partners/admin.py
+msgid "Языки и бот"
+msgstr "Мови й бот"
 
 #: apps/partners/admin.py
 msgid "Гость видит язык своего Telegram, если он включён, иначе основной, и может переключить язык в «Мой профиль». Кнопки и сообщения бота на каждом языке меняются в разделе «Тексты бота»."
@@ -5019,6 +5043,10 @@ msgstr "Місць"
 #: apps/tables/models.py
 msgid "стол"
 msgstr "стіл"
+
+#: apps/tables/models.py bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_billing.py webapp/staff_views.py webapp/texts.py webapp/views.py
+msgid "Стол {number}"
+msgstr "Стіл {number}"
 
 #: apps/tables/models.py
 msgid "Идёт"
@@ -6495,14 +6523,6 @@ msgstr "чекає підтвердження переказу {to_transfer} г�
 #: bot/handlers/staff.py webapp/staff_views.py
 msgid "при получении, {to_pay} грн{bonus_note}"
 msgstr "при отриманні, {to_pay} грн{bonus_note}"
-
-#: bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py
-msgid "Почта"
-msgstr "Пошта"
-
-#: bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_billing.py webapp/staff_views.py webapp/texts.py webapp/views.py
-msgid "Стол {number}"
-msgstr "Стіл {number}"
 
 #: bot/handlers/staff.py webapp/kitchen_views.py webapp/staff_views.py
 msgid "Вне стола"
@@ -8311,10 +8331,6 @@ msgstr "Отримувач"
 #: webapp/staff_views.py
 msgid "Взял в работу"
 msgstr "Взяв у роботу"
-
-#: webapp/staff_views.py webapp/texts.py
-msgid "Оплата"
-msgstr "Оплата"
 
 #: webapp/staff_views.py
 msgid "Подтвердить"

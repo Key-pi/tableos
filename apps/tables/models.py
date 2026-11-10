@@ -4,7 +4,9 @@ from django.db import models
 from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
+from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
+from core.labels import within_one_venue
 
 
 class Table(PartnerBoundModel):
@@ -30,6 +32,8 @@ class Table(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            return _("Стол {number}", number=self.number)
         return f"{self.partner.name} / table {self.number}"
 
     @property
@@ -85,6 +89,8 @@ class TableVisit(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            return f"{self.table} · {self.get_status_display()}"
         return f"{self.partner.name} / table {self.table.number} / visit {self.status}"
 
 
@@ -140,4 +146,6 @@ class TableSession(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            return f"{self.table} · {self.get_status_display()}"
         return f"{self.partner.name} / table {self.table.number} / {self.status}"

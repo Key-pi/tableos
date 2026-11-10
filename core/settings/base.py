@@ -44,6 +44,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # After authentication: the Admin speaks the user's language (PQ-040).
     "core.middleware.UserLanguageMiddleware",
+    # A venue's Admin names records without the venue (admin step 4, PQ-050).
+    "core.middleware.VenueLabelsMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]

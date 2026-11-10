@@ -10,6 +10,7 @@ from django.db.models import Q
 from core.database.models import PartnerBoundModel
 from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
+from core.labels import venue_label
 
 MENU_PHOTO_EXTENSIONS = ("jpg", "jpeg", "png", "webp")
 
@@ -138,7 +139,7 @@ class MenuCategory(TranslatableMixin, PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / {self.full_name}"
+        return venue_label(self, f"{self.full_name}")
 
     @property
     def full_name(self) -> str:
@@ -331,7 +332,7 @@ class MenuItem(TranslatableMixin, PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / {self.name}"
+        return venue_label(self, f"{self.name}")
 
     @property
     def photo_url(self) -> str:

@@ -7,6 +7,7 @@ from django.db.models import Q
 from core.database.models import PartnerBoundModel
 from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
+from core.labels import venue_label, within_one_venue
 
 
 class BonusProgram(PartnerBoundModel):
@@ -99,7 +100,7 @@ class BonusProgram(PartnerBoundModel):
         ordering = ["partner__name", "name"]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / {self.name}"
+        return venue_label(self, f"{self.name}")
 
 
 class BonusTransaction(PartnerBoundModel):
@@ -180,6 +181,8 @@ class BonusTransaction(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            return f"{self.get_transaction_type_display()} · {self.amount}"
         return f"{self.partner.name} / {self.transaction_type} / {self.amount}"
 
 
@@ -250,6 +253,8 @@ class WalkInSale(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            return f"{self._meta.verbose_name} · {self.amount}"
         return f"{self.partner.name} / walk-in {self.amount}"
 
     @property

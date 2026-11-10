@@ -5,6 +5,7 @@ from django.db import models
 
 from core.database.models import PartnerBoundModel
 from core.i18n import gettext_lazy as _lazy
+from core.labels import venue_label
 
 
 class PartnerDailyMetric(PartnerBoundModel):
@@ -41,7 +42,7 @@ class PartnerDailyMetric(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / {self.bucket_date}"
+        return venue_label(self, f"{self.bucket_date}")
 
 
 class TrafficSource(PartnerBoundModel):

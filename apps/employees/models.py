@@ -3,6 +3,7 @@ from django.db import models
 
 from core.database.models import PartnerBoundModel
 from core.i18n import gettext_lazy as _lazy
+from core.labels import venue_label, within_one_venue
 
 
 class EmployeeProfile(PartnerBoundModel):
@@ -101,7 +102,7 @@ class EmployeeProfile(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / {self.user}"
+        return venue_label(self, f"{self.user}")
 
 
 class StaffInvite(PartnerBoundModel):
@@ -165,4 +166,7 @@ class StaffInvite(PartnerBoundModel):
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            role = dict(self._meta.apps.get_model("users", "User").Role.choices)
+            return f"{role.get(self.role, self.role)} · {self.get_status_display()}"
         return f"{self.partner} / {self.role} / {self.status}"

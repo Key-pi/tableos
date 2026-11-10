@@ -4,8 +4,9 @@ from django.db import models
 from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
-from core.i18n import LANGUAGE_NAMES, LANGUAGES
+from core.i18n import LANGUAGE_NAMES, LANGUAGES, _
 from core.i18n import gettext_lazy as _lazy
+from core.labels import venue_label, within_one_venue
 
 
 class Order(PartnerBoundModel):
@@ -194,6 +195,8 @@ class Order(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            return _("Заказ #{public_id}", public_id=self.public_id)
         return f"{self.partner.name} / order {self.public_id}"
 
     def save(self, *args, **kwargs):
@@ -315,7 +318,7 @@ class Cart(PartnerBoundModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / cart / {self.guest_id} / {self.status}"
+        return venue_label(self, f"cart / {self.guest_id} / {self.status}")
 
 
 class OrderItem(PartnerBoundModel):

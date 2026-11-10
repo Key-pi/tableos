@@ -8,6 +8,7 @@ from django.db import models
 from core.database.models import TimeStampedModel
 from core.i18n import LANGUAGE_NAMES, LANGUAGES, _, default_language
 from core.i18n import gettext_lazy as _lazy
+from core.labels import venue_label, within_one_venue
 from core.security.crypto import decrypt_text, encrypt_text
 
 MIN_TRANSFER_WAIT_MINUTES = 15
@@ -214,7 +215,7 @@ class BotInstance(TimeStampedModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / @{self.username}"
+        return venue_label(self, f"@{self.username}")
 
     @classmethod
     def normalize_username(cls, value: str) -> str:
@@ -574,6 +575,8 @@ class PartnerBotSettings(TimeStampedModel):
         ordering = ["partner__name"]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            return str(self._meta.verbose_name)
         return f"{self.partner.name} / bot settings"
 
     def clean(self) -> None:

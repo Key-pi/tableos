@@ -2,6 +2,7 @@ from django.db import models
 
 from core.database.models import PartnerBoundModel
 from core.i18n import gettext_lazy as _lazy
+from core.labels import venue_label
 
 
 class NotificationPreference(PartnerBoundModel):
@@ -27,7 +28,7 @@ class NotificationPreference(PartnerBoundModel):
         ordering = ["partner__name", "guest_id"]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / preferences / {self.guest_id}"
+        return venue_label(self, f"preferences / {self.guest_id}")
 
 
 class GuestCall(PartnerBoundModel):
@@ -72,7 +73,7 @@ class GuestCall(PartnerBoundModel):
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / #{self.table_number} / {self.call_target}"
+        return venue_label(self, f"#{self.table_number} / {self.call_target}")
 
 
 class StaffNotification(PartnerBoundModel):
@@ -145,7 +146,7 @@ class StaffNotification(PartnerBoundModel):
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / {self.category} / {self.title}"
+        return venue_label(self, f"{self.category} / {self.title}")
 
 
 class BroadcastCampaign(PartnerBoundModel):
@@ -203,7 +204,7 @@ class BroadcastCampaign(PartnerBoundModel):
         ordering = ["-created_at"]
 
     def __str__(self) -> str:
-        return f"{self.partner.name} / {self.name}"
+        return venue_label(self, f"{self.name}")
 
 
 class BroadcastDelivery(PartnerBoundModel):

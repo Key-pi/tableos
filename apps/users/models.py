@@ -13,6 +13,7 @@ from apps.users.constants import (
 from core.database.models import PartnerBoundModel, TimeStampedModel
 from core.i18n import LANGUAGE_NAMES, LANGUAGES
 from core.i18n import gettext_lazy as _lazy
+from core.labels import within_one_venue
 
 LANGUAGE_CHOICES = [(code, LANGUAGE_NAMES[code]) for code in LANGUAGES]
 
@@ -146,6 +147,8 @@ class GuestProfile(PartnerBoundModel):
         ordering = ["-updated_at"]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            return self.staff_label()
         identity = self.telegram_account.username or self.telegram_account.telegram_id
         return f"{self.partner.name} / {identity}"
 
@@ -222,6 +225,8 @@ class AdminAccessProfile(TimeStampedModel):
         ordering = ["partner__name", "user__username"]
 
     def __str__(self) -> str:
+        if within_one_venue():
+            return self.user.username
         return f"{self.partner.name} / {self.user.username} / admin access"
 
     def save(self, *args, **kwargs):

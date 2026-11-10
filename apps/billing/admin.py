@@ -34,12 +34,20 @@ from apps.billing.table_bills import (
 )
 from apps.bonuses.services import BonusServiceError
 from apps.users.constants import AdminSection
-from core.admin_mixins import ObjectAction, ObjectActionsMixin, ScopedAdminMixin
+from core.admin_mixins import (
+    ObjectAction,
+    ObjectActionsMixin,
+    RecordsInlineMixin,
+    ScopedAdminMixin,
+)
 from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
 
 
-class BillOrderInline(TabularInline):
+class BillOrderInline(RecordsInlineMixin, TabularInline):
+    admin_section = AdminSection.BILLING
+    venue_hidden_fields = ("bill", "partner", "updated_at")
+    tab = True  # a page tab next to the bill (admin step 4, PQ-050)
     model = BillOrder
     extra = 0
     can_delete = False
@@ -49,7 +57,9 @@ class BillOrderInline(TabularInline):
         return False
 
 
-class BillItemInline(TabularInline):
+class BillItemInline(RecordsInlineMixin, TabularInline):
+    admin_section = AdminSection.BILLING
+    venue_hidden_fields = ("bill", "order_item", "partner", "updated_at")
     model = BillItem
     extra = 0
     can_delete = False
@@ -74,7 +84,9 @@ class BillItemInline(TabularInline):
         return False
 
 
-class BillAdjustmentInline(TabularInline):
+class BillAdjustmentInline(RecordsInlineMixin, TabularInline):
+    admin_section = AdminSection.BILLING
+    tab = True  # a page tab next to the bill (admin step 4, PQ-050)
     model = BillAdjustment
     extra = 0
     can_delete = False
@@ -96,8 +108,11 @@ class BillAdjustmentInline(TabularInline):
         return False
 
 
-class RefundInline(TabularInline):
+class RefundInline(RecordsInlineMixin, TabularInline):
+    admin_section = AdminSection.BILLING
     """Refunds of the bill (PQ-037); made with the bill line action."""
+
+    tab = True  # a page tab next to the bill (admin step 4, PQ-050)
 
     model = Refund
     extra = 0
@@ -122,7 +137,9 @@ class RefundInline(TabularInline):
         return False
 
 
-class PaymentInline(TabularInline):
+class PaymentInline(RecordsInlineMixin, TabularInline):
+    admin_section = AdminSection.BILLING
+    tab = True  # a page tab next to the bill (admin step 4, PQ-050)
     model = Payment
     extra = 0
     can_delete = False
@@ -249,13 +266,34 @@ class BillAdmin(ObjectActionsMixin, ScopedAdminMixin):
         "created_at",
         "updated_at",
     )
+    # Lines under the bill; payments, refunds, changes and orders — page tabs.
     inlines = [
-        BillOrderInline,
         BillItemInline,
         PaymentInline,
         RefundInline,
         BillAdjustmentInline,
+        BillOrderInline,
     ]
+    fieldsets = (
+        (None, {"fields": (
+            "partner",
+            ("public_id", "status"),
+            ("kind", "source"),
+            ("table", "visit"),
+            ("primary_guest", "label"),
+        )}),
+        (_lazy("Суммы"), {"classes": ["tab"], "fields": (
+            ("subtotal_amount", "discount_amount"),
+            ("bonus_spent_amount", "total_amount"),
+            ("paid_amount", "refunded_amount"),
+            "remaining_amount",
+        )}),
+        (_lazy("Время"), {"classes": ["tab"], "fields": (
+            ("created_at", "issued_at"),
+            ("closed_at", "updated_at"),
+        )}),
+        (_lazy("Внешняя касса"), {"classes": ["tab"], "fields": (("external_ref", "pos_tab_id"),)}),
+    )
     actions = (
         "mark_as_issued",
         "record_remaining_cash_payment",

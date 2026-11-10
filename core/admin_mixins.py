@@ -17,7 +17,7 @@ from django.utils.safestring import SafeString, mark_safe
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import checkbox as unfold_checkbox
 
-from apps.partners.models import Partner
+from apps.partners.models import Partner, PartnerBotSettings
 from apps.partners.networks import admin_partner_ids
 from apps.users.models import AdminAccessProfile, User
 from core.i18n import _
@@ -124,6 +124,20 @@ class ScopedAdminMixin(BoteraModelAdmin):
 
     def is_platform_admin(self, request) -> bool:
         return request.user.is_superuser
+
+    def module_on(self, request, field: str) -> bool:
+        """A module's part of a page shows while the venue's module is on
+        (the platform sees it always). One read of the venue's settings per
+        request: a page asks about several modules."""
+
+        partner_id = self.get_partner_scope_id(request)
+        if partner_id is None:
+            return self.is_platform_admin(request)
+        cached = getattr(request, "_venue_settings_row", None)
+        if cached is None or cached[0] != partner_id:
+            row = PartnerBotSettings.objects.filter(partner_id=partner_id).values().first()
+            cached = request._venue_settings_row = (partner_id, row or {})
+        return bool(cached[1].get(field))
 
     def get_partner_scope_id(self, request):
         if self.is_platform_admin(request):
@@ -374,6 +388,38 @@ class SectionInlineMixin:
 
     def has_delete_permission(self, request, obj=None):
         return self._allowed(request, "change")
+
+
+class RecordsInlineMixin:
+    """Rows the system wrote — lines of an order, payments of a bill, history:
+    shown on the page to whoever may view its section, changed here by no one
+    of a venue (admin step 4, PQ-050). Without it a venue did not see them at
+    all: Django's own model permissions are not used for venues. The platform
+    keeps what it had."""
+
+    admin_section: str = ""
+    # Columns that say nothing inside the page of one venue's record.
+    venue_hidden_fields: tuple[str, ...] = ("partner", "updated_at")
+
+    def has_view_permission(self, request, obj=None):
+        if request.user.is_superuser:
+            return super().has_view_permission(request, obj)
+        return has_admin_section_permission(request.user, self.admin_section, "view")
+
+    def has_change_permission(self, request, obj=None):
+        return request.user.is_superuser and super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser and super().has_delete_permission(request, obj)
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def get_fields(self, request, obj=None):
+        fields = super().get_fields(request, obj)
+        if request.user.is_superuser:
+            return fields
+        return [name for name in fields if name not in self.venue_hidden_fields]
 
 
 # --- buttons on a record's page (admin step 3, PQ-050) -------------------------

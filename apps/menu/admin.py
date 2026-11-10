@@ -25,7 +25,6 @@ from apps.menu.options import options_on
 from apps.menu.stock import count_stock
 from apps.menu.translations import fields_of, set_translation, translation_languages
 from apps.orders.kitchen import missing_screen_warnings
-from apps.partners.models import PartnerBotSettings
 from apps.users.constants import AdminSection
 from core.admin_mixins import ObjectAction, ObjectActionsMixin, ScopedAdminMixin, SectionInlineMixin
 from core.i18n import LANGUAGE_NAMES, _
@@ -142,8 +141,10 @@ class TranslatedAdminMixin:
         fieldsets = list(super().get_fieldsets(request, obj))
         names = self.translation_names(request, obj)
         if names and self.fieldsets:
+            tabbed = any("tab" in options.get("classes", ()) for _name, options in fieldsets)
             fieldsets.append((_lazy("Переводы для гостей"), {
                 "description": TRANSLATIONS_HELP, "fields": names,
+                **({"classes": ["tab"]} if tabbed else {}),
             }))
         return fieldsets
 
@@ -345,6 +346,7 @@ class StockVariantForm(StockSeenMixin, forms.ModelForm):
 
 class MenuItemPhotoInline(SectionInlineMixin, TabularInline):
     admin_section = AdminSection.MENU
+    tab = True  # a page tab next to the item (admin step 4, PQ-050)
     model = MenuItemPhoto
     fields = ("image", "sort_order")
     extra = 0
@@ -352,6 +354,7 @@ class MenuItemPhotoInline(SectionInlineMixin, TabularInline):
 
 class MenuItemAttributeInline(TranslatedInlineMixin, SectionInlineMixin, TabularInline):
     admin_section = AdminSection.MENU
+    tab = True  # a page tab next to the item (admin step 4, PQ-050)
     model = MenuItemAttribute
     fields = ("name", "value", "sort_order")
     extra = 0
@@ -384,10 +387,7 @@ def module_on_for(admin_page, request, field: str) -> bool:
     """A module's part of a page while the venue's module is on (platform
     admins see it always)."""
 
-    partner_id = admin_page.get_partner_scope_id(request)
-    if partner_id is None:
-        return admin_page.is_platform_admin(request)
-    return PartnerBotSettings.objects.filter(partner_id=partner_id, **{field: True}).exists()
+    return admin_page.module_on(request, field)
 
 
 class StockStateFilter(admin.SimpleListFilter):
@@ -417,6 +417,14 @@ class StockStateFilter(admin.SimpleListFilter):
 
 
 AVAILABILITY_TOGGLE = "availability"
+# «Где продаётся»: a way to order the venue has not switched on is not asked
+# about (admin step 4, PQ-050); its mark keeps its value.
+CHANNEL_MODULES = {
+    "available_at_table": "module_tables_enabled",
+    "available_for_pickup": "module_pickup_enabled",
+    "available_for_delivery": "module_delivery_enabled",
+    "available_for_shipping": "module_shipping_enabled",
+}
 
 
 @admin.register(MenuItem)
@@ -445,19 +453,22 @@ class MenuItemAdmin(ObjectActionsMixin, TranslatedAdminMixin, VenueFormMixin, Sc
     search_fields = ("public_id", "name", "sku", "barcode", "category__name", "partner__name")
     filter_horizontal = ()
     fieldsets = (
-        (None, {"fields": ("partner", "category", "name", "description", "price", "image",
-                           "image_url", "item_type", "is_available", "sort_order")}),
-        (_lazy("Где продаётся"), {"fields": (
+        (None, {"fields": ("partner", "category", "name", "description",
+                           ("price", "item_type"), "image", "image_url",
+                           ("is_available", "sort_order"))}),
+        (_lazy("Где продаётся"), {"classes": ["tab"], "fields": (
             "available_at_table", "available_for_pickup", "available_for_delivery",
             "available_for_shipping",
         )}),
         (_lazy("Витрина"), {
+            "classes": ["tab"],
             "description": _lazy(
                 "Порция, старая цена, метки, артикул; ниже — ещё фото и характеристики."
             ),
             "fields": SHOWCASE_FIELDS,
         }),
         (_lazy("Остатки"), {
+            "classes": ["tab"],
             "description": _lazy(
                 "Остаток уменьшается, когда гость оформляет заказ и при быстрой продаже; "
                 "отмена заказа возвращает товар. Новое число здесь — пересчёт, он попадает "
@@ -488,8 +499,17 @@ class MenuItemAdmin(ObjectActionsMixin, TranslatedAdminMixin, VenueFormMixin, Sc
             return _("«{name}» снова в меню гостей.", name=obj.name)
         return _("«{name}» убрана из меню гостей.", name=obj.name)
 
+    def _channels_off(self, request) -> tuple[str, ...]:
+        return tuple(
+            field for field, module in CHANNEL_MODULES.items()
+            if not module_on_for(self, request, module)
+        )
+
     def get_list_display(self, request):
-        list_display = tuple(super().get_list_display(request))
+        off = self._channels_off(request)
+        list_display = tuple(
+            column for column in super().get_list_display(request) if column not in off
+        )
         if self.has_change_permission(request):
             # Next to the name: on a tablet the end of a wide row is off screen.
             at = list_display.index("name") + 1 if "name" in list_display else len(list_display)
@@ -504,7 +524,10 @@ class MenuItemAdmin(ObjectActionsMixin, TranslatedAdminMixin, VenueFormMixin, Sc
         return module_on_for(self, request, "module_stock_enabled")
 
     def get_list_filter(self, request):
-        list_filter = tuple(super().get_list_filter(request))
+        off = self._channels_off(request)
+        list_filter = tuple(
+            entry for entry in super().get_list_filter(request) if entry not in off
+        )
         if not self.stock_on_for(request):
             return list_filter
         return (*list_filter, StockStateFilter)
@@ -521,7 +544,7 @@ class MenuItemAdmin(ObjectActionsMixin, TranslatedAdminMixin, VenueFormMixin, Sc
 
     def get_exclude(self, request, obj=None):
         exclude = list(super().get_exclude(request, obj) or ())
-        for fields in self._parts_off(request):
+        for fields in (*self._parts_off(request), self._channels_off(request)):
             exclude += [name for name in fields if name not in exclude]
         return tuple(exclude) or None
 

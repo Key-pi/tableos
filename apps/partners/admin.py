@@ -47,131 +47,136 @@ class OpeningHoursInline(TabularInline):
     )
 
 
+# Bot settings by what the owner sets up (admin step 4, PQ-050): a tab per
+# way to order and per part of the product. The settings of a module show
+# while its switch is on (``BOT_SETTINGS_SHOWN_WHEN``); switching it on shows
+# them at once, before saving. What is saved does not depend on what is shown.
+BOT_SETTINGS_GROUPS = (
+    (_lazy("Каталог"), _lazy(
+        "Меню и то, что к нему добавляется. Витрина, варианты с добавками и остатки "
+        "требуют меню. Профиль гостя и бонусы работают всегда.",
+    ), (
+        "module_menu_enabled",
+        "module_showcase_enabled",
+        "module_options_enabled",
+        "module_stock_enabled",
+        "allow_menu_without_session",
+        "max_menu_items_per_category_message",
+    )),
+    (_lazy("Заказы"), _lazy(
+        "Корзина требует меню и заказы. Счета требуют заказы; запрос счёта гостем "
+        "работает только при включённых столах. Быстрые продажи требуют меню.",
+    ), (
+        "module_orders_enabled",
+        "module_cart_enabled",
+        "module_billing_enabled",
+        "module_quick_sale_enabled",
+        "module_reports_enabled",
+    )),
+    (_lazy("За столом"), _lazy(
+        "Гость сканирует QR-код стола и заказывает с места. Столы и их QR-коды — в "
+        "разделе «Столы». Вызов персонала требует столы.",
+    ), (
+        "module_tables_enabled",
+        "auto_close_table_session_after_payment",
+        "module_staff_call_enabled",
+        ("staff_call_waiter_enabled", "staff_call_bartender_enabled",
+         "staff_call_hookah_enabled"),
+    )),
+    (_lazy("Самовывоз"), _lazy(
+        "Гость заказывает заранее и забирает сам. Включите хотя бы один способ оплаты; "
+        "если включены оба, гость выбирает. Часы самовывоза — в разделе «Часы работы».",
+    ), (
+        "module_pickup_enabled",
+        ("pickup_pay_transfer", "pickup_pay_on_receipt"),
+    )),
+    (_lazy("Доставка"), _lazy(
+        "Заказ везёт курьер. Включите хотя бы один способ оплаты; если включены оба, "
+        "гость выбирает. Часы доставки — в разделе «Часы работы».",
+    ), (
+        "module_delivery_enabled",
+        ("delivery_pay_transfer", "delivery_pay_on_receipt"),
+        "delivery_fee",
+        "delivery_free_from",
+        "delivery_min_order",
+    )),
+    (_lazy("Почта"), _lazy(
+        "Отправка почтой: гость выбирает службу и способ оплаты пересылки из "
+        "включённых. Без номера ТТН заказ не станет «отправлен».",
+    ), (
+        "module_shipping_enabled",
+        ("shipping_nova_poshta", "shipping_ukrposhta", "shipping_meest"),
+        ("shipping_pay_transfer", "shipping_pay_on_receipt"),
+        ("shipping_cost_carrier", "shipping_cost_fixed"),
+        "shipping_fee",
+        "shipping_free_from",
+        "shipping_min_order",
+    )),
+    (_lazy("Перевод"), _lazy(
+        "Оплата переводом заранее — для самовывоза, доставки и почты. Гость видит эти "
+        "реквизиты при оформлении; менять их может только владелец.",
+    ), (
+        "transfer_payment_details",
+        ("remote_unpaid_orders_limit", "transfer_wait_minutes"),
+    )),
+    (_lazy("Экраны"), _lazy(
+        "Mini App открывается внутри Telegram: меню и корзина для гостя, рабочий экран "
+        "для персонала. Экран кухни и бара требует заказы; сами экраны — в разделе "
+        "«Экраны кухни и бара».",
+    ), (
+        "module_webapp_enabled",
+        "module_staff_screen_enabled",
+        "module_kitchen_screen_enabled",
+    )),
+    (_lazy("Языки и бот"), _lazy(
+        "Гость видит язык своего Telegram, если он включён, иначе основной, и "
+        "может переключить язык в «Мой профиль». Кнопки и сообщения бота на "
+        "каждом языке меняются в разделе «Тексты бота».",
+    ), (
+        "default_language",
+        ("language_uk", "language_ru", "language_en"),
+        "duplicate_request_cooldown_seconds",
+        "extra_config",
+    )),
+)
+BOT_SETTINGS_SHOWN_WHEN = {
+    # Module switches themselves are always shown (PQ-033).
+    "auto_close_table_session_after_payment": ("module_tables_enabled",),
+    **dict.fromkeys(
+        ("staff_call_waiter_enabled", "staff_call_bartender_enabled",
+         "staff_call_hookah_enabled"),
+        ("module_staff_call_enabled",),
+    ),
+    **dict.fromkeys(("pickup_pay_transfer", "pickup_pay_on_receipt"),
+                    ("module_pickup_enabled",)),
+    **dict.fromkeys(
+        ("delivery_pay_transfer", "delivery_pay_on_receipt", "delivery_fee",
+         "delivery_free_from", "delivery_min_order"),
+        ("module_delivery_enabled",),
+    ),
+    **dict.fromkeys(
+        ("shipping_nova_poshta", "shipping_ukrposhta", "shipping_meest",
+         "shipping_pay_transfer", "shipping_pay_on_receipt", "shipping_cost_carrier",
+         "shipping_cost_fixed", "shipping_free_from", "shipping_min_order"),
+        ("module_shipping_enabled",),
+    ),
+    "shipping_fee": ("module_shipping_enabled", "shipping_cost_fixed"),
+}
+
+
+def bot_settings_fieldsets(*, tabs: bool):
+    return tuple(
+        (title, {"description": description, "fields": fields,
+                 **({"classes": ["tab"]} if tabs else {})})
+        for title, description, fields in BOT_SETTINGS_GROUPS
+    )
+
+
 class PartnerBotSettingsInline(StackedInline):
     model = PartnerBotSettings
     extra = 0
     max_num = 1
-    fieldsets = (
-        (
-            _lazy("Модули · Базовые"),
-            {
-                "description": (
-                    _lazy(
-                        "Профиль гостя и бонусный баланс считаются базовой частью продукта. Меню "
-                        "нужно для заказов, корзины и быстрых продаж.",
-                    )
-                ),
-                "fields": (
-                    "module_menu_enabled",
-                    "module_showcase_enabled",
-                    "module_options_enabled",
-                    "module_stock_enabled",
-                ),
-            },
-        ),
-        (
-            _lazy("Модули · Сценарии заказа"),
-            {
-                "description": (
-                    _lazy(
-                        "Столы, самовывоз, доставка и отправка почтой — независимые сценарии. "
-                        "Можно включить любой набор; для заказов нужен хотя бы один. У каждого "
-                        "удалённого сценария включите способы оплаты: переводом заранее (на "
-                        "реквизиты ниже) и/или при получении; если включены оба, гость выбирает. "
-                        "У отправки так же включаются службы и варианты оплаты пересылки — гость "
-                        "выбирает из включённых. Часы работы (для самовывоза и доставки) — в "
-                        "карточке партнёра.",
-                    )
-                ),
-                "fields": (
-                    "module_tables_enabled",
-                    "module_pickup_enabled",
-                    ("pickup_pay_transfer", "pickup_pay_on_receipt"),
-                    "module_delivery_enabled",
-                    ("delivery_pay_transfer", "delivery_pay_on_receipt"),
-                    "transfer_payment_details",
-                    ("remote_unpaid_orders_limit", "transfer_wait_minutes"),
-                    "delivery_fee",
-                    "delivery_free_from",
-                    "delivery_min_order",
-                    "module_shipping_enabled",
-                    ("shipping_nova_poshta", "shipping_ukrposhta", "shipping_meest"),
-                    ("shipping_pay_transfer", "shipping_pay_on_receipt"),
-                    ("shipping_cost_carrier", "shipping_cost_fixed"),
-                    "shipping_fee",
-                    "shipping_free_from",
-                    "shipping_min_order",
-                ),
-            },
-        ),
-        (
-            _lazy("Модули · Заказы и оплата"),
-            {
-                "description": (
-                    _lazy(
-                        "Корзина требует меню и заказы. Счета требуют заказы; запрос счёта "
-                        "гостем работает только при включённых столах.",
-                    )
-                ),
-                "fields": (
-                    "module_orders_enabled",
-                    "module_cart_enabled",
-                    "module_webapp_enabled",
-                    "module_billing_enabled",
-                ),
-            },
-        ),
-        (
-            _lazy("Модули · Операции и отчёты"),
-            {
-                "description": (
-                    _lazy(
-                        "Вызов персонала требует столы. Быстрые продажи требуют меню. "
-                        "Экран кухни и бара требует заказы; сами экраны — в разделе "
-                        "«Экраны кухни и бара».",
-                    )
-                ),
-                "fields": (
-                    "module_staff_call_enabled",
-                    "module_quick_sale_enabled",
-                    "module_staff_screen_enabled",
-                    "module_kitchen_screen_enabled",
-                    "module_reports_enabled",
-                ),
-            },
-        ),
-        (
-            _lazy("Поведение бота"),
-            {
-                "fields": (
-                    "auto_close_table_session_after_payment",
-                    "max_menu_items_per_category_message",
-                    "duplicate_request_cooldown_seconds",
-                    "allow_menu_without_session",
-                    "staff_call_waiter_enabled",
-                    "staff_call_bartender_enabled",
-                    "staff_call_hookah_enabled",
-                    "extra_config",
-                )
-            },
-        ),
-        (
-            _lazy("Языки"),
-            {
-                "description": (
-                    _lazy(
-                        "Гость видит язык своего Telegram, если он включён, иначе основной, и "
-                        "может переключить язык в «Мой профиль». Кнопки и сообщения бота на "
-                        "каждом языке меняются в разделе «Тексты бота».",
-                    )
-                ),
-                "fields": (
-                    "default_language",
-                    ("language_uk", "language_ru", "language_en"),
-                ),
-            },
-        ),
-    )
+    fieldsets = bot_settings_fieldsets(tabs=False)
 
 
 @admin.register(Partner)
@@ -295,6 +300,10 @@ def _alert_owners_if_transfer_details_changed(form, obj, actor) -> None:
 class PartnerBotSettingsAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BOT_CONTENT
     single_record = True
+    # A venue has exactly one: nothing to add, and without it the bot has no
+    # settings (the platform creates it with the venue).
+    allow_partner_add = False
+    allow_partner_delete = False
     # Guests pay to these details: only the owner sees and changes them.
     owner_only_fields = ("transfer_payment_details",)
     platform_only_fields = ("extra_config",)
@@ -320,7 +329,11 @@ class PartnerBotSettingsAdmin(ScopedAdminMixin):
         "allow_menu_without_session",
     )
     search_fields = ("partner__name", "partner__slug")
-    fieldsets = PartnerBotSettingsInline.fieldsets
+    fieldsets = bot_settings_fieldsets(tabs=True)
+    conditional_fields = {
+        field: " && ".join(f"{switch} == true" for switch in switches)
+        for field, switches in BOT_SETTINGS_SHOWN_WHEN.items()
+    }
 
     def get_search_fields(self, request):
         if request.user.is_superuser:

@@ -26,7 +26,12 @@ from apps.orders.models import (
 )
 from apps.orders.services import OrderFlowError, transition_order_status
 from apps.users.constants import AdminSection
-from core.admin_mixins import ObjectAction, ObjectActionsMixin, ScopedAdminMixin
+from core.admin_mixins import (
+    ObjectAction,
+    ObjectActionsMixin,
+    RecordsInlineMixin,
+    ScopedAdminMixin,
+)
 from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
 
@@ -50,28 +55,34 @@ class CartItemInline(TabularInline):
         return False
 
 
-class OrderItemInline(TabularInline):
+class OrderItemInline(RecordsInlineMixin, TabularInline):
+    admin_section = AdminSection.ORDERS
+    # What was chosen (variant, add-ons) is in the line's name and price.
+    venue_hidden_fields = ("partner", "kind", "menu_item", "updated_at")
     model = OrderItem
     extra = 0
     can_delete = False
-    readonly_fields = (
-        "partner",
-        "kind",
-        "menu_item",
+    fields = (
         "item_name",
         "unit_price",
         "quantity",
         "comment",
+        "kind",
+        "menu_item",
+        "partner",
         "created_at",
         "updated_at",
     )
+    readonly_fields = fields
 
     def has_add_permission(self, request, obj=None):
         return False
 
 
-class OrderStatusHistoryInline(TabularInline):
+class OrderStatusHistoryInline(RecordsInlineMixin, TabularInline):
+    admin_section = AdminSection.ORDERS
     model = OrderStatusHistory
+    tab = True  # a page tab next to the order (admin step 4, PQ-050)
     extra = 0
     can_delete = False
     fields = ("created_at", "from_status", "to_status", "changed_by", "note")
@@ -210,6 +221,49 @@ class OrderAdmin(ObjectActionsMixin, ScopedAdminMixin):
         "updated_at",
     )
     inlines = [OrderItemInline, OrderStatusHistoryInline]
+    # The page in short rows (admin step 4, PQ-050); an order shows only the
+    # part of its own way to order (``get_fieldsets``).
+    fieldsets = (
+        (None, {"fields": (
+            "partner",
+            ("public_id", "status"),
+            ("channel", "requested_for"),
+            ("guest", "assigned_employee"),
+            ("table", "table_session"),
+            "comment",
+        )}),
+        (_lazy("Доставка"), {"classes": ["tab"], "fields": (
+            "delivery_address",
+            ("delivery_latitude", "delivery_longitude"),
+        )}),
+        (_lazy("Отправка почтой"), {"classes": ["tab"], "fields": (
+            ("shipping_carrier", "shipping_cost"),
+            "shipping_destination",
+            "tracking_number",
+        )}),
+        (_lazy("Оплата"), {"classes": ["tab"], "fields": (
+            ("payment_timing", "payment_method"),
+            ("subtotal_amount", "discount_amount"),
+            ("bonus_spent", "total_amount"),
+            "paid_at",
+        )}),
+        (_lazy("Время"), {"classes": ["tab"], "fields": (
+            ("created_at", "accepted_at"),
+            ("received_at", "updated_at"),
+        )}),
+    )
+    FIELD_CHANNELS = {
+        **dict.fromkeys(("table", "table_session"), (Order.Channel.TABLE,)),
+        "requested_for": (Order.Channel.PICKUP, Order.Channel.DELIVERY),
+        **dict.fromkeys(
+            ("delivery_address", "delivery_latitude", "delivery_longitude"),
+            (Order.Channel.DELIVERY,),
+        ),
+        **dict.fromkeys(
+            ("shipping_carrier", "shipping_cost", "shipping_destination", "tracking_number"),
+            (Order.Channel.SHIPPING,),
+        ),
+    }
     actions = (
         "create_draft_bill",
         "mark_as_accepted",
@@ -219,6 +273,20 @@ class OrderAdmin(ObjectActionsMixin, ScopedAdminMixin):
         "mark_as_completed",
         "mark_as_canceled",
     )
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is None:
+            return fieldsets
+        other = {
+            name for name, channels in self.FIELD_CHANNELS.items() if obj.channel not in channels
+        }
+        result = []
+        for title, options in fieldsets:
+            fields = self._filter_fieldset_fields(options.get("fields", ()), other)
+            if fields:
+                result.append((title, {**options, "fields": fields}))
+        return result
 
     def get_object_actions(self, request, obj):
         return order_admin_actions(obj)
@@ -251,6 +319,16 @@ class OrderAdmin(ObjectActionsMixin, ScopedAdminMixin):
 
     def get_list_display(self, request):
         list_display = tuple(super().get_list_display(request))
+        if not self.is_platform_admin(request):
+            # A venue reads what matters first (admin step 4): how it was
+            # ordered, where it stands, how much; the table — while tables are on.
+            first = ("public_id", "channel", "status", "total_amount", "guest")
+            rest = tuple(
+                column for column in list_display
+                if column not in first
+                and (column != "table" or self.module_on(request, "module_tables_enabled"))
+            )
+            list_display = (*first, *rest)
         if self.has_change_permission(request):
             # Right after the number: on a tablet the end of a wide row is off screen.
             return (*list_display[:1], "next_step", *list_display[1:])
