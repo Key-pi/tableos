@@ -82,6 +82,8 @@ class BonusTransactionAdmin(ScopedAdminMixin):
 @admin.register(WalkInSale)
 class WalkInSaleAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BONUSES
+    # A money record: a venue does not delete it (owner 2026-11-10, PQ-050).
+    allow_partner_delete = False
     form = WalkInSaleAdminForm
     inlines = (WalkInSaleItemInline,)
     list_display = (

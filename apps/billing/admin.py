@@ -224,6 +224,9 @@ class BillingRequestAdmin(ScopedAdminMixin):
 @admin.register(Bill)
 class BillAdmin(ObjectActionsMixin, ScopedAdminMixin):
     admin_section = AdminSection.BILLING
+    # A bill is voided with a reason, a paid one is refunded — a venue does
+    # not delete it (owner 2026-11-10, PQ-050).
+    allow_partner_delete = False
     object_action_errors = (BillingServiceError, BonusServiceError)
     list_display = (
         "public_id",

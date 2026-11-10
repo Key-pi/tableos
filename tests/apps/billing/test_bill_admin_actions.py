@@ -136,3 +136,47 @@ class BilledOrderCancelTests(BillAdminFixture):
                          {"object_action": "status:canceled"})
         order.refresh_from_db()
         self.assertEqual(order.status, "canceled")
+
+
+class MoneyRecordsAreNotDeletedTests(BillAdminFixture):
+    """A venue does not delete a bill or a quick sale in Admin (owner
+    2026-11-10): a bill is voided with a reason, a paid one is refunded —
+    a money record never just disappears. The platform keeps the right."""
+
+    def test_a_venue_cannot_delete_a_bill(self):
+        bill = self.bill()
+        page = self.client.get(reverse("admin:billing_bill_change", args=[bill.pk]))
+        self.assertFalse(page.context["has_delete_permission"])
+        response = self.client.post(
+            reverse("admin:billing_bill_delete", args=[bill.pk]), {"post": "yes"}
+        )
+        self.assertEqual(response.status_code, 403)
+        # Nor with «delete selected» of the list.
+        self.client.post(reverse("admin:billing_bill_changelist"), {
+            "action": "delete_selected", "_selected_action": str(bill.pk), "post": "yes",
+        })
+        self.assertTrue(Bill.objects.filter(pk=bill.pk).exists())
+
+    def test_a_venue_cannot_delete_a_quick_sale(self):
+        from apps.bonuses.models import WalkInSale
+
+        sale = WalkInSale.objects.create(
+            partner=self.partner, amount=Decimal("120.00"), created_by=self.owner
+        )
+        response = self.client.post(
+            reverse("admin:bonuses_walkinsale_delete", args=[sale.pk]), {"post": "yes"}
+        )
+        self.assertEqual(response.status_code, 403)
+        self.client.post(reverse("admin:bonuses_walkinsale_changelist"), {
+            "action": "delete_selected", "_selected_action": str(sale.pk), "post": "yes",
+        })
+        self.assertTrue(WalkInSale.objects.filter(pk=sale.pk).exists())
+
+    def test_the_platform_keeps_the_right(self):
+        from django.contrib import admin
+
+        root = User.objects.create_superuser(username="bill_root", password="x", email="")
+        self.client.force_login(root)
+        bill = self.bill()
+        request = self.client.get(reverse("admin:billing_bill_changelist")).wsgi_request
+        self.assertTrue(admin.site._registry[Bill].has_delete_permission(request, bill))
