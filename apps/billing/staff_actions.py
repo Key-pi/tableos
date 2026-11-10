@@ -8,9 +8,44 @@ it is pressed (``apps/orders/services.py``, ``apps/billing/remote_orders.py``).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from apps.billing.remote_orders import awaits_payment_on_receipt, awaits_transfer_check
 from apps.orders.models import Order
 from apps.orders.services import get_available_staff_actions
+from core.i18n import N_, _
+
+# Status buttons, the same on every staff screen: the bot, the Mini App and
+# Admin (``status_labels_for``).
+STATUS_LABELS = {
+    "accepted": N_("Взять в работу"),
+    "preparing": N_("Готовим"),
+    "ready": N_("Готово"),
+    "delivering": N_("Нести"),
+    "completed": N_("Завершить"),
+    "canceled": N_("Отменить"),
+}
+# Delivery (PQ-032): a ready order is handed to the courier, then delivered.
+DELIVERY_STATUS_LABELS = {
+    **STATUS_LABELS,
+    "delivering": N_("🚚 В пути"),
+    "completed": N_("✅ Доставлено"),
+}
+# Shipping by post (PQ-034): packed, sent with a ТТН, received.
+SHIPPING_STATUS_LABELS = {
+    **STATUS_LABELS,
+    "ready": N_("📦 Собран"),
+    "delivering": N_("🚚 Отправлен"),
+    "completed": N_("✅ Получен"),
+}
+
+
+def status_labels_for(channel: str) -> dict[str, str]:
+    if channel == Order.Channel.DELIVERY:
+        return DELIVERY_STATUS_LABELS
+    if channel == Order.Channel.SHIPPING:
+        return SHIPPING_STATUS_LABELS
+    return STATUS_LABELS
 
 TRANSFER_OK = "transfer_ok"
 TRANSFER_NO = "transfer_no"
@@ -56,6 +91,52 @@ def staff_order_actions(order: Order) -> list[str]:
     if receipt_pending:
         actions.append(RECEIPT_NO)
     return actions
+
+
+@dataclass(frozen=True)
+class ActionText:
+    """How a button of ``staff_order_actions`` reads on the Mini App and in
+    Admin (the bot keeps its own keyboard, ``bot/keyboards/staff.py``)."""
+
+    label: str
+    style: str = ""  # "primary" | "danger" | ""
+    confirm: str = ""
+    needs_tracking: bool = False
+
+
+def describe_order_action(order: Order, code: str) -> ActionText:
+    if code.startswith(STATUS):
+        status = code[len(STATUS):]
+        label = _(status_labels_for(order.channel).get(status, status))
+        if status == Order.Status.CANCELED:
+            return ActionText(label, "danger", _("Отменить заказ?"))
+        return ActionText(label)
+    if code == TRANSFER_OK:
+        return ActionText(_("✅ Оплата получена"), "primary")
+    if code == TRANSFER_NO:
+        return ActionText(_("❌ Оплаты нет"), "danger", _(
+            "Отменить заказ, потому что оплата не поступила? Списанные бонусы вернутся "
+            "гостю, гость получит сообщение."
+        ))
+    if code == RECEIPT_CASH:
+        return ActionText(_("💵 Оплачено наличными"), "primary")
+    if code == RECEIPT_CARD:
+        return ActionText(_("💳 Оплачено картой"), "primary")
+    if code == RECEIPT_COD:
+        return ActionText(_("💵 Наложенный платёж получен"), "primary")
+    if code == RECEIPT_NO:
+        courier_has_it = (
+            order.channel != Order.Channel.DELIVERY or order.status == Order.Status.DELIVERING
+        )
+        label = (
+            _("❌ Посылку не забрали") if order.channel == Order.Channel.SHIPPING
+            else _("❌ Гость не забрал") if courier_has_it
+            else _(STATUS_LABELS["canceled"])
+        )
+        return ActionText(label, "danger", _("Отменить заказ? Списанные бонусы вернутся гостю."))
+    if code == SHIP:
+        return ActionText(_(SHIPPING_STATUS_LABELS["delivering"]), needs_tracking=True)
+    return ActionText(code)
 
 
 # --- bills (the bot's bill card: bot/handlers/staff.py:_build_bill_card_message) --

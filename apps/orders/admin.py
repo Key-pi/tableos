@@ -3,8 +3,17 @@ from django.urls import reverse
 from django.utils.html import format_html
 from unfold.admin import TabularInline
 
+from apps.billing import staff_actions as staff
 from apps.billing.admin_actions import run_with_reason
-from apps.billing.models import Bill, BillItem
+from apps.billing.models import Bill, BillItem, Payment
+from apps.billing.remote_orders import (
+    RemoteOrderError,
+    cancel_unpaid_remote_order,
+    confirm_transfer,
+    mark_order_shipped,
+    record_payment_on_receipt,
+    reject_transfer,
+)
 from apps.billing.services import BillingServiceError, cancel_order, create_bill_from_orders
 from apps.orders.kitchen import issue_screen_link, missing_screen_warnings
 from apps.orders.models import (
@@ -17,7 +26,7 @@ from apps.orders.models import (
 )
 from apps.orders.services import OrderFlowError, transition_order_status
 from apps.users.constants import AdminSection
-from core.admin_mixins import ScopedAdminMixin
+from core.admin_mixins import ObjectAction, ObjectActionsMixin, ScopedAdminMixin
 from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
 
@@ -69,9 +78,76 @@ class OrderStatusHistoryInline(TabularInline):
     readonly_fields = fields
 
 
+# Buttons of an order in Admin (admin step 3, PQ-050): the same actions as the
+# bot's order card and the Mini App (``staff_order_actions``), with icons.
+ORDER_ACTION_ICONS = {
+    staff.TRANSFER_OK: "check_circle",
+    staff.TRANSFER_NO: "money_off",
+    staff.RECEIPT_CASH: "payments",
+    staff.RECEIPT_CARD: "credit_card",
+    staff.RECEIPT_COD: "local_post_office",
+    staff.RECEIPT_NO: "cancel",
+    staff.SHIP: "local_shipping",
+    staff.STATUS + Order.Status.ACCEPTED: "play_arrow",
+    staff.STATUS + Order.Status.PREPARING: "skillet",
+    staff.STATUS + Order.Status.READY: "done",
+    staff.STATUS + Order.Status.DELIVERING: "directions_run",
+    staff.STATUS + Order.Status.COMPLETED: "task_alt",
+    staff.STATUS + Order.Status.CANCELED: "close",
+}
+RECEIPT_METHODS = {
+    staff.RECEIPT_CASH: Payment.Method.CASH,
+    staff.RECEIPT_CARD: Payment.Method.TERMINAL,
+    staff.RECEIPT_COD: Payment.Method.COD,
+}
+
+
+def _without_emoji(label: str) -> str:
+    """Admin draws icons, so the bot's leading emoji is left out."""
+
+    first, _space, rest = str(label).partition(" ")
+    return rest if rest and not any(char.isalnum() for char in first) else str(label)
+
+
+def order_admin_actions(order: Order, *, row: bool = False) -> list[ObjectAction]:
+    """``row``: for a list row, where refusals are not shown (no bill lookup)."""
+
+    result = []
+    for code in staff.staff_order_actions(order):
+        text = staff.describe_order_action(order, code)
+        action = ObjectAction(
+            code=code,
+            label=_without_emoji(text.label),
+            icon=ORDER_ACTION_ICONS.get(code, ""),
+            style=text.style or "default",
+            confirm=text.confirm,
+            field="tracking" if text.needs_tracking else "",
+            field_label=_("Номер ТТН") if text.needs_tracking else "",
+        )
+        if row and action.style == "danger":
+            continue
+        if code == staff.STATUS + Order.Status.CANCELED and BillItem.objects.filter(
+            order=order, is_active=True
+        ).exists():
+            # A billed order is cancelled with a reason, as a bill change (PQ-028).
+            action = ObjectAction(
+                code=code, label=action.label, icon=action.icon, style="danger",
+                list_action="mark_as_canceled",
+            )
+        result.append(action)
+    # The first step forward stands out.
+    for index, action in enumerate(result):
+        if action.style != "danger":
+            result[index] = ObjectAction(**{**action.__dict__, "style": "primary"})
+            break
+    return result
+
+
 @admin.register(Order)
-class OrderAdmin(ScopedAdminMixin):
+class OrderAdmin(ObjectActionsMixin, ScopedAdminMixin):
     admin_section = AdminSection.ORDERS
+    object_action_errors = (OrderFlowError, BillingServiceError, RemoteOrderError)
+    list_before_template = "admin/botera/row_actions.html"
     allow_partner_add = False
     allow_partner_delete = False
     list_display = (
@@ -143,6 +219,63 @@ class OrderAdmin(ScopedAdminMixin):
         "mark_as_completed",
         "mark_as_canceled",
     )
+
+    def get_object_actions(self, request, obj):
+        return order_admin_actions(obj)
+
+    def run_object_action(self, request, obj, code, data):
+        actor = request.user
+        if code.startswith(staff.STATUS):
+            status = code[len(staff.STATUS):]
+            if status == Order.Status.CANCELED:
+                cancel_order(order=obj, actor=actor, note="Cancelled in Admin")
+            else:
+                transition_order_status(
+                    order=obj, to_status=status, actor_user=actor, note="Updated in Admin"
+                )
+        elif code == staff.TRANSFER_OK:
+            confirm_transfer(order=obj, actor=actor)
+        elif code == staff.TRANSFER_NO:
+            reject_transfer(order=obj, actor=actor)
+        elif code in RECEIPT_METHODS:
+            record_payment_on_receipt(order=obj, actor=actor, method=RECEIPT_METHODS[code])
+        elif code == staff.RECEIPT_NO:
+            cancel_unpaid_remote_order(order=obj, actor=actor)
+        elif code == staff.SHIP:
+            mark_order_shipped(order=obj, actor=actor, tracking_number=data.get("tracking", ""))
+        obj.refresh_from_db()
+        return _(
+            "Заказ #{public_id}: {status}.",
+            public_id=obj.public_id, status=obj.get_status_display(),
+        )
+
+    def get_list_display(self, request):
+        list_display = tuple(super().get_list_display(request))
+        if self.has_change_permission(request):
+            # Right after the number: on a tablet the end of a wide row is off screen.
+            return (*list_display[:1], "next_step", *list_display[1:])
+        return list_display
+
+    @admin.display(description=_lazy("Следующий шаг"))
+    def next_step(self, obj):
+        """The first step forward as a button in the row (one that needs no
+        typing and is not a refusal); the rest — on the order's page."""
+
+        actions = order_admin_actions(obj, row=True)
+        with_the_guest = obj.status == Order.Status.DELIVERING or (
+            obj.status == Order.Status.READY and obj.channel == Order.Channel.PICKUP
+        )
+        if not with_the_guest:
+            # Money on receipt is taken when the guest has the order; before
+            # that the next step is the order's own (take it, pack, send).
+            actions.sort(key=lambda action: action.code in RECEIPT_METHODS)
+        for action in actions:
+            if action.field or action.list_action:
+                return format_html(
+                    '<a class="row-action" href="{}">{}</a>', self._change_url(obj), action.label
+                )
+            return self.object_action_button(obj, action)
+        return ""
 
     @admin.action(description=_lazy("Создать черновик счёта из заказов"))
     def create_draft_bill(self, request, queryset):

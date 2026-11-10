@@ -244,6 +244,58 @@ msgstr "Скасувати запити"
 msgid "Отменено запросов счёта: {updated}."
 msgstr "Скасовано запитів рахунку: {updated}."
 
+#: apps/billing/admin.py bot/keyboards/staff.py webapp/staff_billing.py
+msgid "Выдать счёт"
+msgstr "Виставити рахунок"
+
+#: apps/billing/admin.py
+msgid "Оплатить бонусами: до {amount} грн"
+msgstr "Оплатити бонусами: до {amount} грн"
+
+#: apps/billing/admin.py
+msgid "Списать бонусы гостя в оплату счёта?"
+msgstr "Списати бонуси гостя в оплату рахунку?"
+
+#: apps/billing/admin.py
+msgid "Оплачено наличными: {amount} грн"
+msgstr "Оплачено готівкою: {amount} грн"
+
+#: apps/billing/admin.py
+msgid "Оплачено картой: {amount} грн"
+msgstr "Оплачено карткою: {amount} грн"
+
+#: apps/billing/admin.py
+msgid "Убрать позиции"
+msgstr "Прибрати позиції"
+
+#: apps/billing/admin.py
+msgid "Возврат по строкам"
+msgstr "Повернення за рядками"
+
+#: apps/billing/admin.py bot/keyboards/staff.py webapp/staff_views.py
+msgid "Аннулировать"
+msgstr "Анулювати"
+
+#: apps/billing/admin.py bot/handlers/staff.py webapp/staff_billing.py
+msgid "Счёт выдан"
+msgstr "Рахунок виставлено"
+
+#: apps/billing/admin.py bot/handlers/staff.py webapp/staff_billing.py
+msgid "Списано бонусами: {bonus_spent_amount} грн. Остаток к оплате: {remaining_amount} грн."
+msgstr "Списано бонусами: {bonus_spent_amount} грн. Залишок до сплати: {remaining_amount} грн."
+
+#: apps/billing/admin.py bot/handlers/staff.py webapp/staff_billing.py
+msgid "Счёт полностью оплачен бонусами"
+msgstr "Рахунок повністю сплачено бонусами"
+
+#: apps/billing/admin.py
+msgid "Проведено в Admin ({method})."
+msgstr "Проведено в Admin ({method})."
+
+#: apps/billing/admin.py bot/handlers/staff.py webapp/staff_billing.py
+msgid "Оплата зафиксирована"
+msgstr "Оплату зафіксовано"
+
 #: apps/billing/admin.py
 msgid "Аннулировать счета (право от владельца)"
 msgstr "Анулювати рахунки (право від власника)"
@@ -291,10 +343,6 @@ msgstr "Прийняти залишок карткою"
 #: apps/billing/admin.py
 msgid "У счёта нет остатка к оплате."
 msgstr "У рахунку немає залишку до сплати."
-
-#: apps/billing/admin.py
-msgid "Проведено в Admin ({method})."
-msgstr "Проведено в Admin ({method})."
 
 #: apps/billing/admin.py
 msgid "Принято оплат по счетам: {processed_count}."
@@ -1424,6 +1472,90 @@ msgstr "Коментар до цієї зміни вже додано."
 msgid "Время на добавление комментария истекло."
 msgstr "Час на додавання коментаря минув."
 
+#: apps/billing/staff_actions.py bot/keyboards/staff.py webapp/kitchen_views.py
+msgid "Взять в работу"
+msgstr "Взяти в роботу"
+
+#: apps/billing/staff_actions.py bot/handlers/staff.py
+msgid "Готовим"
+msgstr "Готуємо"
+
+#: apps/billing/staff_actions.py webapp/kitchen_views.py webapp/staff_views.py
+msgid "Готово"
+msgstr "Готово"
+
+#: apps/billing/staff_actions.py
+msgid "Нести"
+msgstr "Нести"
+
+#: apps/billing/staff_actions.py
+msgid "Завершить"
+msgstr "Завершити"
+
+#: apps/billing/staff_actions.py bot/keyboards/staff.py
+msgid "Отменить"
+msgstr "Скасувати"
+
+#: apps/billing/staff_actions.py
+msgid "🚚 В пути"
+msgstr "🚚 У дорозі"
+
+#: apps/billing/staff_actions.py
+msgid "✅ Доставлено"
+msgstr "✅ Доставлено"
+
+#: apps/billing/staff_actions.py
+msgid "📦 Собран"
+msgstr "📦 Зібрано"
+
+#: apps/billing/staff_actions.py
+msgid "🚚 Отправлен"
+msgstr "🚚 Відправлено"
+
+#: apps/billing/staff_actions.py
+msgid "✅ Получен"
+msgstr "✅ Отримано"
+
+#: apps/billing/staff_actions.py
+msgid "Отменить заказ?"
+msgstr "Скасувати замовлення?"
+
+#: apps/billing/staff_actions.py bot/keyboards/staff.py
+msgid "✅ Оплата получена"
+msgstr "✅ Оплату отримано"
+
+#: apps/billing/staff_actions.py bot/keyboards/staff.py
+msgid "❌ Оплаты нет"
+msgstr "❌ Оплати немає"
+
+#: apps/billing/staff_actions.py
+msgid "Отменить заказ, потому что оплата не поступила? Списанные бонусы вернутся гостю, гость получит сообщение."
+msgstr "Скасувати замовлення, бо оплата не надійшла? Списані бонуси повернуться гостю, гість отримає повідомлення."
+
+#: apps/billing/staff_actions.py bot/keyboards/staff.py
+msgid "💵 Оплачено наличными"
+msgstr "💵 Сплачено готівкою"
+
+#: apps/billing/staff_actions.py bot/keyboards/staff.py
+msgid "💳 Оплачено картой"
+msgstr "💳 Сплачено карткою"
+
+#: apps/billing/staff_actions.py bot/keyboards/staff.py
+msgid "💵 Наложенный платёж получен"
+msgstr "💵 Накладений платіж отримано"
+
+#: apps/billing/staff_actions.py bot/keyboards/staff.py
+msgid "❌ Посылку не забрали"
+msgstr "❌ Посилку не забрали"
+
+#: apps/billing/staff_actions.py bot/keyboards/staff.py
+msgid "❌ Гость не забрал"
+msgstr "❌ Гість не забрав"
+
+#: apps/billing/staff_actions.py
+msgid "Отменить заказ? Списанные бонусы вернутся гостю."
+msgstr "Скасувати замовлення? Списані бонуси повернуться гостю."
+
 #: apps/billing/table_bills.py
 msgid "За столом несколько визитов — выставьте счёт из карточки нужного визита."
 msgstr "За столом кілька візитів — виставте рахунок із картки потрібного візиту."
@@ -2039,6 +2171,26 @@ msgstr "Залишки"
 #: apps/menu/admin.py
 msgid "Остаток уменьшается, когда гость оформляет заказ и при быстрой продаже; отмена заказа возвращает товар. Новое число здесь — пересчёт, он попадает в «Движение остатков». У позиции с вариантами остаток — у каждого варианта."
 msgstr "Залишок зменшується, коли гість оформлює замовлення, і під час швидкого продажу; скасування замовлення повертає товар. Нове число тут — перерахунок, він потрапляє в «Рух залишків». У позиції з варіантами залишок — у кожного варіанта."
+
+#: apps/menu/admin.py
+msgid "В стоп-лист"
+msgstr "У стоп-лист"
+
+#: apps/menu/admin.py
+msgid "Вернуть в меню"
+msgstr "Повернути в меню"
+
+#: apps/menu/admin.py
+msgid "«{name}» снова в меню гостей."
+msgstr "«{name}» знову в меню гостей."
+
+#: apps/menu/admin.py
+msgid "«{name}» убрана из меню гостей."
+msgstr "«{name}» прибрано з меню гостей."
+
+#: apps/menu/admin.py
+msgid "Стоп-лист"
+msgstr "Стоп-лист"
 
 #: apps/menu/admin.py
 msgid "Гость выбирает добавки, пока включён модуль «Варианты и добавки». Группа без добавок в наличии не показывается."
@@ -3101,6 +3253,18 @@ msgstr "Гість більше не отримує розсилки."
 #: apps/notifications/services.py
 msgid "Рассылка не дошла ни до одного гостя."
 msgstr "Розсилка не дійшла до жодного гостя."
+
+#: apps/orders/admin.py bot/handlers/staff.py webapp/staff_views.py
+msgid "Номер ТТН"
+msgstr "Номер ТТН"
+
+#: apps/orders/admin.py
+msgid "Заказ #{public_id}: {status}."
+msgstr "Замовлення #{public_id}: {status}."
+
+#: apps/orders/admin.py
+msgid "Следующий шаг"
+msgstr "Наступний крок"
 
 #: apps/orders/admin.py
 msgid "Создать черновик счёта из заказов"
@@ -6372,10 +6536,6 @@ msgstr "Гість підтвердив отримання"
 msgid "В работе"
 msgstr "У роботі"
 
-#: bot/handlers/staff.py bot/keyboards/staff.py webapp/staff_views.py
-msgid "Готовим"
-msgstr "Готуємо"
-
 #: bot/handlers/staff.py
 msgid "Несут"
 msgstr "Несуть"
@@ -7098,10 +7258,6 @@ msgstr ""
 "{shipping_carrier}: {shipping_destination}\n"
 "Напишіть номер ТТН у відповідь на це повідомлення."
 
-#: bot/handlers/staff.py webapp/staff_views.py
-msgid "Номер ТТН"
-msgstr "Номер ТТН"
-
 #: bot/handlers/staff.py
 msgid "Не нашёл номер заказа — нажмите «Отправлен» в карточке ещё раз."
 msgstr "Не знайшов номера замовлення — натисніть «Відправлено» в картці ще раз."
@@ -7163,22 +7319,6 @@ msgstr "Рахунок не знайдено."
 #: bot/handlers/staff.py
 msgid "Карточка счёта обновлена"
 msgstr "Картку рахунку оновлено"
-
-#: bot/handlers/staff.py webapp/staff_billing.py
-msgid "Счёт выдан"
-msgstr "Рахунок виставлено"
-
-#: bot/handlers/staff.py webapp/staff_billing.py
-msgid "Оплата зафиксирована"
-msgstr "Оплату зафіксовано"
-
-#: bot/handlers/staff.py webapp/staff_billing.py
-msgid "Списано бонусами: {bonus_spent_amount} грн. Остаток к оплате: {remaining_amount} грн."
-msgstr "Списано бонусами: {bonus_spent_amount} грн. Залишок до сплати: {remaining_amount} грн."
-
-#: bot/handlers/staff.py webapp/staff_billing.py
-msgid "Счёт полностью оплачен бонусами"
-msgstr "Рахунок повністю сплачено бонусами"
 
 #: bot/handlers/staff.py
 msgid ""
@@ -7668,74 +7808,6 @@ msgstr "До мого столу"
 msgid "Начать новый визит"
 msgstr "Почати новий візит"
 
-#: bot/keyboards/staff.py webapp/kitchen_views.py webapp/staff_views.py
-msgid "Взять в работу"
-msgstr "Взяти в роботу"
-
-#: bot/keyboards/staff.py webapp/kitchen_views.py webapp/staff_views.py
-msgid "Готово"
-msgstr "Готово"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "Нести"
-msgstr "Нести"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "Завершить"
-msgstr "Завершити"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "Отменить"
-msgstr "Скасувати"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "🚚 В пути"
-msgstr "🚚 У дорозі"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "✅ Доставлено"
-msgstr "✅ Доставлено"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "📦 Собран"
-msgstr "📦 Зібрано"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "🚚 Отправлен"
-msgstr "🚚 Відправлено"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "✅ Получен"
-msgstr "✅ Отримано"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "💵 Наложенный платёж получен"
-msgstr "💵 Накладений платіж отримано"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "💵 Оплачено наличными"
-msgstr "💵 Сплачено готівкою"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "💳 Оплачено картой"
-msgstr "💳 Сплачено карткою"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "✅ Оплата получена"
-msgstr "✅ Оплату отримано"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "❌ Оплаты нет"
-msgstr "❌ Оплати немає"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "❌ Посылку не забрали"
-msgstr "❌ Посилку не забрали"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "❌ Гость не забрал"
-msgstr "❌ Гість не забрав"
-
 #: bot/keyboards/staff.py webapp/staff_views.py
 msgid "↩️ Возврат"
 msgstr "↩️ Повернення"
@@ -7837,10 +7909,6 @@ msgid "Добавьте позиции"
 msgstr "Додайте позиції"
 
 #: bot/keyboards/staff.py webapp/staff_billing.py
-msgid "Выдать счёт"
-msgstr "Виставити рахунок"
-
-#: bot/keyboards/staff.py webapp/staff_billing.py
 msgid "Оплатить бонусами"
 msgstr "Сплатити бонусами"
 
@@ -7851,10 +7919,6 @@ msgstr "Термінал"
 #: bot/keyboards/staff.py
 msgid "Изменить счёт"
 msgstr "Змінити рахунок"
-
-#: bot/keyboards/staff.py webapp/staff_views.py
-msgid "Аннулировать"
-msgstr "Анулювати"
 
 #: bot/keyboards/staff.py
 msgid "← К счетам"
@@ -7976,6 +8040,10 @@ msgstr "📍 У який заклад? Вибір запам’ятається,
 msgid "Запись принадлежит другому заведению."
 msgstr "Запис належить іншому закладу."
 
+#: core/admin_mixins.py
+msgid "Это действие уже недоступно — страница устарела. Посмотрите, что изменилось."
+msgstr "Ця дія вже недоступна — сторінка застаріла. Подивіться, що змінилося."
+
 #: core/database/models.py
 msgid "Создано"
 msgstr "Створено"
@@ -8023,6 +8091,10 @@ msgstr "Перевірка роботи"
 #: core/urls.py
 msgid "Демо-данные (логины, ссылки на столы):"
 msgstr "Демо-дані (логіни, посилання на столи):"
+
+#: templates/admin/botera/object_actions.html
+msgid "Что сделать"
+msgstr "Що зробити"
 
 #: templates/admin/index.html
 msgid "Требует внимания"
@@ -8415,18 +8487,6 @@ msgstr "Скопіювати"
 #: webapp/staff_views.py
 msgid "Ссылка скопирована"
 msgstr "Посилання скопійовано"
-
-#: webapp/staff_views.py
-msgid "Отменить заказ?"
-msgstr "Скасувати замовлення?"
-
-#: webapp/staff_views.py
-msgid "Отменить заказ, потому что оплата не поступила? Списанные бонусы вернутся гостю, гость получит сообщение."
-msgstr "Скасувати замовлення, бо оплата не надійшла? Списані бонуси повернуться гостю, гість отримає повідомлення."
-
-#: webapp/staff_views.py
-msgid "Отменить заказ? Списанные бонусы вернутся гостю."
-msgstr "Скасувати замовлення? Списані бонуси повернуться гостю."
 
 #: webapp/texts.py
 msgid "Загружаем…"

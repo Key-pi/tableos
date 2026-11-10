@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass
+
+from django.contrib import messages
 from django.contrib.admin import display
 from django.contrib.admin.options import IS_POPUP_VAR
+from django.contrib.admin.utils import quote, unquote
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponseRedirect
-from django.urls import reverse
+from django.http import Http404, HttpResponseNotAllowed, HttpResponseRedirect
+from django.urls import path, reverse
 from django.utils.functional import lazy
+from django.utils.html import format_html
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.safestring import SafeString, mark_safe
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import checkbox as unfold_checkbox
@@ -367,3 +374,124 @@ class SectionInlineMixin:
 
     def has_delete_permission(self, request, obj=None):
         return self._allowed(request, "change")
+
+
+# --- buttons on a record's page (admin step 3, PQ-050) -------------------------
+
+
+@dataclass(frozen=True)
+class ObjectAction:
+    """One button: what may be done with the record now.
+
+    Pressed, it posts ``code`` (and ``field`` when it asks for one value,
+    e.g. a tracking number); ``url`` makes it a link to another page
+    instead. ``confirm`` is asked before a press that cannot be undone."""
+
+    code: str
+    label: str
+    icon: str = ""
+    style: str = "default"  # "primary" | "danger" | "default"
+    confirm: str = ""
+    field: str = ""  # name of the one value to type
+    field_label: str = ""
+    url: str = ""
+    # Posted to Admin's own action of the list (a reason form, PQ-028).
+    list_action: str = ""
+
+
+class ObjectActionsMixin:
+    """What may be done with a record now, as buttons over its page and, for
+    the first one, in its row of the list.
+
+    ``get_object_actions`` says which buttons; a press posts to
+    ``<id>/act/``, is checked again (the page may be out of date: someone
+    else may have moved the order) and runs ``run_object_action`` — the
+    owner module's service, as the bot does. A refused press says why."""
+
+    change_form_outer_before_template = "admin/botera/object_actions.html"
+    object_action_errors: tuple[type[Exception], ...] = ()
+
+    def get_object_actions(self, request, obj) -> list[ObjectAction]:
+        return []
+
+    def run_object_action(self, request, obj, code: str, data) -> str:
+        raise NotImplementedError
+
+    def _admin_url(self, view: str, *args) -> str:
+        opts = self.model._meta
+        return reverse(
+            f"{self.admin_site.name}:{opts.app_label}_{opts.model_name}_{view}", args=args
+        )
+
+    def get_urls(self):
+        opts = self.model._meta
+        return [
+            path(
+                "<path:object_id>/act/",
+                self.admin_site.admin_view(self.object_action_view),
+                name=f"{opts.app_label}_{opts.model_name}_act",
+            ),
+            *super().get_urls(),
+        ]
+
+    def _change_url(self, obj) -> str:
+        return self._admin_url("change", quote(obj.pk))
+
+    def object_action_view(self, request, object_id):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        obj = self.get_object(request, unquote(object_id))
+        if obj is None:
+            raise Http404
+        if not self.has_change_permission(request, obj):
+            raise PermissionDenied
+        code = request.POST.get("object_action", "")
+        offered = {action.code for action in self.get_object_actions(request, obj)
+                   if not action.url and not action.list_action}
+        if code not in offered:
+            messages.warning(request, _(
+                "Это действие уже недоступно — страница устарела. Посмотрите, что изменилось."
+            ))
+        else:
+            try:
+                notice = self.run_object_action(request, obj, code, request.POST)
+            except self.object_action_errors as exc:
+                messages.warning(request, str(exc))
+            else:
+                messages.success(request, notice)
+        if request.GET.get("from") == "list":
+            # Back to the list as it was (its filters and page).
+            back = request.META.get("HTTP_REFERER", "")
+            if not url_has_allowed_host_and_scheme(
+                back, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+            ):
+                back = self._admin_url("changelist")
+            return HttpResponseRedirect(back)
+        return HttpResponseRedirect(self._change_url(obj))
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        if object_id:
+            obj = self.get_object(request, unquote(object_id))
+            if obj is not None and self.has_change_permission(request, obj):
+                extra_context = {
+                    **(extra_context or {}),
+                    "object_actions": self.get_object_actions(request, obj),
+                    "object_action_url": self._admin_url("act", quote(obj.pk)),
+                    "object_changelist_url": self._admin_url("changelist"),
+                }
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
+    def object_action_button(self, obj, action: ObjectAction) -> SafeString:
+        """The button of a list row: it posts through the list's own form
+        (which carries the CSRF token) and comes back to the list."""
+
+        url = self._admin_url("act", quote(obj.pk)) + "?from=list"
+        confirm = (
+            format_html(' onclick="return confirm({})"', json.dumps(str(action.confirm)))
+            if action.confirm else ""
+        )
+        return format_html(
+            '<button type="submit" form="changelist-form" formaction="{}" formnovalidate '
+            'name="object_action" value="{}" class="row-action row-action-{}"{}>{}</button>',
+            url, action.code, action.style, confirm, action.label,
+        )

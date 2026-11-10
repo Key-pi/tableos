@@ -27,8 +27,8 @@ from apps.menu.translations import fields_of, set_translation, translation_langu
 from apps.orders.kitchen import missing_screen_warnings
 from apps.partners.models import PartnerBotSettings
 from apps.users.constants import AdminSection
-from core.admin_mixins import ScopedAdminMixin, SectionInlineMixin
-from core.i18n import LANGUAGE_NAMES
+from core.admin_mixins import ObjectAction, ObjectActionsMixin, ScopedAdminMixin, SectionInlineMixin
+from core.i18n import LANGUAGE_NAMES, _
 from core.i18n import gettext_lazy as _lazy
 
 
@@ -416,10 +416,14 @@ class StockStateFilter(admin.SimpleListFilter):
         return stock_levels.items_in_stock_state(queryset, self.value(), variants=variants)
 
 
+AVAILABILITY_TOGGLE = "availability"
+
+
 @admin.register(MenuItem)
-class MenuItemAdmin(TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
+class MenuItemAdmin(ObjectActionsMixin, TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
     admin_section = AdminSection.MENU
     form = MenuItemForm
+    list_before_template = "admin/botera/row_actions.html"
     list_display = (
         "public_id",
         "name",
@@ -465,6 +469,36 @@ class MenuItemAdmin(TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
 
     def showcase_on_for(self, request) -> bool:
         return module_on_for(self, request, "module_showcase_enabled")
+
+    # The stop list in one press (admin step 3, PQ-050): the item leaves the
+    # guests' menu («В наличии» off) and comes back the same way.
+    @staticmethod
+    def _availability_action(obj) -> ObjectAction:
+        if obj.is_available:
+            return ObjectAction(AVAILABILITY_TOGGLE, _("В стоп-лист"), "block")
+        return ObjectAction(AVAILABILITY_TOGGLE, _("Вернуть в меню"), "undo", style="primary")
+
+    def get_object_actions(self, request, obj):
+        return [self._availability_action(obj)]
+
+    def run_object_action(self, request, obj, code, data):
+        obj.is_available = not obj.is_available
+        obj.save(update_fields=["is_available", "updated_at"])
+        if obj.is_available:
+            return _("«{name}» снова в меню гостей.", name=obj.name)
+        return _("«{name}» убрана из меню гостей.", name=obj.name)
+
+    def get_list_display(self, request):
+        list_display = tuple(super().get_list_display(request))
+        if self.has_change_permission(request):
+            # Next to the name: on a tablet the end of a wide row is off screen.
+            at = list_display.index("name") + 1 if "name" in list_display else len(list_display)
+            return (*list_display[:at], "availability_button", *list_display[at:])
+        return list_display
+
+    @admin.display(description=_lazy("Стоп-лист"))
+    def availability_button(self, obj):
+        return self.object_action_button(obj, self._availability_action(obj))
 
     def stock_on_for(self, request) -> bool:
         return module_on_for(self, request, "module_stock_enabled")

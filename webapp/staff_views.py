@@ -41,7 +41,13 @@ from apps.billing.remote_orders import (
 )
 from apps.billing.repositories import BillingRequestRepository
 from apps.billing.services import BillingServiceError, cancel_order
-from apps.billing.staff_actions import staff_order_actions
+from apps.billing.staff_actions import (
+    DELIVERY_STATUS_LABELS,
+    SHIPPING_STATUS_LABELS,
+    STATUS_LABELS,
+    describe_order_action,
+    staff_order_actions,
+)
 from apps.bonuses.services import BonusServiceError
 from apps.employees.invites import roles_invitable_by
 from apps.notifications.models import StaffNotification
@@ -68,26 +74,6 @@ from webapp.context import WebAppDenied, find_bot
 from webapp.staff_context import StaffRequest, staff_request
 from webapp.views import _body, _denied, _error, _money, _text
 
-# The bot's catalog texts (``bot/keyboards/staff.py``), same entries.
-STATUS_LABELS = {
-    "accepted": N_("Взять в работу"),
-    "preparing": N_("Готовим"),
-    "ready": N_("Готово"),
-    "delivering": N_("Нести"),
-    "completed": N_("Завершить"),
-    "canceled": N_("Отменить"),
-}
-DELIVERY_STATUS_LABELS = {
-    **STATUS_LABELS,
-    "delivering": N_("🚚 В пути"),
-    "completed": N_("✅ Доставлено"),
-}
-SHIPPING_STATUS_LABELS = {
-    **STATUS_LABELS,
-    "ready": N_("📦 Собран"),
-    "delivering": N_("🚚 Отправлен"),
-    "completed": N_("✅ Получен"),
-}
 STAFF_TEXTS = {
     "title": N_("Рабочий режим"),
     "orders": N_("Открытые заказы"),
@@ -202,45 +188,15 @@ def _labels_for(order: Order) -> dict[str, str]:
 
 
 def _action_json(order: Order, code: str) -> dict:
-    is_shipping = order.channel == Order.Channel.SHIPPING
-    if code.startswith(actions.STATUS):
-        status = code[len(actions.STATUS):]
-        data = {"code": code, "label": _(_labels_for(order).get(status, status))}
-        if status == Order.Status.CANCELED:
-            data.update(style="danger", confirm=_("Отменить заказ?"))
-        return data
-    if code == actions.TRANSFER_OK:
-        return {"code": code, "label": _("✅ Оплата получена"), "style": "primary"}
-    if code == actions.TRANSFER_NO:
-        return {
-            "code": code, "label": _("❌ Оплаты нет"), "style": "danger",
-            "confirm": _(
-                "Отменить заказ, потому что оплата не поступила? Списанные бонусы вернутся "
-                "гостю, гость получит сообщение."
-            ),
-        }
-    if code == actions.RECEIPT_CASH:
-        return {"code": code, "label": _("💵 Оплачено наличными"), "style": "primary"}
-    if code == actions.RECEIPT_CARD:
-        return {"code": code, "label": _("💳 Оплачено картой"), "style": "primary"}
-    if code == actions.RECEIPT_COD:
-        return {"code": code, "label": _("💵 Наложенный платёж получен"), "style": "primary"}
-    if code == actions.RECEIPT_NO:
-        courier_has_it = (
-            order.channel != Order.Channel.DELIVERY or order.status == Order.Status.DELIVERING
-        )
-        label = (
-            _("❌ Посылку не забрали") if is_shipping
-            else _("❌ Гость не забрал") if courier_has_it
-            else _(STATUS_LABELS["canceled"])
-        )
-        return {
-            "code": code, "label": label, "style": "danger",
-            "confirm": _("Отменить заказ? Списанные бонусы вернутся гостю."),
-        }
-    if code == actions.SHIP:
-        return {"code": code, "label": _(SHIPPING_STATUS_LABELS["delivering"]), "input": "tracking"}
-    return {"code": code, "label": code}
+    text = describe_order_action(order, code)
+    data = {"code": code, "label": text.label}
+    if text.style:
+        data["style"] = text.style
+    if text.confirm:
+        data["confirm"] = text.confirm
+    if text.needs_tracking:
+        data["input"] = "tracking"
+    return data
 
 
 def _payment_label(order: Order) -> str:

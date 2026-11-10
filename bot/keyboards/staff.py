@@ -1,29 +1,12 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+# Status buttons: one copy for the bot, the Mini App and Admin.
+from apps.billing.staff_actions import (  # noqa: F401
+    DELIVERY_STATUS_LABELS,
+    SHIPPING_STATUS_LABELS,
+    STATUS_LABELS,
+)
 from core.i18n import N_, _
-
-STATUS_LABELS = {
-    "accepted": N_("Взять в работу"),
-    "preparing": N_("Готовим"),
-    "ready": N_("Готово"),
-    "delivering": N_("Нести"),
-    "completed": N_("Завершить"),
-    "canceled": N_("Отменить"),
-}
-# Delivery (PQ-032): a ready order is handed to the courier, then delivered.
-DELIVERY_STATUS_LABELS = {
-    **STATUS_LABELS,
-    "delivering": N_("🚚 В пути"),
-    "completed": N_("✅ Доставлено"),
-}
-# Shipping by post (PQ-034): packed, sent with a ТТН, received.
-SHIPPING_STATUS_LABELS = {
-    **STATUS_LABELS,
-    "ready": N_("📦 Собран"),
-    "delivering": N_("🚚 Отправлен"),
-    "completed": N_("✅ Получен"),
-}
-
 
 # Lists of the staff screens show this many rows a page; the rest is paged.
 PAGE_SIZE = 8

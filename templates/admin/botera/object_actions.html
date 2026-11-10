@@ -1,0 +1,59 @@
+{% load botera_i18n %}
+{% comment %}
+Buttons over a record's page: what may be done with it now
+(core/admin_mixins.py:ObjectActionsMixin, admin step 3, PQ-050). Each press is
+a POST checked again on the server.
+{% endcomment %}
+{% if object_actions %}
+<style>
+    .oa { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; padding: 16px; background: #fff; border: 1px solid var(--color-base-200); border-radius: 8px; }
+    .dark .oa { background: var(--color-base-900); border-color: var(--color-base-800); }
+    .oa-title { font-weight: 600; color: var(--color-font-important-light); }
+    .dark .oa-title { color: var(--color-font-important-dark); }
+    .oa-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .oa-row form { display: flex; gap: 8px; align-items: center; margin: 0; }
+    .oa-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 6px; font-weight: 500; border: 1px solid var(--color-base-200); background: #fff; color: var(--color-font-important-light); cursor: pointer; white-space: nowrap; }
+    .oa-btn:hover { background: var(--color-base-100); }
+    .dark .oa-btn { background: transparent; border-color: var(--color-base-700); color: var(--color-font-important-dark); }
+    .oa-primary, .dark .oa-primary { background: var(--color-primary-600); border-color: var(--color-primary-600); color: #fff; }
+    .oa-primary:hover, .dark .oa-primary:hover { background: var(--color-primary-700); }
+    .oa-danger, .dark .oa-danger { color: var(--color-red-600); border-color: var(--color-red-200); }
+    .oa-danger:hover { background: var(--color-red-50); }
+    .dark .oa-danger { border-color: color-mix(in srgb, var(--color-red-500) 40%, transparent); color: var(--color-red-400); }
+    .oa-input { min-height: 44px; padding: 0 12px; border: 1px solid var(--color-base-200); border-radius: 6px; background: #fff; min-width: 200px; }
+    .dark .oa-input { background: var(--color-base-900); border-color: var(--color-base-700); color: var(--color-font-default-dark); }
+</style>
+<div class="oa">
+    <div class="oa-title">{% tr "Что сделать" %}</div>
+    <div class="oa-row">
+        {% for action in object_actions %}
+            {% if action.url %}
+                <a class="oa-btn oa-{{ action.style }}" href="{{ action.url }}">
+                    {% if action.icon %}<span class="material-symbols-outlined">{{ action.icon }}</span>{% endif %}{{ action.label }}
+                </a>
+            {% elif action.list_action %}
+                <form method="post" action="{{ object_changelist_url }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="{{ action.list_action }}">
+                    <input type="hidden" name="_selected_action" value="{{ original.pk }}">
+                    <input type="hidden" name="index" value="0">
+                    <button type="submit" class="oa-btn oa-{{ action.style }}">
+                        {% if action.icon %}<span class="material-symbols-outlined">{{ action.icon }}</span>{% endif %}{{ action.label }}
+                    </button>
+                </form>
+            {% else %}
+                <form method="post" action="{{ object_action_url }}"{% if action.confirm %} onsubmit="return confirm('{{ action.confirm|escapejs }}')"{% endif %}>
+                    {% csrf_token %}
+                    <input type="hidden" name="object_action" value="{{ action.code }}">
+                    {% if action.field %}
+                        <input class="oa-input" type="text" name="{{ action.field }}" placeholder="{{ action.field_label }}" aria-label="{{ action.field_label }}" required>
+                    {% endif %}
+                    <button type="submit" class="oa-btn oa-{{ action.style }}">
+                        {% if action.icon %}<span class="material-symbols-outlined">{{ action.icon }}</span>{% endif %}{{ action.label }}
+                    </button>
+                </form>
+            {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

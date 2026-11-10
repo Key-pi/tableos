@@ -1,6 +1,9 @@
 from django.contrib import admin, messages
+from django.urls import reverse
+from django.utils.formats import number_format
 from unfold.admin import TabularInline
 
+from apps.billing import staff_actions as staff
 from apps.billing.admin_actions import run_refund, run_with_reason
 from apps.billing.forms import PaymentAdminForm
 from apps.billing.models import (
@@ -17,18 +20,21 @@ from apps.billing.services import (
     BillingServiceError,
     get_bill_remaining_amount,
     issue_bill,
+    pay_bill_with_bonuses,
     record_payment,
     refund_bill_lines,
     remaining_amount_of_loaded_bill,
     remove_bill_lines,
+    user_can_adjust_bills,
     void_bill,
 )
 from apps.billing.table_bills import (
     cancel_billing_request,
     mark_billing_request_processed,
 )
+from apps.bonuses.services import BonusServiceError
 from apps.users.constants import AdminSection
-from core.admin_mixins import ScopedAdminMixin
+from core.admin_mixins import ObjectAction, ObjectActionsMixin, ScopedAdminMixin
 from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
 
@@ -199,8 +205,9 @@ class BillingRequestAdmin(ScopedAdminMixin):
 
 
 @admin.register(Bill)
-class BillAdmin(ScopedAdminMixin):
+class BillAdmin(ObjectActionsMixin, ScopedAdminMixin):
     admin_section = AdminSection.BILLING
+    object_action_errors = (BillingServiceError, BonusServiceError)
     list_display = (
         "public_id",
         "partner",
@@ -255,6 +262,82 @@ class BillAdmin(ScopedAdminMixin):
         "record_remaining_terminal_payment",
         "void_selected_bills",
     )
+
+    def get_object_actions(self, request, obj):
+        """The bot's bill card (``staff_bill_actions``, ``bill_change_rights``):
+        issue and payments here; lines, voiding and refunds by their reason
+        forms (PQ-028, PQ-037)."""
+
+        remaining_text = number_format(get_bill_remaining_amount(obj), 2, force_grouping=True)
+        result = []
+        for code in staff.staff_bill_actions(obj):
+            if code == staff.BILL_ISSUE:
+                result.append(ObjectAction(code, _("Выдать счёт"), "receipt_long"))
+            elif code == staff.BILL_PAY_BONUS:
+                result.append(ObjectAction(
+                    code,
+                    _("Оплатить бонусами: до {amount} грн",
+                      amount=number_format(staff.bill_bonus_offer(obj), 2, force_grouping=True)),
+                    "loyalty",
+                    confirm=_("Списать бонусы гостя в оплату счёта?"),
+                ))
+            elif code == staff.BILL_PAY_CASH:
+                result.append(ObjectAction(
+                    code, _("Оплачено наличными: {amount} грн", amount=remaining_text), "payments",
+                ))
+            elif code == staff.BILL_PAY_TERMINAL:
+                result.append(ObjectAction(
+                    code, _("Оплачено картой: {amount} грн", amount=remaining_text), "credit_card",
+                ))
+        lines_url = (
+            self._admin_url_for(BillItem, "changelist") + f"?bill__id__exact={obj.pk}"
+        )
+        may_change, may_void = staff.bill_change_rights(obj, request.user)
+        if may_change:
+            result.append(ObjectAction("lines", _("Убрать позиции"), "playlist_remove",
+                                       url=lines_url))
+        if obj.status == Bill.Status.PAID and user_can_adjust_bills(request.user, obj.partner_id):
+            result.append(ObjectAction("refund", _("Возврат по строкам"), "currency_exchange",
+                                       url=lines_url))
+        if may_void:
+            result.append(ObjectAction("void", _("Аннулировать"), "block", style="danger",
+                                       list_action="void_selected_bills"))
+        for index, action in enumerate(result):
+            if action.code in (staff.BILL_PAY_CASH, staff.BILL_ISSUE):
+                result[index] = ObjectAction(**{**action.__dict__, "style": "primary"})
+                break
+        return result
+
+    def run_object_action(self, request, obj, code, data):
+        actor = request.user
+        if code == staff.BILL_ISSUE:
+            issue_bill(obj)
+            return _("Счёт выдан")
+        if code == staff.BILL_PAY_BONUS:
+            result = pay_bill_with_bonuses(
+                bill=obj, created_by=actor, comment="Paid in Admin with bonus balance."
+            )
+            if result.remaining_amount > 0:
+                return _(
+                    "Списано бонусами: {bonus_spent_amount} грн. Остаток к оплате: "
+                    "{remaining_amount} грн.",
+                    bonus_spent_amount=result.bonus_spent_amount,
+                    remaining_amount=result.remaining_amount,
+                )
+            return _("Счёт полностью оплачен бонусами")
+        method = Payment.Method.CASH if code == staff.BILL_PAY_CASH else Payment.Method.TERMINAL
+        record_payment(
+            bill=obj,
+            amount=get_bill_remaining_amount(obj),
+            method=method,
+            created_by=actor,
+            comment=_("Проведено в Admin ({method}).", method=method),
+        )
+        return _("Оплата зафиксирована")
+
+    def _admin_url_for(self, model, view: str) -> str:
+        opts = model._meta
+        return reverse(f"{self.admin_site.name}:{opts.app_label}_{opts.model_name}_{view}")
 
     @admin.action(description=_lazy("Аннулировать счета (право от владельца)"))
     def void_selected_bills(self, request, queryset):
