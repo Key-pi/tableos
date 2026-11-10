@@ -37,6 +37,8 @@ from apps.billing.remote_orders import (
     confirm_transfer,
     map_link,
     mark_order_shipped,
+    receipt_payment_due,
+    receipt_refusal_possible,
     record_payment_on_receipt,
     reject_transfer,
     shipping_cost_label,
@@ -269,19 +271,18 @@ def _order_actions_keyboard(order: Order):
     unpaid_on_receipt = awaits_payment_on_receipt(order)
     # A delivery is paid to the courier (PQ-044): payment and «гость не забрал»
     # appear from «В пути» on; before that «Отменить» still returns bonuses.
-    courier_has_it = (
-        order.channel != Order.Channel.DELIVERY or order.status == Order.Status.DELIVERING
-    )
+    receipt_pending = receipt_payment_due(order)
     return build_staff_order_actions_keyboard(
         order_public_id=order.public_id,
         available_statuses=get_available_staff_actions(order.status, channel=order.channel),
         transfer_check_pending=awaits_transfer_check(order),
-        receipt_payment_pending=unpaid_on_receipt and courier_has_it,
+        receipt_payment_pending=receipt_pending,
+        receipt_refusal=receipt_refusal_possible(order),
         cash_on_delivery=is_shipping,
         ship_needs_tracking=is_shipping and order.status == Order.Status.READY,
         status_labels=_status_labels(order),
         can_refund=order.paid_at is not None and order.status != Order.Status.CANCELED,
-        cancel_unpaid=unpaid_on_receipt and not courier_has_it,
+        cancel_unpaid=unpaid_on_receipt and not receipt_pending,
     )
 
 

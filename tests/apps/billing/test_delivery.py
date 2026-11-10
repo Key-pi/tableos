@@ -394,6 +394,31 @@ class DeliveryPaymentOnReceiptTests(DeliveryFixtureMixin, TestCase):
         )
         self.assertIsNotNone(order.paid_at)
 
+    def test_money_is_recorded_after_delivered_was_pressed_first(self):
+        """«Доставлено» pressed before the money was recorded (owner
+        2026-11-10): the payment is still taken; a refusal no longer fits —
+        the guest has the order."""
+        from apps.billing.models import Payment
+        from apps.billing.remote_orders import (
+            RemoteOrderError,
+            cancel_unpaid_remote_order,
+            record_payment_on_receipt,
+        )
+        from apps.billing.staff_actions import staff_order_actions
+
+        self._to(Order.Status.ACCEPTED, Order.Status.READY, Order.Status.DELIVERING,
+                 Order.Status.COMPLETED)
+        self.assertIsNone(self.order.paid_at)
+        self.assertEqual(staff_order_actions(self.order), ["receipt_cash", "receipt_card"])
+        with self.assertRaises(RemoteOrderError):
+            cancel_unpaid_remote_order(order=self.order, actor=self.cashier)
+        order = record_payment_on_receipt(
+            order=self.order, actor=self.cashier, method=Payment.Method.TERMINAL
+        )
+        self.assertIsNotNone(order.paid_at)
+        self.assertEqual(order.status, Order.Status.COMPLETED)
+        self.assertEqual(staff_order_actions(order), [])
+
     def test_the_order_can_still_be_cancelled_before_the_courier_left(self):
         from apps.billing.remote_orders import cancel_unpaid_remote_order
 

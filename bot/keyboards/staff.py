@@ -51,9 +51,15 @@ def build_staff_order_actions_keyboard(
     status_labels: dict[str, str] | None = None,
     can_refund: bool = False,
     cancel_unpaid: bool = False,
+    receipt_refusal: bool | None = None,
 ) -> InlineKeyboardMarkup | None:
     """``cancel_unpaid``: an order paid on receipt that is not with the courier
-    yet — «Отменить» goes through the cancellation that returns bonuses."""
+    yet — «Отменить» goes through the cancellation that returns bonuses.
+    ``receipt_refusal``: «гость не забрал» next to the payment buttons (not
+    for a completed order: the guest has it)."""
+
+    if receipt_refusal is None:
+        receipt_refusal = receipt_payment_pending
 
     labels = status_labels or STATUS_LABELS
     keyboard = []
@@ -114,7 +120,7 @@ def build_staff_order_actions_keyboard(
         )
         for status in available_statuses
     ]
-    if receipt_payment_pending:
+    if receipt_refusal:
         status_buttons.append(
             InlineKeyboardButton(
                 text=_("❌ Посылку не забрали") if cash_on_delivery else _("❌ Гость не забрал"),

@@ -262,7 +262,7 @@ class OrderAdmin(ObjectActionsMixin, ScopedAdminMixin):
         typing and is not a refusal); the rest — on the order's page."""
 
         actions = order_admin_actions(obj, row=True)
-        with_the_guest = obj.status == Order.Status.DELIVERING or (
+        with_the_guest = obj.status in (Order.Status.DELIVERING, Order.Status.COMPLETED) or (
             obj.status == Order.Status.READY and obj.channel == Order.Channel.PICKUP
         )
         if not with_the_guest:

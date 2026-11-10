@@ -10,7 +10,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from apps.billing.remote_orders import awaits_payment_on_receipt, awaits_transfer_check
+from apps.billing.remote_orders import (
+    awaits_payment_on_receipt,
+    awaits_transfer_check,
+    receipt_payment_due,
+    receipt_refusal_possible,
+)
 from apps.orders.models import Order
 from apps.orders.services import get_available_staff_actions
 from core.i18n import N_, _
@@ -65,11 +70,8 @@ def staff_order_actions(order: Order) -> list[str]:
     unpaid_on_receipt = awaits_payment_on_receipt(order)
     # A delivery is paid to the courier (PQ-044): payment and «гость не забрал»
     # appear from «В пути» on; before that «Отменить» still returns bonuses.
-    courier_has_it = (
-        order.channel != Order.Channel.DELIVERY or order.status == Order.Status.DELIVERING
-    )
-    receipt_pending = unpaid_on_receipt and courier_has_it
-    cancel_unpaid = unpaid_on_receipt and not courier_has_it
+    receipt_pending = receipt_payment_due(order)
+    cancel_unpaid = unpaid_on_receipt and not receipt_pending
     ship_needs_tracking = is_shipping and order.status == Order.Status.READY
 
     statuses = get_available_staff_actions(order.status, channel=order.channel)
@@ -88,7 +90,7 @@ def staff_order_actions(order: Order) -> list[str]:
             actions.append(RECEIPT_NO)
         else:
             actions.append(STATUS + status)
-    if receipt_pending:
+    if receipt_refusal_possible(order):
         actions.append(RECEIPT_NO)
     return actions
 
@@ -125,12 +127,9 @@ def describe_order_action(order: Order, code: str) -> ActionText:
     if code == RECEIPT_COD:
         return ActionText(_("💵 Наложенный платёж получен"), "primary")
     if code == RECEIPT_NO:
-        courier_has_it = (
-            order.channel != Order.Channel.DELIVERY or order.status == Order.Status.DELIVERING
-        )
         label = (
             _("❌ Посылку не забрали") if order.channel == Order.Channel.SHIPPING
-            else _("❌ Гость не забрал") if courier_has_it
+            else _("❌ Гость не забрал") if receipt_payment_due(order)
             else _(STATUS_LABELS["canceled"])
         )
         return ActionText(label, "danger", _("Отменить заказ? Списанные бонусы вернутся гостю."))

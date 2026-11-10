@@ -863,6 +863,26 @@ def awaits_payment_on_receipt(order: Order) -> bool:
     )
 
 
+# From here on the guest has (or is getting) a delivery: the courier takes the
+# money (PQ-044). «Доставлено» may be pressed before the money is recorded
+# (owner 2026-11-10): it is still taken then.
+DELIVERY_PAID_FROM = (Order.Status.DELIVERING, Order.Status.COMPLETED)
+
+
+def receipt_payment_due(order: Order) -> bool:
+    """Money on receipt may be recorded now."""
+
+    if not awaits_payment_on_receipt(order):
+        return False
+    return order.channel != Order.Channel.DELIVERY or order.status in DELIVERY_PAID_FROM
+
+
+def receipt_refusal_possible(order: Order) -> bool:
+    """«Гость не забрал»: not once the order is completed — the guest has it."""
+
+    return receipt_payment_due(order) and order.status != Order.Status.COMPLETED
+
+
 @transaction.atomic
 def confirm_transfer(*, order: Order, actor) -> Order:
     """The transfer arrived: record it and take the order into work."""
@@ -932,7 +952,7 @@ def record_payment_on_receipt(*, order: Order, actor, method: str) -> Order:
     order = _lock_remote_order(order, ON_RECEIPT)
     if bill.status == Bill.Status.PAID or order.paid_at is not None:
         raise RemoteOrderError(_("Заказ уже оплачен."))
-    if order.channel == Order.Channel.DELIVERY and order.status != Order.Status.DELIVERING:
+    if order.channel == Order.Channel.DELIVERY and order.status not in DELIVERY_PAID_FROM:
         # The courier takes the money (PQ-044): recorded from «В пути» on.
         raise RemoteOrderError(_("Оплату доставки отмечают, когда заказ в пути."))
     record_payment(

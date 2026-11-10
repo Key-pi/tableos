@@ -221,6 +221,34 @@ class SameButtonsAsTheBotTests(StaffFixture):
                     break
                 self.act(order, forward[0], tracking="20450000000000")
 
+    def test_for_orders_completed_before_the_money_was_recorded(self):
+        """«Доставлено» / «Получен» / «Завершить» first, the money after:
+        payment buttons stay, the refusal goes (the guest has the order)."""
+
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            remote_unpaid_orders_limit=0, shipping_pay_on_receipt=True
+        )
+        expected = {
+            "pickup": ["receipt_cash", "receipt_card"],
+            "delivery": ["receipt_cash", "receipt_card"],
+            "shipping": ["receipt_cod"],
+        }
+        cases = [
+            self.place(payment="on_receipt"),
+            self.place(channel="delivery", payment="on_receipt", address="Хрещатик 1"),
+            self.place(channel="shipping", payment="on_receipt", carrier="nova_poshta",
+                       destination="Київ 3"),
+        ]
+        for order in cases:
+            Order.objects.filter(id=order.id).update(status=Order.Status.COMPLETED)
+            order = Order.objects.get(id=order.id)
+            self.assertEqual(staff_order_actions(order), expected[order.channel], order.channel)
+            self.assertEqual(self.bot_actions(order), expected[order.channel], order.channel)
+            status, body = self.act(order, expected[order.channel][0])
+            self.assertEqual((status, body.get("ok")), (200, True), body)
+            order.refresh_from_db()
+            self.assertIsNotNone(order.paid_at)
+
 
 class StaffCallsTests(StaffFixture):
     def test_the_first_one_goes(self):
