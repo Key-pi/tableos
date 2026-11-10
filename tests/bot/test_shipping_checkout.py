@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 
+from apps.billing.remote_orders import mark_order_shipped
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
 from apps.orders.models import Order
@@ -192,7 +193,7 @@ class GuestShippingFlowTests(ShippingBotFixture):
 class StaffShippingTests(ShippingBotFixture):
     def setUp(self):
         super().setUp()
-        cashier = User.objects.create_user(
+        self.cashier = cashier = User.objects.create_user(
             username="ship_bot_cashier", password="x", partner=self.partner,
             role=User.Role.CASHIER,
         )
@@ -219,6 +220,12 @@ class StaffShippingTests(ShippingBotFixture):
         self.assertIn("відділення 25", text)
         self.assertIn(f"staffship:{self.order.public_id}", data)
         self.assertNotIn(f"stafforder:{self.order.public_id}:delivering", data)
+        # The money comes at the post office: not before the parcel is sent.
+        self.assertNotIn(f"staffrccod:{self.order.public_id}", data)
+        self.assertNotIn(f"staffrccash:{self.order.public_id}", data)
+        mark_order_shipped(order=self.order, actor=self.cashier,
+                           tracking_number="20450000000001")
+        _text, data = self._card_data()
         self.assertIn(f"staffrccod:{self.order.public_id}", data)
         self.assertNotIn(f"staffrccash:{self.order.public_id}", data)
 
@@ -279,6 +286,8 @@ class ShippingNavigationTests(ShippingBotFixture):
 
 class StaffCashOnDeliveryTests(StaffShippingTests):
     def test_cash_on_delivery_is_recorded_from_the_card(self):
+        mark_order_shipped(order=self.order, actor=self.cashier,
+                           tracking_number="20450000000001")
         callback = self._callback(f"staffrccod:{self.order.public_id}", telegram_id=STAFF)
         with patch.object(staff, "resolve_partner_for_bot_token", return_value=self.partner):
             async_to_sync(staff.staff_receipt_payment_callback_handler)(callback, self.bot)

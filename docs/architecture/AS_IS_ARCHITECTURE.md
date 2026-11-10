@@ -406,7 +406,9 @@ apps.notifications.tasks` — цикл, разорванный только им
    `fixed` — строка «Пересылка» `OrderItem.kind = delivery_fee` по
    `shipping_fee` / `shipping_free_from`), минимальный заказ
    `shipping_min_order`. Оплата при получении у отправки — только
-   наложенный платёж (`Payment.Method.COD`). После `ready` персонал вводит
+   наложенный платёж (`Payment.Method.COD`), его отмечают только у
+   отправленного или полученного заказа, как оплату доставки у «в пути»
+   (`remote_orders.py:PAID_AWAY_CHANNELS`, владелец 2026-11-10). После `ready` персонал вводит
    ТТН ответом на сообщение бота (`remote_orders.py:mark_order_shipped`:
    блокировка заказа, `Order.tracking_number`, переход в `delivering`;
    `transition_order_status` не пускает отправку в `delivering` без ТТН);
@@ -804,7 +806,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1095 тестов после запрета удалять счёт в Admin, зелёные на SQLite и на
+- 1096 тестов после наложенного платежа только у отправленной посылки, зелёные на SQLite и на
   PostgreSQL 16. Шестнадцать выполняются только на PostgreSQL и на SQLite
   пропускаются: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа

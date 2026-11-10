@@ -269,8 +269,9 @@ def _order_context_label(order: Order) -> str:
 def _order_actions_keyboard(order: Order):
     is_shipping = order.channel == Order.Channel.SHIPPING
     unpaid_on_receipt = awaits_payment_on_receipt(order)
-    # A delivery is paid to the courier (PQ-044): payment and «гость не забрал»
-    # appear from «В пути» on; before that «Отменить» still returns bonuses.
+    # A delivery is paid to the courier (PQ-044), a parcel at the post office:
+    # payment and «гость не забрал» appear from «В пути» / «Отправлено» on;
+    # before that «Отменить» still returns bonuses.
     receipt_pending = receipt_payment_due(order)
     return build_staff_order_actions_keyboard(
         order_public_id=order.public_id,

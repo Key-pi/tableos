@@ -21,6 +21,12 @@ from apps.billing.remote_orders import (
     save_guest_shipping_destination,
     tracking_link,
 )
+from apps.billing.staff_actions import (
+    RECEIPT_COD,
+    RECEIPT_NO,
+    describe_order_action,
+    staff_order_actions,
+)
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
 from apps.notifications.models import StaffNotification
@@ -215,16 +221,54 @@ class CashOnDeliveryTests(ShippingFixture):
         self._destination()
         self.order = self._place(payment=Order.PaymentTiming.ON_RECEIPT)
 
+    def ship(self):
+        for status in (Order.Status.ACCEPTED, Order.Status.READY):
+            self.order = transition_order_status(order=self.order, to_status=status)
+        self.order = mark_order_shipped(
+            order=self.order, actor=self.cashier, tracking_number="20450000000001"
+        )
+
     def test_cash_on_delivery_is_recorded_when_the_money_arrives(self):
         with self.assertRaisesMessage(RemoteOrderError, "наложенн"):
             record_payment_on_receipt(
                 order=self.order, actor=self.cashier, method=Payment.Method.CASH
             )
+        self.ship()
         order = record_payment_on_receipt(
             order=self.order, actor=self.cashier, method=Payment.Method.COD
         )
         self.assertEqual(order.payment_method, Order.PaymentMethod.COD)
         self.assertEqual(Bill.objects.get(status=Bill.Status.PAID).payments.get().amount, 600)
+
+    def test_the_money_comes_only_once_the_parcel_is_sent(self):
+        # The post office takes the money from the guest (owner 2026-11-10):
+        # before «Отправлено» neither the payment nor «Посылку не забрали» —
+        # only «Отменить», which returns bonuses.
+        for status in (None, Order.Status.ACCEPTED, Order.Status.READY):
+            if status:
+                self.order = transition_order_status(order=self.order, to_status=status)
+            actions = staff_order_actions(self.order)
+            self.assertNotIn(RECEIPT_COD, actions, status)
+            self.assertIn(RECEIPT_NO, actions)
+            self.assertEqual(
+                describe_order_action(self.order, RECEIPT_NO).label, "Отменить", status
+            )
+            with self.assertRaisesMessage(RemoteOrderError, "посылка отправлена"):
+                record_payment_on_receipt(
+                    order=self.order, actor=self.cashier, method=Payment.Method.COD
+                )
+        self.order = mark_order_shipped(
+            order=self.order, actor=self.cashier, tracking_number="20450000000001"
+        )
+        actions = staff_order_actions(self.order)
+        self.assertEqual(actions[0], RECEIPT_COD)
+        self.assertEqual(describe_order_action(self.order, RECEIPT_NO).label,
+                         "❌ Посылку не забрали")
+        # The parcel picked up before the money was recorded: still recorded.
+        self.order = transition_order_status(order=self.order, to_status=Order.Status.COMPLETED)
+        self.assertEqual(staff_order_actions(self.order), [RECEIPT_COD])
+        record_payment_on_receipt(order=self.order, actor=self.cashier, method=Payment.Method.COD)
+        self.assertEqual(staff_order_actions(Order.objects.get(id=self.order.id)), [])
 
     def test_staff_note_mentions_cash_on_delivery(self):
         note = StaffNotification.objects.get(order=self.order).message

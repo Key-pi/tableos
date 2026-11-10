@@ -173,7 +173,7 @@
       var arrived = false;
       data.orders.forEach(function (order) {
         ids[order.id] = true;
-        if (seen && !seen[order.id]) { fresh[order.id] = true; arrived = true; }
+        if (seen && !seen[order.id]) { fresh[order.id] = true; arrived = true; freshTabs.orders = true; }
       });
       if (seen && previous) {
         var oldCalls = {};
@@ -194,7 +194,9 @@
       if (quiet && (tab === "bills" || tab === "tables")) {
         return loadTab().then(function () { if (!busy) render(); });
       }
-      if (tab === "sale" || tab === "report") return;
+      // The sale and the report keep what is typed: only the tabs (red counts)
+      // and the waiter calls are redrawn there (owner 2026-11-10).
+      if (tab === "sale" || tab === "report") { refreshChrome(); return; }
       if (!busy) render();
     });
   }
@@ -526,7 +528,7 @@
     if (data.rights.sale) names.push(["sale", T.sale]);
     if (data.rights.report) names.push(["report", T.report]);
     if (names.length < 2) return null;
-    var bar = el("div", { class: "filters", role: "tablist" });
+    var bar = el("div", { class: "filters", role: "tablist", "data-part": "tabs" });
     names.forEach(function (item) {
       bar.appendChild(el("button", {
         type: "button", class: "chip" + (item[2] && freshTabs[item[0]] ? " fresh" : ""), role: "tab",
@@ -959,6 +961,34 @@
     page.appendChild(board);
   }
 
+  function callsBoard() {
+    if (!data.calls.length) return null;
+    var calls = el("div", { class: "board", "data-part": "calls" });
+    data.calls.forEach(function (call) {
+      calls.appendChild(el("div", { class: "call" },
+        el("div", null,
+          el("div", { class: "what", text: "🔔 " + t("table", { number: call.table }) }),
+          el("div", { class: "meta", text: t("minutes", { minutes: minutesSince(call.created, call.minutes) }) })),
+        el("button", { type: "button", class: "act primary", text: T.go, disabled: busy,
+                       style: "flex:none", onclick: function () { takeCall(call); } })));
+    });
+    return calls;
+  }
+
+  // Redraws the tabs and the calls in place, leaving the rest of the page
+  // (a sale being typed, the report) as it is.
+  function refreshChrome() {
+    var oldBar = root.querySelector('[data-part="tabs"]');
+    var bar = tabsBar();
+    if (oldBar && bar) oldBar.replaceWith(bar);
+    var anchor = bar && bar.isConnected ? bar : root.querySelector(".staff-head");
+    var oldCalls = root.querySelector('[data-part="calls"]');
+    var calls = callsBoard();
+    if (oldCalls && calls) oldCalls.replaceWith(calls);
+    else if (oldCalls) oldCalls.remove();
+    else if (calls && anchor) anchor.after(calls);
+  }
+
   function render() {
     if (!data) return;
     var page = el("div", { class: "page" });
@@ -986,18 +1016,8 @@
     var bar = tabsBar();
     if (bar) page.appendChild(bar);
 
-    if (data.calls.length) {
-      var calls = el("div", { class: "board" });
-      data.calls.forEach(function (call) {
-        calls.appendChild(el("div", { class: "call" },
-          el("div", null,
-            el("div", { class: "what", text: "🔔 " + t("table", { number: call.table }) }),
-            el("div", { class: "meta", text: t("minutes", { minutes: minutesSince(call.created, call.minutes) }) })),
-          el("button", { type: "button", class: "act primary", text: T.go, disabled: busy,
-                         style: "flex:none", onclick: function () { takeCall(call); } })));
-      });
-      page.appendChild(calls);
-    }
+    var calls = callsBoard();
+    if (calls) page.appendChild(calls);
 
     if (tab === "sale") renderSale(page);
     else if (tab === "report") renderReport(page);

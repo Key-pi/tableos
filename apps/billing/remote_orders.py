@@ -867,6 +867,10 @@ def awaits_payment_on_receipt(order: Order) -> bool:
 # money (PQ-044). «Доставлено» may be pressed before the money is recorded
 # (owner 2026-11-10): it is still taken then.
 DELIVERY_PAID_FROM = (Order.Status.DELIVERING, Order.Status.COMPLETED)
+# Paid away from the venue: a delivery to the courier (PQ-044), a parcel
+# sent cash on delivery at the post office (owner 2026-11-10) — the money is
+# recorded from «В пути» / «Отправлено» on.
+PAID_AWAY_CHANNELS = (Order.Channel.DELIVERY, Order.Channel.SHIPPING)
 
 
 def receipt_payment_due(order: Order) -> bool:
@@ -874,7 +878,7 @@ def receipt_payment_due(order: Order) -> bool:
 
     if not awaits_payment_on_receipt(order):
         return False
-    return order.channel != Order.Channel.DELIVERY or order.status in DELIVERY_PAID_FROM
+    return order.channel not in PAID_AWAY_CHANNELS or order.status in DELIVERY_PAID_FROM
 
 
 def receipt_refusal_possible(order: Order) -> bool:
@@ -955,6 +959,9 @@ def record_payment_on_receipt(*, order: Order, actor, method: str) -> Order:
     if order.channel == Order.Channel.DELIVERY and order.status not in DELIVERY_PAID_FROM:
         # The courier takes the money (PQ-044): recorded from «В пути» on.
         raise RemoteOrderError(_("Оплату доставки отмечают, когда заказ в пути."))
+    if order.channel == Order.Channel.SHIPPING and order.status not in DELIVERY_PAID_FROM:
+        # The post office takes it once the parcel is sent (owner 2026-11-10).
+        raise RemoteOrderError(_("Наложенный платёж отмечают, когда посылка отправлена."))
     record_payment(
         bill=bill,
         amount=_money(bill.total_amount - bill.paid_amount),

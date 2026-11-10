@@ -68,8 +68,9 @@ STATUS = "status:"
 def staff_order_actions(order: Order) -> list[str]:
     is_shipping = order.channel == Order.Channel.SHIPPING
     unpaid_on_receipt = awaits_payment_on_receipt(order)
-    # A delivery is paid to the courier (PQ-044): payment and «гость не забрал»
-    # appear from «В пути» on; before that «Отменить» still returns bonuses.
+    # A delivery is paid to the courier (PQ-044), a parcel at the post office:
+    # payment and «гость не забрал» appear from «В пути» / «Отправлено» on;
+    # before that «Отменить» still returns bonuses.
     receipt_pending = receipt_payment_due(order)
     cancel_unpaid = unpaid_on_receipt and not receipt_pending
     ship_needs_tracking = is_shipping and order.status == Order.Status.READY
@@ -128,9 +129,9 @@ def describe_order_action(order: Order, code: str) -> ActionText:
         return ActionText(_("💵 Наложенный платёж получен"), "primary")
     if code == RECEIPT_NO:
         label = (
-            _("❌ Посылку не забрали") if order.channel == Order.Channel.SHIPPING
-            else _("❌ Гость не забрал") if receipt_payment_due(order)
-            else _(STATUS_LABELS["canceled"])
+            _(STATUS_LABELS["canceled"]) if not receipt_payment_due(order)
+            else _("❌ Посылку не забрали") if order.channel == Order.Channel.SHIPPING
+            else _("❌ Гость не забрал")
         )
         return ActionText(label, "danger", _("Отменить заказ? Списанные бонусы вернутся гостю."))
     if code == SHIP:

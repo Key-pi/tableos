@@ -1161,6 +1161,10 @@ msgid "Оплату доставки отмечают, когда заказ в 
 msgstr "A delivery payment is recorded once the order is on the way."
 
 #: apps/billing/remote_orders.py
+msgid "Наложенный платёж отмечают, когда посылка отправлена."
+msgstr "Cash on delivery is recorded once the parcel is sent."
+
+#: apps/billing/remote_orders.py
 msgid "Оплата при получении за заказ #{public_id}."
 msgstr "Payment on receipt for order #{public_id}."
 
