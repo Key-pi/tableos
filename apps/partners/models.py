@@ -335,6 +335,16 @@ class PartnerBotSettings(TimeStampedModel):
             "Требует схему зала и заказы.",
         ),
     )
+    # PQ-052, step 3: tables booked by staff and in Admin.
+    module_reservations_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Бронь столов"),
+        help_text=_lazy(
+            "Персонал на экране и в Admin бронирует столы: имя, телефон, гости, время. Стол "
+            "не забронировать дважды на одно время; за час до брони он помечен на схеме. "
+            "Требует схему зала.",
+        ),
+    )
     module_delivery_enabled = models.BooleanField(
         default=False,
         verbose_name=_lazy("Доставка"),
@@ -619,6 +629,8 @@ class PartnerBotSettings(TimeStampedModel):
         ):
             add_error("module_table_orders_enabled",
                       _("Заказу на стол с планшета нужны схема зала и заказы."))
+        if self.module_reservations_enabled and not self.module_floor_plan_enabled:
+            add_error("module_reservations_enabled", _("Брони столов нужна схема зала."))
         if self.module_orders_enabled and not (
             self.module_tables_enabled
             or self.module_delivery_enabled

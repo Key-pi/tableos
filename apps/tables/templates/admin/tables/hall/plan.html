@@ -32,6 +32,10 @@ grid. «Сейчас» — the state of every table, refreshed every 15 seconds;
   .fp-t.busy > div { background: var(--color-primary-600); border-color: var(--color-primary-700); color: #fff; }
   .fp-t.bill > div { background: #f59e0b; border-color: #d97706; color: #fff; }
   .fp-t.call > div { background: var(--color-red-600); border-color: var(--color-red-700); color: #fff; animation: fp-pulse 1.2s ease-in-out infinite; }
+  .fp-t.reserved > div { background: color-mix(in srgb, #8b5cf6 14%, #fff); border-color: #8b5cf6; border-style: dashed; }
+  .dark .fp-t.reserved > div { background: color-mix(in srgb, #8b5cf6 24%, var(--color-base-800)); }
+  .fp-t.late > div { background: #8b5cf6; border-color: #7c3aed; color: #fff; animation: fp-pulse 1.2s ease-in-out infinite; }
+  .fp-t[data-booking]::after { content: attr(data-booking); position: absolute; top: -4px; right: -2px; font-size: 10px; line-height: 14px; padding: 0 4px; border-radius: 7px; background: #8b5cf6; color: #fff; white-space: nowrap; }
   @keyframes fp-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-red-500) 35%, transparent); } }
   a.fp-t { text-decoration: none; }
   .edit .fp-t { cursor: grab; touch-action: none; }
@@ -63,7 +67,7 @@ grid. «Сейчас» — the state of every table, refreshed every 15 seconds;
 <div class="fp" id="fp"
      data-edit="{% if can_edit %}1{% endif %}" data-state-url="{{ state_url }}"
      data-layout-url="{{ layout_url }}" data-change-url="{{ change_url }}"
-     data-table-url="{{ table_url }}">
+     data-table-url="{{ table_url }}" data-booking-url="{{ booking_url }}">
   {% if not venue_chosen %}
     <div class="fp-card">{% tr "Выберите заведение в шапке, чтобы увидеть его схему." %}</div>
   {% else %}
@@ -83,6 +87,10 @@ grid. «Сейчас» — the state of every table, refreshed every 15 seconds;
         <span><i style="background: var(--color-primary-600); border-color: var(--color-primary-700);"></i>{% tr "Гости" %}</span>
         <span><i style="background: #f59e0b; border-color: #d97706;"></i>{% tr "Просят счёт" %}</span>
         <span><i style="background: var(--color-red-600); border-color: var(--color-red-700);"></i>{% tr "Зовут" %}</span>
+        {% if reservations_on %}
+        <span><i style="border-color: #8b5cf6; border-style: dashed;"></i>{% tr "Бронь" %}</span>
+        <span><i style="background: #8b5cf6; border-color: #7c3aed;"></i>{% tr "Опаздывают" %}</span>
+        {% endif %}
       </div>
       <div id="fp-empty" class="fp-sub" hidden>{% tr "Залов пока нет — добавьте первый кнопкой «＋ Зал»." %}</div>
       <div class="fp-hall" id="fp-hall"></div>
@@ -177,15 +185,25 @@ grid. «Сейчас» — the state of every table, refreshed every 15 seconds;
     var inner = document.createElement("div");
     var num = document.createElement("b"); num.textContent = t.number; inner.appendChild(num);
     var sub = document.createElement("small");
-    if (mode === "now" && t.state !== "free") {
+    var booking = mode === "now" ? t.reservation : null;
+    if (booking && (t.state === "reserved" || t.state === "late")) {
+      sub.textContent = booking.time + " · " + booking.name;
+      node.title = T[t.state] + " · " + booking.time + "–" + booking.until + " · " + booking.name
+        + " · " + fmt(T.guests, { count: booking.guests });
+    } else if (mode === "now" && t.state !== "free") {
       sub.textContent = [t.since, t.guests ? fmt(T.guests, { count: t.guests }) : ""].filter(Boolean).join(" · ");
       node.title = T[t.state] + (Number(t.to_pay) ? " · " + fmt(T.to_pay, { sum: t.to_pay }) : "");
+      if (booking) node.setAttribute("data-booking", "📅 " + booking.time);
     } else {
       sub.textContent = mode === "now" ? T.free : t.seats + " 🪑";
     }
     inner.appendChild(sub); node.appendChild(inner);
-    if (mode === "now") node.href = root.dataset.tableUrl.replace("TABLE", t.id);
-    else bindDrag(node, t, h);
+    // A table waiting for its booking opens the booking; the others — the table.
+    if (mode === "now") {
+      node.href = booking && root.dataset.bookingUrl && t.state !== "busy" && t.state !== "bill" && t.state !== "call"
+        ? root.dataset.bookingUrl.replace("BOOKING", booking.id)
+        : root.dataset.tableUrl.replace("TABLE", t.id);
+    } else bindDrag(node, t, h);
     return node;
   }
 

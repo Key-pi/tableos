@@ -508,7 +508,7 @@ msgstr "Bill requests canceled: {updated}."
 msgid "Суммы"
 msgstr "Amounts"
 
-#: apps/billing/admin.py apps/orders/admin.py
+#: apps/billing/admin.py apps/orders/admin.py apps/tables/models.py webapp/staff_views.py
 msgid "Время"
 msgstr "Time"
 
@@ -732,7 +732,7 @@ msgstr "Till (POS)"
 msgid "Номер"
 msgstr "Number"
 
-#: apps/billing/models.py apps/notifications/models.py apps/orders/models.py apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html bot/keyboards/staff.py
+#: apps/billing/models.py apps/notifications/models.py apps/orders/models.py apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html bot/keyboards/staff.py webapp/staff_views.py
 msgid "Стол"
 msgstr "Table"
 
@@ -884,7 +884,7 @@ msgstr "Quantity"
 msgid "Сумма строки"
 msgstr "Line total"
 
-#: apps/billing/models.py apps/bonuses/models.py apps/orders/models.py bot/keyboards/staff.py webapp/staff_views.py
+#: apps/billing/models.py apps/bonuses/models.py apps/orders/models.py apps/tables/models.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Комментарий"
 msgstr "Comment"
 
@@ -924,7 +924,7 @@ msgstr "Failed"
 msgid "Возвращена"
 msgstr "Refunded"
 
-#: apps/billing/models.py
+#: apps/billing/models.py apps/tables/models.py
 msgid "Отменена"
 msgstr "Canceled"
 
@@ -3088,7 +3088,7 @@ msgstr "staff call"
 msgid "Вызовы персонала"
 msgstr "Staff calls"
 
-#: apps/notifications/models.py
+#: apps/notifications/models.py webapp/staff_views.py
 msgid "Новый заказ"
 msgstr "New order"
 
@@ -3538,7 +3538,7 @@ msgstr "Payment"
 msgid "Заказ #{public_id}: {status}."
 msgstr "Order #{public_id}: {status}."
 
-#: apps/orders/admin.py
+#: apps/orders/admin.py apps/tables/admin.py
 msgid "Следующий шаг"
 msgstr "Next step"
 
@@ -4242,7 +4242,7 @@ msgstr "Report"
 msgid "Отчёт по сети"
 msgstr "Network report"
 
-#: apps/partners/admin.py apps/users/admin_dashboard.py apps/users/admin_navigation.py templates/admin/index.html
+#: apps/partners/admin.py apps/users/admin_dashboard.py apps/users/admin_navigation.py templates/admin/index.html webapp/staff_views.py
 msgid "Сегодня"
 msgstr "Today"
 
@@ -4673,6 +4673,14 @@ msgid "Официант, бармен, менеджер или владелец 
 msgstr "A waiter, bartender, manager or owner taps a table on the plan and orders for a guest without the bot: the order is accepted at once and goes to the kitchen and bar, the table's bill grows. Needs the floor plan and orders."
 
 #: apps/partners/models.py
+msgid "Бронь столов"
+msgstr "Table reservations"
+
+#: apps/partners/models.py
+msgid "Персонал на экране и в Admin бронирует столы: имя, телефон, гости, время. Стол не забронировать дважды на одно время; за час до брони он помечен на схеме. Требует схему зала."
+msgstr "Staff book tables on the screen and in Admin: name, phone, guests, time. A table cannot be booked twice for the same time; an hour before the booking it is marked on the floor plan. Needs the floor plan."
+
+#: apps/partners/models.py
 msgid "Сценарий заказа на доставку. Включается независимо от столов."
 msgstr "Ordering for delivery. Turned on independently of tables."
 
@@ -4943,6 +4951,10 @@ msgstr "The floor plan needs the tables module."
 #: apps/partners/models.py
 msgid "Заказу на стол с планшета нужны схема зала и заказы."
 msgstr "Table orders from the tablet need the floor plan and orders."
+
+#: apps/partners/models.py
+msgid "Брони столов нужна схема зала."
+msgstr "Table reservations need the floor plan."
 
 #: apps/partners/models.py
 msgid "самовывоза"
@@ -5352,6 +5364,14 @@ msgstr "Asking for the bill"
 msgid "Зовут"
 msgstr "Calling"
 
+#: apps/tables/admin.py apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Бронь"
+msgstr "Reservation"
+
+#: apps/tables/admin.py apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Опаздывают"
+msgstr "Running late"
+
 #: apps/tables/admin.py
 msgid "Сохранено"
 msgstr "Saved"
@@ -5379,6 +5399,30 @@ msgstr "to pay {sum} UAH"
 #: apps/tables/admin.py apps/tables/floor_plan.py
 msgid "Схема пришла с ошибкой — обновите страницу."
 msgstr "The plan arrived broken — reload the page."
+
+#: apps/tables/admin.py apps/tables/models.py webapp/staff_views.py
+msgid "Пришли"
+msgstr "Arrived"
+
+#: apps/tables/admin.py apps/tables/models.py webapp/staff_views.py
+msgid "Не пришли"
+msgstr "No-show"
+
+#: apps/tables/admin.py webapp/staff_views.py
+msgid "Отменить бронь"
+msgstr "Cancel reservation"
+
+#: apps/tables/admin.py
+msgid "Отменить бронь «{name}»?"
+msgstr "Cancel the reservation for «{name}»?"
+
+#: apps/tables/admin.py webapp/staff_reservations.py
+msgid "Стол {table}: гости пришли, визит открыт."
+msgstr "Table {table}: the guests arrived, the visit is open."
+
+#: apps/tables/admin.py webapp/staff_reservations.py
+msgid "Бронь отмечена: «{status}»."
+msgstr "Reservation marked: «{status}»."
 
 #: apps/tables/apps.py apps/tables/models.py apps/users/constants.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Столы"
@@ -5508,6 +5552,118 @@ msgstr "table session"
 msgid "Сессии столов"
 msgstr "Table sessions"
 
+#: apps/tables/models.py
+msgid "Ждём"
+msgstr "Expected"
+
+#: apps/tables/models.py
+msgid "Длительность, минут"
+msgstr "Duration, minutes"
+
+#: apps/tables/models.py
+msgid "До"
+msgstr "Until"
+
+#: apps/tables/models.py webapp/staff_views.py
+msgid "Гостей"
+msgstr "Guests"
+
+#: apps/tables/models.py apps/users/models.py webapp/staff_views.py
+msgid "Имя"
+msgstr "First name"
+
+#: apps/tables/models.py apps/users/models.py webapp/staff_views.py webapp/texts.py
+msgid "Телефон"
+msgstr "Phone"
+
+#: apps/tables/models.py
+msgid "Забронировал"
+msgstr "Booked by"
+
+#: apps/tables/models.py
+msgid "Отметил"
+msgstr "Marked by"
+
+#: apps/tables/models.py
+msgid "Отмечена"
+msgstr "Marked at"
+
+#: apps/tables/models.py
+msgid "бронь"
+msgstr "reservation"
+
+#: apps/tables/reservations.py
+msgid "Бронируют официант, кассир, менеджер или владелец этого заведения."
+msgstr "Tables are booked by a waiter, a cashier, a manager or the owner of this venue."
+
+#: apps/tables/reservations.py
+msgid "Бронь столов в этом заведении выключена."
+msgstr "Table reservations are switched off in this venue."
+
+#: apps/tables/reservations.py
+msgid "Укажите имя гостя."
+msgstr "Enter the guest's name."
+
+#: apps/tables/reservations.py
+msgid "Укажите телефон гостя."
+msgstr "Enter the guest's phone."
+
+#: apps/tables/reservations.py webapp/staff_reservations.py
+msgid "Проверьте длительность и число гостей."
+msgstr "Check the duration and the number of guests."
+
+#: apps/tables/reservations.py
+msgid "Бронь — от {low} до {high} минут."
+msgstr "A reservation lasts {low} to {high} minutes."
+
+#: apps/tables/reservations.py
+msgid "Гостей — от 1 до 99."
+msgstr "Guests: 1 to 99."
+
+#: apps/tables/reservations.py webapp/staff_reservations.py
+msgid "Укажите дату и время брони."
+msgstr "Enter the date and time of the reservation."
+
+#: apps/tables/reservations.py
+msgid "Время брони уже прошло."
+msgstr "The reservation time has already passed."
+
+#: apps/tables/reservations.py apps/tables/services.py
+msgid "Стол не найден в этом заведении."
+msgstr "Table not found in this venue."
+
+#: apps/tables/reservations.py
+msgid "Стол {table} уже забронирован с {start} до {end} ({name})."
+msgstr "Table {table} is already booked from {start} to {end} ({name})."
+
+#: apps/tables/reservations.py webapp/staff_reservations.py
+msgid "Бронь не найдена — обновите экран."
+msgstr "Reservation not found — refresh the screen."
+
+#: apps/tables/reservations.py
+msgid "Бронь только что изменили — обновите экран."
+msgstr "The reservation was just changed — refresh the screen."
+
+#: apps/tables/reservations.py
+msgid "Бронь уже отмечена: «{status}». Обновите экран."
+msgstr "The reservation is already marked «{status}». Refresh the screen."
+
+#: apps/tables/reservations.py apps/tables/services.py
+msgid "Эта компания уже ушла — обновите экран."
+msgstr "This company has left — refresh the screen."
+
+#: apps/tables/reservations.py
+msgid "За столом {table} ещё сидят: закройте их визит или перенесите бронь на другой стол."
+msgstr "Someone still sits at table {table}: close their visit or move the reservation to another table."
+
+#: apps/tables/reservations.py
+msgid "Неизвестное действие с бронью."
+msgstr "Unknown reservation action."
+
+#: apps/tables/reservations.py
+msgid "Время брони ещё не наступило."
+msgstr "The reservation time has not come yet."
+
 #: apps/tables/services.py
 msgid "Выберите: подсесть к компании за столом или начать новый визит."
 msgstr "Choose: join the party at the table or start a new visit."
@@ -5533,16 +5689,8 @@ msgid "Стол по этому QR-коду уже недоступен."
 msgstr "The table for this QR code is no longer available."
 
 #: apps/tables/services.py
-msgid "Стол не найден в этом заведении."
-msgstr "Table not found in this venue."
-
-#: apps/tables/services.py
 msgid "За этим столом уже сидят — обновите экран."
 msgstr "Someone already sits at this table — refresh the screen."
-
-#: apps/tables/services.py
-msgid "Эта компания уже ушла — обновите экран."
-msgstr "This company has left — refresh the screen."
 
 #: apps/tables/services.py
 msgid "Эта компания за столом не найдена. Отсканируйте QR ещё раз."
@@ -5640,7 +5788,7 @@ msgstr "Add to the plan"
 msgid "Все столы уже на схеме."
 msgstr "All tables are on the plan."
 
-#: apps/tables/templates/admin/tables/hall/plan.html
+#: apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
 msgid "Сохранить"
 msgstr "Save"
 
@@ -5799,6 +5947,10 @@ msgstr "Traffic source"
 #: apps/users/admin_dashboard.py
 msgid "Новый стол"
 msgstr "New table"
+
+#: apps/users/admin_dashboard.py webapp/staff_views.py
+msgid "Новая бронь"
+msgstr "New reservation"
 
 #: apps/users/admin_dashboard.py
 msgid "Подключите бота"
@@ -5973,10 +6125,6 @@ msgid "Язык бота персонала и Admin для этого поль�
 msgstr "Staff bot and Admin language for this user. Empty means the default."
 
 #: apps/users/models.py
-msgid "Имя"
-msgstr "First name"
-
-#: apps/users/models.py
 msgid "Фамилия"
 msgstr "Last name"
 
@@ -6011,10 +6159,6 @@ msgstr "Subscribed to campaigns"
 #: apps/users/models.py
 msgid "Гость делится им в Telegram (нужен для самовывоза, доставки и отправки)."
 msgstr "Shared by the guest in Telegram (needed for pickup, delivery and shipping)."
-
-#: apps/users/models.py webapp/staff_views.py webapp/texts.py
-msgid "Телефон"
-msgstr "Phone"
 
 #: apps/users/models.py
 msgid "Язык (выбран гостем)"
@@ -7588,7 +7732,7 @@ msgstr "Bills are available only to the owner, a manager or a cashier."
 msgid "Работа со столами доступна только владельцу, менеджеру или кассиру при включённом модуле столов."
 msgstr "Tables are available only to the owner, a manager or a cashier with the tables module on."
 
-#: bot/handlers/staff.py webapp/staff_table_orders.py
+#: bot/handlers/staff.py webapp/staff_reservations.py webapp/staff_table_orders.py
 msgid "Стол не найден."
 msgstr "Table not found."
 
@@ -8748,6 +8892,22 @@ msgstr "The work screen is for this venue's staff only."
 msgid "Рабочий экран здесь пока не включён — работайте в чате бота."
 msgstr "The work screen is not switched on here yet — work in the bot chat."
 
+#: webapp/staff_reservations.py
+msgid "Бронируют официант, кассир, менеджер или владелец."
+msgstr "Tables are booked by a waiter, a cashier, a manager or the owner."
+
+#: webapp/staff_reservations.py
+msgid "Бронь изменена."
+msgstr "Reservation changed."
+
+#: webapp/staff_reservations.py
+msgid "Стол {table} забронирован на {time}."
+msgstr "Table {table} is booked for {time}."
+
+#: webapp/staff_reservations.py webapp/staff_table_orders.py
+msgid "Компания за столом не найдена."
+msgstr "The company at the table was not found."
+
 #: webapp/staff_sales.py
 msgid "Обновите экран и проведите продажу ещё раз."
 msgstr "Refresh the screen and make the sale again."
@@ -8795,10 +8955,6 @@ msgstr "Table orders are made by a waiter, cashier, manager or owner."
 #: webapp/staff_table_orders.py
 msgid "Обновите экран и отправьте заказ ещё раз."
 msgstr "Refresh the screen and send the order again."
-
-#: webapp/staff_table_orders.py
-msgid "Компания за столом не найдена."
-msgstr "The company at the table was not found."
 
 #: webapp/staff_table_orders.py
 msgid "Заказ #{number} на стол {table} уже отправлен."
@@ -9027,6 +9183,58 @@ msgstr "Copy"
 #: webapp/staff_views.py
 msgid "Ссылка скопирована"
 msgstr "Link copied"
+
+#: webapp/staff_views.py
+msgid "Схема"
+msgstr "Floor plan"
+
+#: webapp/staff_views.py
+msgid "＋ Забронировать"
+msgstr "＋ Book"
+
+#: webapp/staff_views.py
+msgid "Изменить"
+msgstr "Edit"
+
+#: webapp/staff_views.py
+msgid "Отменить бронь «{name}» на {time}?"
+msgstr "Cancel the reservation for «{name}» at {time}?"
+
+#: webapp/staff_views.py
+msgid "Отметить, что «{name}» не пришли?"
+msgstr "Mark «{name}» as a no-show?"
+
+#: webapp/staff_views.py
+msgid "За столом {number} уже сидят. Это гости брони «{name}»?"
+msgstr "Someone already sits at table {number}. Are these the guests of «{name}»?"
+
+#: webapp/staff_views.py
+msgid "Стол {number} забронирован на {time}: {name}, гостей {guests}. Посадить других гостей?"
+msgstr "Table {number} is booked for {time}: {name}, {guests} guests. Seat other guests?"
+
+#: webapp/staff_views.py
+msgid "На этот день броней нет."
+msgstr "No reservations for this day."
+
+#: webapp/staff_views.py
+msgid "Дата"
+msgstr "Date"
+
+#: webapp/staff_views.py
+msgid "Длительность"
+msgstr "Duration"
+
+#: webapp/staff_views.py
+msgid "{hours} ч"
+msgstr "{hours} h"
+
+#: webapp/staff_views.py
+msgid "Гости ещё не просили счёт. Счёт по этим заказам — в карточке стола."
+msgstr "The guests have not asked for the bill yet. The bill for these orders is in the table's card."
+
+#: webapp/staff_views.py
+msgid "К столам"
+msgstr "To tables"
 
 #: webapp/texts.py
 msgid "Загружаем…"

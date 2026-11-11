@@ -63,9 +63,11 @@ from apps.orders.services import (
     transition_order_status,
 )
 from apps.tables.floor_plan import table_alerts
+from apps.tables.reservations import ReservationError
 from apps.tables.services import TableSessionError
 from bot.services.staff_rights import (
     can_manage_billing,
+    can_manage_reservations,
     can_quick_sale,
     can_take_table_orders,
     can_view_day_report,
@@ -188,6 +190,36 @@ STAFF_TEXTS = {
     "share": N_("📤 Переслать ссылку"),
     "copy": N_("Скопировать"),
     "copied": N_("Ссылка скопирована"),
+    # Reservations (PQ-052, step 3).
+    "plan_reserved": N_("Бронь"),
+    "plan_late": N_("Опаздывают"),
+    "plan_view": N_("Схема"),
+    "bookings": N_("Бронь"),
+    "book": N_("＋ Забронировать"),
+    "new_order": N_("Новый заказ"),
+    "new_booking": N_("Новая бронь"),
+    "edit_booking": N_("Изменить"),
+    "seat": N_("Пришли"),
+    "no_show": N_("Не пришли"),
+    "cancel_booking": N_("Отменить бронь"),
+    "cancel_booking_q": N_("Отменить бронь «{name}» на {time}?"),
+    "no_show_q": N_("Отметить, что «{name}» не пришли?"),
+    "seat_here_q": N_("За столом {number} уже сидят. Это гости брони «{name}»?"),
+    "booked_soon_q": N_(
+        "Стол {number} забронирован на {time}: {name}, гостей {guests}. Посадить других гостей?"
+    ),
+    "no_bookings": N_("На этот день броней нет."),
+    "today": N_("Сегодня"),
+    "f_table": N_("Стол"),
+    "f_date": N_("Дата"),
+    "f_time": N_("Время"),
+    "f_minutes": N_("Длительность"),
+    "f_guests": N_("Гостей"),
+    "f_name": N_("Имя"),
+    "hours": N_("{hours} ч"),
+    "save": N_("Сохранить"),
+    "unbilled_hint": N_("Гости ещё не просили счёт. Счёт по этим заказам — в карточке стола."),
+    "to_tables": N_("К столам"),
 }
 
 
@@ -308,7 +340,7 @@ def staff_api(method: str):
                     return _error(exc.status, _(exc.message), exc.code)
                 except (
                     OrderFlowError, BillingServiceError, GuestCallError, TableSessionError,
-                    BonusServiceError,
+                    BonusServiceError, ReservationError,
                 ) as exc:
                     return _error(400, str(exc), "refused")
 
@@ -387,6 +419,7 @@ def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
         "tables": can_view_tables(employee, staff.content),
         "sale": can_quick_sale(employee, staff.content),
         "table_orders": can_take_table_orders(employee, staff.content),
+        "reservations": can_manage_reservations(employee, staff.content),
         "report": can_view_day_report(employee, staff.content),
         "invite": bool(roles_invitable_by(employee.user, staff.partner.id)),
     }
@@ -399,9 +432,11 @@ def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
         .order_by("created_at").values_list("id", flat=True)
     ] if rights["billing"] else []
     # Tables where a guest calls or asks for the bill: the «Столы» tab's red
-    # count, for whoever has that tab (owner 2026-11-11).
+    # count, for whoever has that tab (owner 2026-11-11); with reservations,
+    # bookings 15 minutes late too.
     alerts = (
-        table_alerts(staff.partner.id) if rights["tables"] or rights["table_orders"] else []
+        table_alerts(staff.partner.id, reservations=rights["reservations"])
+        if rights["tables"] or rights["table_orders"] or rights["reservations"] else []
     )
     version = _state_version(
         staff, [notification.id.hex for notification in open_calls], request_ids, rights,
@@ -427,6 +462,7 @@ def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
         # The screen counts the minutes itself from these.
         "now": _created(now),
         "texts": {key: _(msgid) for key, msgid in STAFF_TEXTS.items()},
+        "language": staff.language,  # dates of the bookings are written in it
         "venue": {"id": staff.partner.id.hex, "name": staff.partner.name},
         "venues": [
             {"id": venue.id.hex, "name": venue.name} for venue in staff.venues

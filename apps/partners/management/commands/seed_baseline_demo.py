@@ -378,6 +378,7 @@ class Command(BaseCommand):
         self._retire_staff(partner)
         self._seed_tables(partner, demo.TABLES[partner.slug])
         self._seed_halls(partner, demo.HALLS[partner.slug])
+        self._seed_reservations(partner, demo.RESERVATIONS[partner.slug])
         self._seed_menu(partner, demo.MENUS[partner.slug])
         self._seed_bonus_programs(partner, demo.BONUSES[partner.slug])
         self._seed_own_texts(partner)
@@ -792,6 +793,40 @@ class Command(BaseCommand):
                 {"table": numbers[number], "x": x, "y": y, "w": w, "h": h, "shape": shape}
                 for number, x, y, w, h, shape in placements
             ])
+
+    @staticmethod
+    def _seed_reservations(partner: Partner, rows) -> None:
+        """A few bookings through the service, once (a reset venue that has
+        bookings keeps them): one soon, so the plan shows it."""
+
+        from datetime import datetime, timedelta
+
+        from apps.tables.models import Reservation
+        from apps.tables.reservations import create_reservation, reservations_on, venue_zone
+
+        if not rows or not reservations_on(partner.id) or Reservation.objects.filter(
+            partner=partner
+        ).exists():
+            return
+        owner = get_user_model().objects.filter(partner=partner, role="owner",
+                                                is_active=True).first()
+        if owner is None:
+            return
+        zone = venue_zone(partner)
+        now = datetime.now(zone).replace(second=0, microsecond=0)
+        numbers = {table.number: table.id for table in Table.objects.filter(partner=partner)}
+        for number, when, guests, name, phone, comment in rows:
+            if isinstance(when, int):
+                starts_at = now + timedelta(minutes=when - now.minute % 5)
+            else:
+                days, clock = when
+                hour, minute = map(int, clock.split(":"))
+                starts_at = (now + timedelta(days=days)).replace(hour=hour, minute=minute)
+                if starts_at <= now:
+                    starts_at += timedelta(days=1)
+            create_reservation(partner_id=partner.id, actor=owner, table_id=numbers[number],
+                               starts_at=starts_at, guests=guests, name=name, phone=phone,
+                               comment=comment)
 
     @staticmethod
     def _seed_tables(partner: Partner, table_rows) -> None:

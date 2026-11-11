@@ -124,6 +124,7 @@ SETTINGS = {
         "module_stock_enabled": True,
         "module_floor_plan_enabled": True,
         "module_table_orders_enabled": True,
+        "module_reservations_enabled": True,
         "language_ru": True, "language_en": True,
     },
     # The second point: tables and pickup (paid on the spot), a bar screen.
@@ -163,6 +164,7 @@ SETTINGS = {
         # Beans in packs are counted; the kitchen is not.
         "module_stock_enabled": True,
         "module_floor_plan_enabled": True,
+        "module_reservations_enabled": True,
         "language_ru": False, "language_en": True,
     },
     # A shop: no tables; pickup, courier and post; the till and the staff screen.
@@ -291,6 +293,21 @@ TABLES = {
     + [(5, "Тераса", 6, "obolon_tbl_05")],
     CAFE: [(n, f"Стіл {n}", 2 if n <= 3 else (4 if n <= 8 else (6 if n <= 11 else 8)),
             f"river_tbl_{n:02d}") for n in range(1, 13)],
+    SHOP: [],
+}
+
+# Bookings (PQ-052, step 3), made when the venue is seeded: (table, in how many
+# minutes, or ``(days ahead, "HH:MM")``, guests, name, phone, comment).
+RESERVATIONS = {
+    PODIL: [
+        (5, 45, 6, "Олена", "+380671234567", "День народження, біля вікна"),
+        (3, (1, "19:00"), 2, "Андрій", "+380501112233", ""),
+    ],
+    OBOLON: [],
+    CAFE: [
+        (9, (0, "20:00"), 4, "Марія", "+380931234567", ""),
+        (12, (1, "13:30"), 8, "Компанія Петренко", "+380661112233", "Дитячий стілець"),
+    ],
     SHOP: [],
 }
 

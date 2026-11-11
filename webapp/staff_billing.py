@@ -57,6 +57,7 @@ from apps.tables.models import TableVisit
 from apps.tables.services import close_table_visit
 from bot.services.staff_rights import (
     can_manage_billing,
+    can_manage_reservations,
     can_take_table_orders,
     can_view_tables,
 )
@@ -403,10 +404,11 @@ def request_action_view(request, staff: StaffRequest, body: dict) -> dict:
 @staff_api("GET")
 def tables_view(request, staff: StaffRequest, body: dict) -> dict:
     """Tables with guests now: their visits, what is not billed yet, open bills.
-    Who orders from the tablet (PQ-052) opens it too — without the bills'
-    and the visit's actions."""
+    Who orders from the tablet or books tables (PQ-052) opens it too —
+    without the bills' and the visit's actions."""
 
-    if not can_take_table_orders(staff.employee, staff.content):
+    if not (can_take_table_orders(staff.employee, staff.content)
+            or can_manage_reservations(staff.employee, staff.content)):
         _tables(staff)
     partner_id = staff.partner.id
     sessions = list(BillingOperationsRepository.active_sessions_for_partner(partner_id))

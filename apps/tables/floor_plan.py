@@ -9,7 +9,10 @@ arranging one hall never mix their layouts (lock order: ``Hall`` →
 
 ``table_states`` — what each table is doing now, for the plan in Admin and
 on the staff screen: ``call`` (a guest called staff, nobody went yet),
-``bill`` (a bill was asked for), ``busy`` (guests sit there), ``free``.
+``bill`` (a bill was asked for), ``busy`` (guests sit there), ``free``;
+with reservations (step 3) a free table is ``reserved`` an hour before its
+booking and ``late`` 15 minutes after its time with nobody seated, and every
+table carries the booking it shows (``reservations.plan_bookings``).
 A few queries for the whole venue, nothing stored.
 
 A module of its own (``PartnerBotSettings.module_floor_plan_enabled``); the
@@ -34,7 +37,7 @@ from core.i18n import _
 # A call older than this is not a call any more: the guest has long been
 # helped (the same window as the staff screen's list of calls).
 CALL_HOURS = 3
-STATES = ("free", "busy", "bill", "call")
+STATES = ("free", "reserved", "late", "busy", "bill", "call")
 
 
 class FloorPlanError(ValueError):
@@ -103,16 +106,19 @@ def save_hall_layout(*, partner_id, hall_id, placements: list[dict]) -> Hall:
     return hall
 
 
-def table_states(partner_id, *, now=None) -> dict[UUID, dict]:
-    """``{table id: {"state", "guests", "since", "to_pay"}}`` for every active
-    table of the venue."""
+def table_states(partner_id, *, now=None, reservations=None) -> dict[UUID, dict]:
+    """``{table id: {"state", "guests", "since", "to_pay", "reservation"}}`` for
+    every active table of the venue. ``reservations`` — whether bookings are
+    shown (``None``: as the venue's module says)."""
 
     from apps.billing.models import Bill
     from apps.billing.repositories import BillingOperationsRepository
+    from apps.tables.reservations import plan_bookings, plan_json, reservations_on
 
     now = now or timezone.now()
     states = {
-        table_id: {"state": "free", "guests": 0, "since": None, "to_pay": Decimal("0")}
+        table_id: {"state": "free", "guests": 0, "since": None, "to_pay": Decimal("0"),
+                   "reservation": None}
         for table_id in Table.objects.filter(partner_id=partner_id, is_active=True)
         .values_list("id", flat=True)
     }
@@ -146,6 +152,9 @@ def table_states(partner_id, *, now=None) -> dict[UUID, dict]:
             )
     asked = set(_open_bill_requests(partner_id).values_list("table_id", flat=True))
     called = set(_open_calls(partner_id, now).values_list("table_session__table_id", flat=True))
+    if reservations is None:
+        reservations = reservations_on(partner_id)
+    bookings = plan_bookings(partner_id, now=now) if reservations else {}
     for table_id, state in states.items():
         state["guests"] = guests.get(table_id, 0)
         if state["state"] == "busy":
@@ -153,6 +162,11 @@ def table_states(partner_id, *, now=None) -> dict[UUID, dict]:
                 state["state"] = "call"
             elif table_id in asked:
                 state["state"] = "bill"
+        if table_id in bookings:
+            booking, kind = bookings[table_id]
+            state["reservation"] = plan_json(booking, kind)
+            if state["state"] == "free":
+                state["state"] = kind
     return states
 
 
@@ -175,10 +189,13 @@ def _open_bill_requests(partner_id):
     )
 
 
-def table_alerts(partner_id, *, now=None) -> list[dict]:
+def table_alerts(partner_id, *, now=None, reservations=False) -> list[dict]:
     """Tables where a guest calls staff or asks for the bill — the «Столы»
     tab's red count on the staff screen, so it shows without opening the tab
-    (owner 2026-11-11). Two small queries, for the screen's every poll."""
+    (owner 2026-11-11); with ``reservations`` also bookings 15 minutes late
+    (``late``). One query, for the screen's every poll."""
+
+    from apps.tables.reservations import late_bookings
 
     now = now or timezone.now()
     calls = _open_calls(partner_id, now).annotate(
@@ -187,8 +204,13 @@ def table_alerts(partner_id, *, now=None) -> list[dict]:
     bills = _open_bill_requests(partner_id).annotate(
         number=F("table__number"), kind=Value("bill", output_field=CharField()),
     ).order_by().values_list("number", "kind")
+    parts = [bills]
+    if reservations:
+        parts.append(late_bookings(partner_id, now=now).annotate(
+            number=F("table__number"), kind=Value("late", output_field=CharField()),
+        ).order_by().values_list("number", "kind"))
     # One query: the screen asks every 8 seconds.
-    alerts = set(calls.union(bills))
+    alerts = set(calls.union(*parts))
     return [{"table": number, "kind": kind} for number, kind in sorted(alerts)]
 
 
@@ -208,6 +230,7 @@ def _table_json(table: Table, state: dict) -> dict:
         "guests": state["guests"],
         "since": timezone.localtime(since).strftime("%H:%M") if since else "",
         "to_pay": f"{state['to_pay']:.2f}",
+        "reservation": state.get("reservation"),
     }
 
 

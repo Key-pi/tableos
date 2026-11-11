@@ -18,14 +18,21 @@ from apps.billing.table_bills import (
 from apps.orders.models import Order
 from apps.partners.networks import bot_for_partner
 from apps.tables.floor_plan import FloorPlanError, floor_plan, save_hall_layout
-from apps.tables.models import Hall, Table, TableSession, TableVisit
+from apps.tables.models import Hall, Reservation, Table, TableSession, TableVisit
+from apps.tables.reservations import (
+    ReservationError,
+    create_reservation,
+    mark_reservation,
+    seat_reservation,
+    update_reservation,
+)
 from apps.tables.services import (
     TableSessionError,
     close_table_session_if_settled,
     close_table_visit,
 )
 from apps.users.constants import AdminSection
-from core.admin_mixins import ScopedAdminMixin
+from core.admin_mixins import ObjectAction, ObjectActionsMixin, ScopedAdminMixin
 from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
 
@@ -472,11 +479,14 @@ class HallAdmin(ScopedAdminMixin):
             "add_url": reverse("admin:tables_hall_add") if can_edit else "",
             "change_url": reverse("admin:tables_hall_change", args=["HALL"]) if can_edit else "",
             "table_url": reverse("admin:tables_table_change", args=["TABLE"]),
+            "reservations_on": self.module_on(request, "module_reservations_enabled"),
+            "booking_url": reverse("admin:tables_reservation_change", args=["BOOKING"]),
             "state_url": reverse("admin:tables_hall_state"),
             "layout_url": reverse("admin:tables_hall_layout", args=["HALL"]),
             "texts": {
                 "free": _("Свободен"), "busy": _("Гости"), "bill": _("Просят счёт"),
-                "call": _("Зовут"), "saved": _("Сохранено"), "unsaved": _(
+                "call": _("Зовут"), "reserved": _("Бронь"), "late": _("Опаздывают"),
+                "saved": _("Сохранено"), "unsaved": _(
                     "Есть несохранённые изменения"),
                 "overlap": _("Столы стоят друг на друге — подвиньте их."),
                 "failed": _("Не сохранилось — проверьте связь и попробуйте ещё раз."),
@@ -506,3 +516,124 @@ class HallAdmin(ScopedAdminMixin):
                 "Схема пришла с ошибкой — обновите страницу.")
             return JsonResponse({"error": message}, status=400)
         return JsonResponse(floor_plan(partner_id))
+
+
+BOOKING_FIELDS = ("table", "starts_at", "minutes", "guests", "name", "phone", "comment")
+
+
+@admin.register(Reservation)
+class ReservationAdmin(ObjectActionsMixin, ScopedAdminMixin):
+    """«Бронь» (PQ-052, step 3). The form is checked and saved by
+    ``apps/tables/reservations.py`` — the same rules as on the staff screen
+    (no double booking, the venue's table, who may book); «Пришли», «Не
+    пришли», «Отменить» are buttons. A booking is never deleted by the venue:
+    it is cancelled."""
+
+    admin_section = AdminSection.TABLES
+    allow_partner_delete = False
+    object_action_errors = (ReservationError,)
+    list_display = ("starts_at", "table", "name", "phone", "guests", "minutes", "status")
+    list_filter = ("status", "partner")
+    search_fields = ("name", "phone", "comment")
+    date_hierarchy = "starts_at"
+    ordering = ("-starts_at",)
+    list_select_related = ("table", "partner")
+    readonly_fields = ("status", "ends_at", "visit", "created_by", "closed_by", "closed_at")
+
+    def get_fields(self, request, obj=None):
+        own = ("partner", *BOOKING_FIELDS) if self.is_platform_admin(request) else BOOKING_FIELDS
+        if obj is None:
+            return own
+        return (*own, *self.readonly_fields)
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj is not None and obj.status != Reservation.Status.BOOKED:
+            return (*BOOKING_FIELDS, "partner", *self.readonly_fields)
+        return self.readonly_fields
+
+    def has_add_permission(self, request, obj=None):
+        return super().has_add_permission(request) and self.module_on(
+            request, "module_reservations_enabled"
+        )
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        admin_page = self
+
+        class ServiceForm(form):
+            """Saved by the service at the end of validation: its refusal is
+            the form's error, and nothing is written."""
+
+            def _post_clean(self):
+                super()._post_clean()
+                if self.errors:
+                    return
+                admin_page._save_through_service(request, self, obj)
+
+        return ServiceForm
+
+    def _save_through_service(self, request, form, obj) -> None:
+        data = form.cleaned_data
+        partner_id = (
+            data["partner"].id if self.is_platform_admin(request) and data.get("partner")
+            else obj.partner_id if obj is not None else self.get_partner_scope_id(request)
+        )
+        fields = {
+            "partner_id": partner_id, "actor": request.user,
+            "table_id": data["table"].id if data.get("table") else None,
+            "starts_at": data["starts_at"], "minutes": data["minutes"],
+            "guests": data["guests"], "name": data["name"], "phone": data["phone"],
+            "comment": data.get("comment", ""),
+        }
+        try:
+            if obj is None:
+                form.saved_booking = create_reservation(**fields)
+            else:
+                form.saved_booking = update_reservation(reservation_id=obj.id, **fields)
+        except ReservationError as exc:
+            form.add_error(None, str(exc))
+
+    def save_model(self, request, obj, form, change):
+        # Already written by the service in the form's validation.
+        saved = form.saved_booking
+        obj.pk, obj.partner_id, obj.ends_at = saved.pk, saved.partner_id, saved.ends_at
+        obj._state.adding = False
+
+    def get_list_display(self, request):
+        list_display = super().get_list_display(request)
+        if self.has_change_permission(request):
+            return (*list_display[:1], "next_step", *list_display[1:])
+        return list_display
+
+    def _actions(self, obj) -> list[ObjectAction]:
+        from django.utils import timezone
+
+        if obj.status != Reservation.Status.BOOKED:
+            return []
+        actions = [ObjectAction("seat", _("Пришли"), "how_to_reg", style="primary")]
+        if timezone.now() >= obj.starts_at:
+            actions.append(ObjectAction("no_show", _("Не пришли"), "person_off"))
+        actions.append(ObjectAction(
+            "cancel", _("Отменить бронь"), "event_busy", style="danger",
+            confirm=_("Отменить бронь «{name}»?", name=obj.name),
+        ))
+        return actions
+
+    def get_object_actions(self, request, obj):
+        return self._actions(obj)
+
+    def run_object_action(self, request, obj, code, data):
+        if code == "seat":
+            booking = seat_reservation(partner_id=obj.partner_id, actor=request.user,
+                                       reservation_id=obj.id)
+            return _("Стол {table}: гости пришли, визит открыт.", table=booking.table.number)
+        status = {"no_show": Reservation.Status.NO_SHOW,
+                  "cancel": Reservation.Status.CANCELED}[code]
+        booking = mark_reservation(partner_id=obj.partner_id, actor=request.user,
+                                   reservation_id=obj.id, status=status)
+        return _("Бронь отмечена: «{status}».", status=booking.get_status_display())
+
+    @admin.display(description=_lazy("Следующий шаг"))
+    def next_step(self, obj):
+        actions = self._actions(obj)
+        return self.object_action_button(obj, actions[0]) if actions else "—"

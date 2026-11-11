@@ -516,6 +516,7 @@
     var name = tab;  // the answer belongs to this tab, even if another is open by then
     if (name === "orders") return Promise.resolve();
     if ((name === "sale" || name === "table_order") && tabData[name]) return Promise.resolve();  // the menu: once
+    if (name === "tables" && tablesMode === "bookings" && data.rights.reservations) return loadBookings();
     var path = { sale: "sale_menu", table_order: "table_order_menu" }[name] || name;
     return api(path).then(function (result) {
       if (!result.ok) { toast(result.data.error || T.error); if (tab === name) tab = "orders"; return; }
@@ -541,7 +542,7 @@
     // [tab, title, red count]: new orders, guests asking for the bill.
     var names = [["orders", T.orders + " " + data.orders.length, newOrders]];
     if (data.rights.billing) names.push(["bills", T.bills, data.bill_requests.length]);
-    if (data.rights.tables || data.rights.table_orders) {
+    if (data.rights.tables || data.rights.table_orders || data.rights.reservations) {
       var needing = {};
       (data.table_alerts || []).forEach(function (alert) { needing[alert.table] = true; });
       names.push(["tables", T.tables, Object.keys(needing).length]);
@@ -570,6 +571,18 @@
     var info = tabData.bills;
     if (!info) { page.appendChild(el("div", { class: "center" }, el("div", { class: "spinner" }))); return; }
     var board = el("div", { class: "board" });
+    // Orders at tables nobody asked a bill for yet: a card over the whole row
+    // (owner 2026-11-11: the small line hung beside the cards).
+    if (info.unbilled) {
+      var hint = el("article", { class: "order wide-card" },
+        el("div", { class: "top" }, el("span", { class: "place", text: "🍽 " + t("unbilled", { count: info.unbilled }) })),
+        el("div", { class: "meta", text: T.unbilled_hint }));
+      if (data.rights.tables) {
+        hint.appendChild(el("div", { class: "acts" }, el("button", { type: "button", class: "act", text: T.to_tables,
+                                                               onclick: function () { switchTab("tables"); } })));
+      }
+      board.appendChild(hint);
+    }
     info.requests.forEach(function (item) {
       var card = el("article", { class: "order new" },
         el("div", { class: "top" }, el("span", { class: "place", text: "🧾 " + t("table", { number: item.table }) }),
@@ -593,7 +606,6 @@
            el("span", { class: "status", text: bill.status_label })),
         moneyLine(T.total, bill.total), moneyLine(T.remaining, bill.remaining, true)));
     });
-    if (info.unbilled) board.appendChild(el("div", { class: "note", text: t("unbilled", { count: info.unbilled }) }));
     if (!info.requests.length && !info.bills.length) board.appendChild(el("div", { class: "empty", text: T.no_bills }));
     page.appendChild(board);
   }
@@ -632,6 +644,8 @@
 
   function renderTables(page) {
     var info = tabData.tables;
+    if (tablesMode === "bookings" && !data.rights.reservations) tablesMode = "plan";
+    if (tablesMode === "bookings") { renderBookings(page); return; }
     if (!info) { page.appendChild(el("div", { class: "center" }, el("div", { class: "spinner" }))); return; }
     if (info.plan) { renderPlan(page, info); return; }
     var board = el("div", { class: "board" });
@@ -657,38 +671,70 @@
       hall.tables.forEach(function (item) { if (item.id === openTableId) entry = item; });
     });
     var table = info.tables.filter(function (item) { return item.id === openTableId; })[0];
-    if (!entry || JSON.stringify([entry, table]) === openTableShown) return;
-    if (!table) { open.remove(); openTableId = ""; return; }  // the company left
-    openTable(info, entry);
+    if (!entry) { open.remove(); openTableId = ""; return; }
+    if (JSON.stringify([entry, table]) === openTableShown) return;
+    openTable(info, entry, true);  // the company left: the sheet closes or shows the free table
   }
 
-  function openTable(info, entry) {
+  // A tap on a table: its sheet — the company sitting there, the booking
+  // the plan shows, «Новый заказ» and «＋ Забронировать»; a free table with
+  // nothing to show goes straight to the order (or says it is free).
+  function openTable(info, entry, refreshing) {
     var old = document.querySelector(".sheet-back.table");
+    var table = info.tables.filter(function (item) { return item.id === entry.id; })[0];
+    if (!table && !entry.reservation && !data.rights.reservations) {
+      if (old) old.remove();
+      openTableId = "";
+      if (refreshing) return;
+      if (data.rights.table_orders) { startTableOrder({ id: entry.id, number: entry.number }, null); return; }
+      toast(t("table_free", { number: entry.number }));
+      return;
+    }
     if (old) old.remove();
     openTableId = entry.id;
-    openTableShown = JSON.stringify([entry, info.tables.filter(function (item) { return item.id === entry.id; })[0]]);
-    var table = info.tables.filter(function (item) { return item.id === entry.id; })[0];
-    if (!table && data.rights.table_orders) { startTableOrder({ id: entry.id, number: entry.number }, null); return; }
-    if (!table) { toast(t("table_free", { number: entry.number })); return; }
+    openTableShown = JSON.stringify([entry, table]);
     var back = el("div", { class: "sheet-back table", onclick: function (event) {
-      if (event.target === back) back.remove();
+      if (event.target === back) { back.remove(); openTableId = ""; }
     } });
     var body = el("div", { class: "sheet", role: "dialog", style: "max-height:85vh;overflow:auto" },
-      el("p", null, el("b", { text: t("table", { number: table.number }) + " · " + T["plan_" + entry.state] })));
-    table.visits.forEach(function (visit) { body.appendChild(visitCard(table, visit)); });
-    body.appendChild(el("div", { class: "acts" },
-      el("button", { type: "button", class: "act", text: T.back, onclick: function () { back.remove(); } })));
+      el("p", null, el("b", { text: t("table", { number: entry.number }) + " · " + T["plan_" + entry.state] })));
+    if (entry.reservation) body.appendChild(bookingCard(entry.reservation, table));
+    (table ? table.visits : []).forEach(function (visit) { body.appendChild(visitCard(table, visit)); });
+    var acts = el("div", { class: "acts" },
+      el("button", { type: "button", class: "act", text: T.back, onclick: function () { back.remove(); openTableId = ""; } }));
+    if (!table && data.rights.table_orders) {
+      acts.appendChild(el("button", { type: "button", class: "act primary", text: T.new_order, onclick: function () {
+        var booking = entry.reservation;
+        var go = function () { startTableOrder({ id: entry.id, number: entry.number }, null); };
+        // Seating others at a table booked soon is allowed — with a warning.
+        if (booking) sheet(t("booked_soon_q", { number: entry.number, time: booking.time, name: booking.name, guests: booking.guests }), go);
+        else go();
+      } }));
+    }
+    if (data.rights.reservations) {
+      acts.appendChild(el("button", { type: "button", class: "act", text: T.book, onclick: function () {
+        bookingForm(null, { table: entry.id, date: todayIso() });
+      } }));
+    }
+    body.appendChild(acts);
     back.appendChild(body);
     document.body.appendChild(back);
   }
 
   function planTile(info, hall, entry) {
+    var booking = entry.reservation;
     var since = entry.state === "free" ? T.plan_free
+      : entry.state === "reserved" || entry.state === "late" ? booking.time + " · " + booking.name
       : [entry.since, entry.guests ? t("guests", { count: entry.guests }) : ""].filter(Boolean).join(" · ");
     // State classes are prefixed: «.call» is the calls board's own style.
     var tile = el("button", { type: "button", class: "ptable st-" + entry.state + (entry.shape === "round" ? " round" : ""),
                               onclick: function () { openTable(info, entry); } },
       el("span", null, el("b", { text: String(entry.number) }), el("small", { text: since })));
+    // Guests sit there and a booking comes soon: its time in the corner.
+    if (booking && entry.state !== "reserved" && entry.state !== "late") {
+      tile.setAttribute("data-booking", "📅 " + booking.time);
+      if (booking.late) tile.classList.add("booking-late");
+    }
     if (hall) {
       tile.style.left = (entry.x / hall.width * 100) + "%";
       tile.style.top = (entry.y / hall.height * 100) + "%";
@@ -703,22 +749,34 @@
     if (!plan.halls.some(function (hall) { return hall.id === planHall; })) {
       planHall = plan.halls.length ? plan.halls[0].id : "";
     }
-    if (plan.halls.length > 1) {
+    if (plan.halls.length > 1 || data.rights.reservations) {
       var chips = el("div", { class: "filters", role: "tablist" });
-      plan.halls.forEach(function (hall) {
-        var busyHere = hall.tables.filter(function (item) { return item.state === "call" || item.state === "bill"; }).length;
-        chips.appendChild(el("button", { type: "button", class: "chip", "aria-pressed": String(hall.id === planHall),
-                                         onclick: function () { planHall = hall.id; render(); } },
-          hall.name, busyHere ? el("span", { class: "count", text: String(busyHere) }) : null));
-      });
+      if (plan.halls.length > 1) {
+        plan.halls.forEach(function (hall) {
+          var busyHere = hall.tables.filter(function (item) {
+            return item.state === "call" || item.state === "bill" || item.state === "late";
+          }).length;
+          chips.appendChild(el("button", { type: "button", class: "chip", "aria-pressed": String(hall.id === planHall),
+                                           onclick: function () { planHall = hall.id; render(); } },
+            hall.name, busyHere ? el("span", { class: "count", text: String(busyHere) }) : null));
+        });
+      } else {
+        chips.appendChild(el("button", { type: "button", class: "chip", "aria-pressed": "true", text: T.plan_view }));
+      }
+      if (data.rights.reservations) chips.appendChild(bookingsChip(false));
       page.appendChild(chips);
     }
     var wrap = el("div", { class: "plan-wrap" });
-    wrap.appendChild(el("div", { class: "plan-legend" },
+    var legend = el("div", { class: "plan-legend" },
       el("span", null, el("i", { class: "st-free" }), T.plan_free),
       el("span", null, el("i", { class: "st-busy" }), T.plan_busy),
       el("span", null, el("i", { class: "st-bill" }), T.plan_bill),
-      el("span", null, el("i", { class: "st-call" }), T.plan_call)));
+      el("span", null, el("i", { class: "st-call" }), T.plan_call));
+    if (data.rights.reservations) {
+      legend.appendChild(el("span", null, el("i", { class: "st-reserved" }), T.plan_reserved));
+      legend.appendChild(el("span", null, el("i", { class: "st-late" }), T.plan_late));
+    }
+    wrap.appendChild(legend);
     var hall = plan.halls.filter(function (item) { return item.id === planHall; })[0];
     if (hall) {
       var area = el("div", { class: "plan", style: "aspect-ratio:" + hall.width + " / " + hall.height });
@@ -733,6 +791,212 @@
     }
     if (!hall && !plan.unplaced.length) wrap.appendChild(el("div", { class: "empty", text: T.no_tables }));
     page.appendChild(wrap);
+  }
+
+  // --- reservations (PQ-052, step 3): the day's list, the form, the marks ---
+  var tablesMode = "plan", bookingDay = "";
+
+  function todayIso() {
+    var now = new Date(Date.now() - clockOffset);
+    return now.getFullYear() + "-" + ("0" + (now.getMonth() + 1)).slice(-2) + "-" + ("0" + now.getDate()).slice(-2);
+  }
+
+  function shiftDay(iso, days) {
+    var moment = new Date(iso + "T12:00:00");
+    moment.setDate(moment.getDate() + days);
+    return moment.getFullYear() + "-" + ("0" + (moment.getMonth() + 1)).slice(-2) + "-" + ("0" + moment.getDate()).slice(-2);
+  }
+
+  function dayLabel(iso, today) {
+    var moment = new Date(iso + "T12:00:00"), text;
+    try {
+      text = moment.toLocaleDateString(data.language || undefined, { weekday: "short", day: "numeric", month: "long" });
+    } catch (ignored) {
+      text = iso.split("-").reverse().join(".");
+    }
+    return iso === today ? T.today + " · " + text : text;
+  }
+
+  function loadBookings() {
+    return api("reservations", undefined, bookingDay ? { date: bookingDay } : undefined).then(function (result) {
+      if (!result.ok) { toast(result.data.error || T.error); tablesMode = "plan"; return; }
+      tabData.bookings = result.data;
+      bookingDay = result.data.date;
+    });
+  }
+
+  function setTablesMode(mode) {
+    tablesMode = mode;
+    loadTab().then(function () { if (tab === "tables" && !busy) render(); });
+    render();
+  }
+
+  function bookingsChip(pressed) {
+    return el("button", { type: "button", class: "chip", "aria-pressed": String(pressed),
+                          onclick: function () { setTablesMode(pressed ? "plan" : "bookings"); } }, "📅 " + T.bookings);
+  }
+
+  // The tables a booking may take: from the day's list or from the plan.
+  function bookingTables() {
+    if (tabData.bookings && tabData.bookings.tables) return tabData.bookings.tables;
+    var plan = tabData.tables && tabData.tables.plan;
+    if (!plan) return [];
+    var all = [];
+    plan.halls.concat([{ tables: plan.unplaced }]).forEach(function (hall) {
+      hall.tables.forEach(function (item) { all.push({ id: item.id, number: item.number, seats: item.seats }); });
+    });
+    return all.sort(function (a, b) { return a.number - b.number; });
+  }
+
+  // One booking: when, where, who, and what can be done with it now.
+  function bookingCard(booking, table) {
+    var card = el("article", { class: "order booking b-" + booking.status + (booking.late ? " new" : "") },
+      el("div", { class: "top" }, el("span", { class: "num", text: booking.time + "–" + booking.until }),
+         el("span", { class: "status", text: booking.late ? T.plan_late : booking.status_label })),
+      el("div", { class: "place", text: t("table", { number: booking.table }) + " · " + t("guests", { count: booking.guests }) }),
+      el("div", null, el("b", { text: booking.name }), " · ", el("a", { href: "tel:" + booking.phone, text: booking.phone })));
+    if (booking.comment) card.appendChild(el("div", { class: "note", text: booking.comment }));
+    if (booking.status !== "booked") return card;
+    var acts = el("div", { class: "acts" });
+    acts.appendChild(el("button", { type: "button", class: "act primary", text: T.seat,
+                                   onclick: function () { seatBooking(booking, table); } }));
+    if (booking.started) {
+      acts.appendChild(el("button", { type: "button", class: "act", text: T.no_show, onclick: function () {
+        sheet(t("no_show_q", { name: booking.name }), function () { bookingAction(booking, "no_show"); });
+      } }));
+    }
+    acts.appendChild(el("button", { type: "button", class: "act", text: T.edit_booking,
+                                   onclick: function () { bookingForm(booking, {}); } }));
+    acts.appendChild(el("button", { type: "button", class: "act danger", text: T.cancel_booking, onclick: function () {
+      sheet(t("cancel_booking_q", { name: booking.name, time: booking.time }), function () { bookingAction(booking, "cancel"); });
+    } }));
+    card.appendChild(acts);
+    return card;
+  }
+
+  // «Пришли»: a free table opens its visit; where a company already sits,
+  // staff confirm these are the booking's guests (they were seated first).
+  function seatBooking(booking, table) {
+    if (!table && tabData.tables) {
+      table = tabData.tables.tables.filter(function (item) { return item.id === booking.table_id; })[0];
+    }
+    if (table && table.visits.length === 1) {
+      sheet(t("seat_here_q", { number: booking.table, name: booking.name }), function () {
+        bookingAction(booking, "seat", table.visits[0].id);
+      });
+      return;
+    }
+    bookingAction(booking, "seat");
+  }
+
+  function bookingAction(booking, action, visit) {
+    if (busy) return;
+    busy = true;
+    var payload = { id: booking.id, action: action };
+    if (visit) payload.visit = visit;
+    api("reservation_action", payload).then(function (result) {
+      after(result, function () { return load(true); });
+    });
+  }
+
+  function field(label, input) {
+    return el("label", { class: "field" }, el("span", { text: label }), input);
+  }
+
+  function nextHalfHour() {
+    var now = new Date(Date.now() - clockOffset + 30 * 60000);
+    var minutes = now.getMinutes() < 30 ? "30" : "00";
+    if (minutes === "00") now.setHours(now.getHours() + 1);
+    return ("0" + now.getHours()).slice(-2) + ":" + minutes;
+  }
+
+  // The form: a new booking (``defaults`` — table and day) or another time
+  // for one still «Ждём».
+  function bookingForm(booking, defaults) {
+    var tables = bookingTables();
+    var value = booking || {};
+    var day = value.date || defaults.date || bookingDay || todayIso();
+    var input = function (attrs) {
+      return el("input", Object.assign({ style: "width:100%" }, attrs));
+    };
+    var table = el("select", { style: "width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--separator);background:var(--bg);color:var(--text)" });
+    tables.forEach(function (item) {
+      table.appendChild(el("option", { value: item.id, text: t("table", { number: item.number }),
+                                        selected: item.id === (value.table_id || defaults.table) ? true : undefined }));
+    });
+    var date = input({ type: "date", value: day });
+    var time = input({ type: "time", value: value.time || (day === todayIso() ? nextHalfHour() : "19:00"), step: 300 });
+    var minutes = el("select", { style: table.getAttribute("style") });
+    [60, 90, 120, 150, 180, 240, 300].forEach(function (count) {
+      minutes.appendChild(el("option", { value: String(count), text: t("hours", { hours: String(count / 60).replace(".", ",") }),
+                                          selected: count === (value.minutes || 120) ? true : undefined }));
+    });
+    var guests = input({ type: "number", min: 1, max: 99, inputmode: "numeric", value: String(value.guests || 2) });
+    var name = input({ type: "text", maxlength: 80, value: value.name || "", autocomplete: "off" });
+    var phone = input({ type: "tel", maxlength: 32, value: value.phone || "", autocomplete: "off" });
+    var comment = input({ type: "text", maxlength: 300, value: value.comment || "" });
+    var back = el("div", { class: "sheet-back booking-form", style: "z-index:40", onclick: function (event) {
+      if (event.target === back) back.remove();
+    } });
+    var problem = el("div", { class: "form-error", role: "alert", hidden: true });
+    var save = el("button", { type: "button", class: "act primary", text: T.save, onclick: function () {
+      if (busy) return;
+      problem.hidden = true;
+      busy = true;
+      save.disabled = true;
+      var body = { table: table.value, date: date.value, time: time.value, minutes: Number(minutes.value),
+                   guests: Number(guests.value), name: name.value, phone: phone.value, comment: comment.value };
+      if (booking) body.id = booking.id;
+      api("reservation_save", body).then(function (result) {
+        busy = false;
+        save.disabled = false;
+        if (!result.ok) {  // the form stays, the reason over its buttons
+          haptic("error");
+          problem.textContent = result.data.error || T.error;
+          problem.hidden = false;
+          return;
+        }
+        back.remove();
+        var open = document.querySelector(".sheet-back.table");
+        if (open) { open.remove(); openTableId = ""; }
+        bookingDay = date.value;
+        after(result);
+      });
+    } });
+    back.appendChild(el("div", { class: "sheet", role: "dialog", style: "max-height:90vh;overflow:auto" },
+      el("p", null, el("b", { text: booking ? T.edit_booking : T.new_booking })),
+      field(T.f_table, table), field(T.f_date, date), field(T.f_time, time), field(T.f_minutes, minutes),
+      field(T.f_guests, guests), field(T.f_name, name), field(T.phone, phone), field(T.comment, comment),
+      problem,
+      el("div", { class: "acts" },
+        el("button", { type: "button", class: "act", text: T.back, onclick: function () { back.remove(); } }), save)));
+    document.body.appendChild(back);
+    if (!booking) name.focus();
+  }
+
+  function renderBookings(page) {
+    var chips = el("div", { class: "filters", role: "tablist" },
+      el("button", { type: "button", class: "chip", "aria-pressed": "false", text: T.plan_view,
+                     onclick: function () { setTablesMode("plan"); } }),
+      bookingsChip(true));
+    page.appendChild(chips);
+    var info = tabData.bookings;
+    if (!info) { page.appendChild(el("div", { class: "center" }, el("div", { class: "spinner" }))); return; }
+    var go = function (day) { bookingDay = day; tabData.bookings = null; setTablesMode("bookings"); };
+    page.appendChild(el("div", { class: "booking-day" },
+      el("button", { type: "button", class: "act", text: "‹", "aria-label": "-1",
+                     onclick: function () { go(shiftDay(info.date, -1)); } }),
+      el("b", { text: dayLabel(info.date, info.today) }),
+      el("button", { type: "button", class: "act", text: "›", "aria-label": "+1",
+                     onclick: function () { go(shiftDay(info.date, 1)); } }),
+      info.date !== info.today ? el("button", { type: "button", class: "act", text: T.today,
+                                                onclick: function () { go(info.today); } }) : null,
+      el("button", { type: "button", class: "act primary", text: T.book,
+                     onclick: function () { bookingForm(null, { date: info.date }); } })));
+    var board = el("div", { class: "board" });
+    info.reservations.forEach(function (booking) { board.appendChild(bookingCard(booking, null)); });
+    if (!info.reservations.length) board.appendChild(el("div", { class: "empty", text: T.no_bookings }));
+    page.appendChild(board);
   }
 
   function after(result, refresh) {

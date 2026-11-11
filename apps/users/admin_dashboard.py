@@ -211,6 +211,7 @@ QUICK_ACTIONS = (
     ("employees.staffinvite", "person_add", N_("Пригласить сотрудника"), ""),
     ("analytics.trafficsource", "link", N_("Источник переходов"), ""),
     ("tables.table", "table_restaurant", N_("Новый стол"), "module_tables_enabled"),
+    ("tables.reservation", "event", N_("Новая бронь"), "module_reservations_enabled"),
 )
 
 

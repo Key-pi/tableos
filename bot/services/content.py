@@ -83,6 +83,7 @@ class BotContent:
     # PQ-052: the floor plan and staff orders to a table from the tablet.
     module_floor_plan_enabled: bool = False
     module_table_orders_enabled: bool = False
+    module_reservations_enabled: bool = False
 
     @classmethod
     def for_partner(cls, partner: Partner) -> "BotContent":
@@ -144,6 +145,7 @@ class BotContent:
             module_reports_enabled=settings.module_reports_enabled,
             module_floor_plan_enabled=settings.module_floor_plan_enabled,
             module_table_orders_enabled=settings.module_table_orders_enabled,
+            module_reservations_enabled=settings.module_reservations_enabled,
             auto_close_table_session_after_payment=(
                 settings.auto_close_table_session_after_payment
             ),
@@ -227,6 +229,12 @@ class BotContent:
 
         return (self.supports_table_orders()
                 and self.module_floor_plan_enabled and self.module_table_orders_enabled)
+
+    def supports_reservations(self) -> bool:
+        """Staff book tables on the screen and in Admin (PQ-052, step 3)."""
+
+        return (self.supports_tables() and self.module_floor_plan_enabled
+                and self.module_reservations_enabled)
 
     def supports_quick_sale(self) -> bool:
         return self.module_quick_sale_enabled and self.module_menu_enabled

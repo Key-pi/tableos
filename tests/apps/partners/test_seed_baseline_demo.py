@@ -176,6 +176,19 @@ class SeedBaselineDemoTests(TestCase):
         table.refresh_from_db()
         self.assertEqual((table.plan_x, table.plan_y), (6, 3))
 
+    def test_bookings_once_and_one_shows_on_the_plan(self):
+        from apps.tables.floor_plan import table_states
+        from apps.tables.models import Reservation
+
+        _seed()
+        podil = Partner.objects.get(slug="night-owl-hookah")
+        self.assertEqual(Reservation.objects.filter(partner=podil).count(), 2)
+        states = {state["state"] for state in table_states(podil.id).values()}
+        self.assertIn("reserved", states)
+        self.assertEqual(Reservation.objects.filter(partner__slug="green-shelf-plants").count(), 0)
+        _seed()  # a re-run adds none
+        self.assertEqual(Reservation.objects.filter(partner=podil).count(), 2)
+
     def test_translations_for_the_guest_languages_on(self):
         _seed()
         cafe = MenuCategory.objects.get(partner__slug=CAFE, name="Сніданки")

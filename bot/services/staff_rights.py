@@ -25,6 +25,15 @@ def can_take_table_orders(employee, content) -> bool:
     return employee.user.role in TABLE_ORDER_ROLES and content.supports_tablet_orders()
 
 
+def can_manage_reservations(employee, content) -> bool:
+    """A waiter, a cashier, a manager or the owner books tables (PQ-052, step
+    3); the service checks again."""
+
+    from apps.tables.reservations import RESERVATION_ROLES
+
+    return employee.user.role in RESERVATION_ROLES and content.supports_reservations()
+
+
 def can_quick_sale(employee, content) -> bool:
     return employee.user.role in STAFF_OPERATIONS_ROLES and content.supports_quick_sale()
 

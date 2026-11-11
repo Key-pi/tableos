@@ -69,3 +69,23 @@
 /* An order to a table from the tablet (PQ-052, step 2). */
 .order-for { display: flex; align-items: center; gap: 12px; }
 .order-for .act { flex: none; }
+
+/* Reservations (PQ-052, step 3). */
+.ptable.st-reserved > span, .plan-legend i.st-reserved { background: color-mix(in srgb, #8b5cf6 16%, var(--section)); border-color: #8b5cf6; border-style: dashed; }
+.ptable.st-late > span, .plan-legend i.st-late { background: #8b5cf6; border-color: #7c3aed; color: #fff; }
+.ptable.st-late > span { animation: plan-pulse 1.2s ease-in-out infinite; }
+.ptable[data-booking] { overflow: visible; }
+.ptable[data-booking]::after { content: attr(data-booking); position: absolute; top: -4px; right: -2px; font-size: 10px; line-height: 14px; padding: 0 4px; border-radius: 7px; background: #8b5cf6; color: #fff; white-space: nowrap; }
+.ptable.booking-late::after { background: var(--danger); }
+.booking-day { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 12px 0; }
+.booking-day b { flex: 1 1 140px; text-align: center; }
+.booking-day .act { flex: none; min-width: 44px; }
+.booking-day .act.primary { flex: 1 0 auto; }
+.order.booking { border-left-color: #8b5cf6; }
+.order.booking.new { border-left-color: var(--danger); }
+.order.b-seated, .order.b-no_show, .order.b-canceled { opacity: 0.6; border-left-color: transparent; }
+.order.wide-card { grid-column: 1 / -1; border-left-color: var(--accent); }
+.booking-form select { font: inherit; }
+.form-error { color: var(--danger); font-size: 14px; padding: 6px 0 0; }
+.plan-rest .ptable[data-booking] { position: relative; }
+.toast { z-index: 50; }  /* over the sheets: a refusal is seen */

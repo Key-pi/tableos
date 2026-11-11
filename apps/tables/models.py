@@ -215,3 +215,65 @@ class TableSession(PartnerBoundModel):
         if within_one_venue():
             return f"{self.table} · {self.get_status_display()}"
         return f"{self.partner.name} / table {self.table.number} / {self.status}"
+
+
+class Reservation(PartnerBoundModel):
+    """A table booked by staff or in Admin (PQ-052, step 3). Written only by
+    ``apps/tables/reservations.py``: one table is never booked twice for
+    overlapping time; «Пришли» opens the visit."""
+
+    class Status(models.TextChoices):
+        BOOKED = "booked", _lazy("Ждём")
+        SEATED = "seated", _lazy("Пришли")
+        NO_SHOW = "no_show", _lazy("Не пришли")
+        CANCELED = "canceled", _lazy("Отменена")
+
+    table = models.ForeignKey(Table, on_delete=models.PROTECT, related_name="reservations",
+                              verbose_name=_lazy("Стол"))
+    starts_at = models.DateTimeField(verbose_name=_lazy("Время"))
+    minutes = models.PositiveSmallIntegerField(default=120,
+                                               verbose_name=_lazy("Длительность, минут"))
+    # Derived from the two above on every save — for the overlap check and
+    # the plan in the database.
+    ends_at = models.DateTimeField(editable=False, verbose_name=_lazy("До"))
+    guests = models.PositiveSmallIntegerField(default=2, verbose_name=_lazy("Гостей"))
+    name = models.CharField(max_length=80, verbose_name=_lazy("Имя"))
+    phone = models.CharField(max_length=32, verbose_name=_lazy("Телефон"))
+    comment = models.CharField(max_length=300, blank=True, verbose_name=_lazy("Комментарий"))
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.BOOKED,
+                              verbose_name=_lazy("Статус"))
+    visit = models.ForeignKey(TableVisit, on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name="reservations", verbose_name=_lazy("Визит"))
+    created_by = models.ForeignKey(
+        "users.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name=_lazy("Забронировал"),
+    )
+    closed_by = models.ForeignKey(
+        "users.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name=_lazy("Отметил"),
+    )
+    closed_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Отмечена"))
+
+    class Meta:
+        verbose_name = _lazy("бронь")
+        verbose_name_plural = _lazy("Бронь")
+        ordering = ["starts_at"]
+        indexes = [
+            models.Index(fields=["partner", "table", "starts_at"]),
+            models.Index(fields=["partner", "status", "starts_at"]),
+        ]
+
+    def __str__(self) -> str:
+        from django.utils import timezone
+
+        local = timezone.localtime(self.starts_at)
+        return f"{local:%d.%m %H:%M} · {self.name}"
+
+    def save(self, *args, **kwargs):
+        from datetime import timedelta
+
+        self.ends_at = self.starts_at + timedelta(minutes=self.minutes)
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and {"starts_at", "minutes"} & set(update_fields):
+            kwargs["update_fields"] = {*update_fields, "ends_at"}
+        super().save(*args, **kwargs)
