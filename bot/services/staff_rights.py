@@ -16,6 +16,15 @@ def can_view_tables(employee, content) -> bool:
     return employee.user.role in STAFF_OPERATIONS_ROLES and content.supports_tables()
 
 
+def can_take_table_orders(employee, content) -> bool:
+    """A waiter, a cashier, a manager or the owner orders to a table from the
+    tablet (PQ-052, step 2); the service checks again."""
+
+    from apps.orders.services import TABLE_ORDER_ROLES
+
+    return employee.user.role in TABLE_ORDER_ROLES and content.supports_tablet_orders()
+
+
 def can_quick_sale(employee, content) -> bool:
     return employee.user.role in STAFF_OPERATIONS_ROLES and content.supports_quick_sale()
 

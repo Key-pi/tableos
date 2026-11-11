@@ -65,3 +65,7 @@
 .plan-rest-title { color: var(--hint); font-size: 13px; }
 .plan-rest { display: flex; flex-wrap: wrap; gap: 8px; }
 .plan-rest .ptable { position: static; width: 84px; height: 64px; }
+
+/* An order to a table from the tablet (PQ-052, step 2). */
+.order-for { display: flex; align-items: center; gap: 12px; }
+.order-for .act { flex: none; }

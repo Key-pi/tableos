@@ -169,6 +169,10 @@ class Order(PartnerBoundModel):
         default=0,
         verbose_name=_lazy("Итого"),
     )
+    # A staff order from the tablet (PQ-052, step 2): the screen's key, so a
+    # retry after a slow answer does not make a second order.
+    request_key = models.CharField(max_length=64, blank=True, default="",
+                                   verbose_name=_lazy("Ключ отправки"))
     accepted_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Принят"))
     received_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Получен"))
     paid_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Оплачен"))
@@ -181,7 +185,12 @@ class Order(PartnerBoundModel):
             models.UniqueConstraint(
                 fields=["partner", "public_id"],
                 name="unique_order_public_id_per_partner",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["partner", "request_key"],
+                condition=~Q(request_key=""),
+                name="unique_order_request_key_per_partner",
+            ),
         ]
         indexes = [
             # Staff screens list open orders by partner; without this index

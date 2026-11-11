@@ -91,10 +91,17 @@ def _redeem(body: dict) -> bool:
 @staff_api("GET")
 def sale_menu_view(request, staff: StaffRequest, body: dict) -> dict:
     _sales(staff)
-    categories: dict = {}
     items = list(
         MenuItemRepository.active_for_partner(staff.partner.id).select_related("category__parent")
     )
+    return menu_json(staff, items)
+
+
+def menu_json(staff: StaffRequest, items: list) -> dict:
+    """Categories with their items, variants, add-ons and what is left, for
+    the staff's quick sale and tablet order (PQ-052)."""
+
+    categories: dict = {}
     # Variants and add-ons as the guest chooses them (owner, 2026-11-07).
     choices = catalog_choices(staff.partner, items)
     stock = stock_on(staff.partner.id)

@@ -123,6 +123,7 @@ SETTINGS = {
         "staff_call_hookah_enabled": True,
         "module_stock_enabled": True,
         "module_floor_plan_enabled": True,
+        "module_table_orders_enabled": True,
         "language_ru": True, "language_en": True,
     },
     # The second point: tables and pickup (paid on the spot), a bar screen.

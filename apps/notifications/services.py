@@ -483,6 +483,9 @@ def send_guest_order_status_update_now(
 
     if not NotificationPreferenceRepository.guest_allows_order_updates(order.guest_id):
         return False
+    if order.guest.is_anonymous:
+        # Ordered through staff without the bot (PQ-052): nobody to tell.
+        return False
 
     try:
         bot_instance = _active_partner_bot(order.partner_id)

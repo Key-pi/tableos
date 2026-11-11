@@ -11,7 +11,7 @@ from apps.users.constants import (
     AdminSection,
 )
 from core.database.models import PartnerBoundModel, TimeStampedModel
-from core.i18n import LANGUAGE_NAMES, LANGUAGES
+from core.i18n import LANGUAGE_NAMES, LANGUAGES, _
 from core.i18n import gettext_lazy as _lazy
 from core.labels import within_one_venue
 
@@ -79,9 +79,14 @@ class TelegramAccount(TimeStampedModel):
 class GuestProfile(PartnerBoundModel):
     """Partner-specific customer profile linked to a shared Telegram account."""
 
+    # Empty — the anonymous guest of a table visit ordered by staff from the
+    # tablet (PQ-052, step 2): no messages, broadcasts or bonuses, not found
+    # by its code.
     telegram_account = models.ForeignKey(
         TelegramAccount,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="guest_profiles",
         verbose_name="Telegram",
     )
@@ -146,8 +151,12 @@ class GuestProfile(PartnerBoundModel):
         ]
         ordering = ["-updated_at"]
 
+    @property
+    def is_anonymous(self) -> bool:
+        return self.telegram_account_id is None
+
     def __str__(self) -> str:
-        if within_one_venue():
+        if within_one_venue() or self.is_anonymous:
             return self.staff_label()
         identity = self.telegram_account.username or self.telegram_account.telegram_id
         return f"{self.partner.name} / {identity}"
@@ -158,6 +167,8 @@ class GuestProfile(PartnerBoundModel):
         Never the Telegram ID: it means nothing to a waiter.
         """
 
+        if self.is_anonymous:
+            return _("Гость без бота")
         account = self.telegram_account
         name = " ".join(part for part in (account.first_name, account.last_name) if part)
         username = f"@{account.username}" if account.username else ""

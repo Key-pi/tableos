@@ -66,6 +66,7 @@ from apps.tables.services import TableSessionError
 from bot.services.staff_rights import (
     can_manage_billing,
     can_quick_sale,
+    can_take_table_orders,
     can_view_day_report,
     can_view_tables,
 )
@@ -118,6 +119,10 @@ STAFF_TEXTS = {
     "plan_call": N_("Зовут"),
     "plan_unplaced": N_("Не на схеме"),
     "table_free": N_("Стол {number} свободен."),
+    "order_for_table": N_("Заказ на стол {number}"),
+    "order_code_hint": N_("Код гостя — если назвал: бонусы начислятся ему"),
+    "send_order": N_("Отправить на кухню и бар"),
+    "add_order": N_("＋ Заказ"),
     "bill_requests": N_("Просят счёт"),
     "open_bills": N_("Открытые счета"),
     "unbilled": N_("Заказов без счёта: {count}"),
@@ -378,6 +383,7 @@ def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
         "billing": can_manage_billing(employee, staff.content),
         "tables": can_view_tables(employee, staff.content),
         "sale": can_quick_sale(employee, staff.content),
+        "table_orders": can_take_table_orders(employee, staff.content),
         "report": can_view_day_report(employee, staff.content),
         "invite": bool(roles_invitable_by(employee.user, staff.partner.id)),
     }

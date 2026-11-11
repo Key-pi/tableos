@@ -80,6 +80,7 @@ BOT_SETTINGS_GROUPS = (
         "module_tables_enabled",
         "auto_close_table_session_after_payment",
         "module_floor_plan_enabled",
+        "module_table_orders_enabled",
         "module_staff_call_enabled",
         ("staff_call_waiter_enabled", "staff_call_bartender_enabled",
          "staff_call_hookah_enabled"),

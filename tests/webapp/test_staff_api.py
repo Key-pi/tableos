@@ -603,7 +603,7 @@ class StaffSaleAndReportTests(StaffFixture):
         self.assertEqual(report["money"][0]["value"], "80.00")
         self.assertEqual(self.staff_call("state", user_id=7700204)[1]["rights"],
                          {"billing": False, "tables": True, "sale": True, "report": True,
-                          "invite": False})
+                          "invite": False, "table_orders": False})
 
 
 class StaffInviteTests(StaffFixture):

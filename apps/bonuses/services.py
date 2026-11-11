@@ -182,6 +182,10 @@ def apply_bonus_programs(
 ) -> list[BonusTransaction]:
     if guest.partner_id != partner_id:
         raise BonusServiceError(_("Гость не из этого заведения."))
+    if guest.telegram_account_id is None:
+        # The anonymous guest of a table visit earns nothing (PQ-052): bonuses
+        # are for a guest named by code.
+        return []
     bonus_paid_amount = Decimal(bonus_paid_amount).quantize(Decimal("0.01"))
     if not bonus_paid_amount.is_finite() or bonus_paid_amount < 0:
         raise BonusServiceError("Bonus-paid amount cannot be negative.")

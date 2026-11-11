@@ -132,15 +132,17 @@ def find_guest_by_customer_code(partner_id, customer_code: str) -> GuestProfile:
 
     code = customer_code.strip().upper()
     try:
+        # The anonymous guest of a table visit (PQ-052) is nobody to name.
         return GuestProfile.objects.select_related("telegram_account").get(
-            partner_id=partner_id, customer_code=code
+            partner_id=partner_id, customer_code=code, telegram_account__isnull=False
         )
     except GuestProfile.DoesNotExist:
         scope = shared_bonus_scope(partner_id)
         if scope is None:
             raise
     elsewhere = (
-        GuestProfile.objects.filter(partner_id__in=scope.partner_ids, customer_code=code)
+        GuestProfile.objects.filter(partner_id__in=scope.partner_ids, customer_code=code,
+                                    telegram_account__isnull=False)
         .order_by("created_at")
         .first()
     )
@@ -154,3 +156,13 @@ def find_guest_by_customer_code(partner_id, customer_code: str) -> GuestProfile:
         },
     )
     return GuestProfile.objects.select_related("telegram_account").get(id=profile.id)
+
+
+def create_anonymous_guest(*, partner_id) -> GuestProfile:
+    """The guest of a table visit who ordered through staff, without the bot
+    (PQ-052, step 2): no Telegram, so no messages or broadcasts; earns no
+    bonuses; never found by its code. One per company at a table — a guest
+    sits at one table at a time, so one per venue would hop between tables."""
+
+    return GuestProfile.objects.create(partner_id=partner_id, telegram_account=None,
+                                       is_subscribed=False)

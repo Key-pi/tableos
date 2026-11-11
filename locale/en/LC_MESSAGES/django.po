@@ -3742,6 +3742,10 @@ msgstr "Payment timing"
 msgid "Способ оплаты"
 msgstr "Payment method"
 
+#: apps/orders/models.py
+msgid "Ключ отправки"
+msgstr "Submission key"
+
 #: apps/orders/models.py bot/handlers/session.py bot/handlers/staff.py
 msgid "Получен"
 msgstr "Received"
@@ -4121,6 +4125,30 @@ msgstr "Order #{public_id}: {to_status}"
 #: apps/orders/services.py
 msgid "Статус заказа ({order_location}) изменён с {from_status} на {to_status}."
 msgstr "Order status ({order_location}) changed from {from_status} to {to_status}."
+
+#: apps/orders/services.py
+msgid "Слишком много строк в одном заказе."
+msgstr "Too many lines in one order."
+
+#: apps/orders/services.py
+msgid "Часть позиций сейчас недоступна — обновите меню."
+msgstr "Some items are unavailable now — refresh the menu."
+
+#: apps/orders/services.py
+msgid "Количество — от 1 до 99."
+msgstr "Quantity is 1 to 99."
+
+#: apps/orders/services.py
+msgid "Гость с кодом {code} не найден."
+msgstr "No guest with code {code}."
+
+#: apps/orders/services.py
+msgid "Заказ на стол делают официант, кассир, менеджер или владелец этого заведения."
+msgstr "Table orders are made by a waiter, cashier, manager or owner of this venue."
+
+#: apps/orders/services.py
+msgid "Заказ на стол с планшета в этом заведении выключен."
+msgstr "Table orders from the tablet are off in this venue."
 
 #: apps/partners/admin.py
 msgid "Интервал работы"
@@ -4637,6 +4665,14 @@ msgid "Залы и столы на схеме: владелец и менедж�
 msgstr "Halls and tables on a plan: the owner and managers arrange them in Admin, staff see where it is free, where guests sit, who asks for the bill or calls. Needs tables."
 
 #: apps/partners/models.py
+msgid "Заказ на стол с планшета"
+msgstr "Table order from the tablet"
+
+#: apps/partners/models.py
+msgid "Официант, бармен, менеджер или владелец нажимает стол на схеме и делает заказ за гостя без бота: заказ сразу принят и уходит на кухню и бар, счёт стола растёт. Требует схему зала и заказы."
+msgstr "A waiter, bartender, manager or owner taps a table on the plan and orders for a guest without the bot: the order is accepted at once and goes to the kitchen and bar, the table's bill grows. Needs the floor plan and orders."
+
+#: apps/partners/models.py
 msgid "Сценарий заказа на доставку. Включается независимо от столов."
 msgstr "Ordering for delivery. Turned on independently of tables."
 
@@ -4903,6 +4939,10 @@ msgstr "Bot settings"
 #: apps/partners/models.py
 msgid "Схеме зала нужен модуль столов."
 msgstr "The floor plan needs the tables module."
+
+#: apps/partners/models.py
+msgid "Заказу на стол с планшета нужны схема зала и заказы."
+msgstr "Table orders from the tablet need the floor plan and orders."
 
 #: apps/partners/models.py
 msgid "самовывоза"
@@ -5493,6 +5533,18 @@ msgid "Стол по этому QR-коду уже недоступен."
 msgstr "The table for this QR code is no longer available."
 
 #: apps/tables/services.py
+msgid "Стол не найден в этом заведении."
+msgstr "Table not found in this venue."
+
+#: apps/tables/services.py
+msgid "За этим столом уже сидят — обновите экран."
+msgstr "Someone already sits at this table — refresh the screen."
+
+#: apps/tables/services.py
+msgid "Эта компания уже ушла — обновите экран."
+msgstr "This company has left — refresh the screen."
+
+#: apps/tables/services.py
 msgid "Эта компания за столом не найдена. Отсканируйте QR ещё раз."
 msgstr "This party was not found at the table. Scan the QR again."
 
@@ -5971,6 +6023,10 @@ msgstr "Language (chosen by the guest)"
 #: apps/users/models.py
 msgid "гость"
 msgstr "guest"
+
+#: apps/users/models.py
+msgid "Гость без бота"
+msgstr "Guest without the bot"
 
 #: apps/users/models.py
 msgid "Набор прав"
@@ -7532,7 +7588,7 @@ msgstr "Bills are available only to the owner, a manager or a cashier."
 msgid "Работа со столами доступна только владельцу, менеджеру или кассиру при включённом модуле столов."
 msgstr "Tables are available only to the owner, a manager or a cashier with the tables module on."
 
-#: bot/handlers/staff.py
+#: bot/handlers/staff.py webapp/staff_table_orders.py
 msgid "Стол не найден."
 msgstr "Table not found."
 
@@ -8732,6 +8788,26 @@ msgstr "Open orders"
 msgid "Открытых счетов"
 msgstr "Open bills"
 
+#: webapp/staff_table_orders.py
+msgid "Заказ на стол делают официант, кассир, менеджер или владелец."
+msgstr "Table orders are made by a waiter, cashier, manager or owner."
+
+#: webapp/staff_table_orders.py
+msgid "Обновите экран и отправьте заказ ещё раз."
+msgstr "Refresh the screen and send the order again."
+
+#: webapp/staff_table_orders.py
+msgid "Компания за столом не найдена."
+msgstr "The company at the table was not found."
+
+#: webapp/staff_table_orders.py
+msgid "Заказ #{number} на стол {table} уже отправлен."
+msgstr "Order #{number} to table {table} was already sent."
+
+#: webapp/staff_table_orders.py
+msgid "Заказ #{number} на стол {table} отправлен на кухню и бар."
+msgstr "Order #{number} to table {table} sent to the kitchen and bar."
+
 #: webapp/staff_views.py
 msgid "Рабочий режим"
 msgstr "Work mode"
@@ -8795,6 +8871,22 @@ msgstr "Nobody at the tables right now."
 #: webapp/staff_views.py
 msgid "Стол {number} свободен."
 msgstr "Table {number} is free."
+
+#: webapp/staff_views.py
+msgid "Заказ на стол {number}"
+msgstr "Order to table {number}"
+
+#: webapp/staff_views.py
+msgid "Код гостя — если назвал: бонусы начислятся ему"
+msgstr "Guest code — if given, bonuses go to them"
+
+#: webapp/staff_views.py
+msgid "Отправить на кухню и бар"
+msgstr "Send to the kitchen and bar"
+
+#: webapp/staff_views.py
+msgid "＋ Заказ"
+msgstr "＋ Order"
 
 #: webapp/staff_views.py
 msgid "Открытые счета"

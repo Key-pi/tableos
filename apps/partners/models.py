@@ -324,6 +324,17 @@ class PartnerBotSettings(TimeStampedModel):
             "видит, где свободно, где гости, где просят счёт или зовут. Требует столы.",
         ),
     )
+    # PQ-052, step 2: staff order to a table from the tablet for a guest
+    # without the bot.
+    module_table_orders_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Заказ на стол с планшета"),
+        help_text=_lazy(
+            "Официант, бармен, менеджер или владелец нажимает стол на схеме и делает заказ "
+            "за гостя без бота: заказ сразу принят и уходит на кухню и бар, счёт стола растёт. "
+            "Требует схему зала и заказы.",
+        ),
+    )
     module_delivery_enabled = models.BooleanField(
         default=False,
         verbose_name=_lazy("Доставка"),
@@ -603,6 +614,11 @@ class PartnerBotSettings(TimeStampedModel):
             add_error("module_orders_enabled", "Orders module requires menu module.")
         if self.module_floor_plan_enabled and not self.module_tables_enabled:
             add_error("module_floor_plan_enabled", _("Схеме зала нужен модуль столов."))
+        if self.module_table_orders_enabled and not (
+            self.module_floor_plan_enabled and self.module_orders_enabled
+        ):
+            add_error("module_table_orders_enabled",
+                      _("Заказу на стол с планшета нужны схема зала и заказы."))
         if self.module_orders_enabled and not (
             self.module_tables_enabled
             or self.module_delivery_enabled

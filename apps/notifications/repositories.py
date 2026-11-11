@@ -12,9 +12,11 @@ class NotificationPreferenceRepository:
 
     @staticmethod
     def marketing_guests(partner_id):
+        # The anonymous guest of a table visit (PQ-052) has no Telegram.
         return GuestProfile.objects.select_related("telegram_account").filter(
             partner_id=partner_id,
             is_subscribed=True,
+            telegram_account__isnull=False,
         ).filter(
             Q(notification_preferences__isnull=True)
             | Q(notification_preferences__marketing_enabled=True)
@@ -27,6 +29,7 @@ class NotificationPreferenceRepository:
         return GuestProfile.objects.select_related("telegram_account").filter(
             partner_id__in=partner_ids,
             is_subscribed=True,
+            telegram_account__isnull=False,
         ).filter(
             Q(notification_preferences__isnull=True)
             | Q(notification_preferences__marketing_enabled=True)

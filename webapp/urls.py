@@ -1,6 +1,6 @@
 from django.urls import path
 
-from webapp import kitchen_views, staff_billing, staff_sales, staff_views, views
+from webapp import kitchen_views, staff_billing, staff_sales, staff_table_orders, staff_views, views
 
 app_name = "webapp"
 
@@ -36,6 +36,13 @@ urlpatterns += [
     path("<str:bot_hex>/api/staff/request_action", staff_billing.request_action_view,
          name="staff_request_action"),
     path("<str:bot_hex>/api/staff/tables", staff_billing.tables_view, name="staff_tables"),
+    # PQ-052, step 2: an order to a table from the tablet.
+    path("<str:bot_hex>/api/staff/table_order_menu", staff_table_orders.menu_view,
+         name="staff_table_order_menu"),
+    path("<str:bot_hex>/api/staff/table_order_preview", staff_table_orders.preview_view,
+         name="staff_table_order_preview"),
+    path("<str:bot_hex>/api/staff/table_order", staff_table_orders.order_view,
+         name="staff_table_order"),
     path("<str:bot_hex>/api/staff/visit_action", staff_billing.visit_action_view,
          name="staff_visit_action"),
 ]

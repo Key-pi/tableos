@@ -160,7 +160,8 @@ class TableAdmin(ScopedAdminMixin):
             _("Гость: {} • код {} • с {}"),
             (
                 (
-                    session.guest.telegram_account.username
+                    session.guest.staff_label() if session.guest.is_anonymous
+                    else session.guest.telegram_account.username
                     or session.guest.telegram_account.telegram_id,
                     session.guest.customer_code,
                     session.started_at.strftime("%d.%m %H:%M"),
@@ -184,7 +185,8 @@ class TableAdmin(ScopedAdminMixin):
             (
                 (
                     order.public_id,
-                    order.guest.telegram_account.username or order.guest.customer_code,
+                    order.guest.staff_label() if order.guest.is_anonymous
+                    else order.guest.telegram_account.username or order.guest.customer_code,
                     order.total_amount,
                     order.get_status_display(),
                 )

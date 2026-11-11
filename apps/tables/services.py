@@ -11,7 +11,11 @@ from apps.bonuses.services import apply_bonus_programs
 from apps.orders.models import Cart, Order
 from apps.tables.models import Table, TableSession, TableVisit
 from apps.users.models import GuestProfile
-from apps.users.services import get_or_create_guest_profile, mark_guest_visit
+from apps.users.services import (
+    create_anonymous_guest,
+    get_or_create_guest_profile,
+    mark_guest_visit,
+)
 from core.i18n import _
 
 
@@ -167,6 +171,83 @@ def activate_table_session(
         comment=f"Visit bonus for table #{table.number}.",
     )
     return session
+
+
+class StaleTablePage(TableSessionError):
+    """The staff screen showed the table as it was: someone sat down or the
+    company left meanwhile."""
+
+
+@transaction.atomic
+def open_staff_table_session(
+    *, partner_id: UUID | str, table_id, visit_id=None, guest: GuestProfile | None = None
+) -> TableSession:
+    """The session a staff order from the tablet goes to (PQ-052, step 2).
+
+    ``visit_id`` — the company at the table the order is for; ``None`` — a
+    new company at a free table (a table that is no longer free is refused:
+    the screen is out of date). ``guest`` — named by code: they sit at this
+    table now, as after scanning its QR; ``None`` — the visit's anonymous
+    guest, created once per visit.
+
+    Lock order as activation: GuestProfile → Table → the guest's own
+    TableSessions → TableVisit. The table lock makes two taps on one free
+    table take turns: the second sees the table taken.
+    """
+
+    if guest is not None:
+        guest = GuestProfile.objects.select_for_update().get(id=guest.id, partner_id=partner_id)
+    try:
+        table = Table.objects.select_for_update(of=("self",), no_key=True).get(
+            id=table_id, partner_id=partner_id, is_active=True
+        )
+    except Table.DoesNotExist as exc:
+        raise TableSessionError(_("Стол не найден в этом заведении.")) from exc
+    active = TableVisit.objects.filter(
+        partner_id=partner_id, table=table, status=TableVisit.Status.ACTIVE
+    )
+    if visit_id is None:
+        if active.exists():
+            raise StaleTablePage(_("За этим столом уже сидят — обновите экран."))
+    elif not active.filter(id=visit_id).exists():
+        raise StaleTablePage(_("Эта компания уже ушла — обновите экран."))
+
+    if guest is not None:
+        _close_guest_active_sessions(partner_id=partner_id, guest_profile=guest,
+                                     keep_visit_id=visit_id)
+        mark_guest_visit(guest)
+    visit = (
+        TableVisit.objects.select_for_update().get(id=visit_id) if visit_id is not None
+        else TableVisit.objects.create(partner_id=partner_id, table=table)
+    )
+    if guest is None:
+        session = (
+            TableSession.objects.filter(
+                partner_id=partner_id, visit=visit, status=TableSession.Status.ACTIVE,
+                guest__telegram_account__isnull=True,
+            ).select_related("guest", "table").first()
+        )
+        if session is not None:
+            return session
+        guest = create_anonymous_guest(partner_id=partner_id)
+        mark_guest_visit(guest)
+        return TableSession.objects.create(partner_id=partner_id, guest=guest, table=table,
+                                           visit=visit)
+    session = TableSession.objects.filter(
+        partner_id=partner_id, guest=guest, visit=visit, status=TableSession.Status.ACTIVE
+    ).first()
+    if session is not None:
+        return session
+    session = TableSession.objects.create(partner_id=partner_id, guest=guest, table=table,
+                                          visit=visit)
+    # A named guest earns the visit bonus as after scanning the QR.
+    apply_bonus_programs(
+        partner_id=partner_id, event=BonusProgram.TriggerEvent.VISIT, guest=guest,
+        source_type="table_session", source_id=str(session.id),
+        comment=f"Visit bonus for table #{table.number}.",
+    )
+    return session
+
 
 
 def get_active_table_session(*, partner_id: UUID | str, telegram_id: int) -> TableSession | None:

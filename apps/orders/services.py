@@ -1335,3 +1335,151 @@ def _create_staff_notifications_for_status_change(
     for notification in notifications:
         notification.save()
         deliver_staff_notification(notification)
+
+
+# --- an order to a table from the staff tablet (PQ-052, step 2) -----------------
+
+# Who orders for a guest without the bot: the floor, not the hookah master.
+TABLE_ORDER_ROLES = frozenset({"owner", "manager", "cashier", "waiter"})
+TABLE_ORDER_MAX_LINES = 50
+
+
+def table_orders_on(partner_id) -> bool:
+    return PartnerBotSettings.objects.filter(
+        partner_id=partner_id, module_tables_enabled=True, module_orders_enabled=True,
+        module_floor_plan_enabled=True, module_table_orders_enabled=True,
+    ).exists()
+
+
+def may_take_table_orders(employee) -> bool:
+    return bool(
+        employee is not None and employee.is_active and employee.user.is_active
+        and employee.user.role in TABLE_ORDER_ROLES
+    )
+
+
+def resolve_staff_order_lines(*, partner_id, items: list[dict]) -> list[dict]:
+    """The chosen items as order lines, by the rules of a guest's table order:
+    sold at the table, on sale now, the variant and add-ons valid
+    (``resolve_choice``). ``items`` — ``{"menu_item_id", "quantity",
+    "variant_id", "modifier_ids"}``."""
+
+    if not items:
+        raise OrderFlowError(_("Нельзя создать заказ без позиций."))
+    if len(items) > TABLE_ORDER_MAX_LINES:
+        raise OrderFlowError(_("Слишком много строк в одном заказе."))
+    ids = {str(item["menu_item_id"]) for item in items}
+    menu_items = {
+        str(item.id): item
+        for item in MenuItem.objects.filter(
+            partner_id=partner_id, id__in=ids, is_available=True, category__is_active=True,
+        ).select_related("partner", "category__parent")
+    }
+    if len(menu_items) != len(ids):
+        raise OrderFlowError(_("Часть позиций сейчас недоступна — обновите меню."))
+    not_sold = [item.name for item in menu_items.values()
+                if not item.is_sold_in(Order.Channel.TABLE)]
+    if not_sold:
+        raise OrderFlowError(_("Недоступно для заказа к столу: {not_sold}.",
+                               not_sold=", ".join(sorted(not_sold))))
+    closed = first_not_on_sale(menu_items.values())
+    if closed:
+        raise OrderFlowError(closed)
+    choices = catalog_choices(partner_id, menu_items.values())
+    lines = []
+    for item in items:
+        menu_item = menu_items[str(item["menu_item_id"])]
+        quantity = item.get("quantity")
+        if not isinstance(quantity, int) or isinstance(quantity, bool) or not 0 < quantity <= 99:
+            raise OrderFlowError(_("Количество — от 1 до 99."))
+        try:
+            choice = resolve_choice(menu_item, item.get("variant_id"),
+                                    item.get("modifier_ids") or (), choices=choices[menu_item.id])
+        except ChoiceError as exc:
+            raise OrderFlowError(str(exc)) from exc
+        lines.append({
+            "menu_item_id": menu_item.id, "item_name": choice.name,
+            "unit_price": choice.unit_price, "quantity": quantity,
+            "variant_id": choice.variant_id, "modifiers": choice.snapshot(),
+        })
+    return lines
+
+
+def guest_for_staff_order(partner_id, customer_code: str) -> GuestProfile | None:
+    """The guest named by code (bonuses go to them), or None — the visit's
+    anonymous guest."""
+
+    from apps.users.services import find_guest_by_customer_code
+
+    code = (customer_code or "").strip()
+    if not code:
+        return None
+    try:
+        return find_guest_by_customer_code(partner_id, code)
+    except GuestProfile.DoesNotExist as exc:
+        raise OrderFlowError(_("Гость с кодом {code} не найден.", code=code.upper())) from exc
+
+
+def create_staff_table_order(
+    *,
+    partner_id,
+    actor: EmployeeProfile,
+    table_id,
+    visit_id=None,
+    customer_code: str = "",
+    items: list[dict],
+    comment: str = "",
+    request_key: str = "",
+) -> Order:
+    """A waiter, a bartender, a manager or the owner orders for a guest at a
+    table (PQ-052, step 2). The order is an ordinary table order: accepted at
+    once (the person entered it themselves), so it goes to the kitchen and
+    bar screens; the table's bill grows. A retry with the same
+    ``request_key`` returns the order already made."""
+
+    from apps.tables.services import TableSessionError, open_staff_table_session
+
+    if request_key:
+        existing = Order.objects.filter(partner_id=partner_id, request_key=request_key).first()
+        if existing is not None:
+            return existing
+    actor = (
+        EmployeeProfile.objects.select_related("user")
+        .filter(id=getattr(actor, "id", None), partner_id=partner_id).first()
+    )
+    if not may_take_table_orders(actor):
+        raise OrderFlowError(_(
+            "Заказ на стол делают официант, кассир, менеджер или владелец этого заведения."
+        ))
+    if not table_orders_on(partner_id):
+        raise OrderFlowError(_("Заказ на стол с планшета в этом заведении выключен."))
+    lines = resolve_staff_order_lines(partner_id=partner_id, items=items)
+    guest = guest_for_staff_order(partner_id, customer_code)
+    try:
+        with transaction.atomic():
+            try:
+                session = open_staff_table_session(
+                    partner_id=partner_id, table_id=table_id, visit_id=visit_id, guest=guest,
+                )
+            except TableSessionError as exc:
+                raise OrderFlowError(str(exc)) from exc
+            order = create_order(
+                partner_id=partner_id, guest=session.guest, table_session=session,
+                items=lines, comment=(comment or "").strip()[:500], notify_staff=False,
+            )
+            if request_key:
+                order.request_key = request_key
+                order.save(update_fields=["request_key", "updated_at"])
+            order = transition_order_status(
+                order=order, to_status=Order.Status.ACCEPTED, actor_user=actor.user,
+                note="Staff order from the tablet",
+            )
+    except IntegrityError:
+        existing = (
+            Order.objects.filter(partner_id=partner_id, request_key=request_key).first()
+            if request_key else None
+        )
+        if existing is None:
+            raise
+        return existing
+    return order

@@ -55,7 +55,11 @@ from apps.partners.models import PartnerBotSettings
 from apps.tables.floor_plan import floor_plan
 from apps.tables.models import TableVisit
 from apps.tables.services import close_table_visit
-from bot.services.staff_rights import can_manage_billing, can_view_tables
+from bot.services.staff_rights import (
+    can_manage_billing,
+    can_take_table_orders,
+    can_view_tables,
+)
 from core.i18n import N_, _
 from webapp.context import WebAppDenied
 from webapp.staff_context import StaffRequest
@@ -398,9 +402,12 @@ def request_action_view(request, staff: StaffRequest, body: dict) -> dict:
 
 @staff_api("GET")
 def tables_view(request, staff: StaffRequest, body: dict) -> dict:
-    """Tables with guests now: their visits, what is not billed yet, open bills."""
+    """Tables with guests now: their visits, what is not billed yet, open bills.
+    Who orders from the tablet (PQ-052) opens it too — without the bills'
+    and the visit's actions."""
 
-    _tables(staff)
+    if not can_take_table_orders(staff.employee, staff.content):
+        _tables(staff)
     partner_id = staff.partner.id
     sessions = list(BillingOperationsRepository.active_sessions_for_partner(partner_id))
     unbilled = list(
@@ -414,6 +421,7 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
         .order_by("table__number", "started_at")
     )
     can_bill = can_manage_billing(staff.employee, staff.content)
+    can_close = can_view_tables(staff.employee, staff.content)
     tables: dict = {}
     for visit in visits:
         table = tables.setdefault(
@@ -434,6 +442,7 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
             "unbilled_total": _money(sum(order.total_amount for order in visit_orders)),
             "bills": [_bill_json(bill) for bill in bills if bill.visit_id == visit.id],
             "can_bill": can_bill and bool(visit_orders),
+            "can_close": can_close,
         })
     result = {"tables": sorted(tables.values(), key=lambda table: table["number"])}
     # PQ-052: with the floor plan module, the halls and every table's state;
