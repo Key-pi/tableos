@@ -315,6 +315,15 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name=_lazy("Столы и QR-сессии"),
         help_text=_lazy("Сценарий заказа за столом. Нужен для вызова персонала и запроса счёта."),
     )
+    # PQ-052: halls and tables on a grid, the state of each table.
+    module_floor_plan_enabled = models.BooleanField(
+        default=False,
+        verbose_name=_lazy("Схема зала"),
+        help_text=_lazy(
+            "Залы и столы на схеме: владелец и менеджер расставляют их в Admin, персонал "
+            "видит, где свободно, где гости, где просят счёт или зовут. Требует столы.",
+        ),
+    )
     module_delivery_enabled = models.BooleanField(
         default=False,
         verbose_name=_lazy("Доставка"),
@@ -592,6 +601,8 @@ class PartnerBotSettings(TimeStampedModel):
             add_error("module_cart_enabled", "Cart module requires menu module.")
         if self.module_orders_enabled and not self.module_menu_enabled:
             add_error("module_orders_enabled", "Orders module requires menu module.")
+        if self.module_floor_plan_enabled and not self.module_tables_enabled:
+            add_error("module_floor_plan_enabled", _("Схеме зала нужен модуль столов."))
         if self.module_orders_enabled and not (
             self.module_tables_enabled
             or self.module_delivery_enabled

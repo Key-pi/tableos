@@ -377,6 +377,7 @@ class Command(BaseCommand):
         self._seed_staff(partner, demo.STAFF[partner.slug], staff_password)
         self._retire_staff(partner)
         self._seed_tables(partner, demo.TABLES[partner.slug])
+        self._seed_halls(partner, demo.HALLS[partner.slug])
         self._seed_menu(partner, demo.MENUS[partner.slug])
         self._seed_bonus_programs(partner, demo.BONUSES[partner.slug])
         self._seed_own_texts(partner)
@@ -773,6 +774,24 @@ class Command(BaseCommand):
             ):
                 employee.is_active = False
                 employee.save()
+
+    @staticmethod
+    def _seed_halls(partner: Partner, halls) -> None:
+        from apps.tables.floor_plan import save_hall_layout
+        from apps.tables.models import Hall
+
+        for order, (name, width, height, placements) in enumerate(halls, start=1):
+            hall, created = Hall.objects.get_or_create(
+                partner=partner, name=name,
+                defaults={"width": width, "height": height, "sort_order": order},
+            )
+            if not created:
+                continue
+            numbers = {table.number: table.id for table in Table.objects.filter(partner=partner)}
+            save_hall_layout(partner_id=partner.id, hall_id=hall.id, placements=[
+                {"table": numbers[number], "x": x, "y": y, "w": w, "h": h, "shape": shape}
+                for number, x, y, w, h, shape in placements
+            ])
 
     @staticmethod
     def _seed_tables(partner: Partner, table_rows) -> None:

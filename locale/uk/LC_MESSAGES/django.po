@@ -732,7 +732,7 @@ msgstr "Каса (POS)"
 msgid "Номер"
 msgstr "Номер"
 
-#: apps/billing/models.py apps/notifications/models.py apps/orders/models.py apps/tables/models.py bot/keyboards/staff.py
+#: apps/billing/models.py apps/notifications/models.py apps/orders/models.py apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html bot/keyboards/staff.py
 msgid "Стол"
 msgstr "Стіл"
 
@@ -2592,7 +2592,7 @@ msgstr "Бар"
 msgid "Кухня"
 msgstr "Кухня"
 
-#: apps/menu/models.py
+#: apps/menu/models.py apps/tables/models.py
 msgid "Порядок"
 msgstr "Порядок"
 
@@ -4628,6 +4628,14 @@ msgstr "Столи й QR-сесії"
 msgid "Сценарий заказа за столом. Нужен для вызова персонала и запроса счёта."
 msgstr "Сценарій замовлення за столом. Потрібен для виклику персоналу й запиту рахунку."
 
+#: apps/partners/models.py apps/tables/admin.py apps/tables/models.py
+msgid "Схема зала"
+msgstr "Схема залу"
+
+#: apps/partners/models.py
+msgid "Залы и столы на схеме: владелец и менеджер расставляют их в Admin, персонал видит, где свободно, где гости, где просят счёт или зовут. Требует столы."
+msgstr "Зали і столи на схемі: власник і менеджер розставляють їх в Admin, персонал бачить, де вільно, де гості, де просять рахунок або кличуть. Потрібні столи."
+
 #: apps/partners/models.py
 msgid "Сценарий заказа на доставку. Включается независимо от столов."
 msgstr "Сценарій замовлення з доставкою. Вмикається незалежно від столів."
@@ -4891,6 +4899,10 @@ msgstr "налаштування бота"
 #: apps/partners/models.py
 msgid "Настройки ботов"
 msgstr "Налаштування ботів"
+
+#: apps/partners/models.py
+msgid "Схеме зала нужен модуль столов."
+msgstr "Схемі залу потрібен модуль столів."
 
 #: apps/partners/models.py
 msgid "самовывоза"
@@ -5284,9 +5296,105 @@ msgstr "Візит столу #{number}: {exc}"
 msgid "Закрыто визитов: {closed_count}."
 msgstr "Закрито візитів: {closed_count}."
 
+#: apps/tables/admin.py apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Свободен"
+msgstr "Вільний"
+
+#: apps/tables/admin.py apps/tables/templates/admin/tables/hall/plan.html apps/users/models.py webapp/staff_views.py
+msgid "Гости"
+msgstr "Гості"
+
+#: apps/tables/admin.py apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Просят счёт"
+msgstr "Просять рахунок"
+
+#: apps/tables/admin.py apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Зовут"
+msgstr "Кличуть"
+
+#: apps/tables/admin.py
+msgid "Сохранено"
+msgstr "Збережено"
+
+#: apps/tables/admin.py
+msgid "Есть несохранённые изменения"
+msgstr "Є незбережені зміни"
+
+#: apps/tables/admin.py
+msgid "Столы стоят друг на друге — подвиньте их."
+msgstr "Столи стоять один на одному — посуньте їх."
+
+#: apps/tables/admin.py
+msgid "Не сохранилось — проверьте связь и попробуйте ещё раз."
+msgstr "Не збереглося — перевірте зв'язок і спробуйте ще раз."
+
+#: apps/tables/admin.py
+msgid "гостей: {count}"
+msgstr "гостей: {count}"
+
+#: apps/tables/admin.py
+msgid "к оплате {sum} грн"
+msgstr "до сплати {sum} грн"
+
+#: apps/tables/admin.py apps/tables/floor_plan.py
+msgid "Схема пришла с ошибкой — обновите страницу."
+msgstr "Схема прийшла з помилкою — оновіть сторінку."
+
 #: apps/tables/apps.py apps/tables/models.py apps/users/constants.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Столы"
 msgstr "Столи"
+
+#: apps/tables/floor_plan.py
+msgid "Неизвестная форма стола."
+msgstr "Невідома форма столу."
+
+#: apps/tables/floor_plan.py
+msgid "Стол — от 1 до {cells} клеток в сторону."
+msgstr "Стіл — від 1 до {cells} клітинок у кожен бік."
+
+#: apps/tables/floor_plan.py
+msgid "Стол выходит за границы зала «{hall}»."
+msgstr "Стіл виходить за межі залу «{hall}»."
+
+#: apps/tables/floor_plan.py
+msgid "Зал не найден."
+msgstr "Зал не знайдено."
+
+#: apps/tables/floor_plan.py
+msgid "Один стол стоит на схеме дважды."
+msgstr "Один стіл стоїть на схемі двічі."
+
+#: apps/tables/floor_plan.py
+msgid "Стол не найден — обновите страницу."
+msgstr "Стіл не знайдено — оновіть сторінку."
+
+#: apps/tables/floor_plan.py
+msgid "Столы {first} и {second} стоят друг на друге."
+msgstr "Столи {first} і {second} стоять один на одному."
+
+#: apps/tables/models.py
+msgid "Ширина, клеток"
+msgstr "Ширина, клітинок"
+
+#: apps/tables/models.py
+msgid "Глубина, клеток"
+msgstr "Глибина, клітинок"
+
+#: apps/tables/models.py
+msgid "зал"
+msgstr "зал"
+
+#: apps/tables/models.py
+msgid "Столы стоят до клетки {cells}: сначала подвиньте их."
+msgstr "Столи стоять до клітинки {cells}: спершу посуньте їх."
+
+#: apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html
+msgid "Квадратный"
+msgstr "Квадратний"
+
+#: apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html
+msgid "Круглый"
+msgstr "Круглий"
 
 #: apps/tables/models.py
 msgid "Код QR"
@@ -5295,6 +5403,22 @@ msgstr "Код QR"
 #: apps/tables/models.py
 msgid "Мест"
 msgstr "Місць"
+
+#: apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html
+msgid "Зал"
+msgstr "Зал"
+
+#: apps/tables/models.py
+msgid "Клетка слева"
+msgstr "Клітинка зліва"
+
+#: apps/tables/models.py
+msgid "Клетка сверху"
+msgstr "Клітинка згори"
+
+#: apps/tables/models.py
+msgid "Форма"
+msgstr "Форма"
 
 #: apps/tables/models.py
 msgid "стол"
@@ -5415,6 +5539,62 @@ msgstr "У гостя є необроблений запит рахунку."
 #: apps/tables/services.py
 msgid "По гостю есть открытый счёт или неоплаченная сумма."
 msgstr "За гостем є відкритий рахунок або неоплачена сума."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Выберите заведение в шапке, чтобы увидеть его схему."
+msgstr "Виберіть заклад у шапці, щоб побачити його схему."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Сейчас"
+msgstr "Зараз"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Расставить"
+msgstr "Розставити"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Залов пока нет — добавьте первый кнопкой «＋ Зал»."
+msgstr "Залів поки немає — додайте перший кнопкою «＋ Зал»."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Нажмите на стол, чтобы открыть его. Схема обновляется сама."
+msgstr "Натисніть на стіл, щоб відкрити його. Схема оновлюється сама."
+
+#: apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Не на схеме"
+msgstr "Не на схемі"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Выберите стол на схеме или добавьте его из списка ниже. Перетаскивайте столы пальцем или мышью."
+msgstr "Виберіть стіл на схемі або додайте його зі списку нижче. Перетягуйте столи пальцем або мишею."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Ширина"
+msgstr "Ширина"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Глубина"
+msgstr "Глибина"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Убрать со схемы"
+msgstr "Прибрати зі схеми"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Добавить на схему"
+msgstr "Додати на схему"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Все столы уже на схеме."
+msgstr "Усі столи вже на схемі."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Сохранить"
+msgstr "Зберегти"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Название и размер зала"
+msgstr "Назва і розмір залу"
 
 #: apps/users/admin.py
 msgid "Нельзя выдать права больше своих (разделы: {sections}). Это может сделать владелец."
@@ -5791,10 +5971,6 @@ msgstr "Мова (вибрана гостем)"
 #: apps/users/models.py
 msgid "гость"
 msgstr "гість"
-
-#: apps/users/models.py
-msgid "Гости"
-msgstr "Гості"
 
 #: apps/users/models.py
 msgid "Набор прав"
@@ -8617,8 +8793,8 @@ msgid "Сейчас за столами никого нет."
 msgstr "Зараз за столами нікого немає."
 
 #: webapp/staff_views.py
-msgid "Просят счёт"
-msgstr "Просять рахунок"
+msgid "Стол {number} свободен."
+msgstr "Стіл {number} вільний."
 
 #: webapp/staff_views.py
 msgid "Открытые счета"

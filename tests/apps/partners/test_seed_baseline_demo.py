@@ -156,6 +156,26 @@ class SeedBaselineDemoTests(TestCase):
         mouthpiece.refresh_from_db()
         self.assertEqual(mouthpiece.stock_quantity, 3)
 
+    def test_the_floor_plan_and_seeding_again_keeps_the_layout(self):
+        from apps.tables.floor_plan import save_hall_layout
+        from apps.tables.models import Hall, Table
+
+        _seed()
+        self.assertTrue(_settings("night-owl-hookah").module_floor_plan_enabled)
+        self.assertFalse(_settings("green-shelf-plants").module_floor_plan_enabled)
+        halls = list(Hall.objects.filter(partner__slug="night-owl-hookah"))
+        self.assertEqual([hall.name for hall in halls], ["Зал", "Тераса"])
+        placed = Table.objects.filter(partner__slug="night-owl-hookah").exclude(plan_x=None)
+        self.assertEqual(placed.count(), 8)
+        # The owner moves a table; a re-run does not put it back.
+        table = Table.objects.get(partner__slug="night-owl-hookah", number=3)
+        save_hall_layout(partner_id=table.partner_id, hall_id=halls[1].id, placements=[
+            {"table": table.id, "x": 6, "y": 3, "w": 2, "h": 2, "shape": "square"},
+        ])
+        _seed()
+        table.refresh_from_db()
+        self.assertEqual((table.plan_x, table.plan_y), (6, 3))
+
     def test_translations_for_the_guest_languages_on(self):
         _seed()
         cafe = MenuCategory.objects.get(partner__slug=CAFE, name="Сніданки")

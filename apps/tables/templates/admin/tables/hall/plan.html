@@ -1,0 +1,365 @@
+{% extends "admin/base_site.html" %}
+{% load botera_i18n %}
+{% comment %}
+«Схема зала» (PQ-052, apps/tables/floor_plan.py): halls as tabs, tables on a
+grid. «Сейчас» — the state of every table, refreshed every 15 seconds;
+«Расставить» (owner, manager) — drag tables by cells, shape and size, save.
+{% endcomment %}
+
+{% block extrahead %}{{ block.super }}
+<style>
+  .fp { display: flex; flex-direction: column; gap: 16px; }
+  .fp-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .fp-chip { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--color-base-200); font-weight: 500; background: transparent; cursor: pointer; color: inherit; }
+  .dark .fp-chip { border-color: var(--color-base-700); }
+  .fp-chip.on { background: var(--color-primary-600); border-color: var(--color-primary-600); color: #fff; }
+  .fp-chip.ghost { border-style: dashed; }
+  .fp-gap { flex: 1; }
+  .fp-wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  @media (min-width: 1000px) { .fp-wrap.edit { grid-template-columns: minmax(0, 1fr) 260px; } }
+  .fp-card { background: #fff; border: 1px solid var(--color-base-200); border-radius: 8px; padding: 16px; min-width: 0; }
+  .dark .fp-card { background: var(--color-base-900); border-color: var(--color-base-800); }
+  .fp-hall { position: relative; width: 100%; border-radius: 6px; background-color: var(--color-base-50); user-select: none; }
+  .dark .fp-hall { background-color: var(--color-base-950); }
+  .fp-hall.grid { background-image: linear-gradient(to right, var(--color-base-200) 1px, transparent 1px), linear-gradient(to bottom, var(--color-base-200) 1px, transparent 1px); }
+  .dark .fp-hall.grid { background-image: linear-gradient(to right, var(--color-base-800) 1px, transparent 1px), linear-gradient(to bottom, var(--color-base-800) 1px, transparent 1px); }
+  .fp-t { position: absolute; box-sizing: border-box; padding: 3px; display: flex; }
+  .fp-t > div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; border: 2px solid var(--color-base-300); background: #fff; text-align: center; line-height: 1.15; overflow: hidden; color: var(--color-font-important-light); }
+  .dark .fp-t > div { background: var(--color-base-800); border-color: var(--color-base-600); color: var(--color-font-important-dark); }
+  .fp-t.round > div { border-radius: 50%; }
+  .fp-t b { font-size: 18px; }
+  .fp-t small { font-size: 11px; opacity: .85; }
+  .fp-t.busy > div { background: var(--color-primary-600); border-color: var(--color-primary-700); color: #fff; }
+  .fp-t.bill > div { background: #f59e0b; border-color: #d97706; color: #fff; }
+  .fp-t.call > div { background: var(--color-red-600); border-color: var(--color-red-700); color: #fff; animation: fp-pulse 1.2s ease-in-out infinite; }
+  @keyframes fp-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-red-500) 35%, transparent); } }
+  a.fp-t { text-decoration: none; }
+  .edit .fp-t { cursor: grab; touch-action: none; }
+  .fp-t.sel > div { outline: 3px solid var(--color-primary-400); outline-offset: 2px; }
+  .fp-t.bad > div { border-color: var(--color-red-600); border-style: dashed; }
+  .fp-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; }
+  .fp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .fp-legend i { width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--color-base-300); display: inline-block; }
+  .fp-sub { color: var(--color-font-subtle-light); font-size: 13px; }
+  .dark .fp-sub { color: var(--color-font-subtle-dark); }
+  .fp-h { font-weight: 600; margin: 0 0 8px; }
+  .fp-side { display: flex; flex-direction: column; gap: 14px; }
+  .fp-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .fp-btn { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-base-200); background: transparent; cursor: pointer; color: inherit; font-weight: 500; }
+  .dark .fp-btn { border-color: var(--color-base-700); }
+  .fp-btn.primary { background: var(--color-primary-600); border-color: var(--color-primary-600); color: #fff; }
+  .fp-btn:disabled { opacity: .45; cursor: default; }
+  .fp-msg { font-weight: 500; }
+  .fp-msg.err { color: var(--color-red-600); }
+  .fp-msg.ok { color: var(--color-green-700); }
+  .dark .fp-msg.ok { color: var(--color-green-400); }
+  .fp-unplaced { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{{ plan|json_script:"fp-plan" }}
+{{ texts|json_script:"fp-texts" }}
+<div class="fp" id="fp"
+     data-edit="{% if can_edit %}1{% endif %}" data-state-url="{{ state_url }}"
+     data-layout-url="{{ layout_url }}" data-change-url="{{ change_url }}"
+     data-table-url="{{ table_url }}">
+  {% if not venue_chosen %}
+    <div class="fp-card">{% tr "Выберите заведение в шапке, чтобы увидеть его схему." %}</div>
+  {% else %}
+  <div class="fp-bar">
+    <div class="fp-bar" id="fp-halls"></div>
+    {% if can_edit %}<a class="fp-chip ghost" href="{{ add_url }}">＋ {% tr "Зал" %}</a>{% endif %}
+    <span class="fp-gap"></span>
+    {% if can_edit %}
+      <button type="button" class="fp-chip on" data-mode="now">{% tr "Сейчас" %}</button>
+      <button type="button" class="fp-chip" data-mode="edit">{% tr "Расставить" %}</button>
+    {% endif %}
+  </div>
+  <div class="fp-wrap" id="fp-wrap">
+    <div class="fp-card">
+      <div class="fp-legend" id="fp-legend" style="margin-bottom: 12px;">
+        <span><i></i>{% tr "Свободен" %}</span>
+        <span><i style="background: var(--color-primary-600); border-color: var(--color-primary-700);"></i>{% tr "Гости" %}</span>
+        <span><i style="background: #f59e0b; border-color: #d97706;"></i>{% tr "Просят счёт" %}</span>
+        <span><i style="background: var(--color-red-600); border-color: var(--color-red-700);"></i>{% tr "Зовут" %}</span>
+      </div>
+      <div id="fp-empty" class="fp-sub" hidden>{% tr "Залов пока нет — добавьте первый кнопкой «＋ Зал»." %}</div>
+      <div class="fp-hall" id="fp-hall"></div>
+      <p class="fp-sub" id="fp-hint" style="margin-top: 10px;">{% tr "Нажмите на стол, чтобы открыть его. Схема обновляется сама." %}</p>
+      <div id="fp-rest" style="margin-top: 12px;" hidden>
+        <p class="fp-h">{% tr "Не на схеме" %}</p>
+        <div class="fp-unplaced" id="fp-rest-list"></div>
+      </div>
+    </div>
+    {% if can_edit %}
+    <div class="fp-card fp-side" id="fp-side" hidden>
+      <div>
+        <p class="fp-h">{% tr "Стол" %} <span id="fp-sel-num">—</span></p>
+        <p class="fp-sub" id="fp-sel-none">{% tr "Выберите стол на схеме или добавьте его из списка ниже. Перетаскивайте столы пальцем или мышью." %}</p>
+        <div id="fp-sel-tools" hidden>
+          <div class="fp-row" style="margin-bottom: 8px;">
+            <button type="button" class="fp-btn" data-shape="square">◻ {% tr "Квадратный" %}</button>
+            <button type="button" class="fp-btn" data-shape="round">◯ {% tr "Круглый" %}</button>
+          </div>
+          <div class="fp-row" style="margin-bottom: 6px;">{% tr "Ширина" %}
+            <button type="button" class="fp-btn" data-size="w:-1">−</button><b id="fp-w"></b>
+            <button type="button" class="fp-btn" data-size="w:1">+</button></div>
+          <div class="fp-row" style="margin-bottom: 8px;">{% tr "Глубина" %}
+            <button type="button" class="fp-btn" data-size="h:-1">−</button><b id="fp-h"></b>
+            <button type="button" class="fp-btn" data-size="h:1">+</button></div>
+          <button type="button" class="fp-btn" id="fp-remove">{% tr "Убрать со схемы" %}</button>
+        </div>
+      </div>
+      <div>
+        <p class="fp-h">{% tr "Добавить на схему" %}</p>
+        <div class="fp-unplaced" id="fp-add-list"></div>
+        <p class="fp-sub" id="fp-add-none">{% tr "Все столы уже на схеме." %}</p>
+      </div>
+      <div class="fp-row">
+        <button type="button" class="fp-btn primary" id="fp-save" disabled>{% tr "Сохранить" %}</button>
+        <a class="fp-btn" id="fp-hall-edit" href="#">{% tr "Название и размер зала" %}</a>
+      </div>
+      <div class="fp-msg" id="fp-msg"></div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var root = document.getElementById("fp");
+  if (!document.getElementById("fp-hall")) return;
+  var plan = JSON.parse(document.getElementById("fp-plan").textContent);
+  var T = JSON.parse(document.getElementById("fp-texts").textContent);
+  var canEdit = root.dataset.edit === "1";
+  var hallBox = document.getElementById("fp-hall");
+  var mode = "now", hallId = null, selected = null, dirty = {};
+  var csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || "";
+
+  function fmt(text, values) { return text.replace(/\{(\w+)\}/g, function (m, k) { return values[k]; }); }
+  function hall() { return plan.halls.filter(function (h) { return h.id === hallId; })[0]; }
+  function byId(id) {
+    var found = null;
+    plan.halls.forEach(function (h) { h.tables.forEach(function (t) { if (t.id === id) found = t; }); });
+    plan.unplaced.forEach(function (t) { if (t.id === id) found = t; });
+    return found;
+  }
+  function overlaps(a, b) { return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h; }
+  function bad(h) {
+    var wrong = {};
+    h.tables.forEach(function (a, i) { h.tables.slice(i + 1).forEach(function (b) {
+      if (overlaps(a, b)) { wrong[a.id] = wrong[b.id] = true; } }); });
+    return wrong;
+  }
+
+  function renderHalls() {
+    var bar = document.getElementById("fp-halls");
+    bar.innerHTML = "";
+    plan.halls.forEach(function (h) {
+      var chip = document.createElement("button");
+      chip.type = "button"; chip.className = "fp-chip" + (h.id === hallId ? " on" : "");
+      chip.textContent = h.name + (dirty[h.id] ? " •" : "");
+      chip.onclick = function () { hallId = h.id; selected = null; render(); };
+      bar.appendChild(chip);
+    });
+  }
+
+  function tableNode(t, h, wrong) {
+    var node = document.createElement(mode === "now" ? "a" : "div");
+    node.className = "fp-t " + (t.shape === "round" ? "round " : "") + (mode === "now" ? t.state : "")
+      + (selected === t.id ? " sel" : "") + (wrong[t.id] ? " bad" : "");
+    node.style.left = (t.x / h.width * 100) + "%";
+    node.style.top = (t.y / h.height * 100) + "%";
+    node.style.width = (t.w / h.width * 100) + "%";
+    node.style.height = (t.h / h.height * 100) + "%";
+    var inner = document.createElement("div");
+    var num = document.createElement("b"); num.textContent = t.number; inner.appendChild(num);
+    var sub = document.createElement("small");
+    if (mode === "now" && t.state !== "free") {
+      sub.textContent = [t.since, t.guests ? fmt(T.guests, { count: t.guests }) : ""].filter(Boolean).join(" · ");
+      node.title = T[t.state] + (Number(t.to_pay) ? " · " + fmt(T.to_pay, { sum: t.to_pay }) : "");
+    } else {
+      sub.textContent = mode === "now" ? T.free : t.seats + " 🪑";
+    }
+    inner.appendChild(sub); node.appendChild(inner);
+    if (mode === "now") node.href = root.dataset.tableUrl.replace("TABLE", t.id);
+    else bindDrag(node, t, h);
+    return node;
+  }
+
+  function render() {
+    if (!hallId && plan.halls.length) hallId = plan.halls[0].id;
+    renderHalls();
+    var h = hall();
+    document.getElementById("fp-empty").hidden = !!h;
+    document.getElementById("fp-wrap").classList.toggle("edit", mode === "edit");
+    document.getElementById("fp-legend").style.display = mode === "now" ? "" : "none";
+    document.getElementById("fp-hint").hidden = mode !== "now";
+    hallBox.innerHTML = "";
+    hallBox.hidden = !h;
+    hallBox.classList.toggle("grid", mode === "edit");
+    if (h) {
+      hallBox.style.aspectRatio = h.width + " / " + h.height;
+      hallBox.style.backgroundSize = (100 / h.width) + "% " + (100 / h.height) + "%";
+      var wrong = mode === "edit" ? bad(h) : {};
+      h.tables.forEach(function (t) { hallBox.appendChild(tableNode(t, h, wrong)); });
+    }
+    var rest = document.getElementById("fp-rest");
+    rest.hidden = mode !== "now" || !plan.unplaced.length;
+    var restList = document.getElementById("fp-rest-list"); restList.innerHTML = "";
+    plan.unplaced.forEach(function (t) {
+      var a = document.createElement("a");
+      a.className = "fp-chip"; a.href = root.dataset.tableUrl.replace("TABLE", t.id);
+      a.textContent = t.number + " · " + (T[t.state] || "");
+      restList.appendChild(a);
+    });
+    if (canEdit) renderSide(h);
+  }
+
+  function renderSide(h) {
+    var side = document.getElementById("fp-side");
+    side.hidden = mode !== "edit" || !h;
+    if (side.hidden) return;
+    var t = selected && h.tables.filter(function (x) { return x.id === selected; })[0];
+    document.getElementById("fp-sel-num").textContent = t ? t.number : "—";
+    document.getElementById("fp-sel-none").hidden = !!t;
+    document.getElementById("fp-sel-tools").hidden = !t;
+    if (t) { document.getElementById("fp-w").textContent = t.w; document.getElementById("fp-h").textContent = t.h; }
+    var list = document.getElementById("fp-add-list"); list.innerHTML = "";
+    plan.unplaced.forEach(function (u) {
+      var chip = document.createElement("button");
+      chip.type = "button"; chip.className = "fp-chip"; chip.textContent = "＋ " + u.number;
+      chip.onclick = function () { addToHall(u); };
+      list.appendChild(chip);
+    });
+    document.getElementById("fp-add-none").hidden = plan.unplaced.length > 0;
+    document.getElementById("fp-hall-edit").href = root.dataset.changeUrl.replace("HALL", h.id);
+    var anyDirty = Object.keys(dirty).length > 0;
+    document.getElementById("fp-save").disabled = !anyDirty;
+    var msg = document.getElementById("fp-msg");
+    if (anyDirty && !msg.classList.contains("err")) { msg.className = "fp-msg"; msg.textContent = T.unsaved; }
+  }
+
+  function touch(h) { dirty[h.id] = true; var msg = document.getElementById("fp-msg"); msg.className = "fp-msg"; msg.textContent = T.unsaved; }
+
+  function addToHall(u) {
+    var h = hall();
+    u.w = u.w || 2; u.h = u.h || 2;
+    for (var y = 0; y + u.h <= h.height; y++) {
+      for (var x = 0; x + u.w <= h.width; x++) {
+        var spot = { x: x, y: y, w: u.w, h: u.h };
+        if (!h.tables.some(function (t) { return overlaps(spot, t); })) {
+          u.x = x; u.y = y;
+          plan.unplaced = plan.unplaced.filter(function (t) { return t.id !== u.id; });
+          h.tables.push(u); selected = u.id; touch(h); render(); return;
+        }
+      }
+    }
+  }
+
+  function bindDrag(node, t, h) {
+    node.addEventListener("pointerdown", function (event) {
+      event.preventDefault();
+      selected = t.id;
+      var box = hallBox.getBoundingClientRect();
+      var cellW = box.width / h.width, cellH = box.height / h.height;
+      var grabX = (event.clientX - box.left) / cellW - t.x, grabY = (event.clientY - box.top) / cellH - t.y;
+      var moved = false;
+      node.setPointerCapture(event.pointerId);
+      node.classList.add("sel");
+      function move(e) {
+        var x = Math.round((e.clientX - box.left) / cellW - grabX);
+        var y = Math.round((e.clientY - box.top) / cellH - grabY);
+        x = Math.max(0, Math.min(h.width - t.w, x)); y = Math.max(0, Math.min(h.height - t.h, y));
+        if (x !== t.x || y !== t.y) {
+          t.x = x; t.y = y; moved = true;
+          node.style.left = (x / h.width * 100) + "%"; node.style.top = (y / h.height * 100) + "%";
+        }
+      }
+      function up() {
+        node.removeEventListener("pointermove", move);
+        node.removeEventListener("pointerup", up);
+        node.removeEventListener("pointercancel", up);
+        if (moved) touch(h);
+        render();
+      }
+      node.addEventListener("pointermove", move);
+      node.addEventListener("pointerup", up);
+      node.addEventListener("pointercancel", up);
+    });
+  }
+
+  if (canEdit) {
+    document.querySelectorAll("[data-mode]").forEach(function (button) {
+      button.onclick = function () {
+        mode = button.dataset.mode;
+        document.querySelectorAll("[data-mode]").forEach(function (b) { b.classList.toggle("on", b === button); });
+        selected = null; render();
+      };
+    });
+    document.querySelectorAll("[data-shape]").forEach(function (button) {
+      button.onclick = function () {
+        var h = hall(), t = byId(selected); if (!t) return;
+        t.shape = button.dataset.shape; touch(h); render();
+      };
+    });
+    document.querySelectorAll("[data-size]").forEach(function (button) {
+      button.onclick = function () {
+        var h = hall(), t = byId(selected); if (!t) return;
+        var parts = button.dataset.size.split(":"), key = parts[0], step = Number(parts[1]);
+        var limit = key === "w" ? h.width - t.x : h.height - t.y;
+        t[key] = Math.max(1, Math.min(8, Math.min(limit, t[key] + step)));
+        touch(h); render();
+      };
+    });
+    document.getElementById("fp-remove").onclick = function () {
+      var h = hall(), t = byId(selected); if (!t) return;
+      h.tables = h.tables.filter(function (x) { return x.id !== t.id; });
+      t.x = t.y = null; plan.unplaced.push(t);
+      plan.unplaced.sort(function (a, b) { return a.number - b.number; });
+      selected = null; touch(h); render();
+    };
+    document.getElementById("fp-save").onclick = function () {
+      var msg = document.getElementById("fp-msg");
+      var ids = Object.keys(dirty);
+      for (var i = 0; i < ids.length; i++) {
+        var h = plan.halls.filter(function (x) { return x.id === ids[i]; })[0];
+        if (h && Object.keys(bad(h)).length) { hallId = h.id; render(); msg.className = "fp-msg err"; msg.textContent = T.overlap; return; }
+      }
+      var button = this; button.disabled = true;
+      (function next() {
+        var id = Object.keys(dirty)[0];
+        if (!id) { msg.className = "fp-msg ok"; msg.textContent = T.saved; render(); return; }
+        var h = plan.halls.filter(function (x) { return x.id === id; })[0];
+        fetch(root.dataset.layoutUrl.replace("HALL", id), {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+          body: JSON.stringify({ placements: h.tables.map(function (t) {
+            return { table: t.id, x: t.x, y: t.y, w: t.w, h: t.h, shape: t.shape }; }) }),
+        }).then(function (response) {
+          return response.json().then(function (body) { return { ok: response.ok, body: body }; });
+        }).then(function (result) {
+          if (!result.ok) { msg.className = "fp-msg err"; msg.textContent = result.body.error || T.failed; button.disabled = false; return; }
+          delete dirty[id];
+          if (!Object.keys(dirty).length) plan = result.body;
+          next();
+        }).catch(function () { msg.className = "fp-msg err"; msg.textContent = T.failed; button.disabled = false; });
+      })();
+    };
+  }
+
+  // «Сейчас» refreshes itself; while arranging, nothing is overwritten.
+  setInterval(function () {
+    if (mode !== "now" || document.hidden) return;
+    fetch(root.dataset.stateUrl, { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (fresh) { if (fresh && mode === "now") { plan = fresh; render(); } })
+      .catch(function () {});
+  }, 15000);
+
+  render();
+})();
+</script>
+{% endblock %}

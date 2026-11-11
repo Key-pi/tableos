@@ -45,3 +45,23 @@
 .sheet p { margin: 0 0 14px; }
 .sheet .acts { margin-top: 12px; }
 .chip.fresh { animation: flash 1.6s ease-out 3; }
+
+/* The floor plan on the «Столы» tab (PQ-052). */
+.plan-wrap { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.plan-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--hint); font-size: 13px; }
+.plan-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.plan-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 2px solid var(--separator); background: var(--section); }
+.plan { position: relative; width: 100%; background: var(--bg2); border-radius: var(--radius); }
+.ptable { position: absolute; padding: 3px; border: 0; background: transparent; display: flex; font: inherit; color: var(--text); }
+.ptable > span { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; border: 2px solid var(--separator); background: var(--section); line-height: 1.15; overflow: hidden; }
+.ptable.round > span { border-radius: 50%; }
+.ptable b { font-size: 18px; }
+.ptable small { font-size: 11px; opacity: .85; }
+.ptable.st-busy > span, .plan-legend i.st-busy { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.ptable.st-bill > span, .plan-legend i.st-bill { background: #f59e0b; border-color: #d97706; color: #fff; }
+.ptable.st-call > span, .plan-legend i.st-call { background: var(--danger); border-color: var(--danger); color: #fff; }
+.ptable.st-call > span { animation: plan-pulse 1.2s ease-in-out infinite; }
+@keyframes plan-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 35%, transparent); } }
+.plan-rest-title { color: var(--hint); font-size: 13px; }
+.plan-rest { display: flex; flex-wrap: wrap; gap: 8px; }
+.plan-rest .ptable { position: static; width: 84px; height: 64px; }

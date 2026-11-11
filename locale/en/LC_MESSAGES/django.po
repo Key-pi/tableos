@@ -732,7 +732,7 @@ msgstr "Till (POS)"
 msgid "Номер"
 msgstr "Number"
 
-#: apps/billing/models.py apps/notifications/models.py apps/orders/models.py apps/tables/models.py bot/keyboards/staff.py
+#: apps/billing/models.py apps/notifications/models.py apps/orders/models.py apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html bot/keyboards/staff.py
 msgid "Стол"
 msgstr "Table"
 
@@ -2592,7 +2592,7 @@ msgstr "Bar"
 msgid "Кухня"
 msgstr "Kitchen"
 
-#: apps/menu/models.py
+#: apps/menu/models.py apps/tables/models.py
 msgid "Порядок"
 msgstr "Order"
 
@@ -4628,6 +4628,14 @@ msgstr "Tables and QR sessions"
 msgid "Сценарий заказа за столом. Нужен для вызова персонала и запроса счёта."
 msgstr "Ordering at the table. Needed for staff calls and bill requests."
 
+#: apps/partners/models.py apps/tables/admin.py apps/tables/models.py
+msgid "Схема зала"
+msgstr "Floor plan"
+
+#: apps/partners/models.py
+msgid "Залы и столы на схеме: владелец и менеджер расставляют их в Admin, персонал видит, где свободно, где гости, где просят счёт или зовут. Требует столы."
+msgstr "Halls and tables on a plan: the owner and managers arrange them in Admin, staff see where it is free, where guests sit, who asks for the bill or calls. Needs tables."
+
 #: apps/partners/models.py
 msgid "Сценарий заказа на доставку. Включается независимо от столов."
 msgstr "Ordering for delivery. Turned on independently of tables."
@@ -4891,6 +4899,10 @@ msgstr "bot settings"
 #: apps/partners/models.py
 msgid "Настройки ботов"
 msgstr "Bot settings"
+
+#: apps/partners/models.py
+msgid "Схеме зала нужен модуль столов."
+msgstr "The floor plan needs the tables module."
 
 #: apps/partners/models.py
 msgid "самовывоза"
@@ -5284,9 +5296,105 @@ msgstr "Table #{number} visit: {exc}"
 msgid "Закрыто визитов: {closed_count}."
 msgstr "Visits closed: {closed_count}."
 
+#: apps/tables/admin.py apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Свободен"
+msgstr "Free"
+
+#: apps/tables/admin.py apps/tables/templates/admin/tables/hall/plan.html apps/users/models.py webapp/staff_views.py
+msgid "Гости"
+msgstr "Guests"
+
+#: apps/tables/admin.py apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Просят счёт"
+msgstr "Asking for the bill"
+
+#: apps/tables/admin.py apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Зовут"
+msgstr "Calling"
+
+#: apps/tables/admin.py
+msgid "Сохранено"
+msgstr "Saved"
+
+#: apps/tables/admin.py
+msgid "Есть несохранённые изменения"
+msgstr "There are unsaved changes"
+
+#: apps/tables/admin.py
+msgid "Столы стоят друг на друге — подвиньте их."
+msgstr "Tables overlap — move them apart."
+
+#: apps/tables/admin.py
+msgid "Не сохранилось — проверьте связь и попробуйте ещё раз."
+msgstr "Not saved — check the connection and try again."
+
+#: apps/tables/admin.py
+msgid "гостей: {count}"
+msgstr "guests: {count}"
+
+#: apps/tables/admin.py
+msgid "к оплате {sum} грн"
+msgstr "to pay {sum} UAH"
+
+#: apps/tables/admin.py apps/tables/floor_plan.py
+msgid "Схема пришла с ошибкой — обновите страницу."
+msgstr "The plan arrived broken — reload the page."
+
 #: apps/tables/apps.py apps/tables/models.py apps/users/constants.py bot/keyboards/staff.py webapp/staff_views.py
 msgid "Столы"
 msgstr "Tables"
+
+#: apps/tables/floor_plan.py
+msgid "Неизвестная форма стола."
+msgstr "Unknown table shape."
+
+#: apps/tables/floor_plan.py
+msgid "Стол — от 1 до {cells} клеток в сторону."
+msgstr "A table is 1 to {cells} cells each way."
+
+#: apps/tables/floor_plan.py
+msgid "Стол выходит за границы зала «{hall}»."
+msgstr "A table goes beyond the hall «{hall}»."
+
+#: apps/tables/floor_plan.py
+msgid "Зал не найден."
+msgstr "Hall not found."
+
+#: apps/tables/floor_plan.py
+msgid "Один стол стоит на схеме дважды."
+msgstr "One table is on the plan twice."
+
+#: apps/tables/floor_plan.py
+msgid "Стол не найден — обновите страницу."
+msgstr "Table not found — reload the page."
+
+#: apps/tables/floor_plan.py
+msgid "Столы {first} и {second} стоят друг на друге."
+msgstr "Tables {first} and {second} overlap."
+
+#: apps/tables/models.py
+msgid "Ширина, клеток"
+msgstr "Width, cells"
+
+#: apps/tables/models.py
+msgid "Глубина, клеток"
+msgstr "Depth, cells"
+
+#: apps/tables/models.py
+msgid "зал"
+msgstr "hall"
+
+#: apps/tables/models.py
+msgid "Столы стоят до клетки {cells}: сначала подвиньте их."
+msgstr "Tables reach cell {cells}: move them first."
+
+#: apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html
+msgid "Квадратный"
+msgstr "Square"
+
+#: apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html
+msgid "Круглый"
+msgstr "Round"
 
 #: apps/tables/models.py
 msgid "Код QR"
@@ -5295,6 +5403,22 @@ msgstr "QR code"
 #: apps/tables/models.py
 msgid "Мест"
 msgstr "Seats"
+
+#: apps/tables/models.py apps/tables/templates/admin/tables/hall/plan.html
+msgid "Зал"
+msgstr "Hall"
+
+#: apps/tables/models.py
+msgid "Клетка слева"
+msgstr "Cell from the left"
+
+#: apps/tables/models.py
+msgid "Клетка сверху"
+msgstr "Cell from the top"
+
+#: apps/tables/models.py
+msgid "Форма"
+msgstr "Shape"
 
 #: apps/tables/models.py
 msgid "стол"
@@ -5415,6 +5539,62 @@ msgstr "The guest has an unprocessed bill request."
 #: apps/tables/services.py
 msgid "По гостю есть открытый счёт или неоплаченная сумма."
 msgstr "The guest has an open bill or an unpaid amount."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Выберите заведение в шапке, чтобы увидеть его схему."
+msgstr "Choose a venue in the header to see its plan."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Сейчас"
+msgstr "Now"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Расставить"
+msgstr "Arrange"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Залов пока нет — добавьте первый кнопкой «＋ Зал»."
+msgstr "No halls yet — add the first with «＋ Hall»."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Нажмите на стол, чтобы открыть его. Схема обновляется сама."
+msgstr "Tap a table to open it. The plan refreshes itself."
+
+#: apps/tables/templates/admin/tables/hall/plan.html webapp/staff_views.py
+msgid "Не на схеме"
+msgstr "Not on the plan"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Выберите стол на схеме или добавьте его из списка ниже. Перетаскивайте столы пальцем или мышью."
+msgstr "Pick a table on the plan or add one from the list below. Drag tables with a finger or the mouse."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Ширина"
+msgstr "Width"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Глубина"
+msgstr "Depth"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Убрать со схемы"
+msgstr "Remove from the plan"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Добавить на схему"
+msgstr "Add to the plan"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Все столы уже на схеме."
+msgstr "All tables are on the plan."
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Сохранить"
+msgstr "Save"
+
+#: apps/tables/templates/admin/tables/hall/plan.html
+msgid "Название и размер зала"
+msgstr "Hall name and size"
 
 #: apps/users/admin.py
 msgid "Нельзя выдать права больше своих (разделы: {sections}). Это может сделать владелец."
@@ -5791,10 +5971,6 @@ msgstr "Language (chosen by the guest)"
 #: apps/users/models.py
 msgid "гость"
 msgstr "guest"
-
-#: apps/users/models.py
-msgid "Гости"
-msgstr "Guests"
 
 #: apps/users/models.py
 msgid "Набор прав"
@@ -8617,8 +8793,8 @@ msgid "Сейчас за столами никого нет."
 msgstr "Nobody at the tables right now."
 
 #: webapp/staff_views.py
-msgid "Просят счёт"
-msgstr "Asking for the bill"
+msgid "Стол {number} свободен."
+msgstr "Table {number} is free."
 
 #: webapp/staff_views.py
 msgid "Открытые счета"

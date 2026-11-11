@@ -1,5 +1,10 @@
+import json
+
 from django.contrib import admin, messages
-from django.urls import reverse
+from django.core.exceptions import PermissionDenied
+from django.http import Http404, JsonResponse
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.http import urlencode
 
@@ -12,7 +17,8 @@ from apps.billing.table_bills import (
 )
 from apps.orders.models import Order
 from apps.partners.networks import bot_for_partner
-from apps.tables.models import Table, TableSession, TableVisit
+from apps.tables.floor_plan import FloorPlanError, floor_plan, save_hall_layout
+from apps.tables.models import Hall, Table, TableSession, TableVisit
 from apps.tables.services import (
     TableSessionError,
     close_table_session_if_settled,
@@ -421,3 +427,80 @@ class TableVisitAdmin(ScopedAdminMixin):
                 "Закрыто визитов: {closed_count}.",
                 closed_count=closed_count,
             ))
+
+
+@admin.register(Hall)
+class HallAdmin(ScopedAdminMixin):
+    """«Схема зала» (PQ-052): the list of halls is the plan itself — halls as
+    tabs, tables on a grid. Everyone with the tables page sees the state of
+    each table; who may change tables (the owner, a manager) arranges them.
+    The layout is written only by ``floor_plan.save_hall_layout``."""
+
+    admin_section = AdminSection.TABLES
+    fields = ("partner", "name", "sort_order", "width", "height")
+    list_display = ("name", "sort_order", "width", "height")
+
+    def get_urls(self):
+        own = [
+            path("state/", self.admin_site.admin_view(self.state_view),
+                 name="tables_hall_state"),
+            path("<path:object_id>/layout/", self.admin_site.admin_view(self.layout_view),
+                 name="tables_hall_layout"),
+        ]
+        return own + super().get_urls()
+
+    def _venue(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        if not self.module_on(request, "module_floor_plan_enabled"):
+            raise Http404
+        return self.get_partner_scope_id(request)
+
+    def changelist_view(self, request, extra_context=None):
+        partner_id = self._venue(request)
+        plan = floor_plan(partner_id) if partner_id else {"halls": [], "unplaced": []}
+        can_edit = bool(partner_id) and self.has_change_permission(request)
+        context = {
+            **self.admin_site.each_context(request),
+            "title": _("Схема зала"),
+            "opts": self.model._meta,
+            "plan": plan,
+            "can_edit": can_edit,
+            "venue_chosen": bool(partner_id),
+            "add_url": reverse("admin:tables_hall_add") if can_edit else "",
+            "change_url": reverse("admin:tables_hall_change", args=["HALL"]) if can_edit else "",
+            "table_url": reverse("admin:tables_table_change", args=["TABLE"]),
+            "state_url": reverse("admin:tables_hall_state"),
+            "layout_url": reverse("admin:tables_hall_layout", args=["HALL"]),
+            "texts": {
+                "free": _("Свободен"), "busy": _("Гости"), "bill": _("Просят счёт"),
+                "call": _("Зовут"), "saved": _("Сохранено"), "unsaved": _(
+                    "Есть несохранённые изменения"),
+                "overlap": _("Столы стоят друг на друге — подвиньте их."),
+                "failed": _("Не сохранилось — проверьте связь и попробуйте ещё раз."),
+                "guests": _("гостей: {count}"), "to_pay": _("к оплате {sum} грн"),
+            },
+        }
+        return TemplateResponse(request, "admin/tables/hall/plan.html", context)
+
+    def state_view(self, request):
+        partner_id = self._venue(request)
+        return JsonResponse(floor_plan(partner_id) if partner_id else {"halls": [],
+                                                                        "unplaced": []})
+
+    def layout_view(self, request, object_id):
+        partner_id = self._venue(request)
+        if request.method != "POST":
+            return JsonResponse({"error": "POST"}, status=405)
+        if not partner_id or not self.has_change_permission(request):
+            raise PermissionDenied
+        if not Hall.objects.filter(partner_id=partner_id, pk=object_id).exists():
+            raise Http404
+        try:
+            placements = json.loads(request.body or b"{}").get("placements", [])
+            save_hall_layout(partner_id=partner_id, hall_id=object_id, placements=placements)
+        except (ValueError, AttributeError) as exc:
+            message = str(exc) if isinstance(exc, FloorPlanError) else _(
+                "Схема пришла с ошибкой — обновите страницу.")
+            return JsonResponse({"error": message}, status=400)
+        return JsonResponse(floor_plan(partner_id))

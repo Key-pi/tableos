@@ -576,12 +576,8 @@
     page.appendChild(board);
   }
 
-  function renderTables(page) {
-    var info = tabData.tables;
-    if (!info) { page.appendChild(el("div", { class: "center" }, el("div", { class: "spinner" }))); return; }
-    var board = el("div", { class: "board" });
-    info.tables.forEach(function (table) {
-      table.visits.forEach(function (visit) {
+  // One visit of a table: guests, what is not billed, bills, the actions.
+  function visitCard(table, visit) {
         var card = el("article", { class: "order" },
           el("div", { class: "top" }, el("span", { class: "num", text: t("table", { number: table.number }) }),
              el("span", { class: "status", text: t("visit", { since: visit.since }) })),
@@ -603,11 +599,92 @@
         acts.appendChild(el("button", { type: "button", class: "act danger", text: T.close_visit,
                                        onclick: function () { sheet(T.close_visit_confirm, function () { visitAction(visit, "close"); }); } }));
         card.appendChild(acts);
-        board.appendChild(card);
-      });
+        return card;
+  }
+
+  function renderTables(page) {
+    var info = tabData.tables;
+    if (!info) { page.appendChild(el("div", { class: "center" }, el("div", { class: "spinner" }))); return; }
+    if (info.plan) { renderPlan(page, info); return; }
+    var board = el("div", { class: "board" });
+    info.tables.forEach(function (table) {
+      table.visits.forEach(function (visit) { board.appendChild(visitCard(table, visit)); });
     });
     if (!info.tables.length) board.appendChild(el("div", { class: "empty", text: T.no_tables }));
     page.appendChild(board);
+  }
+
+  // --- the floor plan (PQ-052): halls, tables coloured by their state -------
+  var planHall = "";
+
+  function openTable(info, entry) {
+    var old = document.querySelector(".sheet-back.table");
+    if (old) old.remove();
+    var table = info.tables.filter(function (item) { return item.id === entry.id; })[0];
+    if (!table) { toast(t("table_free", { number: entry.number })); return; }
+    var back = el("div", { class: "sheet-back table", onclick: function (event) {
+      if (event.target === back) back.remove();
+    } });
+    var body = el("div", { class: "sheet", role: "dialog", style: "max-height:85vh;overflow:auto" },
+      el("p", null, el("b", { text: t("table", { number: table.number }) + " · " + T["plan_" + entry.state] })));
+    table.visits.forEach(function (visit) { body.appendChild(visitCard(table, visit)); });
+    body.appendChild(el("div", { class: "acts" },
+      el("button", { type: "button", class: "act", text: T.back, onclick: function () { back.remove(); } })));
+    back.appendChild(body);
+    document.body.appendChild(back);
+  }
+
+  function planTile(info, hall, entry) {
+    var since = entry.state === "free" ? T.plan_free
+      : [entry.since, entry.guests ? t("guests", { count: entry.guests }) : ""].filter(Boolean).join(" · ");
+    // State classes are prefixed: «.call» is the calls board's own style.
+    var tile = el("button", { type: "button", class: "ptable st-" + entry.state + (entry.shape === "round" ? " round" : ""),
+                              onclick: function () { openTable(info, entry); } },
+      el("span", null, el("b", { text: String(entry.number) }), el("small", { text: since })));
+    if (hall) {
+      tile.style.left = (entry.x / hall.width * 100) + "%";
+      tile.style.top = (entry.y / hall.height * 100) + "%";
+      tile.style.width = (entry.w / hall.width * 100) + "%";
+      tile.style.height = (entry.h / hall.height * 100) + "%";
+    }
+    return tile;
+  }
+
+  function renderPlan(page, info) {
+    var plan = info.plan;
+    if (!plan.halls.some(function (hall) { return hall.id === planHall; })) {
+      planHall = plan.halls.length ? plan.halls[0].id : "";
+    }
+    if (plan.halls.length > 1) {
+      var chips = el("div", { class: "filters", role: "tablist" });
+      plan.halls.forEach(function (hall) {
+        var busyHere = hall.tables.filter(function (item) { return item.state === "call" || item.state === "bill"; }).length;
+        chips.appendChild(el("button", { type: "button", class: "chip", "aria-pressed": String(hall.id === planHall),
+                                         onclick: function () { planHall = hall.id; render(); } },
+          hall.name, busyHere ? el("span", { class: "count", text: String(busyHere) }) : null));
+      });
+      page.appendChild(chips);
+    }
+    var wrap = el("div", { class: "plan-wrap" });
+    wrap.appendChild(el("div", { class: "plan-legend" },
+      el("span", null, el("i", { class: "st-free" }), T.plan_free),
+      el("span", null, el("i", { class: "st-busy" }), T.plan_busy),
+      el("span", null, el("i", { class: "st-bill" }), T.plan_bill),
+      el("span", null, el("i", { class: "st-call" }), T.plan_call)));
+    var hall = plan.halls.filter(function (item) { return item.id === planHall; })[0];
+    if (hall) {
+      var area = el("div", { class: "plan", style: "aspect-ratio:" + hall.width + " / " + hall.height });
+      hall.tables.forEach(function (entry) { area.appendChild(planTile(info, hall, entry)); });
+      wrap.appendChild(area);
+    }
+    if (plan.unplaced.length) {
+      wrap.appendChild(el("div", { class: "plan-rest-title", text: T.plan_unplaced }));
+      var rest = el("div", { class: "plan-rest" });
+      plan.unplaced.forEach(function (entry) { rest.appendChild(planTile(info, null, entry)); });
+      wrap.appendChild(rest);
+    }
+    if (!hall && !plan.unplaced.length) wrap.appendChild(el("div", { class: "empty", text: T.no_tables }));
+    page.appendChild(wrap);
   }
 
   function after(result, refresh) {
@@ -627,6 +704,8 @@
   function visitAction(visit, action) {
     if (busy) return;
     busy = true;
+    var open = document.querySelector(".sheet-back.table");
+    if (open) open.remove();
     api("visit_action", { visit: visit.id, action: action }).then(function (result) { after(result); });
   }
 

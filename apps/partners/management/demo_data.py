@@ -122,6 +122,7 @@ SETTINGS = {
         "staff_call_bartender_enabled": True,
         "staff_call_hookah_enabled": True,
         "module_stock_enabled": True,
+        "module_floor_plan_enabled": True,
         "language_ru": True, "language_en": True,
     },
     # The second point: tables and pickup (paid on the spot), a bar screen.
@@ -160,6 +161,7 @@ SETTINGS = {
         "staff_call_hookah_enabled": False,
         # Beans in packs are counted; the kitchen is not.
         "module_stock_enabled": True,
+        "module_floor_plan_enabled": True,
         "language_ru": False, "language_en": True,
     },
     # A shop: no tables; pickup, courier and post; the till and the staff screen.
@@ -288,6 +290,27 @@ TABLES = {
     + [(5, "Тераса", 6, "obolon_tbl_05")],
     CAFE: [(n, f"Стіл {n}", 2 if n <= 3 else (4 if n <= 8 else (6 if n <= 11 else 8)),
             f"river_tbl_{n:02d}") for n in range(1, 13)],
+    SHOP: [],
+}
+
+# The floor plan (PQ-052): (hall, width, height, [(table, x, y, w, h, shape)]).
+# Laid out once, when the hall is created: a re-run keeps the owner's layout.
+HALLS = {
+    PODIL: [
+        ("Зал", 16, 10, [(1, 1, 1, 2, 2, "square"), (2, 4, 1, 2, 2, "square"),
+                         (5, 7, 1, 3, 3, "round"), (6, 1, 5, 3, 3, "round"),
+                         (7, 6, 6, 4, 2, "square"), (8, 14, 1, 2, 8, "square")]),
+        ("Тераса", 10, 6, [(3, 1, 1, 2, 2, "round"), (4, 5, 1, 2, 2, "round")]),
+    ],
+    OBOLON: [],
+    CAFE: [
+        ("Зал", 18, 10, [(1, 1, 1, 2, 2, "round"), (2, 4, 1, 2, 2, "round"),
+                         (3, 7, 1, 2, 2, "round"), (4, 10, 1, 2, 2, "square"),
+                         (5, 13, 1, 2, 2, "square"), (6, 1, 4, 2, 2, "square"),
+                         (7, 4, 4, 2, 2, "square"), (8, 7, 4, 2, 2, "square"),
+                         (9, 10, 4, 3, 2, "square"), (10, 14, 4, 3, 2, "square"),
+                         (11, 1, 7, 3, 2, "square"), (12, 6, 7, 4, 2, "square")]),
+    ],
     SHOP: [],
 }
 

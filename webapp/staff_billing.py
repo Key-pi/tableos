@@ -51,6 +51,8 @@ from apps.billing.table_bills import (
 from apps.bonuses.services import bonus_balance
 from apps.orders.models import Order
 from apps.orders.repositories import OrderRepository
+from apps.partners.models import PartnerBotSettings
+from apps.tables.floor_plan import floor_plan
 from apps.tables.models import TableVisit
 from apps.tables.services import close_table_visit
 from bot.services.staff_rights import can_manage_billing, can_view_tables
@@ -415,7 +417,8 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
     tables: dict = {}
     for visit in visits:
         table = tables.setdefault(
-            visit.table_id, {"number": visit.table.number, "visits": []}
+            visit.table_id,
+            {"id": visit.table_id.hex, "number": visit.table.number, "visits": []},
         )
         visit_orders = [
             order for order in unbilled
@@ -432,7 +435,14 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
             "bills": [_bill_json(bill) for bill in bills if bill.visit_id == visit.id],
             "can_bill": can_bill and bool(visit_orders),
         })
-    return {"tables": sorted(tables.values(), key=lambda table: table["number"])}
+    result = {"tables": sorted(tables.values(), key=lambda table: table["number"])}
+    # PQ-052: with the floor plan module, the halls and every table's state;
+    # a table with guests opens its card above by its id.
+    if PartnerBotSettings.objects.filter(
+        partner_id=partner_id, module_floor_plan_enabled=True
+    ).exists():
+        result["plan"] = floor_plan(partner_id)
+    return result
 
 
 @staff_api("POST")

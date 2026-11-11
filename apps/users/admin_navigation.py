@@ -57,6 +57,7 @@ GROUPS = (
         Page("billing.payment", "payments"),
         Page("billing.refund", "currency_exchange"),
         Page("tables.table", "table_restaurant", add=True, module="module_tables_enabled"),
+        Page("tables.hall", "grid_view", module="module_floor_plan_enabled"),
         Page("orders.kitchenscreen", "soup_kitchen", add=True,
              module="module_kitchen_screen_enabled"),
     )),
@@ -127,7 +128,7 @@ PLATFORM_GROUP = (_lazy("Платформа"), (
 TABS = (
     ("billing.bill", "billing.billingrequest", "billing.billitem", "billing.billadjustment"),
     ("billing.payment", "billing.refund"),
-    ("tables.table", "tables.tablevisit", "tables.tablesession"),
+    ("tables.table", "tables.hall", "tables.tablevisit", "tables.tablesession"),
     ("menu.menuitem", "menu.menucategory", "menu.modifiergroup", "menu.menubadge",
      "menu.stockmovement"),
     ("users.guestprofile", "bonuses.walkinsale", "bonuses.bonustransaction",
