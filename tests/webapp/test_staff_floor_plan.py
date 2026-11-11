@@ -33,3 +33,37 @@ class StaffPlanTests(BillsFixture):
         status, body = self.staff_call("tables", user_id=7700204)
         self.assertEqual(status, 200)
         self.assertNotIn("plan", body)
+
+
+class TableAlertsTests(BillsFixture):
+    """The «Столы» tab's red count (owner 2026-11-11): tables where a guest
+    calls or asks for the bill, in the screen's state and its version, so the
+    tab shows it without being opened."""
+
+    def test_alerts_come_with_the_state(self):
+        from apps.billing.models import BillingRequest
+        from apps.notifications.models import GuestCall
+        from apps.tables.models import TableSession
+
+        status, body = self.staff_call("state", user_id=7700204)
+        self.assertEqual((status, body["table_alerts"]), (200, []))
+        version = body["version"]
+        session = TableSession.objects.filter(table=self.table, status="active").first()
+        GuestCall.objects.create(partner=self.partner, table_session=session,
+                                 guest=session.guest, table_number=7, call_target="waiter")
+        status, body = self.staff_call("state", query=f"?since={version}", user_id=7700204)
+        self.assertNotIn("unchanged", body)
+        self.assertEqual(body["table_alerts"], [{"table": 7, "kind": "call"}])
+        BillingRequest.objects.create(partner=self.partner, table=self.table,
+                                      guest=session.guest, table_session=session)
+        body = self.staff_call("state", user_id=7700204)[1]
+        self.assertEqual(sorted(alert["kind"] for alert in body["table_alerts"]),
+                         ["bill", "call"])
+
+    def test_not_for_who_has_no_tables_tab(self):
+        from apps.users.models import User
+        from tests.webapp.test_staff_api import staff
+
+        staff(self.partner, "kava_hookah", User.Role.HOOKAH_MASTER, 7700298)
+        body = self.staff_call("state", user_id=7700298)[1]
+        self.assertEqual(body["table_alerts"], [])

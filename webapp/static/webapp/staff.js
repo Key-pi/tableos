@@ -186,6 +186,13 @@
         });
         // A guest asking for the bill: the open list of bills shows it at once.
         if (freshTabs.bills && tab === "bills") tabData.bills = null;
+        // A table where a guest calls or asks for the bill flashes «Столы»
+        // (owner 2026-11-11: it was seen only after opening the tab).
+        var oldAlerts = {};
+        (previous.table_alerts || []).forEach(function (alert) { oldAlerts[alert.table + alert.kind] = true; });
+        (data.table_alerts || []).forEach(function (alert) {
+          if (!oldAlerts[alert.table + alert.kind]) freshTabs.tables = true;
+        });
       }
       seen = ids;
       if (arrived) { haptic("warning"); beep(); }
@@ -506,20 +513,25 @@
   var openBillId = "";
 
   function loadTab() {
-    if (tab === "orders") return Promise.resolve();
-    if ((tab === "sale" || tab === "table_order") && tabData[tab]) return Promise.resolve();  // the menu: once
-    var path = { sale: "sale_menu", table_order: "table_order_menu" }[tab] || tab;
+    var name = tab;  // the answer belongs to this tab, even if another is open by then
+    if (name === "orders") return Promise.resolve();
+    if ((name === "sale" || name === "table_order") && tabData[name]) return Promise.resolve();  // the menu: once
+    var path = { sale: "sale_menu", table_order: "table_order_menu" }[name] || name;
     return api(path).then(function (result) {
-      if (!result.ok) { toast(result.data.error || T.error); tab = "orders"; return; }
-      tabData[tab] = result.data;
+      if (!result.ok) { toast(result.data.error || T.error); if (tab === name) tab = "orders"; return; }
+      tabData[name] = result.data;
+      if (name === "tables") refreshOpenTable();
     });
   }
 
   function switchTab(name) {
     tab = name;
     if (name === "report") tabData.report = null;
-    if (name !== "orders" && !tabData[name]) {
-      loadTab().then(render);
+    // Bills and tables change all the time: asked again on every opening, the
+    // last view is shown meanwhile (owner 2026-11-11: it was up to 8 s old).
+    var live = name === "bills" || name === "tables";
+    if (name !== "orders" && (live || !tabData[name])) {
+      loadTab().then(function () { if (tab === name && !busy) render(); });
     }
     render();
   }
@@ -529,7 +541,11 @@
     // [tab, title, red count]: new orders, guests asking for the bill.
     var names = [["orders", T.orders + " " + data.orders.length, newOrders]];
     if (data.rights.billing) names.push(["bills", T.bills, data.bill_requests.length]);
-    if (data.rights.tables || data.rights.table_orders) names.push(["tables", T.tables]);
+    if (data.rights.tables || data.rights.table_orders) {
+      var needing = {};
+      (data.table_alerts || []).forEach(function (alert) { needing[alert.table] = true; });
+      names.push(["tables", T.tables, Object.keys(needing).length]);
+    }
     if (data.rights.sale) names.push(["sale", T.sale]);
     if (data.rights.report) names.push(["report", T.report]);
     if (names.length < 2) return null;
@@ -629,9 +645,28 @@
   // --- the floor plan (PQ-052): halls, tables coloured by their state -------
   var planHall = "";
 
+  var openTableId = "", openTableShown = "";
+
+  // The open table card is built again when its table changed meanwhile.
+  function refreshOpenTable() {
+    var open = document.querySelector(".sheet-back.table");
+    var info = tabData.tables;
+    if (!open || !openTableId || !info || !info.plan) return;
+    var entry = null;
+    info.plan.halls.concat([{ tables: info.plan.unplaced }]).forEach(function (hall) {
+      hall.tables.forEach(function (item) { if (item.id === openTableId) entry = item; });
+    });
+    var table = info.tables.filter(function (item) { return item.id === openTableId; })[0];
+    if (!entry || JSON.stringify([entry, table]) === openTableShown) return;
+    if (!table) { open.remove(); openTableId = ""; return; }  // the company left
+    openTable(info, entry);
+  }
+
   function openTable(info, entry) {
     var old = document.querySelector(".sheet-back.table");
     if (old) old.remove();
+    openTableId = entry.id;
+    openTableShown = JSON.stringify([entry, info.tables.filter(function (item) { return item.id === entry.id; })[0]]);
     var table = info.tables.filter(function (item) { return item.id === entry.id; })[0];
     if (!table && data.rights.table_orders) { startTableOrder({ id: entry.id, number: entry.number }, null); return; }
     if (!table) { toast(t("table_free", { number: entry.number })); return; }

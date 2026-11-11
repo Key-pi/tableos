@@ -62,6 +62,7 @@ from apps.orders.services import (
     requested_time_label,
     transition_order_status,
 )
+from apps.tables.floor_plan import table_alerts
 from apps.tables.services import TableSessionError
 from bot.services.staff_rights import (
     can_manage_billing,
@@ -350,10 +351,12 @@ def _open_calls(staff: StaffRequest):
     )
 
 
-def _state_version(staff: StaffRequest, call_ids: list, request_ids: list, rights: dict) -> str:
+def _state_version(staff: StaffRequest, call_ids: list, request_ids: list, rights: dict,
+                   alerts: list) -> str:
     """What the screen shows changes only with these: the open orders (any
     change of an order moves its ``updated_at``), this person's calls, the
-    bill requests, the rights and the language. Few cheap queries."""
+    bill requests, the tables' alerts, the rights and the language. Few cheap
+    queries."""
 
     orders = (
         get_open_orders_for_partner(staff.partner.id)
@@ -363,7 +366,7 @@ def _state_version(staff: StaffRequest, call_ids: list, request_ids: list, right
     parts = [
         staff.partner.id.hex, staff.employee.id.hex, staff.language,
         orders["count"], orders["last"].isoformat() if orders["last"] else "",
-        call_ids, request_ids, sorted(rights.items()),
+        call_ids, request_ids, alerts, sorted(rights.items()),
         [venue.id.hex for venue in staff.venues],
     ]
     return hashlib.sha1(json.dumps(parts, default=str).encode()).hexdigest()[:16]
@@ -395,8 +398,14 @@ def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
         for request_id in BillingRequestRepository.open_for_partner(staff.partner.id)
         .order_by("created_at").values_list("id", flat=True)
     ] if rights["billing"] else []
+    # Tables where a guest calls or asks for the bill: the «Столы» tab's red
+    # count, for whoever has that tab (owner 2026-11-11).
+    alerts = (
+        table_alerts(staff.partner.id) if rights["tables"] or rights["table_orders"] else []
+    )
     version = _state_version(
-        staff, [notification.id.hex for notification in open_calls], request_ids, rights
+        staff, [notification.id.hex for notification in open_calls], request_ids, rights,
+        alerts,
     )
     if request.GET.get("since") == version:
         return {"unchanged": True, "version": version}
@@ -427,6 +436,7 @@ def staff_state_view(request, staff: StaffRequest, body: dict) -> dict:
         "orders": [_order_json(order, now=now) for order in orders],
         "calls": calls,
         "bill_requests": request_ids,
+        "table_alerts": alerts,
     }
 
 

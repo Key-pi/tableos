@@ -25,6 +25,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from django.db import transaction
+from django.db.models import CharField, F, Value
 from django.utils import timezone
 
 from apps.tables.models import TABLE_MAX_CELLS, Hall, Table, TableSession, TableVisit
@@ -106,9 +107,8 @@ def table_states(partner_id, *, now=None) -> dict[UUID, dict]:
     """``{table id: {"state", "guests", "since", "to_pay"}}`` for every active
     table of the venue."""
 
-    from apps.billing.models import Bill, BillingRequest
+    from apps.billing.models import Bill
     from apps.billing.repositories import BillingOperationsRepository
-    from apps.notifications.models import GuestCall
 
     now = now or timezone.now()
     states = {
@@ -144,15 +144,8 @@ def table_states(partner_id, *, now=None) -> dict[UUID, dict]:
             states[bill.table_id]["to_pay"] += max(
                 Decimal("0"), (bill.total_amount or 0) - (bill.paid_amount or 0)
             )
-    asked = set(BillingRequest.objects.filter(
-        partner_id=partner_id, table_session__visit__status=TableVisit.Status.ACTIVE,
-        status__in=(BillingRequest.Status.OPEN, BillingRequest.Status.AUTO_PREPARED),
-    ).values_list("table_id", flat=True))
-    called = set(GuestCall.objects.filter(
-        partner_id=partner_id, taken_at__isnull=True,
-        created_at__gte=now - timedelta(hours=CALL_HOURS),
-        table_session__visit__status=TableVisit.Status.ACTIVE,
-    ).values_list("table_session__table_id", flat=True))
+    asked = set(_open_bill_requests(partner_id).values_list("table_id", flat=True))
+    called = set(_open_calls(partner_id, now).values_list("table_session__table_id", flat=True))
     for table_id, state in states.items():
         state["guests"] = guests.get(table_id, 0)
         if state["state"] == "busy":
@@ -161,6 +154,42 @@ def table_states(partner_id, *, now=None) -> dict[UUID, dict]:
             elif table_id in asked:
                 state["state"] = "bill"
     return states
+
+
+def _open_calls(partner_id, now):
+    from apps.notifications.models import GuestCall
+
+    return GuestCall.objects.filter(
+        partner_id=partner_id, taken_at__isnull=True,
+        created_at__gte=now - timedelta(hours=CALL_HOURS),
+        table_session__visit__status=TableVisit.Status.ACTIVE,
+    )
+
+
+def _open_bill_requests(partner_id):
+    from apps.billing.models import BillingRequest
+
+    return BillingRequest.objects.filter(
+        partner_id=partner_id, table_session__visit__status=TableVisit.Status.ACTIVE,
+        status__in=(BillingRequest.Status.OPEN, BillingRequest.Status.AUTO_PREPARED),
+    )
+
+
+def table_alerts(partner_id, *, now=None) -> list[dict]:
+    """Tables where a guest calls staff or asks for the bill — the «Столы»
+    tab's red count on the staff screen, so it shows without opening the tab
+    (owner 2026-11-11). Two small queries, for the screen's every poll."""
+
+    now = now or timezone.now()
+    calls = _open_calls(partner_id, now).annotate(
+        number=F("table_session__table__number"), kind=Value("call", output_field=CharField()),
+    ).order_by().values_list("number", "kind")
+    bills = _open_bill_requests(partner_id).annotate(
+        number=F("table__number"), kind=Value("bill", output_field=CharField()),
+    ).order_by().values_list("number", "kind")
+    # One query: the screen asks every 8 seconds.
+    alerts = set(calls.union(bills))
+    return [{"table": number, "kind": kind} for number, kind in sorted(alerts)]
 
 
 def _table_json(table: Table, state: dict) -> dict:
