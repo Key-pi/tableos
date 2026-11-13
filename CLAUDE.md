@@ -106,9 +106,9 @@
 - Пушить — когда просит владелец. Сливать в `clean-project-rules` — только по
   его слову; после слияния — коммит документов «… checked by the owner;
   <ветка> merged».
-- Коммитить небольшими зелёными шагами. Порядок изменения по шагам —
-  `.claude/skills/tableos-development/SKILL.md` (в облачной сессии проекта
-  навыки сами не подгружаются — прочитать файл).
+- Коммитить небольшими зелёными шагами. Порядок изменения по шагам — навык
+  `.claude/skills/tableos-development/SKILL.md` (не подгрузился — прочитать
+  файл).
 - Сначала тест, который падает; для блокировок — тест на PostgreSQL и
   проверка мутацией (убрать защиту → тест падает).
 - Перед каждым коммитом с изменением поведения — полный прогон на SQLite и
@@ -151,6 +151,12 @@ docker compose logs init        # логины и ссылки на столы �
 - Без `DJANGO_USE_SQLITE=true` тесты идут в PostgreSQL: по умолчанию `false`
   (`core/settings/env.py`, `.env.example`). Нужен `.env` с
   `BOT_TOKEN_ENCRYPTION_KEY` (ключ Fernet).
+- `.env`, `.env.production` и `infrastructure/loadtest/.local.env` Claude не
+  читает и не правит — запрет в `.claude/settings.json` (там токены и ключи).
+  Имена переменных — в `.env.example`; значения владелец вписывает сам, в чат
+  их не просить.
+- После сжатия разговора хук из `.claude/settings.json` добавляет
+  `git status` и коммиты ветки, которых ещё нет в `origin/clean-project-rules`.
 - SQLite игнорирует `select_for_update`: блокировки проверяет только прогон на
   PostgreSQL. Celery в тестах eager.
 - Таймзона `Europe/Kyiv`. Старое `Europe/Kiev` в `.env` читается как Kyiv, но

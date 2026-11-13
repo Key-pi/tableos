@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.production)",
+      "Read(./infrastructure/loadtest/.local.env)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git",
+            "args": ["status", "--short", "--branch"],
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "git",
+            "args": [
+              "log",
+              "--format=нет в origin/clean-project-rules: %h %s",
+              "origin/clean-project-rules..HEAD"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
