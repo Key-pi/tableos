@@ -125,6 +125,36 @@ whitenoise и кэш в Redis. Сервисы:
 | Аналитика | `PartnerDailyMetric`, `TrafficSource`, `SourceVisit`, `SystemSnapshot` | `analytics/services.py`, `analytics/sources.py`, `analytics/selectors.py` (отчёт сети), `analytics/dashboard.py` (стартовая страница), `analytics/system_load.py` (нагрузка) | Отчёт за день для персонала по запросу (с разбивкой по каналам заказа); снимок метрик раз в 15 минут; источники переходов (PQ-031); снимок нагрузки раз в минуту (PQ-051). |
 | Mini App | — (адаптер, как бот) | `webapp/views.py` (гость), `webapp/staff_*.py` (рабочий экран), `webapp/kitchen_views.py` (экран кухни) | Вызывает те же сервисы, что бот; подробно — [MINI_APP.md](MINI_APP.md). |
 
+### Модули заведения
+
+Каждый модуль — переключатель в `PartnerBotSettings` (Admin: «Настройки» →
+«Настройки бота»), включается отдельно (PQ-033). Зависимости проверяет
+`apps/partners/models.py:PartnerBotSettings.clean`. Новый переключатель
+добавлять в эту таблицу — иначе падает `tests/core/test_docs.py`.
+
+| Переключатель | В Admin | По умолчанию | Требует | Подробно |
+|---|---|---|---|---|
+| `module_menu_enabled` | Меню | вкл. | — | [CATALOG.md](CATALOG.md) |
+| `module_showcase_enabled` | Расширенная витрина | выкл. | — | [CATALOG.md](CATALOG.md) |
+| `module_options_enabled` | Варианты и добавки | выкл. | — | [CATALOG.md](CATALOG.md) |
+| `module_stock_enabled` | Остатки | выкл. | — | [CATALOG.md](CATALOG.md) |
+| `module_tables_enabled` | Столы и QR-сессии | вкл. | — | [B3_2_VISITS_AND_BILL_CHANGES.md](B3_2_VISITS_AND_BILL_CHANGES.md) |
+| `module_floor_plan_enabled` | Схема зала | выкл. | столы | [FLOOR_PLAN.md](FLOOR_PLAN.md) |
+| `module_table_orders_enabled` | Заказ на стол с планшета | выкл. | схема зала, заказы | [FLOOR_PLAN.md](FLOOR_PLAN.md) |
+| `module_reservations_enabled` | Бронь столов | выкл. | схема зала | [FLOOR_PLAN.md](FLOOR_PLAN.md) |
+| `module_pickup_enabled` | Самовывоз | выкл. | хотя бы один способ оплаты; для перевода — реквизиты | [PICKUP.md](PICKUP.md) |
+| `module_delivery_enabled` | Доставка | выкл. | как самовывоз | [DELIVERY.md](DELIVERY.md) |
+| `module_shipping_enabled` | Отправка почтой | выкл. | как самовывоз; хотя бы одна служба и один вариант оплаты пересылки | [SHIPPING.md](SHIPPING.md) |
+| `module_cart_enabled` | Корзина | вкл. | меню, заказы | этот документ, «Сессия гостя, меню, корзина и заказ» |
+| `module_orders_enabled` | Заказы | вкл. | меню; столы, самовывоз, доставка или отправка | этот документ, «Сессия гостя, меню, корзина и заказ» |
+| `module_billing_enabled` | Счета и оплаты | выкл. | заказы (запрос счёта гостем — при столах) | [B3_2_VISITS_AND_BILL_CHANGES.md](B3_2_VISITS_AND_BILL_CHANGES.md), [REFUNDS.md](REFUNDS.md) |
+| `module_staff_call_enabled` | Вызов персонала | выкл. | столы | этот документ, «Уведомления и рассылки» |
+| `module_quick_sale_enabled` | Быстрые продажи | вкл. | меню | этот документ, «Лояльность и быстрая продажа» |
+| `module_reports_enabled` | Отчёт дня | вкл. | — | этот документ, модуль «Аналитика» |
+| `module_webapp_enabled` | Mini App (меню и заказ в приложении) | выкл. | корзина, `WEBAPP_BASE_URL` | [MINI_APP.md](MINI_APP.md) |
+| `module_staff_screen_enabled` | Рабочий экран персонала (Mini App) | выкл. | `WEBAPP_BASE_URL` | [MINI_APP.md](MINI_APP.md) |
+| `module_kitchen_screen_enabled` | Экран кухни и бара | выкл. | заказы | [MINI_APP.md](MINI_APP.md) |
+
 ### Фактические зависимости импорта
 
 Целевая схема разрешает только `tables → users` и запрещает `core → apps`.
@@ -892,7 +922,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1191 тест после брони столов, зелёные на SQLite и на PostgreSQL 16.
+- 1201 тест после проверки документации, зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -914,14 +944,19 @@ Admin показывает поля жизненного цикла, произ�
   `tests/apps/tables/test_reservations.py`). Тест
   миграции (`tests/apps/tables/test_visit_migration.py`) прогоняет заполнение
   визитов назад и вперёд.
+- Документация сверяется с кодом в каждом полном прогоне:
+  `tests/core/test_docs.py` (`infrastructure/scripts/check_docs.py`) —
+  ссылки на код и документы, якоря, недокументированные модели, задачи,
+  команды, модули, обработчики и переменные окружения, форма инструкций,
+  число тестов.
 - Записанные прогоны — в
   [`../engineering/TESTING.md`](../engineering/TESTING.md).
 - CI нет; все проверки запускаются вручную.
 
 ## Цифры кодовой базы на 2026-11-14
 
-493 отслеживаемых Python-файла (около 80 000 строк), 121 пронумерованная
-миграция, 128 тестовых модулей. Крупнейшие нетестовые модули:
+495 отслеживаемых Python-файлов (около 80 500 строк), 121 пронумерованная
+миграция, 129 тестовых модулей. Крупнейшие нетестовые модули:
 `bot/handlers/staff.py` (3921 строка), `apps/orders/services.py` (1485),
 `apps/billing/services.py` (1485), `apps/notifications/services.py` (1464),
 `apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1037),

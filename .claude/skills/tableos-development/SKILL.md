@@ -20,7 +20,8 @@ description: Порядок изменения в Botera Shop от падающ�
 - [ ] Полный прогон SQLite и PostgreSQL 16 — OK; миграции
   вперёд/назад/вперёд на PostgreSQL.
 - [ ] Ruff без новых замечаний; переводы обновлены.
-- [ ] Документы и строка журнала `TESTING.md` — в этом же коммите.
+- [ ] Документы и строка журнала `TESTING.md` — в этом же коммите;
+  `python3 infrastructure/scripts/check_docs.py` — без расхождений.
 - [ ] Пуш — по просьбе владельца; слияние в `clean-project-rules` — только по
   его слову.
 
@@ -69,6 +70,7 @@ description: Порядок изменения в Botera Shop от падающ�
 ```bash
 DJANGO_USE_SQLITE=true python3 manage.py check
 DJANGO_USE_SQLITE=true python3 manage.py makemigrations --check --dry-run
+python3 infrastructure/scripts/check_docs.py                                     # документация против кода
 DJANGO_USE_SQLITE=true python3 manage.py test --noinput                           # весь набор, SQLite
 DJANGO_USE_SQLITE=false POSTGRES_HOST=127.0.0.1 python3 manage.py test --noinput  # весь набор, PostgreSQL 16
 ```
@@ -91,7 +93,8 @@ DJANGO_USE_SQLITE=false POSTGRES_HOST=127.0.0.1 python3 manage.py test --noinput
 
 ## 6. Документы — в том же коммите
 
-По `.claude/rules/docs.md`. Строка журнала `docs/engineering/TESTING.md`:
+По `.claude/rules/docs.md` — там таблица «что изменилось в коде → что
+обновить». Строка журнала `docs/engineering/TESTING.md`:
 `| дата | что сделано (ветка, PQ), тесты, мутации, миграции | SQLite / PostgreSQL 16 | объём | итог: число тестов, OK |`.
 
 ## 7. Коммит и отчёт владельцу

@@ -116,8 +116,9 @@
   сообщать команды и их итог, а не «всё зелёное».
 - Ruff: в изменённых файлах не добавлять новых замечаний; старые заодно не
   чинить.
-- Документы — в том же коммите: `AS_IS_ARCHITECTURE.md`, `FEATURE_MATRIX.md`,
-  PQ/ADR при решении, строка журнала в `TESTING.md` (`.claude/rules/docs.md`).
+- Документы — в том же коммите (что обновлять — `.claude/rules/docs.md`).
+  Расхождения с кодом ловит `tests/core/test_docs.py`; при коммите только с
+  документами — `python3 infrastructure/scripts/check_docs.py`.
 - Документация — по-русски; сообщения коммитов — по-английски, как в истории.
 - Не удалять `brag-output/` и `Claude outputs/` — материалы владельца в git.
 - Не писать настоящие токены, пароли, ключи и Telegram ID в код, тесты,
@@ -137,6 +138,7 @@ DJANGO_USE_SQLITE=true python3 manage.py test --noinput
 DJANGO_USE_SQLITE=false POSTGRES_HOST=127.0.0.1 python3 manage.py test --noinput
 
 DJANGO_USE_SQLITE=true python3 manage.py makemigrations --check --dry-run
+python3 infrastructure/scripts/check_docs.py         # документация против кода
 ruff check --no-cache <изменённые файлы> --output-format concise
 python3 infrastructure/scripts/messages.py update    # затем перевести и … compile
 docker compose config --quiet
@@ -156,8 +158,8 @@ docker compose logs init        # логины и ссылки на столы �
   Имена переменных — в `.env.example`; значения владелец вписывает сам, в чат
   их не просить.
 - После сжатия разговора хук из `.claude/settings.json` добавляет
-  `git status` и коммиты ветки, которых ещё нет в `origin/clean-project-rules`.
-- SQLite игнорирует `select_for_update`: блокировки проверяет только прогон на
+  `git status` и коммиты ветки, которых нет в `origin/clean-project-rules`.
+- SQLite игнорирует `select_for_update` — блокировки проверяет только
   PostgreSQL. Celery в тестах eager.
 - Таймзона `Europe/Kyiv`. Старое `Europe/Kiev` в `.env` читается как Kyiv, но
   локальный PostgreSQL с `timezone = 'Europe/Kiev'` в `postgresql.conf` не
@@ -171,10 +173,8 @@ docker compose logs init        # логины и ссылки на столы �
   ботов и Telegram ID владельца из `.env` (`DEMO_*`).
 - `bot/main.py:run_polling` — только для эмулятора и нагрузочного теста; в
   работе боты запускает `bot/supervisor.py`.
-- Встроенные помощники Explore и Plan стартуют без `CLAUDE.md` и правил: в
-  задании для них называть нужные правила и файлы.
-- `TABLEOS_TZ.md` и `PROJECT_CHEATSHEET.md` — исторические, ниже по
-  приоритету, чем код и `docs/`.
+- Помощники Explore и Plan стартуют без `CLAUDE.md` и правил — называть их в
+  задании. `TABLEOS_TZ.md` и `PROJECT_CHEATSHEET.md` — исторические.
 
 ## Карта документов
 
