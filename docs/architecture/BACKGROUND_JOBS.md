@@ -11,6 +11,7 @@ Autodiscovery Celery регистрирует такие собственные 
 | `notifications.deliver_staff_notification` | `apps/notifications/tasks.py` | `default` | `on_commit` после создания строки `StaffNotification` | `autoretry_for=Exception`, нарастающая пауза, максимум 5; `acks_late`, `reject_on_worker_lost` | уже `sent` пропускается; текст уже на языке сотрудника (строка создаётся на сотрудника, PQ-040); заново проверяются активность сотрудника/пользователя и согласие на уведомления; временные ошибки Telegram выбрасывают `RetryableDeliveryError` (хотя бы один раз, PQ-015) |
 | `notifications.send_guest_order_status_update` | `apps/notifications/tasks.py` | `default` | `on_commit` после смены статуса заказа, если гость разрешил уведомления | так же | заново проверяется настройка; текст собирается на языке гостя (`speaking_to_guest`, PQ-040); повтор только при временной ошибке, после успешной отправки ничего не выбрасывается |
 | `notifications.announce_guest_call_taken` | `apps/notifications/tasks.py` | `default` | `on_commit` после того, как сотрудник принял вызов («🏃 Иду», `take_guest_call`) | так же, как у уведомлений | гостю «… идёт к вам» — один раз: после успешной отправки ставится `GuestCall.guest_told_at`, повтор её пропускает (падение между отправкой и записью может повторить сообщение — хотя бы один раз, ADR-0008); сообщения остальных сотрудников правятся по `telegram_message_id`, ошибка правки (старое или удалённое сообщение) пропускается |
+| `notifications.send_guest_refund_notice` | `apps/notifications/tasks.py` | `default` | `on_commit` после возврата (`refund_bill_lines`, PQ-037) | так же, как у уведомлений | сообщение гостю счёта о сумме, способе и бонусах на его языке; повтор только при временной ошибке (хотя бы один раз, ADR-0008); гостю без Telegram (анонимный гость визита) не отправляется |
 | `notifications.send_broadcast_campaign` | `apps/notifications/tasks.py` | `broadcasts` | `on_commit` из `send_broadcast_campaign`; ставит себя на каждую пачку | так же | строки `BroadcastDelivery`: захват `pending → sending` (skip-locked), отправка вне транзакций, запись каждого результата; `sending` повторно не захватывается (не больше одного раза, PQ-014); рассылка «Всем гостям сети» — одна строка на человека по всей сети, через бота сети (PQ-047, NETWORKS.md) |
 | `notifications.process_scheduled_broadcast_campaigns` | `apps/notifications/tasks.py` | `default` | beat, каждую минуту | нет | `send_broadcast_campaign` блокирует строку кампании и пропускает поставленные, отправляемые и отправленные |
 | `notifications.recover_stalled_broadcast_campaigns` | `apps/notifications/tasks.py` | `default` | beat, каждые 5 минут | нет | просроченные захваты (30 мин) → `unknown`; кампании в `sending` с ожидающими строками и без свежего захвата ставятся заново; законченные — завершаются |
@@ -46,7 +47,10 @@ B4 на середине без курсора помечается как не�
 2026-10-26, AA-044), ровно один `beat`, ровно один сервис `bot`
 (`manage.py runbot --wait --processes N`), PostgreSQL и Redis; перед ними разово
 выполняется `init` (миграции и демо-данные). Без beat не работают
-запланированные рассылки, восстановление зависших рассылок и метрики дня.
+запланированные рассылки, восстановление зависших рассылок, автоотмена
+неподтверждённых переводов, метрики дня, снимок нагрузки (страница «Нагрузка»
+сама предупреждает, что фоновые задачи стоят) и чистка отметок сообщений бота
+сети.
 
 ## Целевой договор задачи
 

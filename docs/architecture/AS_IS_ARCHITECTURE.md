@@ -1,8 +1,9 @@
 # Botera Shop — архитектура как она есть
 
 **Статус:** поведение, которое реализовано сейчас, сверено с кодом ветки
-`clean-project-rules` 2026-10-23 после батчей B0–B5, самовывоза и
-упорядочивания каналов (ADR-0009). Документ описывает, что код делает
+`clean-project-rules` 2026-11-14 (сверка документации после PQ-031–PQ-052:
+каналы заказа, возвраты, языки, сервис ботов, сети, Mini App, каталог, Admin,
+нагрузка, схема зала). Документ описывает, что код делает
 сегодня, а не задуманный дизайн. Задуманный дизайн — в
 [`TARGET_ARCHITECTURE.md`](TARGET_ARCHITECTURE.md); открытые дефекты — в
 [`../audits/ARCHITECTURE_AUDIT.md`](../audits/ARCHITECTURE_AUDIT.md).
@@ -34,11 +35,11 @@ flowchart LR
 
 | Процесс | Точка входа | Ответственность | Модуль настроек по умолчанию |
 |---|---|---|---|
-| Django web/Admin | `core/wsgi.py`, `core/asgi.py`, `core/urls.py` | демо-страница, `/admin/`, `/health/` | `core.settings.production` |
+| Django web/Admin | `core/wsgi.py`, `core/asgi.py`, `core/urls.py` | демо-страница, `/admin/` (с `/admin/language/` и `/admin/point/<точка>/`), `/health/`, Mini App и экран кухни `/app/` (`webapp/urls.py`), запасная раздача `/media/` | `core.settings.production` |
 | Management-команды, `runserver` | `manage.py` | миграции, наполнение демо-данными, `runbot`, `ensure_admin` | `core.settings.local` |
-| Telegram-бот | `manage.py runbot` → `bot/main.py:run_polling` | polling всех активных `BotInstance`: в одном процессе или с `--processes N` в N процессах, каждый бот ровно в одном (`bot/services/runtime.py:configs_for_shard`) | `core.settings.local` (через `manage.py`) |
-| Воркер Celery | `celery -A core.celery worker` → `core/celery.py` | уведомления персонала и гостей, рассылки, обновление метрик | `core.settings.local` |
-| Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `cancel-expired-transfer-orders` (5 мин), `refresh-daily-partner-metrics` (15 мин) | `core.settings.local` |
+| Telegram-бот | `manage.py runbot` → `bot/supervisor.py:BotSupervisor` | сервис ботов: polling всех исправных активных `BotInstance`, список перечитывается раз в минуту; в одном процессе или с `--processes N` в N процессах, каждый бот ровно в одном (`bot/services/runtime.py:configs_for_shard`). `bot/main.py:run_polling` — только эмулятор и нагрузочный тест | `core.settings.local` (через `manage.py`) |
+| Воркер Celery | `celery -A core.celery worker` → `core/celery.py` | уведомления персонала и гостей, сообщения о возврате, рассылки, метрики, снимок нагрузки | `core.settings.local` |
+| Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `record-system-snapshot` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `cancel-expired-transfer-orders` (5 мин), `refresh-daily-partner-metrics` (15 мин), `forget-old-network-message-points` (1 день) | `core.settings.local` |
 | PostgreSQL 16, Redis 7 | `docker-compose.yml` | долговечные данные; брокер и хранилище результатов Celery | — |
 
 `docker-compose.yml` объявляет `db`, `redis` (оба с healthcheck), разовый
@@ -65,13 +66,15 @@ flowchart LR
 участвует: его `site/sitecustomize.py` подключается только через
 `infrastructure/loadtest/env.sh`.
 
-Admin по-русски:
-- подписи моделей, полей и вариантов — `verbose_name` в моделях;
+Admin — на языке пользователя (uk/ru/en, PQ-040, [LANGUAGES.md](LANGUAGES.md)):
+- подписи моделей, полей и вариантов — `verbose_name` в моделях, по-русски
+  в коде (`tests/core/test_admin_language.py`), переводы — в
+  `locale/{uk,en}/LC_MESSAGES/django.po`;
 - разделы — `AppConfig.verbose_name`;
-- строки темы Unfold — `LOCALE_PATHS` → `locale/ru/LC_MESSAGES/theme.po`,
-  `django.mo` собирает `infrastructure/scripts/messages.py compile`, gettext
-  не нужен;
-- проверка — `tests/core/test_admin_language.py`.
+- строки темы Unfold — `locale/{ru,uk}/LC_MESSAGES/theme.po`; `django.mo`
+  собирает `infrastructure/scripts/messages.py compile`, gettext не нужен;
+- язык пользователя — `core/middleware.py:UserLanguageMiddleware`, проверка —
+  `tests/core/test_admin_i18n.py`.
 
 Продакшен (AA-038, `docs/engineering/DEPLOYMENT.md`): `docker-compose.prod.yml`
 задаёт `core.settings.production` всем процессам. Модуль отказывается
@@ -79,8 +82,9 @@ Admin по-русски:
 whitenoise и кэш в Redis. Сервисы:
 
 - `init` — `check --deploy` и миграции, без демо;
-- `web` — `collectstatic` и gunicorn на `127.0.0.1`;
-- `worker`, `beat`, `bot`;
+- `web` — `collectstatic` и gunicorn на `127.0.0.1` (`WEB_WORKERS`, по
+  умолчанию 3); фото меню отдаёт Caddy на хосте;
+- `worker`, `broadcasts`, `beat`, `bot`;
 - `redis` с паролем;
 - `backup` — `infrastructure/docker/backup.sh`, суточный `pg_dump`.
 
@@ -101,41 +105,45 @@ whitenoise и кэш в Redis. Сервисы:
 
 ## Модули приложения и их зона
 
-Установленные приложения по порядку: `unfold`, Django contrib, `bot`, затем
-`partners`, `users`, `tables`, `menu`, `orders`, `billing`, `bonuses`,
-`employees`, `notifications`, `analytics`. В `core` — общие базовые классы,
+Установленные приложения по порядку: `unfold`, Django contrib, `bot`,
+`webapp` (адаптер Mini App, без моделей), затем `partners`, `users`, `tables`,
+`menu`, `orders`, `billing`, `bonuses`, `employees`, `notifications`,
+`analytics`. В `core` — общие базовые классы,
 ограничение Admin по партнёру, Celery, шифрование, логирование и настройки.
 
 | Область | Хранимые понятия | Где реальная оркестрация | Примечания |
 |---|---|---|---|
-| Партнёры | `Partner`, `BotInstance`, `PartnerBotSettings`, `OpeningHours` | `clean()` моделей (`Partner.clean` отклоняет неизвестные часовые пояса), `BotInstance.set_token`, `partners/opening_hours.py` | `PartnerBotSettings` хранит флаги модулей, подписи кнопок, шаблоны сообщений и реквизиты для перевода. Часовой пояс по умолчанию `Europe/Kyiv`. Часы работы поддерживают интервалы через полночь. |
-| Пользователи и личность | `User`, глобальный `TelegramAccount`, партнёрский `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile` | Одна Telegram-личность → один профиль гостя на партнёра. Телефон гостя хранится в профиле. |
-| Столы | `Table`, `TableSession`, `TableVisit` | `tables/services.py` | Активация по QR, визиты стола, закрытие только после расчёта. `timed_out` и `expires_at` есть, но ничто их не выставляет. |
-| Меню | `MenuCategory`, `MenuItem` | чтение — `menu/repositories.py`; запись — Admin | Цена должна быть положительной (`menu_item_price_positive`). Отметки каналов: `available_at_table`, `available_for_pickup`, `available_for_delivery`; `MenuItem.is_sold_in(channel)`. |
-| Заказы | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory` | `orders/services.py`; удалённые каналы — в `billing/remote_orders.py` | Корзина, создание заказа по каналу (стол / самовывоз / доставка / отправка), машина статусов, подтверждение получения гостем. `Order.channel`, `Order.requested_for`, `Order.payment_timing`, `Order.REMOTE_CHANNELS` (старое имя `PREPAID_CHANNELS` — синоним). |
-| Счета | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment`, `BillAdjustment` | ядро — `billing/services.py`; стол — `billing/table_bills.py`; удалённые каналы — `billing/remote_orders.py` | Создание и расширение счёта, оплата деньгами и бонусами, изменения и аннулирование, действия после оплаты. |
-| Бонусы | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Баланс на основе журнала с проверкой сверки; быстрая продажа. |
-| Сотрудники | `EmployeeProfile` | `employees/selectors.py:get_staff_employee_by_telegram` | Запись — через Admin. |
-| Уведомления | `NotificationPreference`, `StaffNotification`, `BroadcastCampaign`, `BroadcastDelivery` | `notifications/services.py`, `tasks.py` | Вся отправка в Telegram — здесь. |
-| Аналитика | `PartnerDailyMetric`, `TrafficSource`, `SourceVisit` | `analytics/services.py`, `analytics/sources.py` | Отчёт за день для персонала по запросу (с разбивкой по каналам заказа); снимок раз в 15 минут; источники переходов (PQ-031). |
+| Партнёры | `Partner`, `Network`, `BotInstance`, `PartnerBotSettings`, `OpeningHours`, `BotText`, `NetworkGuestChoice`, `BotMessagePoint`, `NetworkWallet` | `clean()` моделей (`Partner.clean` отклоняет неизвестные часовые пояса), `BotInstance.set_token`, `partners/opening_hours.py`, `partners/networks.py` (точки сети, точка обновления, бот точки), `partners/languages.py` и `bot_texts.py` (языки, свои тексты), `partners/mini_app.py`, `partners/services.py:record_bot_runtime_states` | `PartnerBotSettings` хранит флаги модулей, их настройки и реквизиты для перевода; подписи кнопок и сообщения — каталог текстов и `BotText` (PQ-040). Часовой пояс по умолчанию `Europe/Kyiv`. Часы работы — интервалы через полночь, свои у самовывоза и доставки (PQ-038). |
+| Пользователи и личность | `User`, глобальный `TelegramAccount`, партнёрский `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile`, `find_guest_by_customer_code`, `create_anonymous_guest` | Одна Telegram-личность → один профиль гостя на партнёра; у анонимного гостя визита Telegram нет (PQ-052). Телефон, адрес и получатель гостя хранятся в профиле. Меню и стартовая страница Admin — `users/admin_navigation.py`, `admin_dashboard.py`. |
+| Столы | `Hall`, `Table`, `TableVisit`, `TableSession`, `Reservation` | `tables/services.py` (активация, визиты, стол с планшета), `tables/floor_plan.py` (схема и статусы), `tables/reservations.py` (бронь) | Активация по QR, визиты стола, закрытие только после расчёта. `timed_out` и `expires_at` есть, но ничто их не выставляет. |
+| Меню | `MenuCategory`, `MenuBadge`, `MenuItem`, `MenuItemPhoto`, `MenuItemAttribute`, `MenuItemVariant`, `ModifierGroup`, `Modifier`, `StockMovement` | чтение — `menu/repositories.py`, `menu/catalog.py` (дерево, расписание); выбор и цена — `menu/options.py:resolve_choice`; остатки — `menu/stock.py`; переводы — `menu/translations.py`; фото — `menu/photos.py`; остальное — Admin | Цена должна быть положительной (`menu_item_price_positive`). Отметки каналов: `available_at_table`, `available_for_pickup`, `available_for_delivery`, `available_for_shipping`; `MenuItem.is_sold_in(channel)`. Подробно — [CATALOG.md](CATALOG.md). |
+| Заказы | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory`, `KitchenScreen`, `OrderStationReady` | `orders/services.py`; удалённые каналы — в `billing/remote_orders.py`; экран кухни и бара — `orders/kitchen.py` | Корзина, создание заказа по каналу (стол / самовывоз / доставка / отправка), заказ на стол с планшета, машина статусов, подтверждение получения гостем. `Order.channel`, `Order.requested_for`, `Order.payment_timing`, `Order.request_key`, `Order.REMOTE_CHANNELS` (старое имя `PREPAID_CHANNELS` — синоним). |
+| Счета | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment`, `BillAdjustment`, `Refund`, `RefundLine` | ядро — `billing/services.py`; стол — `billing/table_bills.py`; удалённые каналы — `billing/remote_orders.py`; кнопки персонала для бота, Mini App и Admin — `billing/staff_actions.py` | Создание и расширение счёта, оплата деньгами и бонусами, изменения и аннулирование, возвраты, действия после оплаты. |
+| Бонусы | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Баланс на основе журнала с проверкой сверки (в сети с общими бонусами — по всем точкам); быстрая продажа. |
+| Сотрудники | `EmployeeProfile`, `StaffInvite` | `employees/selectors.py:get_staff_employee_by_telegram`, `employees/invites.py` (приглашения), `employees/network_staff.py` (копии персонала сети) | Профиль создаёт Admin или подтверждённое приглашение (PQ-046). |
+| Уведомления | `NotificationPreference`, `GuestCall`, `StaffNotification`, `BroadcastCampaign`, `BroadcastDelivery` | `notifications/services.py`, `tasks.py`, `telegram_transport.py` | Вся отправка в Telegram из воркера — здесь. |
+| Аналитика | `PartnerDailyMetric`, `TrafficSource`, `SourceVisit`, `SystemSnapshot` | `analytics/services.py`, `analytics/sources.py`, `analytics/selectors.py` (отчёт сети), `analytics/dashboard.py` (стартовая страница), `analytics/system_load.py` (нагрузка) | Отчёт за день для персонала по запросу (с разбивкой по каналам заказа); снимок метрик раз в 15 минут; источники переходов (PQ-031); снимок нагрузки раз в минуту (PQ-051). |
+| Mini App | — (адаптер, как бот) | `webapp/views.py` (гость), `webapp/staff_*.py` (рабочий экран), `webapp/kitchen_views.py` (экран кухни) | Вызывает те же сервисы, что бот; подробно — [MINI_APP.md](MINI_APP.md). |
 
 ### Фактические зависимости импорта
 
 Целевая схема разрешает только `tables → users` и запрещает `core → apps`.
 Сейчас в коде такие прямые зависимости (продакшен-модули без тестов и
-миграций, включая импорты внутри функций):
+миграций, включая импорты внутри функций; пересчитано разбором AST
+2026-11-14):
 
 ```text
 bot           -> все доменные приложения
+webapp        -> все доменные приложения и bot (права персонала, тексты)
 analytics     -> billing, bonuses, employees, menu, orders, partners, tables, users
-billing       -> bonuses, employees, notifications, orders, partners, tables, users
+billing       -> bonuses, employees, menu, notifications, orders, partners, tables, users
 orders        -> billing, employees, menu, notifications, partners, tables, users
-tables        -> billing, bonuses, notifications, orders, users
-notifications -> employees, orders, partners, tables, users
+tables        -> billing, bonuses, notifications, orders, partners, users
+notifications -> billing, employees, menu, orders, partners, tables, users
 bonuses       -> menu, orders, partners, users
-partners      -> bonuses, employees, menu, tables, users (Admin и наполнение демо-данными)
-menu          -> users
-employees     -> users
+partners      -> analytics, bonuses, employees, menu, notifications, orders, tables, users (Admin, сети, наполнение демо-данными)
+menu          -> orders, partners, users
+employees     -> partners, users
 users         -> analytics, orders, partners (только меню и стартовая страница Admin)
 core          -> partners, users (core/admin_mixins.py); orders, partners, tables (core/urls.py)
 ```
@@ -151,10 +159,11 @@ apps.notifications.tasks` — цикл, разорванный только им
 
 ## Работа бота и маршрутизация
 
-`bot/main.py:create_dispatcher` регистрирует `PartnerRuntimeMiddleware` как
-внешний middleware обновлений и подключает роутеры в порядке `start`,
-`session`, `menu`, `order`, `remote_checkout`, `profile`, `billing`,
-`guest_call`, `staff`. aiogram останавливается на первом подходящем
+`bot/main.py:create_dispatcher` регистрирует внешние middleware обновлений
+`LoadCounterMiddleware` (счётчик нагрузки, PQ-051) и `PartnerRuntimeMiddleware`
+и подключает роутеры в порядке `start`, `points`, `session`, `menu`, `order`,
+`remote_checkout`, `profile`, `billing`, `guest_call`, `staff_refunds`,
+`staff_invites`, `staff`. aiogram останавливается на первом подходящем
 обработчике, поэтому порядок — это поведение.
 
 1. `runbot` запускает сервис ботов `bot/supervisor.py:BotSupervisor`
@@ -229,7 +238,8 @@ apps.notifications.tasks` — цикл, разорванный только им
    партнёру бота. Каждый callback персонала заново определяет исполнителя и
    проверяет нужное право (`_can_manage_billing`, `_can_view_tables`,
    `_ensure_open_orders_allowed`, `_ensure_quick_sale_allowed`). Права
-   сочетают `User.role` с флагами модулей партнёра.
+   сочетают `User.role` с флагами модулей партнёра; общие для бота и
+   рабочего экрана Mini App — `bot/services/staff_rights.py`.
 6. Экраны персонала (PQ-044): в рабочий режим ведут `/staff` и кнопка
    «🧑‍🍳 Рабочий режим» на клавиатуре (`GuestAction.STAFF` — только
    активному сотруднику заведения, `bot/services/navigation.py`). Каждый
@@ -343,8 +353,12 @@ apps.notifications.tasks` — цикл, разорванный только им
 3. Оформление → `create_order`: проверяет, что гость, стол, сессия и каждая
    позиция меню принадлежат партнёру, фиксирует названия позиций и цены из
    корзины, пишет `OrderStatusHistory` и создаёт строки `StaffNotification`,
-   которые отправляются через `transaction.on_commit`. Доступность позиций
-   меню проверяется при добавлении в корзину, а не повторно при оформлении.
+   которые отправляются через `transaction.on_commit`. При оформлении за
+   столом (`checkout_active_cart_for_telegram_user`) заново проверяются
+   способ заказа, расписание категории, выбор вариантов и добавок, а
+   остаток — в `create_order`; стоп-лист позиции (`is_available`) — только
+   при добавлении в корзину (AA-051). Удалённое оформление
+   (`remote_orders.py:_active_cart`) перепроверяет и стоп-лист.
 4. Смена статуса персоналом идёт через `transition_order_status`: заказ
    заново загружается с `select_for_update()` и проверяется по
    `ORDER_STATUS_TRANSITIONS`: `new → accepted|canceled`,
@@ -861,10 +875,13 @@ Telegram Mini App для гостя (PQ-048, этап 1, [MINI_APP.md](MINI_APP.
 | Визит стола | активация (подсесть/новый/auto), автоматическое закрытие пустого рассчитанного визита, `close_table_visit` | Блокировка строки стола сериализует создание визита и присоединение; блокировка строки визита перед присоединением и закрытием |
 | Корзина | сервисы корзины, оформление, смена способа заказа | Частичная уникальность активной корзины на гостя; блокировка строки корзины |
 | Счёт | сервисы создания, расширения, выставления, оплаты, изменения, аннулирования | Блокировка счёта; одно активное распределение на позицию заказа; изменения с аудитом; аннулирование освобождает распределения |
-| Запрос счёта | `mark_billing_request_processed`, `cancel_billing_request` | Перезагрузка под блокировкой; `processed` и `cancelled` — финальные |
+| Запрос счёта | `mark_billing_request_processed`, `cancel_billing_request` | Перезагрузка под блокировкой; `processed` и `canceled` — финальные |
 | Оплата | `record_payment`, `pay_bill_with_bonuses`, `confirm_transfer` | Блокировка счёта; сумма положительна и ≤ остатка; Admin не может править существующие оплаты |
 | Журнал бонусов | сервисы бонусов, оплата счёта бонусами | Блокировка гостя; проверка сверки; ключ идемпотентности уникален в пределах партнёра |
 | Рассылка | сервис и задача уведомлений | Блокировка кампании; строка `BroadcastDelivery` на получателя, захват skip-locked, повторно не отправляется (B4, ADR-0008) |
+| Остаток позиции | `apps/menu/stock.py` (заказ, отмена, быстрая продажа, возврат, пересчёт) | Строки остатка блокируются последними, `no_key`; каждое изменение — `StockMovement`; отмена и возврат не возвращают больше, чем заказ взял |
+| Приглашение сотрудника | `apps/employees/invites.py` | Блокировка приглашения: одноразовое, 24 часа; `StaffInvite → EmployeeProfile` |
+| Бронь стола | `apps/tables/reservations.py` | Блокировка строки стола перед проверкой пересечения (`Table → Reservation`); «не пришли» только после времени |
 
 Admin показывает поля жизненного цикла, производные и журнальные поля только
 для чтения у заказов, корзин, счетов, распределений, оплат, сессий, балансов
@@ -899,13 +916,13 @@ Admin показывает поля жизненного цикла, произ�
   [`../engineering/TESTING.md`](../engineering/TESTING.md).
 - CI нет; все проверки запускаются вручную.
 
-## Цифры кодовой базы на 2026-10-23
+## Цифры кодовой базы на 2026-11-14
 
-233 отслеживаемых Python-файла (около 31 400 строк), 50 пронумерованных
-миграций, 37 тестовых модулей. Крупнейшие нетестовые модули:
-`bot/handlers/staff.py` (2983 строки), `apps/billing/services.py` (1106),
-`apps/orders/services.py` (914), `bot/keyboards/staff.py` (901),
-`apps/analytics/services.py` (771),
-`apps/partners/management/commands/seed_baseline_demo.py` (728). Инвентарь
-на момент аудита сохранён в
+493 отслеживаемых Python-файла (около 80 000 строк), 121 пронумерованная
+миграция, 128 тестовых модулей. Крупнейшие нетестовые модули:
+`bot/handlers/staff.py` (3921 строка), `apps/orders/services.py` (1485),
+`apps/billing/services.py` (1485), `apps/notifications/services.py` (1464),
+`apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1037),
+`apps/partners/management/commands/seed_baseline_demo.py` (1006). Инвентарь
+на момент аудита 2026-07-27 сохранён в
 [`../audits/CODEBASE_INVENTORY.md`](../audits/CODEBASE_INVENTORY.md).
