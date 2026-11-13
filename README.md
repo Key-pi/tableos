@@ -54,7 +54,9 @@ docker compose logs init   # логины Admin и ссылки на столы 
   [`docs/engineering/DEVELOPMENT.md`](docs/engineering/DEVELOPMENT.md) и
   [`docs/engineering/TESTING.md`](docs/engineering/TESTING.md)
 - Правила репозитория для разработчиков и агентов: [`AGENTS.md`](AGENTS.md),
-  для Claude — [`CLAUDE.md`](CLAUDE.md)
+  для Claude — [`CLAUDE.md`](CLAUDE.md), решения по областям кода —
+  [`.claude/rules/`](.claude/rules/), порядок изменения —
+  [`.claude/skills/tableos-development/SKILL.md`](.claude/skills/tableos-development/SKILL.md)
 - Находки аудита и статус батчей:
   [`docs/audits/ARCHITECTURE_AUDIT.md`](docs/audits/ARCHITECTURE_AUDIT.md) и
   [`docs/audits/REFACTOR_ROADMAP.md`](docs/audits/REFACTOR_ROADMAP.md)

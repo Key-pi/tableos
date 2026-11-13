@@ -227,8 +227,10 @@ cp .env.example .env          # и впишите BOT_TOKEN_ENCRYPTION_KEY
 
 ## Порядок изменения
 
-1. Прочитать [`AGENTS.md`](../../AGENTS.md), [`CLAUDE.md`](../../CLAUDE.md)
-   и документ нужного модуля/архитектуры.
+1. Прочитать [`AGENTS.md`](../../AGENTS.md), [`CLAUDE.md`](../../CLAUDE.md),
+   правило своей области в [`.claude/rules/`](../../.claude/rules/) и документ
+   нужного модуля/архитектуры; порядок по шагам —
+   [`.claude/skills/tableos-development/SKILL.md`](../../.claude/skills/tableos-development/SKILL.md).
 2. Найти статические импорты и динамические регистрации (Django Admin,
    миграции, Celery, роутеры aiogram, management-команды) прежде чем
    переносить или удалять код.

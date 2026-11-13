@@ -19,3 +19,7 @@ infrastructure/loadtest/.local.env
 infrastructure/loadtest/results/
 infrastructure/loadtest/partners.json
 infrastructure/loadtest/admin_sessions.json
+
+# личные инструкции Claude Code (https://code.claude.com/docs/en/memory)
+CLAUDE.local.md
+.claude/settings.local.json

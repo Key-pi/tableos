@@ -260,7 +260,7 @@ PQ-033) и отправка почтой ([SHIPPING.md](../architecture/SHIPPING
 выкаткой B2–B5 в продакшен: аудиты дублей данных на копии продакшена и полный
 набор тестов на PostgreSQL.
 
-## После дорожной карты — продуктовые ветки (2026-10-24 — 2026-11-12)
+## После дорожной карты — продуктовые ветки (2026-10-24 — 2026-11-14)
 
 Каждая — по решению владельца, с тестами (в том числе на PostgreSQL для
 блокировок), проверкой мутациями и слиянием в `clean-project-rules` после его
@@ -274,13 +274,13 @@ PQ-033) и отправка почтой ([SHIPPING.md](../architecture/SHIPPING
 | Часы и уведомления по модулю | PQ-038 | PICKUP.md |
 | Языки бота и Admin | PQ-040 | LANGUAGES.md |
 | Нагрузочный тест и исправления AA-040–AA-047 | — | LOAD_TESTING.md |
-| Путь гостя и экраны персонала (AA-048–AA-050) | PQ-043, PQ-044 | BOT_RUNTIME.md |
-| Сервис ботов | PQ-041, PQ-042 | BOT_RUNTIME.md |
-| Приглашения сотрудников | PQ-046 | AS_IS_ARCHITECTURE.md |
-| Сети заведений | PQ-047 | NETWORKS.md |
-| Telegram Mini App | PQ-048 | MINI_APP.md |
-| Каталог | PQ-049 | CATALOG.md |
-| Admin для заведения | PQ-050 | AS_IS_ARCHITECTURE.md |
-| Страница «Нагрузка» | PQ-051 | AS_IS_ARCHITECTURE.md |
-| Схема зала, заказ на стол, бронь | PQ-052 | FLOOR_PLAN.md |
-| Сверка документации (AA-051–AA-053) | — | ARCHITECTURE_AUDIT.md |
+| Путь гостя и экраны персонала (ветки `guest-flow-ux`, `staff-flow-ux`; AA-048–AA-050) | PQ-043, PQ-044 | BOT_RUNTIME.md |
+| Сервис ботов (ветка `bot-supervisor`) | PQ-041, PQ-042 | BOT_RUNTIME.md |
+| Приглашения сотрудников (ветка `staff-invites`) | PQ-046 | AS_IS_ARCHITECTURE.md |
+| Сети заведений (ветка `venue-networks`) | PQ-047 | NETWORKS.md |
+| Telegram Mini App (ветка `mini-app`) | PQ-048 | MINI_APP.md |
+| Каталог (ветка `catalog`) | PQ-049 | CATALOG.md |
+| Admin для заведения (ветка `admin-polish`) | PQ-050 | AS_IS_ARCHITECTURE.md |
+| Страница «Нагрузка» (ветка `system-load`) | PQ-051 | AS_IS_ARCHITECTURE.md |
+| Схема зала, заказ на стол, бронь (ветка `floor-plan`) | PQ-052 | FLOOR_PLAN.md |
+| Сверка документации и инструкций (ветка `docs-audit`; AA-051–AA-053) | — | ARCHITECTURE_AUDIT.md |
