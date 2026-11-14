@@ -91,7 +91,8 @@ whitenoise и кэш в Redis. Сервисы:
 Образ ставит зависимости из `requirements.lock` и в продакшене работает от
 пользователя `app`. Вход в Admin ограничен: после 5 неверных паролей
 учётная запись закрыта на 15 минут (`core/security/login_throttle.py`,
-`core/urls.py`). CI в репозитории нет.
+`core/urls.py`). CI — GitHub Actions (`.github/workflows/tests.yml`, раздел
+«Тесты и проверки»).
 
 Очереди: `default` и `broadcasts`; в `broadcasts` направляется только
 `notifications.send_broadcast_campaign`. Поскольку `CELERY_TASK_QUEUES`
@@ -951,7 +952,13 @@ Admin показывает поля жизненного цикла, произ�
   число тестов.
 - Записанные прогоны — в
   [`../engineering/TESTING.md`](../engineering/TESTING.md).
-- CI нет; все проверки запускаются вручную.
+- CI — GitHub Actions (`.github/workflows/tests.yml`): на каждый пуш и pull
+  request два параллельных задания, SQLite и PostgreSQL 16 (с Redis 7), —
+  `manage.py check`, `makemigrations --check`, `check_docs.py` и весь набор;
+  Python 3.12, как в `infrastructure/docker/Dockerfile`. Ruff в CI не
+  запускается: 13 старых замечаний и другая версия в окружении (AA-053).
+  Полные прогоны перед коммитом по-прежнему обязательны — CI их не заменяет,
+  а страхует.
 
 ## Цифры кодовой базы на 2026-11-14
 

@@ -1,0 +1,82 @@
+# Проверка на каждый пуш и pull request: Django check, миграции, документация
+# против кода и весь набор тестов — на SQLite и на PostgreSQL 16, двумя
+# параллельными заданиями. Результат — вкладка Actions на GitHub и значок у
+# коммита: зелёная галочка — всё прошло, красный крестик — открыть запуск и
+# посмотреть, какой шаг упал. Подробно — docs/engineering/TESTING.md, раздел
+# «GitHub Actions».
+
+name: Тесты
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# Новый пуш в ту же ветку отменяет ещё идущую проверку старого.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: ${{ matrix.database }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        database: [SQLite, PostgreSQL 16]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: tableos
+          POSTGRES_USER: tableos
+          POSTGRES_PASSWORD: tableos
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tableos"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DJANGO_USE_SQLITE: ${{ matrix.database == 'SQLite' }}
+      POSTGRES_HOST: 127.0.0.1
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"  # как в infrastructure/docker/Dockerfile
+          cache: pip
+          cache-dependency-path: requirements.lock
+
+      - name: Зависимости
+        run: pip install -r requirements.lock
+
+      # Тестам нужен настоящий ключ Fernet; свой на каждый запуск, нигде не хранится.
+      - name: Ключ шифрования токенов для тестов
+        run: >-
+          echo "BOT_TOKEN_ENCRYPTION_KEY=$(python -c
+          'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+          >> "$GITHUB_ENV"
+
+      - name: Django check
+        run: python manage.py check
+
+      - name: Миграции совпадают с моделями
+        run: python manage.py makemigrations --check --dry-run
+
+      - name: Документация против кода
+        run: python infrastructure/scripts/check_docs.py
+
+      - name: Весь набор тестов
+        run: python manage.py test --noinput

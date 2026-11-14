@@ -6,6 +6,7 @@ paths:
   - "infrastructure/**"
   - "core/settings/**"
   - "docker-compose*.yml"
+  - ".github/**"
 ---
 
 # Платформа: нагрузка, подключение бизнеса, запуск
@@ -31,6 +32,10 @@ paths:
 - Демо-данные: `seed_baseline_demo`, заведения —
   `apps/partners/management/demo_data.py`; токены и Telegram ID — только из
   `.env` (`DEMO_*`), в коде и документах — заглушки.
+- CI — `.github/workflows/tests.yml` (подробно — `docs/engineering/TESTING.md`,
+  «GitHub Actions»): SQLite и PostgreSQL 16 с Redis 7, Python 3.12 как в
+  `infrastructure/docker/Dockerfile`; ключ Fernet создаётся на запуск, секретов
+  у задания нет и не добавлять без согласия владельца; Ruff в CI нет (AA-053).
 - Продакшен: `docker-compose.prod.yml`, `core.settings.production`,
   зависимости — `requirements.lock` через pip-compile; обновлять зависимости —
   только с согласия владельца.

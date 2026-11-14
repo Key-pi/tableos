@@ -115,7 +115,9 @@ Mini App, блокировки и т. д.) — в `.claude/rules/*.md`; в по�
 состояние Ruff и итог последнего полного прогона — в журнале `TESTING.md`;
 каждый полный прогон записывайте туда же. Расхождения документации с кодом
 ловит `tests/core/test_docs.py` (отдельно —
-`python3 infrastructure/scripts/check_docs.py`).
+`python3 infrastructure/scripts/check_docs.py`). На каждый пуш GitHub Actions
+(`.github/workflows/tests.yml`) прогоняет check, миграции, документацию и
+весь набор на SQLite и PostgreSQL 16; ветку с красной проверкой не сливать.
 Не заявляйте «зелёные» тесты или линтер без перепроверки и не заявляйте
 покрытие PostgreSQL, которого нет в репозитории.
 

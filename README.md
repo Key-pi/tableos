@@ -1,5 +1,7 @@
 # Botera Shop
 
+[![Тесты](https://github.com/Key-pi/tableos/actions/workflows/tests.yml/badge.svg?branch=clean-project-rules)](https://github.com/Key-pi/tableos/actions/workflows/tests.yml)
+
 Botera Shop (бывший TableOS) — multi-tenant платформа заказов и лояльности
 для заведений и магазинов: Django-монолит из модулей, Telegram-бот на
 aiogram, Celery, PostgreSQL и Redis. Часть сети Botera

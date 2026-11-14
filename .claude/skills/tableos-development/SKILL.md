@@ -102,6 +102,8 @@ DJANGO_USE_SQLITE=false POSTGRES_HOST=127.0.0.1 python3 manage.py test --noinput
 - Небольшой зелёный коммит; сообщение по-английски, как в `git log`
   (`Floor plan, step 3: table reservations (PQ-052)`, `docs(audit): …`).
 - Пушить — когда просит владелец; в `clean-project-rules` — только по его
-  слову.
+  слову. После пуша дождаться GitHub Actions (`gh run list --branch <ветка>`,
+  или `https://api.github.com/repos/Key-pi/tableos/actions/runs?branch=<ветка>`);
+  красный — разобрать упавший шаг и чинить до слияния.
 - Владельцу: что сделано и как проверить руками; какие команды прогнаны и
   их итог (число тестов, OK); что осталось открытым или ждёт его решения.
