@@ -23,3 +23,6 @@ infrastructure/loadtest/admin_sessions.json
 # личные инструкции Claude Code (https://code.claude.com/docs/en/memory)
 CLAUDE.local.md
 .claude/settings.local.json
+
+# настройки IDE (PyCharm / IntelliJ) — у каждого свои
+.idea/
