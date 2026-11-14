@@ -38,7 +38,6 @@ ROOT = Path(__file__).resolve().parents[2]
 SKIP_DIRS = {
     ".git", ".venv", "venv", "node_modules", "__pycache__", ".ruff_cache",
     ".mypy_cache", ".pytest_cache", "htmlcov", "media", "staticfiles",
-    "brag-output", "Claude outputs",
 }
 # Dated records: their code references describe the code of their day.
 # Links in them are still checked.
