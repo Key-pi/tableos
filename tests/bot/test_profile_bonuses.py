@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from asgiref.sync import async_to_sync
 
-from apps.bonuses.models import BonusTransaction
+from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import sync_bonus_balance_from_ledger
 from apps.partners.models import Network, Partner
 from apps.users.services import get_or_create_guest_profile
@@ -24,6 +24,11 @@ class ProfileBonusesTests(GuestFlowFixture):
             idempotency_key="profile-bonuses-seed",
         )
         sync_bonus_balance_from_ledger(self.guest)
+        # The history opens where a bonus programme works (PQ-001).
+        BonusProgram.objects.create(
+            partner=self.partner, name="Кешбэк",
+            program_type=BonusProgram.ProgramType.CASHBACK, percent="5.00",
+        )
 
     def press(self):
         callback = self._callback("guestprofile:bonuses:0")

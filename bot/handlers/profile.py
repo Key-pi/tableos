@@ -11,6 +11,7 @@ from apps.billing.remote_orders import tracking_link
 from apps.billing.services import get_order_refunded_money
 from apps.bonuses.selectors import (
     active_bonus_programs_for_partner,
+    bonuses_work_at,
     recent_bonus_transactions_for_guest,
 )
 from apps.bonuses.services import bonus_balance
@@ -60,19 +61,24 @@ def _render_profile_summary(
     guest_profile,
     active_session,
     balance=None,
+    show_bonuses: bool = True,
 ) -> str:
     lines = [
         _("<b>Мой профиль</b> · {partner_name}", partner_name=escape_html(partner_name)),
-        _(
-            "Код для бонусов: <code>{customer_code}</code> — назовите его на кассе.",
-            customer_code=guest_profile.customer_code,
-        ),
-        _(
-            "Бонусов на счёте: <b>{loyalty_balance}</b>",
-            # The shared balance in a network with shared bonuses (PQ-047).
-            loyalty_balance=guest_profile.loyalty_balance if balance is None else balance,
-        ),
     ]
+    # Without a working bonus programme the venue does not show bonuses (PQ-001).
+    if show_bonuses:
+        lines += [
+            _(
+                "Код для бонусов: <code>{customer_code}</code> — назовите его на кассе.",
+                customer_code=guest_profile.customer_code,
+            ),
+            _(
+                "Бонусов на счёте: <b>{loyalty_balance}</b>",
+                # The shared balance in a network with shared bonuses (PQ-047).
+                loyalty_balance=guest_profile.loyalty_balance if balance is None else balance,
+            ),
+        ]
     if active_session is not None:
         lines.append(_("Ваш стол: #{number}", number=active_session.table.number))
     if guest_profile.last_visit_at:
@@ -179,16 +185,19 @@ async def profile_handler(message: Message, bot: Bot) -> None:
         partner_id=partner.id,
         telegram_id=message.from_user.id,
     )
+    show_bonuses = await sync_to_async(bonuses_work_at)(partner.id)
     await message.answer(
         _render_profile_summary(
             partner_name=partner.name,
             guest_profile=guest_profile,
             active_session=session,
             balance=await sync_to_async(bonus_balance)(guest_profile),
+            show_bonuses=show_bonuses,
         ),
         reply_markup=build_profile_summary_keyboard(
             bonuses_label=content.button_profile_bonuses_label,
             show_language=await sync_to_async(_offers_language_choice)(partner),
+            show_bonuses=show_bonuses,
         ),
     )
 
@@ -209,6 +218,7 @@ async def profile_summary_callback(callback: CallbackQuery, bot: Bot) -> None:
         partner_id=partner.id,
         telegram_id=callback.from_user.id,
     )
+    show_bonuses = await sync_to_async(bonuses_work_at)(partner.id)
     updated = await _safe_profile_message_edit(
         callback.message,
         _render_profile_summary(
@@ -216,10 +226,12 @@ async def profile_summary_callback(callback: CallbackQuery, bot: Bot) -> None:
             guest_profile=guest_profile,
             active_session=session,
             balance=await sync_to_async(bonus_balance)(guest_profile),
+            show_bonuses=show_bonuses,
         ),
         reply_markup=build_profile_summary_keyboard(
             bonuses_label=content.button_profile_bonuses_label,
             show_language=await sync_to_async(_offers_language_choice)(partner),
+            show_bonuses=show_bonuses,
         ),
     )
     if updated:
@@ -231,6 +243,10 @@ async def profile_summary_callback(callback: CallbackQuery, bot: Bot) -> None:
 @router.callback_query(F.data.startswith("guestprofile:bonuses:"))
 async def profile_bonuses_callback(callback: CallbackQuery, bot: Bot) -> None:
     partner = await sync_to_async(resolve_partner_for_bot_token)(bot.token)
+    if not await sync_to_async(bonuses_work_at)(partner.id):
+        # A button left from before the venue switched its programmes off.
+        await callback.answer(_("Сейчас бонусной программы нет."), show_alert=True)
+        return
     guest_profile = await sync_to_async(get_or_create_guest_profile)(
         partner_id=partner.id,
         telegram_id=callback.from_user.id,

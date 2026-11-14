@@ -6,17 +6,14 @@ MY_ORDERS_LABEL = N_("📋 Мои заказы")
 
 
 def build_profile_summary_keyboard(
-    *, bonuses_label: str, show_language: bool = False
+    *, bonuses_label: str, show_language: bool = False, show_bonuses: bool = True
 ) -> InlineKeyboardMarkup:
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=bonuses_label,
-                callback_data="guestprofile:bonuses:0",
-            )
-        ],
-        [InlineKeyboardButton(text=_(MY_ORDERS_LABEL), callback_data="guestorders:0")],
-    ]
+    rows = []
+    if show_bonuses:
+        rows.append(
+            [InlineKeyboardButton(text=bonuses_label, callback_data="guestprofile:bonuses:0")]
+        )
+    rows.append([InlineKeyboardButton(text=_(MY_ORDERS_LABEL), callback_data="guestorders:0")])
     if show_language:
         rows.append([InlineKeyboardButton(text=_("🌐 Язык"), callback_data="guestlang:menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

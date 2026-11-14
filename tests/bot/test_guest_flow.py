@@ -242,7 +242,8 @@ class StartAndHelpTests(GuestFlowFixture):
         async_to_sync(start.start_handler)(message, SimpleNamespace(args=""), self.bot)
         greeting, choice = (call.args[0] for call in message.answer.call_args_list)
         self.assertNotIn("QR", greeting)
-        self.assertIn("Ваш код для бонусов", greeting)
+        self.assertIn("Добро пожаловать", greeting)
+        self.assertNotIn("код для бонусов", greeting)  # no programme here (PQ-001)
         self.assertIn("Как хотите заказать?", choice)
         self.assertIn("За столом — отсканируйте QR-код на столе.", choice)
         self.assertEqual(

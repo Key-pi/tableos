@@ -6552,6 +6552,10 @@ msgstr "• No bonus history yet."
 msgid "Страница истории: {page}/{total_pages}"
 msgstr "History page: {page}/{total_pages}"
 
+#: bot/handlers/profile.py
+msgid "Сейчас бонусной программы нет."
+msgstr "There is no bonus program right now."
+
 #: bot/handlers/profile.py bot/handlers/session.py
 msgid "оплачен"
 msgstr "paid"

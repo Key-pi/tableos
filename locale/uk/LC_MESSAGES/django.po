@@ -6552,6 +6552,10 @@ msgstr "• Історія бонусів поки порожня."
 msgid "Страница истории: {page}/{total_pages}"
 msgstr "Сторінка історії: {page}/{total_pages}"
 
+#: bot/handlers/profile.py
+msgid "Сейчас бонусной программы нет."
+msgstr "Зараз бонусної програми немає."
+
 #: bot/handlers/profile.py bot/handlers/session.py
 msgid "оплачен"
 msgstr "оплачено"

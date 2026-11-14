@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from asgiref.sync import sync_to_async
 
 from apps.analytics.sources import parse_source_payload, record_source_visit
+from apps.bonuses.selectors import bonuses_work_at
 from apps.employees.invites import parse_invite_payload
 from apps.employees.models import EmployeeProfile
 from apps.employees.selectors import get_staff_employee_by_telegram
@@ -34,6 +35,18 @@ from core.i18n import _
 
 router = Router()
 
+
+
+async def _bonus_code_lines(partner, guest_profile, *, gap: bool = False) -> list[str]:
+    """The guest's bonus code, only where a bonus programme works (PQ-001)."""
+
+    if not await sync_to_async(bonuses_work_at)(partner.id):
+        return []
+    line = _(
+        "Ваш код для бонусов: <code>{customer_code}</code> — назовите его на кассе.",
+        customer_code=guest_profile.customer_code,
+    )
+    return ["", line] if gap else [line]
 
 @router.message(CommandStart())
 async def start_handler(message: Message, command: CommandObject, bot: Bot) -> None:
@@ -99,11 +112,8 @@ async def start_handler(message: Message, command: CommandObject, bot: Bot) -> N
         "\n".join(
             [
                 content.welcome_message(partner_name=partner.name),
-                _(
-                    "Ваш код для бонусов: <code>{customer_code}</code> — назовите его на кассе.",
-                    customer_code=guest_profile.customer_code,
-                ),
             ]
+            + await _bonus_code_lines(partner, guest_profile)
             + (
                 [
                     _(
@@ -189,12 +199,8 @@ async def _activate_and_reply(*, message: Message, user, partner, content, paylo
                     partner_name=partner.name,
                     table_number=session.table.number,
                 ),
-                "",
-                _(
-                    "Ваш код для бонусов: <code>{customer_code}</code> — назовите его на кассе.",
-                    customer_code=guest_profile.customer_code,
-                ),
             ]
+            + await _bonus_code_lines(partner, guest_profile, gap=True)
             + (
                 [
                     "",

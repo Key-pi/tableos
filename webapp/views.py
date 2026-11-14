@@ -38,6 +38,7 @@ from apps.billing.remote_orders import (
     save_guest_shipping_destination,
 )
 from apps.billing.services import BillingServiceError
+from apps.bonuses.selectors import bonuses_work_at
 from apps.bonuses.services import bonus_balance
 from apps.menu.catalog import (
     badges_of,
@@ -276,7 +277,9 @@ def state_view(request, guest: GuestRequest, body: dict) -> dict:
         cart=_cart_json(guest),
         bonus_balance=(
             _money(bonus_balance(profile))
-            if profile is not None and content.supports_loyalty() else None
+            # Without a working bonus programme no balance is shown (PQ-001).
+            if profile is not None and content.supports_loyalty()
+            and bonuses_work_at(partner.id) else None
         ),
         can_order=content.supports_cart(),
     )
