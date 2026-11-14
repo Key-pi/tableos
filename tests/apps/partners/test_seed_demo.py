@@ -7,7 +7,7 @@ from django.test import TestCase
 
 from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuItem
-from apps.partners.models import Partner
+from apps.partners.models import Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.users.models import TelegramAccount, User
 
@@ -26,6 +26,19 @@ class SeedDemoTests(TestCase):
         self.assertEqual(Table.objects.filter(partner=partner).count(), 5)
         self.assertEqual(MenuItem.objects.filter(partner=partner).count(), 4)
         self.assertEqual(EmployeeProfile.objects.filter(partner=partner).count(), 1)
+
+    def test_the_demo_switches_its_modules_on_itself(self):
+        # A new venue has every module off (PQ-053).
+        _seed()
+        settings = PartnerBotSettings.objects.get(partner__slug="demo-lounge")
+        on = sorted(
+            field.name for field in PartnerBotSettings._meta.concrete_fields
+            if field.name.startswith("module_") and getattr(settings, field.name)
+        )
+        self.assertEqual(on, [
+            "module_cart_enabled", "module_menu_enabled", "module_orders_enabled",
+            "module_quick_sale_enabled", "module_reports_enabled", "module_tables_enabled",
+        ])
 
     def test_conflict_rolls_back_every_change(self):
         other = Partner.objects.create(name="Other", slug="other-venue")

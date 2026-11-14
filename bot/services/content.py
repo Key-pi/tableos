@@ -106,18 +106,19 @@ class BotContent:
 
     @classmethod
     def defaults(cls) -> "BotContent":
+        # Modules as a new venue has them: all off (PQ-053), from the model so
+        # the two cannot drift apart.
+        modules = {
+            name: PartnerBotSettings._meta.get_field(name).default
+            for name in (
+                "module_menu_enabled", "module_tables_enabled", "module_delivery_enabled",
+                "module_pickup_enabled", "module_shipping_enabled", "module_cart_enabled",
+                "module_orders_enabled", "module_billing_enabled", "module_staff_call_enabled",
+                "module_quick_sale_enabled", "module_reports_enabled",
+            )
+        }
         return cls(
-            module_menu_enabled=True,
-            module_tables_enabled=True,
-            module_delivery_enabled=False,
-            module_pickup_enabled=False,
-            module_shipping_enabled=False,
-            module_cart_enabled=True,
-            module_orders_enabled=True,
-            module_billing_enabled=False,
-            module_staff_call_enabled=False,
-            module_quick_sale_enabled=True,
-            module_reports_enabled=True,
+            **modules,
             auto_close_table_session_after_payment=True,
             max_menu_items_per_category_message=8,
             duplicate_request_cooldown_seconds=45,

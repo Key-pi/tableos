@@ -4,11 +4,12 @@ from unittest.mock import AsyncMock
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 
-from apps.partners.models import BotInstance, Partner
+from apps.partners.models import BotInstance, Partner, PartnerBotSettings
 from apps.tables.models import Table, TableSession
 from apps.tables.services import activate_table_session
 from bot.handlers.start import start_handler, visit_choice_callback
 from bot.services.runtime import BotRuntimeConfig, register_runtime_configs
+from tests.modules import TABLE_VENUE_MODULES
 
 
 def _user(telegram_id):
@@ -42,6 +43,7 @@ class VisitChoiceBotFlowTests(TestCase):
                 )
             ]
         )
+        PartnerBotSettings.objects.create(partner=self.partner, **TABLE_VENUE_MODULES)
         self.table = Table.objects.create(partner=self.partner, number=8, qr_token="choice08")
         self.first = activate_table_session(
             partner_id=self.partner.id,

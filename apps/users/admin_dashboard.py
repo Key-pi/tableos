@@ -243,6 +243,15 @@ def _setup(request, partner_id) -> list[dict]:
             if _can(request, "partners.botinstance", "add") else None,
             lambda: _can(request, "partners.botinstance"),
         ),
+        dashboard.SETUP_MODULES: (
+            _("Включите нужные модули"),
+            _(
+                "У нового заведения все модули выключены: включите то, чем будете "
+                "пользоваться, — меню, столы, самовывоз, доставку и другие."
+            ),
+            settings_link,
+            lambda: _can(request, "partners.partnerbotsettings", "change"),
+        ),
         dashboard.SETUP_MENU: (
             _("Добавьте позиции меню"),
             _("Без них гостю нечего заказать."),

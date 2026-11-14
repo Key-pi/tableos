@@ -18,6 +18,7 @@ from apps.tables.models import Table
 from apps.tables.services import activate_table_session
 from apps.users.models import TelegramAccount, User
 from bot.handlers import staff
+from tests.modules import TABLE_VENUE_MODULES
 
 
 class _FakeState:
@@ -46,7 +47,9 @@ class StaffBillChangeHandlerTests(TestCase):
             slug="bot-correction-venue",
             status=Partner.Status.ACTIVE,
         )
-        PartnerBotSettings.objects.create(partner=self.partner, module_billing_enabled=True)
+        PartnerBotSettings.objects.create(
+            partner=self.partner, **TABLE_VENUE_MODULES, module_billing_enabled=True
+        )
         table = Table.objects.create(partner=self.partner, number=3, qr_token="botcorr03")
         category = MenuCategory.objects.create(partner=self.partner, name="Bar")
         menu_item = MenuItem.objects.create(

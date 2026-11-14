@@ -31,7 +31,10 @@ paths:
   `apps/analytics/dashboard.py:setup_steps`.
 - Демо-данные: `seed_baseline_demo`, заведения —
   `apps/partners/management/demo_data.py`; токены и Telegram ID — только из
-  `.env` (`DEMO_*`), в коде и документах — заглушки.
+  `.env` (`DEMO_*`), в коде и документах — заглушки. У нового заведения все
+  модули выключены (PQ-053), поэтому демо включает свои модули явно
+  (`demo_data.py:SETTINGS`); тест, которому нужно обычное заведение со столами,
+  берёт `tests/modules.py:TABLE_VENUE_MODULES`.
 - CI — `.github/workflows/tests.yml` (подробно — `docs/engineering/TESTING.md`,
   «GitHub Actions»): SQLite и PostgreSQL 16 с Redis 7, Python 3.12 как в
   `infrastructure/docker/Dockerfile`; ключ Fernet создаётся на запуск, секретов

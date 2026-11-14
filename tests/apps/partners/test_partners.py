@@ -5,6 +5,7 @@ from apps.partners.forms import BotInstanceAdminForm
 from apps.partners.models import BotInstance, Partner, PartnerBotSettings
 from bot.services.content import BotContent
 from bot.services.runtime import BotRuntimeConfigError, load_active_bot_configs
+from tests.modules import TABLE_VENUE_MODULES
 
 
 class BotInstanceAdminFormTests(TestCase):
@@ -80,7 +81,7 @@ class PartnerBotSettingsModuleTests(TestCase):
     def test_supports_cart_depends_on_module(self):
         settings = PartnerBotSettings.objects.create(
             partner=self.partner,
-            module_cart_enabled=False,
+            **{**TABLE_VENUE_MODULES, "module_cart_enabled": False},
         )
 
         content = BotContent.from_settings(settings)
@@ -163,7 +164,7 @@ class PartnerBotSettingsModuleTests(TestCase):
     def test_order_journey_modules_are_independent(self):
         settings = PartnerBotSettings.objects.create(
             partner=self.partner,
-            module_tables_enabled=True,
+            **TABLE_VENUE_MODULES,
             module_delivery_enabled=True,
             module_pickup_enabled=True,
         )

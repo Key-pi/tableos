@@ -79,6 +79,9 @@ class Command(BaseCommand):
         settings.module_tables_enabled = True
         settings.module_cart_enabled = True
         settings.module_orders_enabled = True
+        # A new venue has every module off (PQ-053); the demo switches its own on.
+        settings.module_quick_sale_enabled = True
+        settings.module_reports_enabled = True
         settings.save(
             update_fields=[
                 "allow_menu_without_session",
@@ -86,6 +89,8 @@ class Command(BaseCommand):
                 "module_tables_enabled",
                 "module_cart_enabled",
                 "module_orders_enabled",
+                "module_quick_sale_enabled",
+                "module_reports_enabled",
                 "updated_at",
             ]
         )

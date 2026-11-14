@@ -159,6 +159,7 @@ def broken_bot(partner_id) -> BotInstance | None:
 
 # What a new venue still has to set up, in the order to do it.
 SETUP_BOT = "bot"
+SETUP_MODULES = "modules"
 SETUP_MENU = "menu"
 SETUP_PAYMENT_DETAILS = "payment_details"
 SETUP_PAYMENT_OPTIONS = "payment_options"
@@ -176,6 +177,12 @@ def setup_steps(partner_id) -> list[str]:
     steps = []
     if bot_for_partner(partner_id, active_only=False) is None:
         steps.append(SETUP_BOT)
+    # A new venue starts with every module off (PQ-053).
+    if settings is None or not any(
+        getattr(settings, field.name) for field in PartnerBotSettings._meta.concrete_fields
+        if field.name.startswith("module_")
+    ):
+        steps.append(SETUP_MODULES)
     if settings is not None:
         if settings.module_menu_enabled and not MenuItem.objects.filter(
             partner_id=partner_id

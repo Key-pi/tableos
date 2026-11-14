@@ -18,6 +18,7 @@ from bot.handlers.staff import (
     _resolve_staff_employee_by_telegram_id,
 )
 from bot.services.content import BotContent
+from tests.modules import table_venue_content
 
 
 class _StubUser:
@@ -35,7 +36,7 @@ class _StubEmployee:
 
 class StaffModuleGatingTests(SimpleTestCase):
     def test_cashier_with_all_modules_enabled_can_use_everything(self):
-        employee = _StubEmployee("cashier", BotContent.defaults())
+        employee = _StubEmployee("cashier", table_venue_content())
 
         self.assertTrue(_can_use_quick_sale(employee))
         self.assertTrue(_can_view_day_report(employee))
@@ -43,7 +44,7 @@ class StaffModuleGatingTests(SimpleTestCase):
         self.assertFalse(_can_manage_billing(employee))
 
     def test_disabled_modules_hide_staff_capabilities(self):
-        content = BotContent.defaults()
+        content = table_venue_content()
         content.module_quick_sale_enabled = False
         content.module_reports_enabled = False
         employee = _StubEmployee("owner", content)
@@ -52,29 +53,29 @@ class StaffModuleGatingTests(SimpleTestCase):
         self.assertFalse(_can_view_day_report(employee))
 
     def test_enabled_billing_module_exposes_payments(self):
-        content = BotContent.defaults()
+        content = table_venue_content()
         content.module_billing_enabled = True
         employee = _StubEmployee("manager", content)
 
         self.assertTrue(_can_manage_billing(employee))
 
     def test_role_still_required_even_with_modules_enabled(self):
-        employee = _StubEmployee("waiter", BotContent.defaults())
+        employee = _StubEmployee("waiter", table_venue_content())
 
         self.assertFalse(_can_use_quick_sale(employee))
         self.assertFalse(_can_view_day_report(employee))
         self.assertFalse(_can_manage_billing(employee))
 
     def test_open_orders_visible_to_any_role_when_orders_module_on(self):
-        waiter = _StubEmployee("waiter", BotContent.defaults())
+        waiter = _StubEmployee("waiter", table_venue_content())
         self.assertTrue(_can_view_open_orders(waiter))
 
-        content = BotContent.defaults()
+        content = table_venue_content()
         content.module_orders_enabled = False
         self.assertFalse(_can_view_open_orders(_StubEmployee("owner", content)))
 
     def test_stale_open_order_action_is_denied_when_module_is_disabled(self):
-        content = BotContent.defaults()
+        content = table_venue_content()
         content.module_orders_enabled = False
 
         with self.assertRaisesRegex(OrderFlowError, "Модуль заказов отключён"):
@@ -83,7 +84,7 @@ class StaffModuleGatingTests(SimpleTestCase):
     def test_tables_button_needs_operations_role_and_tables_module(self):
         # Tables feed is gated by the tables module + an operations role, and no
         # longer requires the billing module (defaults: tables on, billing off).
-        content = BotContent.defaults()
+        content = table_venue_content()
         self.assertFalse(content.module_billing_enabled)
         self.assertTrue(_can_view_tables(_StubEmployee("manager", content)))
 
@@ -91,7 +92,7 @@ class StaffModuleGatingTests(SimpleTestCase):
         self.assertFalse(_can_view_tables(_StubEmployee("waiter", content)))
 
         # Tables module off hides the feed even for managers.
-        no_tables = BotContent.defaults()
+        no_tables = table_venue_content()
         no_tables.module_tables_enabled = False
         self.assertFalse(_can_view_tables(_StubEmployee("manager", no_tables)))
 

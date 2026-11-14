@@ -5973,6 +5973,14 @@ msgid "Создайте бота в @BotFather и вставьте его ток
 msgstr "Create a bot in @BotFather and paste its token."
 
 #: apps/users/admin_dashboard.py
+msgid "Включите нужные модули"
+msgstr "Switch on the modules you need"
+
+#: apps/users/admin_dashboard.py
+msgid "У нового заведения все модули выключены: включите то, чем будете пользоваться, — меню, столы, самовывоз, доставку и другие."
+msgstr "A new venue has every module off: switch on what you will use — menu, tables, pickup, delivery and the rest."
+
+#: apps/users/admin_dashboard.py
 msgid "Добавьте позиции меню"
 msgstr "Add menu items"
 

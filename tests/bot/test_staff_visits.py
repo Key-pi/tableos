@@ -15,6 +15,7 @@ from apps.tables.models import Table, TableVisit
 from apps.tables.services import VISIT_CHOICE_NEW, activate_table_session
 from apps.users.models import TelegramAccount, User
 from bot.handlers import staff
+from tests.modules import TABLE_VENUE_MODULES
 
 
 class StaffTableVisitHandlerTests(TestCase):
@@ -22,7 +23,9 @@ class StaffTableVisitHandlerTests(TestCase):
         self.partner = Partner.objects.create(
             name="Staff Visit Venue", slug="staff-visit-venue", status=Partner.Status.ACTIVE
         )
-        PartnerBotSettings.objects.create(partner=self.partner, module_billing_enabled=True)
+        PartnerBotSettings.objects.create(
+            partner=self.partner, **TABLE_VENUE_MODULES, module_billing_enabled=True
+        )
         self.table = Table.objects.create(partner=self.partner, number=9, qr_token="staffv09")
         category = MenuCategory.objects.create(partner=self.partner, name="Bar")
         self.menu_item = MenuItem.objects.create(

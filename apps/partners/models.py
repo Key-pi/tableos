@@ -280,7 +280,7 @@ class PartnerBotSettings(TimeStampedModel):
         verbose_name=_lazy("Заведение"),
     )
     module_menu_enabled = models.BooleanField(
-        default=True,
+        default=False,
         verbose_name=_lazy("Меню"),
         help_text=_lazy("Категории и позиции. Нужен для заказов и быстрых продаж."),
     )
@@ -312,7 +312,7 @@ class PartnerBotSettings(TimeStampedModel):
         ),
     )
     module_tables_enabled = models.BooleanField(
-        default=True,
+        default=False,
         verbose_name=_lazy("Столы и QR-сессии"),
         help_text=_lazy("Сценарий заказа за столом. Нужен для вызова персонала и запроса счёта."),
     )
@@ -492,7 +492,7 @@ class PartnerBotSettings(TimeStampedModel):
         help_text=_lazy("0 — без минимума."),
     )
     module_cart_enabled = models.BooleanField(
-        default=True,
+        default=False,
         verbose_name=_lazy("Корзина"),
         help_text=_lazy("Сбор позиций перед заказом. Требует меню и модуль заказов."),
     )
@@ -516,7 +516,7 @@ class PartnerBotSettings(TimeStampedModel):
         ),
     )
     module_orders_enabled = models.BooleanField(
-        default=True,
+        default=False,
         verbose_name=_lazy("Заказы"),
         help_text=_lazy(
             "Оформление и обработку заказов. Требует меню и хотя бы один сценарий: столы, "
@@ -537,7 +537,7 @@ class PartnerBotSettings(TimeStampedModel):
         help_text=_lazy("Кнопка вызова официанта/бара/кальянщика. Требует столы."),
     )
     module_quick_sale_enabled = models.BooleanField(
-        default=True,
+        default=False,
         verbose_name=_lazy("Быстрые продажи"),
         help_text=_lazy("Продажа на кассе по коду клиента. Требует меню."),
     )
@@ -552,7 +552,7 @@ class PartnerBotSettings(TimeStampedModel):
         ),
     )
     module_reports_enabled = models.BooleanField(
-        default=True,
+        default=False,
         verbose_name=_lazy("Отчёт дня"),
         help_text=_lazy("Операционный отчёт в staff-боте."),
     )

@@ -16,6 +16,7 @@ from bot.filters.content import PartnerButtonFilter
 from bot.handlers import remote_checkout
 from bot.services.content import BotContent
 from core.i18n import LANGUAGES, _, gettext_in, texts
+from tests.modules import table_venue_content
 
 MENU = BUTTON_TEXTS["button_menu_label"]
 PROFILE = BUTTON_TEXTS["button_my_profile"]
@@ -45,7 +46,7 @@ class ContentLanguageTests(TestCase):
     def test_whole_help_text_only_when_the_owner_wrote_one(self):
         help_key = WHOLE_TEXTS["ordering_help_message_template"]
         with texts("ru"):
-            self.assertIn("Как заказать", BotContent.defaults().ordering_help_message())
+            self.assertIn("Как заказать", table_venue_content().ordering_help_message())
         with texts("ru", {("ru", help_key): "Звоните нам."}):
             self.assertEqual(BotContent.defaults().ordering_help_message(), "Звоните нам.")
 

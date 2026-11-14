@@ -5,12 +5,12 @@ from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase
 
 from bot.handlers.order import checkout_handler
-from bot.services.content import BotContent
+from tests.modules import table_venue_content
 
 
 class CheckoutReplyButtonTests(SimpleTestCase):
     def _run_checkout(self, label: str) -> MagicMock:
-        content = BotContent.defaults()
+        content = table_venue_content()
         content.button_checkout_label = label
         partner = SimpleNamespace(id="partner-id", name="Venue")
         order = SimpleNamespace(

@@ -130,30 +130,35 @@ whitenoise и кэш в Redis. Сервисы:
 
 Каждый модуль — переключатель в `PartnerBotSettings` (Admin: «Настройки» →
 «Настройки бота»), включается отдельно (PQ-033). Зависимости проверяет
-`apps/partners/models.py:PartnerBotSettings.clean`. Решено, ещё не сделано: у нового
-заведения все модули выключены (PQ-053).
+`apps/partners/models.py:PartnerBotSettings.clean`. У нового заведения все модули
+выключены (PQ-053): владелец включает нужные сам, пока ни одного нет — на стартовой
+странице Admin шаг «Включите нужные модули». У заведений, созданных раньше,
+значения не менялись (миграция `partners.0033` меняет только значение по
+умолчанию, SQL у неё пустой). Бот без строки настроек
+(`bot/services/content.py:BotContent.defaults`) берёт те же значения из модели.
+Демо включает модули явно.
 Новый переключатель
 добавлять в эту таблицу — иначе падает `tests/core/test_docs.py`.
 
 | Переключатель | В Admin | По умолчанию | Требует | Подробно |
 |---|---|---|---|---|
-| `module_menu_enabled` | Меню | вкл. | — | [CATALOG.md](CATALOG.md) |
+| `module_menu_enabled` | Меню | выкл. | — | [CATALOG.md](CATALOG.md) |
 | `module_showcase_enabled` | Расширенная витрина | выкл. | — | [CATALOG.md](CATALOG.md) |
 | `module_options_enabled` | Варианты и добавки | выкл. | — | [CATALOG.md](CATALOG.md) |
 | `module_stock_enabled` | Остатки | выкл. | — | [CATALOG.md](CATALOG.md) |
-| `module_tables_enabled` | Столы и QR-сессии | вкл. | — | [B3_2_VISITS_AND_BILL_CHANGES.md](B3_2_VISITS_AND_BILL_CHANGES.md) |
+| `module_tables_enabled` | Столы и QR-сессии | выкл. | — | [B3_2_VISITS_AND_BILL_CHANGES.md](B3_2_VISITS_AND_BILL_CHANGES.md) |
 | `module_floor_plan_enabled` | Схема зала | выкл. | столы | [FLOOR_PLAN.md](FLOOR_PLAN.md) |
 | `module_table_orders_enabled` | Заказ на стол с планшета | выкл. | схема зала, заказы | [FLOOR_PLAN.md](FLOOR_PLAN.md) |
 | `module_reservations_enabled` | Бронь столов | выкл. | схема зала | [FLOOR_PLAN.md](FLOOR_PLAN.md) |
 | `module_pickup_enabled` | Самовывоз | выкл. | хотя бы один способ оплаты; для перевода — реквизиты | [PICKUP.md](PICKUP.md) |
 | `module_delivery_enabled` | Доставка | выкл. | как самовывоз | [DELIVERY.md](DELIVERY.md) |
 | `module_shipping_enabled` | Отправка почтой | выкл. | как самовывоз; хотя бы одна служба и один вариант оплаты пересылки | [SHIPPING.md](SHIPPING.md) |
-| `module_cart_enabled` | Корзина | вкл. | меню, заказы | этот документ, «Сессия гостя, меню, корзина и заказ» |
-| `module_orders_enabled` | Заказы | вкл. | меню; столы, самовывоз, доставка или отправка | этот документ, «Сессия гостя, меню, корзина и заказ» |
+| `module_cart_enabled` | Корзина | выкл. | меню, заказы | этот документ, «Сессия гостя, меню, корзина и заказ» |
+| `module_orders_enabled` | Заказы | выкл. | меню; столы, самовывоз, доставка или отправка | этот документ, «Сессия гостя, меню, корзина и заказ» |
 | `module_billing_enabled` | Счета и оплаты | выкл. | заказы (запрос счёта гостем — при столах) | [B3_2_VISITS_AND_BILL_CHANGES.md](B3_2_VISITS_AND_BILL_CHANGES.md), [REFUNDS.md](REFUNDS.md) |
 | `module_staff_call_enabled` | Вызов персонала | выкл. | столы | этот документ, «Уведомления и рассылки» |
-| `module_quick_sale_enabled` | Быстрые продажи | вкл. | меню | этот документ, «Лояльность и быстрая продажа» |
-| `module_reports_enabled` | Отчёт дня | вкл. | — | этот документ, модуль «Аналитика» |
+| `module_quick_sale_enabled` | Быстрые продажи | выкл. | меню | этот документ, «Лояльность и быстрая продажа» |
+| `module_reports_enabled` | Отчёт дня | выкл. | — | этот документ, модуль «Аналитика» |
 | `module_webapp_enabled` | Mini App (меню и заказ в приложении) | выкл. | корзина, `WEBAPP_BASE_URL` | [MINI_APP.md](MINI_APP.md) |
 | `module_staff_screen_enabled` | Рабочий экран персонала (Mini App) | выкл. | `WEBAPP_BASE_URL` | [MINI_APP.md](MINI_APP.md) |
 | `module_kitchen_screen_enabled` | Экран кухни и бара | выкл. | заказы | [MINI_APP.md](MINI_APP.md) |
@@ -784,8 +789,8 @@ PQ-050): все страницы — `core/admin_mixins.py:BoteraModelAdmin` (е
 ровно того, что посчитано. «Сегодня» — `build_daily_operations_report` (как
 отчёт дня в боте): выручка, средний чек (как в `PartnerDailyMetric`), заказы,
 продажи, открытые заказы и счета. Быстрые действия и «Что ещё настроить»
-(бот, меню, реквизиты, способы оплаты, часы, столы, сотрудники, адрес и
-телефон — `setup_steps`). Каждая часть видна только тому, кто может открыть
+(бот, модули — пока ни один не включён, меню, реквизиты, способы оплаты, часы,
+столы, сотрудники, адрес и телефон — `setup_steps`). Каждая часть видна только тому, кто может открыть
 страницу, куда она ведёт, и пока включён её модуль; реквизиты — только
 владельцу. Счётчик «Счета» в меню считает те же запросы. Платформа видит
 стартовую страницу Unfold, как раньше.
@@ -934,7 +939,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1225 тестов после скрытия бонусов без работающих программ, зелёные на SQLite и на PostgreSQL 16.
+- 1230 тестов после того, как у нового заведения все модули выключены, зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -973,8 +978,8 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Цифры кодовой базы на 2026-11-14
 
-498 отслеживаемых Python-файлов (около 81 000 строк), 122 пронумерованные
-миграции, 130 тестовых модулей. Крупнейшие нетестовые модули:
+502 отслеживаемых Python-файла (около 81 300 строк), 123 пронумерованные
+миграции, 132 тестовых модуля. Крупнейшие нетестовые модули:
 `bot/handlers/staff.py` (3921 строка), `apps/orders/services.py` (1493),
 `apps/billing/services.py` (1485), `apps/notifications/services.py` (1464),
 `apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1037),

@@ -7,18 +7,18 @@ from apps.tables.models import Table
 from apps.tables.services import activate_table_session
 from apps.users.models import GuestProfile, TelegramAccount
 from bot.keyboards.main import build_main_keyboard
-from bot.services.content import BotContent
 from bot.services.navigation import (
     GuestAction,
     GuestJourney,
     GuestNavigationState,
     resolve_guest_navigation_state,
 )
+from tests.modules import table_venue_content
 
 
 class MainKeyboardStateTests(SimpleTestCase):
     def test_browse_state_hides_table_only_actions(self):
-        content = BotContent.defaults()
+        content = table_venue_content()
         keyboard = build_main_keyboard(
             content,
             navigation_state=GuestNavigationState(
@@ -67,7 +67,7 @@ class GuestNavigationResolverTests(TestCase):
             name="Table 2",
             qr_token="navtable2",
         )
-        self.content = BotContent.defaults()
+        self.content = table_venue_content()
         self.content.module_billing_enabled = True
         self.content.module_staff_call_enabled = True
         self.category = MenuCategory.objects.create(
