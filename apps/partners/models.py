@@ -3,6 +3,7 @@ import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.core.exceptions import ImproperlyConfigured, ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from core.database.models import TimeStampedModel
@@ -558,6 +559,16 @@ class PartnerBotSettings(TimeStampedModel):
     auto_close_table_session_after_payment = models.BooleanField(
         default=True,
         verbose_name=_lazy("Закрывать стол после полной оплаты"),
+    )
+    table_session_idle_hours = models.PositiveSmallIntegerField(
+        default=4,
+        validators=[MinValueValidator(1), MaxValueValidator(72)],
+        verbose_name=_lazy("Закрывать пустую сессию стола через, часов"),
+        help_text=_lazy(
+            "Гость отсканировал QR-код и ушёл: сессия без заказов и долгов "
+            "закрывается сама, если столько часов ничего не происходило. "
+            "С неоплаченным заказом сессию закрывает персонал."
+        ),
     )
     max_menu_items_per_category_message = models.PositiveSmallIntegerField(
         default=8,

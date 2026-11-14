@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from django.db import transaction
@@ -9,6 +9,7 @@ from apps.billing.models import Bill, BillingRequest, BillOrder
 from apps.bonuses.models import BonusProgram
 from apps.bonuses.services import apply_bonus_programs
 from apps.orders.models import Cart, Order
+from apps.partners.models import PartnerBotSettings
 from apps.tables.models import Table, TableSession, TableVisit
 from apps.users.models import GuestProfile
 from apps.users.services import (
@@ -575,3 +576,106 @@ def close_table_session_if_settled(session: TableSession) -> TableSession:
     if not can_close:
         raise TableSessionError(reason)
     return _close_locked_table_session(locked_session)
+
+
+IDLE_SESSION_HOURS_DEFAULT = 4
+_OPEN_BILLING_REQUEST = (BillingRequest.Status.OPEN, BillingRequest.Status.AUTO_PREPARED)
+
+
+def expire_idle_table_sessions(*, now: datetime | None = None) -> int:
+    """Close table sessions nobody used for the venue's window (PQ-008).
+
+    The guest scanned the QR code and left. A session with no order (a
+    cancelled one does not count) and no open billing request expires once
+    nothing happened for ``PartnerBotSettings.table_session_idle_hours``
+    (4 by default): it becomes ``timed_out`` and its visit closes when nobody
+    else sits in it. A session with an unpaid order stays for the staff. The
+    guest's cart keeps its items (``apps/orders/services.py:_align_cart_with_session``).
+    Returns how many sessions expired.
+    """
+
+    now = now or timezone.now()
+    hours_by_partner = dict(
+        PartnerBotSettings.objects.values_list("partner_id", "table_session_idle_hours")
+    )
+    with_orders = Order.objects.filter(table_session_id__isnull=False).exclude(
+        status=Order.Status.CANCELED
+    ).values("table_session_id")
+    candidates = (
+        TableSession.objects.filter(
+            status=TableSession.Status.ACTIVE,
+            started_at__lte=now - timedelta(hours=1),
+        )
+        .exclude(id__in=with_orders)
+        .order_by("started_at")
+        .values_list("id", "partner_id")
+    )
+    expired = 0
+    for session_id, partner_id in list(candidates):
+        hours = hours_by_partner.get(partner_id) or IDLE_SESSION_HOURS_DEFAULT
+        if _expire_idle_session(session_id, partner_id=partner_id,
+                                quiet_since=now - timedelta(hours=hours), now=now):
+            expired += 1
+    return expired
+
+
+def _last_session_activity(session: TableSession) -> datetime:
+    moments = [session.started_at, session.updated_at]
+    for model in (Cart, Order, BillingRequest):
+        latest = (
+            model.objects.filter(partner_id=session.partner_id, table_session_id=session.id)
+            .order_by("-updated_at")
+            .values_list("updated_at", flat=True)
+            .first()
+        )
+        if latest is not None:
+            moments.append(latest)
+    return max(moments)
+
+
+@transaction.atomic
+def _expire_idle_session(session_id, *, partner_id, quiet_since: datetime, now: datetime) -> bool:
+    """Lock order: the guest's active carts, then the session, then the visit.
+
+    The table checkout locks the cart first too, so an order placed at this
+    very moment is either seen here (the session stays) or refused there
+    (the session is closed)."""
+
+    guest_id = (
+        TableSession.objects.filter(id=session_id, partner_id=partner_id)
+        .values_list("guest_id", flat=True)
+        .first()
+    )
+    if guest_id is None:
+        return False
+    list(
+        Cart.objects.select_for_update()
+        .filter(partner_id=partner_id, guest_id=guest_id, status=Cart.Status.ACTIVE)
+        .order_by("id")
+        .values_list("id", flat=True)
+    )
+    session = (
+        TableSession.objects.select_for_update()
+        .filter(id=session_id, partner_id=partner_id)
+        .first()
+    )
+    if session is None or session.status != TableSession.Status.ACTIVE:
+        return False
+    if _last_session_activity(session) > quiet_since:
+        return False
+    has_orders = (
+        Order.objects.filter(partner_id=partner_id, table_session_id=session.id)
+        .exclude(status=Order.Status.CANCELED)
+        .exists()
+    )
+    has_requests = BillingRequest.objects.filter(
+        partner_id=partner_id, table_session_id=session.id, status__in=_OPEN_BILLING_REQUEST,
+    ).exists()
+    if has_orders or has_requests:
+        return False
+    session.status = TableSession.Status.TIMED_OUT
+    session.closed_at = now
+    session.save(update_fields=["status", "closed_at", "updated_at"])
+    if session.visit_id is not None:
+        _close_visit_if_finished(session.visit_id)
+    return True

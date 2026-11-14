@@ -39,7 +39,7 @@ flowchart LR
 | Management-команды, `runserver` | `manage.py` | миграции, наполнение демо-данными, `runbot`, `ensure_admin` | `core.settings.local` |
 | Telegram-бот | `manage.py runbot` → `bot/supervisor.py:BotSupervisor` | сервис ботов: polling всех исправных активных `BotInstance`, список перечитывается раз в минуту; в одном процессе или с `--processes N` в N процессах, каждый бот ровно в одном (`bot/services/runtime.py:configs_for_shard`). `bot/main.py:run_polling` — только эмулятор и нагрузочный тест | `core.settings.local` (через `manage.py`) |
 | Воркер Celery | `celery -A core.celery worker` → `core/celery.py` | уведомления персонала и гостей, сообщения о возврате, рассылки, метрики, снимок нагрузки | `core.settings.local` |
-| Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `record-system-snapshot` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `cancel-expired-transfer-orders` (5 мин), `refresh-daily-partner-metrics` (15 мин), `forget-old-network-message-points` (1 день) | `core.settings.local` |
+| Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `record-system-snapshot` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `cancel-expired-transfer-orders` (5 мин), `expire-idle-table-sessions` (10 мин), `refresh-daily-partner-metrics` (15 мин), `forget-old-network-message-points` (1 день) | `core.settings.local` |
 | PostgreSQL 16, Redis 7 | `docker-compose.yml` | долговечные данные; брокер и хранилище результатов Celery | — |
 
 `docker-compose.yml` объявляет `db`, `redis` (оба с healthcheck), разовый
@@ -363,7 +363,16 @@ apps.notifications.tasks` — цикл, разорванный только им
    `unique_active_table_session_per_partner_guest` гарантирует одну активную
    сессию на гостя и партнёра. Визит закрывается сам, когда в нём никто не
    сидит и он рассчитан (нет неоплаченных заказов и открытого счёта);
-   `close_table_visit` — команда персонала.
+   `close_table_visit` — команда персонала. Пустая сессия истекает сама
+   (PQ-008, `tables/services.py:expire_idle_table_sessions`, beat каждые
+   10 минут): без заказов (отменённые не в счёт) и без открытого запроса счёта,
+   если `PartnerBotSettings.table_session_idle_hours` (4 по умолчанию, «За
+   столом») ничего не происходило — последнее из начала сессии и изменений её
+   корзины, заказов и запросов счёта. Сессия становится `timed_out`, визит
+   закрывается, если в нём больше никто не сидит; корзина гостя сохраняет
+   позиции. Блокировки: активные корзины гостя → сессия → визит; оформление за
+   столом тоже начинает с корзины и после её блокировки перепроверяет, что
+   сессия ещё открыта (иначе «отсканируйте QR-код ещё раз»).
 2. Команды корзины в `orders/services.py` блокируют активную `Cart` гостя.
    Сначала гость выбирает способ заказа (PQ-043): скан QR стола или кнопка
    способа (клавиатура, `pick:<способ>` под меню и после /start) задают
@@ -906,7 +915,7 @@ Telegram Mini App для гостя (PQ-048, этап 1, [MINI_APP.md](MINI_APP.
 | Понятие | Механизм перехода | Долговечная защита или блокировка сейчас |
 |---|---|---|
 | Статус заказа | `transition_order_status`; `cancel_order`; подтверждение гостем; завершение после оплаты; подтверждение/отклонение перевода, оплата при получении и отказ гостя (самовывоз, доставка) | Перезагрузка под блокировкой; таблица переходов персонала и явное правило подтверждения гостем; отмена заказа с активными строками счёта отклоняется; неоплаченный заказ с переводом заранее (`payment_timing = prepaid`) не принимается |
-| Сессия стола | `activate_table_session`, `close_table_session_if_settled`, автозакрытие после оплаты | Частичная уникальность активной сессии на гостя; блокировки; обработчика истечения нет |
+| Сессия стола | `activate_table_session`, `close_table_session_if_settled`, автозакрытие после оплаты, истечение пустой сессии (`expire_idle_table_sessions`, PQ-008) | Частичная уникальность активной сессии на гостя; блокировки (истечение — корзина → сессия → визит, тест на PostgreSQL) |
 | Визит стола | активация (подсесть/новый/auto), автоматическое закрытие пустого рассчитанного визита, `close_table_visit` | Блокировка строки стола сериализует создание визита и присоединение; блокировка строки визита перед присоединением и закрытием |
 | Корзина | сервисы корзины, оформление, смена способа заказа | Частичная уникальность активной корзины на гостя; блокировка строки корзины |
 | Счёт | сервисы создания, расширения, выставления, оплаты, изменения, аннулирования | Блокировка счёта; одно активное распределение на позицию заказа; изменения с аудитом; аннулирование освобождает распределения |
@@ -925,7 +934,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1201 тест после проверки документации, зелёные на SQLite и на PostgreSQL 16.
+- 1215 тестов после истечения пустых сессий стола, зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -964,9 +973,9 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Цифры кодовой базы на 2026-11-14
 
-495 отслеживаемых Python-файлов (около 80 500 строк), 121 пронумерованная
-миграция, 129 тестовых модулей. Крупнейшие нетестовые модули:
-`bot/handlers/staff.py` (3921 строка), `apps/orders/services.py` (1485),
+498 отслеживаемых Python-файлов (около 81 000 строк), 122 пронумерованные
+миграции, 130 тестовых модулей. Крупнейшие нетестовые модули:
+`bot/handlers/staff.py` (3921 строка), `apps/orders/services.py` (1493),
 `apps/billing/services.py` (1485), `apps/notifications/services.py` (1464),
 `apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1037),
 `apps/partners/management/commands/seed_baseline_demo.py` (1006). Инвентарь

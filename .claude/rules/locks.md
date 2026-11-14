@@ -16,6 +16,10 @@ paths:
 - Заказ на стол с планшета — как активация:
   `GuestProfile → Table (no_key) → свои TableSession → TableVisit`
   (`apps/tables/services.py:open_staff_table_session`).
+- Истечение пустой сессии стола (PQ-008): активные корзины гостя →
+  `TableSession` → `TableVisit` (`apps/tables/services.py:_expire_idle_session`).
+  Оформление заказа за столом тоже сначала блокирует корзину и после этого
+  перепроверяет, что сессия ещё `active` — так оно не проскочит в закрытую.
 - Изменение счёта и возврат: `Bill → BillItem → GuestProfile → Order`.
 - Вызов персонала «Иду»: только `GuestCall` (`take_guest_call`).
 - Приглашение сотрудника: `StaffInvite → EmployeeProfile`.

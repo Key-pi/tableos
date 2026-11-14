@@ -1073,6 +1073,14 @@ def checkout_active_cart_for_telegram_user(
         raise OrderFlowError(
             _("Корзина собрана не для стола. Оформите самовывоз или отсканируйте QR-код стола.")
         )
+    # The cart row is locked now; a session closed meanwhile (staff, or the
+    # idle expiry that locks the cart first, PQ-008) takes no more orders.
+    if not TableSession.objects.filter(
+        id=cart.table_session_id, status=TableSession.Status.ACTIVE
+    ).exists():
+        raise OrderFlowError(
+            _("Сессия за столом закрыта. Отсканируйте QR-код стола ещё раз.")
+        )
     not_sold = [
         name for item, name in zip(cart_items, line_names_in(cart_items), strict=True)
         if not item.menu_item.is_sold_in(Order.Channel.TABLE)

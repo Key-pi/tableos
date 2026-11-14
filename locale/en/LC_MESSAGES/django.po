@@ -4079,6 +4079,10 @@ msgid "Корзина собрана не для стола. Оформите с
 msgstr "The cart is not for a table. Order for pickup or scan the table's QR code."
 
 #: apps/orders/services.py
+msgid "Сессия за столом закрыта. Отсканируйте QR-код стола ещё раз."
+msgstr "Your table session has closed. Scan the table's QR code again."
+
+#: apps/orders/services.py
 msgid "Недоступно для заказа к столу: {not_sold}."
 msgstr "Not available for table orders: {not_sold}."
 
@@ -4883,6 +4887,14 @@ msgstr "Operations report in the staff bot."
 #: apps/partners/models.py
 msgid "Закрывать стол после полной оплаты"
 msgstr "Close the table after full payment"
+
+#: apps/partners/models.py
+msgid "Закрывать пустую сессию стола через, часов"
+msgstr "Close an empty table session after, hours"
+
+#: apps/partners/models.py
+msgid "Гость отсканировал QR-код и ушёл: сессия без заказов и долгов закрывается сама, если столько часов ничего не происходило. С неоплаченным заказом сессию закрывает персонал."
+msgstr "The guest scanned the QR code and left: a session without orders or debts closes by itself after this many hours with nothing happening. A session with an unpaid order is closed by the staff."
 
 #: apps/partners/models.py
 msgid "Позиций меню в одном сообщении"

@@ -79,6 +79,7 @@ BOT_SETTINGS_GROUPS = (
     ), (
         "module_tables_enabled",
         "auto_close_table_session_after_payment",
+        "table_session_idle_hours",
         "module_floor_plan_enabled",
         "module_table_orders_enabled",
         "module_reservations_enabled",
