@@ -2,14 +2,14 @@
 
 > **Статус:** исторический продуктовый источник, сохранён полностью после
 > аудита 2026-07-27. Продукт теперь называется **Botera Shop** (сеть Botera,
-> см. [`docs/product/ECOSYSTEM_DIRECTION.md`](docs/product/ECOSYSTEM_DIRECTION.md)).
+> см. [`docs/product/ECOSYSTEM_DIRECTION.md`](../product/ECOSYSTEM_DIRECTION.md)).
 > Документ — исходное требование, а не описание работающего кода.
 > Канонический продуктовый договор — в
-> [`docs/product/PRODUCT_SPEC.md`](docs/product/PRODUCT_SPEC.md), текущая
+> [`docs/product/PRODUCT_SPEC.md`](../product/PRODUCT_SPEC.md), текущая
 > реализация — в
-> [`docs/architecture/AS_IS_ARCHITECTURE.md`](docs/architecture/AS_IS_ARCHITECTURE.md),
+> [`docs/architecture/AS_IS_ARCHITECTURE.md`](../architecture/AS_IS_ARCHITECTURE.md),
 > а сопоставление разделов и противоречия — в
-> [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](docs/product/LEGACY_TZ_MIGRATION_MAP.md).
+> [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](../product/LEGACY_TZ_MIGRATION_MAP.md).
 > При расхождении сначала зафиксируйте доказательство и получите решение
 > владельца; не меняйте код или смысл требования молча.
 

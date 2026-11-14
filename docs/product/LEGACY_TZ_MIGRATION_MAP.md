@@ -8,8 +8,8 @@
 | Источник | Роль после аудита | Каноническое место |
 | --- | --- | --- |
 | `README.md` | Только короткий вход в проект; не источник статуса реализации | `docs/engineering/DEVELOPMENT.md`, `docs/engineering/TESTING.md`, документы архитектуры |
-| `PROJECT_CHEATSHEET.md` | Старые рабочие заметки; команды и утверждения о базовой проверке требуют сверки | `docs/audits/BASELINE.md`, `docs/engineering/*`, `docs/architecture/BACKGROUND_JOBS.md` |
-| `TABLEOS_TZ.md` | Сохранённый старый продуктовый и дизайнерский источник, историческое свидетельство | `docs/product/*`, документы архитектуры, ADR и отчёты аудита |
+| `docs/legacy/PROJECT_CHEATSHEET.md` | Старые рабочие заметки; команды и утверждения о базовой проверке требуют сверки | `docs/audits/BASELINE.md`, `docs/engineering/*`, `docs/architecture/BACKGROUND_JOBS.md` |
+| `docs/legacy/TABLEOS_TZ.md` | Сохранённый старый продуктовый и дизайнерский источник, историческое свидетельство | `docs/product/*`, документы архитектуры, ADR и отчёты аудита |
 | Исполняемый код, модели, миграции, тесты | Источник правды о текущем поведении | `docs/architecture/AS_IS_ARCHITECTURE.md`, `docs/audits/ARCHITECTURE_AUDIT.md` |
 
 Не удаляйте и не переименовывайте старые файлы в батче реализации только потому, что их содержание перенесено. Любое удаление требует отдельной проверки влияния на ссылки.

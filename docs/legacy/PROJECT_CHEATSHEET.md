@@ -2,11 +2,11 @@
 
 > **Статус:** старая рабочая шпаргалка, механически обновлённая после аудита
 > 2026-07-27 и последующих батчей. Каноническое вступление и проверенные
-> команды — в [`docs/engineering/`](docs/engineering/); текущее поведение и
+> команды — в [`docs/engineering/`](../engineering); текущее поведение и
 > известные пробелы — в
-> [`docs/architecture/AS_IS_ARCHITECTURE.md`](docs/architecture/AS_IS_ARCHITECTURE.md)
-> и [`docs/audits/`](docs/audits/). Сверка продукта и спецификации — в
-> [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](docs/product/LEGACY_TZ_MIGRATION_MAP.md).
+> [`docs/architecture/AS_IS_ARCHITECTURE.md`](../architecture/AS_IS_ARCHITECTURE.md)
+> и [`docs/audits/`](../audits). Сверка продукта и спецификации — в
+> [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](../product/LEGACY_TZ_MIGRATION_MAP.md).
 > Файл сохранён для исторической навигации и не важнее этих документов и кода.
 
 ## Что это
@@ -37,7 +37,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery worker -Q broadcasts --
 DJANGO_USE_SQLITE=true ./.venv/bin/celery -A core.celery beat --loglevel=info
 ```
 
-Проще всего — Docker (пошагово: [DEVELOPMENT.md](docs/engineering/DEVELOPMENT.md#запуск-в-docker-с-нуля)).
+Проще всего — Docker (пошагово: [DEVELOPMENT.md](../engineering/DEVELOPMENT.md#запуск-в-docker-с-нуля)).
 Docker Compose поднимает все нужные процессы — `db`, `redis`, разовый `init`, `web`,
 `worker`, `beat`, `bot` (с B4). `beat` и `bot` должны работать в одном
 экземпляре:
@@ -69,7 +69,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 ./.venv/bin/ruff check .
 ```
 
-Проверенная база на 2026-07-27 (полный вывод и версии — в [BASELINE.md](docs/audits/BASELINE.md)):
+Проверенная база на 2026-07-27 (полный вывод и версии — в [BASELINE.md](../audits/BASELINE.md)):
 
 - `manage.py test`: 139 тестов OK.
 - `manage.py check`: замечаний нет.
@@ -79,7 +79,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 После B1–B5, самовывоза, упорядочивания каналов, Docker, источников переходов, доставки, способов оплаты, отправки почтой защиты прав владельца лимита неоплаченных заказов подготовки к запуску перевода Admin «Моих заказов» возвратов, часов и уведомлений по модулю, механики языков, текстов гостя на языках, перевода персонала, уведомлений и Admin, исправления AA-040, счетов на большой истории (AA-041), повтора номеров (AA-042), бота в нескольких процессах (AA-043), уведомлений (AA-044), индексов открытых заказов и счетов (AA-045), списков Admin (AA-046), запросов на обновление бота (AA-047), русского языка на сервере (AA-048), пути гостя в боте (AA-049), экранов персонала (AA-050), «Иду» на вызове персонала, сервиса ботов (PQ-041, PQ-042), приглашений сотрудников (PQ-046), сетей заведений (PQ-047, этапы 1, 2, 2б и 3, персонал сети), фото меню и Mini App для гостя и персонала, рабочий экран целиком и счётчики, сжатие фото и короткие ответы экрана, экран кухни и бара, исправления по проверке, отдача WebP (PQ-048), витрина каталога и правки по проверке, варианты и добавки (PQ-049), новый демо-сид и его правки, остатки и переводы каталога (PQ-049), исправление «Бонусов» в боте, меню Admin по задачам (PQ-050), страница оплаты в Admin, стартовая страница и кнопки действий Admin (PQ-050), оплата при получении у завершённого заказа, формы Admin вкладками, запрет удалять счёт в Admin, наложенный платёж после отправки, страница «Нагрузка», схема зала, заказ на стол с планшета, счётчик «Столы», бронь столов
 набор тестов вырос;
 число тестов, актуальные команды и журнал прогонов — в
-[TESTING.md](docs/engineering/TESTING.md).
+[TESTING.md](../engineering/TESTING.md).
 
 ## Как работает Celery
 
@@ -93,7 +93,7 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 6. Воркер отправляет сообщение через Telegram API.
 7. Результат пишется обратно в модель: `delivery_status`, `delivered_at`, `delivery_error`.
 
-Гарантии доставки (B4, [ADR-0008](docs/decisions/ADR-0008.md)): рабочие
+Гарантии доставки (B4, [ADR-0008](../decisions/ADR-0008.md)): рабочие
 уведомления — хотя бы один раз (временные ошибки Telegram повторяются, уже
 отправленное не шлётся снова); рассылки — не больше одного раза на гостя
 (строки `BroadcastDelivery`, отправка вне транзакции, зависшие отправки после
@@ -101,10 +101,10 @@ DJANGO_USE_SQLITE=true ./.venv/bin/python manage.py test
 
 Ключевые файлы:
 
-- [core/celery.py](core/celery.py)
-- [apps/notifications/tasks.py](apps/notifications/tasks.py)
-- [apps/notifications/services.py](apps/notifications/services.py)
-- [core/settings/base.py](core/settings/base.py)
+- [core/celery.py](../../core/celery.py)
+- [apps/notifications/tasks.py](../../apps/notifications/tasks.py)
+- [apps/notifications/services.py](../../apps/notifications/services.py)
+- [core/settings/base.py](../../core/settings/base.py)
 
 Важно: в тестах Celery работает в режиме eager, потому что `CELERY_TASK_ALWAYS_EAGER` автоматически включается для `manage.py test`. Поэтому тестам не нужен живой Redis.
 
@@ -163,7 +163,7 @@ docker compose -f docker-compose.yml -f infrastructure/docker/compose.ports.yml 
 5. Персонал получает уведомление через Celery.
 6. Гость может открыть «Мой стол», подтвердить получение, запросить счёт или позвать персонал.
 
-Гость на самовывозе ([PICKUP.md](docs/architecture/PICKUP.md)):
+Гость на самовывозе ([PICKUP.md](../architecture/PICKUP.md)):
 
 1. Нажимает «Самовывоз» — корзина переходит в этот способ заказа.
 2. Выбирает время, делится телефоном, решает, списать ли бонусы.
@@ -188,24 +188,24 @@ docker compose -f docker-compose.yml -f infrastructure/docker/compose.ports.yml 
 
 ## Где что искать
 
-- Настройки: [core/settings](core/settings/base.py)
-- URL: [core/urls.py](core/urls.py)
-- Ограничение Admin по партнёру и права: [core/admin_mixins.py](core/admin_mixins.py)
-- Celery: [core/celery.py](core/celery.py)
-- Партнёры, боты, часы работы: [apps/partners](apps/partners/models.py)
-- Пользователи, гости, доступ к Admin: [apps/users](apps/users/models.py)
-- Столы, QR-сессии, визиты: [apps/tables](apps/tables/services.py)
-- Меню: [apps/menu](apps/menu/models.py)
-- Заказы и корзина: [apps/orders](apps/orders/services.py)
-- Счета: [apps/billing](apps/billing/services.py); стол — [table_bills.py](apps/billing/table_bills.py); самовывоз — [remote_orders.py](apps/billing/remote_orders.py)
-- Бонусы и быстрая продажа: [apps/bonuses](apps/bonuses/services.py)
-- Уведомления: [apps/notifications](apps/notifications/services.py)
-- Аналитика и отчёт дня: [apps/analytics](apps/analytics/services.py)
-- Обработчики бота: [bot/handlers](bot/handlers/staff.py)
+- Настройки: [core/settings](../../core/settings/base.py)
+- URL: [core/urls.py](../../core/urls.py)
+- Ограничение Admin по партнёру и права: [core/admin_mixins.py](../../core/admin_mixins.py)
+- Celery: [core/celery.py](../../core/celery.py)
+- Партнёры, боты, часы работы: [apps/partners](../../apps/partners/models.py)
+- Пользователи, гости, доступ к Admin: [apps/users](../../apps/users/models.py)
+- Столы, QR-сессии, визиты: [apps/tables](../../apps/tables/services.py)
+- Меню: [apps/menu](../../apps/menu/models.py)
+- Заказы и корзина: [apps/orders](../../apps/orders/services.py)
+- Счета: [apps/billing](../../apps/billing/services.py); стол — [table_bills.py](../../apps/billing/table_bills.py); самовывоз — [remote_orders.py](../../apps/billing/remote_orders.py)
+- Бонусы и быстрая продажа: [apps/bonuses](../../apps/bonuses/services.py)
+- Уведомления: [apps/notifications](../../apps/notifications/services.py)
+- Аналитика и отчёт дня: [apps/analytics](../../apps/analytics/services.py)
+- Обработчики бота: [bot/handlers](../../bot/handlers/staff.py)
 
 ## Правила разработки
 
-Полные правила — в [AGENTS.md](AGENTS.md) и [CLAUDE.md](CLAUDE.md). Кратко:
+Полные правила — в [AGENTS.md](../../AGENTS.md) и [CLAUDE.md](../../CLAUDE.md). Кратко:
 
 - Бизнес-логику держать в `services.py`.
 - Обработчики бота и Admin вызывают сервисы, а не повторяют бизнес-правила.

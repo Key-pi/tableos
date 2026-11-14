@@ -42,7 +42,7 @@ SKIP_DIRS = {
 }
 # Dated records: their code references describe the code of their day.
 # Links in them are still checked.
-HISTORICAL = ("docs/audits/", "TABLEOS_TZ.md", "PROJECT_CHEATSHEET.md")
+HISTORICAL = ("docs/audits/", "docs/legacy/")
 CLAUDE_MD_LIMIT = 200
 
 FENCE = re.compile(r"^(```|~~~).*?^\1", re.S | re.M)

@@ -176,7 +176,7 @@ docker compose logs init        # логины и ссылки на столы �
 - `bot/main.py:run_polling` — только для эмулятора и нагрузочного теста; в
   работе боты запускает `bot/supervisor.py`.
 - Помощники Explore и Plan стартуют без `CLAUDE.md` и правил — называть их в
-  задании. `TABLEOS_TZ.md` и `PROJECT_CHEATSHEET.md` — исторические.
+  задании. `docs/legacy/` — исторические документы, ниже кода и `docs/`.
 
 ## Карта документов
 

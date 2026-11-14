@@ -43,7 +43,7 @@ paths:
   дописывать датированное «Уточнение».
 - Не править исторические снимки: `docs/audits/BASELINE.md`,
   `AUDIT_SUMMARY.md`, `CODEBASE_INVENTORY.md`, `FILE_COVERAGE.md`, доказательства
-  находок AA-001–AA-050, `TABLEOS_TZ.md`. Новая находка — новый номер AA в
+  находок AA-001–AA-050, `docs/legacy/`. Новая находка — новый номер AA в
   `ARCHITECTURE_AUDIT.md` и строка в «Остаются открытыми».
 - После проверки владельцем и слияния ветки: «Где мы сейчас» в `CLAUDE.md`,
   строка в `docs/audits/REFACTOR_ROADMAP.md` («После дорожной карты»), статус

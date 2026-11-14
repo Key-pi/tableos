@@ -65,8 +65,8 @@ docker compose logs init   # логины Admin и ссылки на столы 
 - Открытые продуктовые решения:
   [`docs/product/OPEN_PRODUCT_QUESTIONS.md`](docs/product/OPEN_PRODUCT_QUESTIONS.md)
 
-`TABLEOS_TZ.md` и `PROJECT_CHEATSHEET.md` сохранены как исторические
-документы. Их связь с текущим кодом описана в
+Исторические документы (старое ТЗ, шпаргалка, задание первого аудита) — в
+[`docs/legacy/`](docs/legacy/README.md). Связь старого ТЗ с текущим кодом —
 [`docs/product/LEGACY_TZ_MIGRATION_MAP.md`](docs/product/LEGACY_TZ_MIGRATION_MAP.md).
 
 ## Проверка локально

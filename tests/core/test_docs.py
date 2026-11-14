@@ -82,6 +82,7 @@ class CheckerCatchesDriftTests(SimpleTestCase):
         files = self._repo({
             "apps/x.py": "",
             "docs/audits/BASELINE.md": "`apps/removed.py` existed in July.\n",
+            "docs/legacy/TABLEOS_TZ.md": "`apps/never_built.py` was only planned.\n",
         })
         self.assertEqual(tool.code_references(files), [])
 
