@@ -285,3 +285,4 @@ PQ-033) и отправка почтой ([SHIPPING.md](../architecture/SHIPPING
 | Схема зала, заказ на стол, бронь (ветка `floor-plan`) | PQ-052 | FLOOR_PLAN.md |
 | Сверка документации и инструкций (ветка `docs-audit`; AA-051–AA-053) | — | ARCHITECTURE_AUDIT.md |
 | Истечение пустой сессии стола (ветка `session-expiry`) | PQ-008 | AS_IS_ARCHITECTURE.md, BACKGROUND_JOBS.md |
+| Бонусы не видны гостю без работающих программ (ветка `bonus-visibility`) | PQ-001 | AS_IS_ARCHITECTURE.md, MINI_APP.md |
