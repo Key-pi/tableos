@@ -284,3 +284,4 @@ PQ-033) и отправка почтой ([SHIPPING.md](../architecture/SHIPPING
 | Страница «Нагрузка» (ветка `system-load`) | PQ-051 | AS_IS_ARCHITECTURE.md |
 | Схема зала, заказ на стол, бронь (ветка `floor-plan`) | PQ-052 | FLOOR_PLAN.md |
 | Сверка документации и инструкций (ветка `docs-audit`; AA-051–AA-053) | — | ARCHITECTURE_AUDIT.md |
+| Истечение пустой сессии стола (ветка `session-expiry`) | PQ-008 | AS_IS_ARCHITECTURE.md, BACKGROUND_JOBS.md |
