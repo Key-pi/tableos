@@ -171,7 +171,7 @@ CELERY_BEAT_SCHEDULE = {
     # PQ-036: unconfirmed transfers past the venue's wait are canceled.
     "expire-idle-table-sessions": {
         "task": "tables.expire_idle_table_sessions",
-        "schedule": timedelta(minutes=10),
+        "schedule": timedelta(minutes=5),
     },
     "cancel-expired-transfer-orders": {
         "task": "billing.cancel_expired_transfer_orders",

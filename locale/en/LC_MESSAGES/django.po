@@ -4889,12 +4889,12 @@ msgid "Закрывать стол после полной оплаты"
 msgstr "Close the table after full payment"
 
 #: apps/partners/models.py
-msgid "Закрывать пустую сессию стола через, часов"
-msgstr "Close an empty table session after, hours"
+msgid "Закрывать пустую сессию стола через, минут"
+msgstr "Close an empty table session after, minutes"
 
 #: apps/partners/models.py
-msgid "Гость отсканировал QR-код и ушёл: сессия без заказов и долгов закрывается сама, если столько часов ничего не происходило. С неоплаченным заказом сессию закрывает персонал."
-msgstr "The guest scanned the QR code and left: a session without orders or debts closes by itself after this many hours with nothing happening. A session with an unpaid order is closed by the staff."
+msgid "Гость отсканировал QR-код и ушёл: сессия без заказов и долгов закрывается сама, если столько минут ничего не происходило (120 — два часа; от 15 минут до 72 часов). С неоплаченным заказом сессию закрывает персонал."
+msgstr "The guest scanned the QR code and left: a session with no orders and nothing owed closes by itself after this many quiet minutes (120 is two hours; from 15 minutes to 72 hours). Staff close a session with an unpaid order."
 
 #: apps/partners/models.py
 msgid "Позиций меню в одном сообщении"

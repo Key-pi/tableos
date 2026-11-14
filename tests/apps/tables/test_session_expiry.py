@@ -56,8 +56,8 @@ class ExpiryFixture(TestCase):
         return checkout_active_cart_for_telegram_user(partner_id=self.partner.id,
                                                       telegram_id=telegram_id)
 
-    def later(self, hours):
-        return timezone.now() + timedelta(hours=hours)
+    def later(self, hours=0, minutes=0):
+        return timezone.now() + timedelta(hours=hours, minutes=minutes)
 
     def refresh(self, session):
         session.refresh_from_db()
@@ -81,7 +81,7 @@ class IdleSessionTests(ExpiryFixture):
 
     def test_the_window_is_the_venues_own(self):
         PartnerBotSettings.objects.filter(partner=self.partner).update(
-            table_session_idle_hours=2)
+            table_session_idle_minutes=120)
         other = make_venue("Patient")
         other_table = Table.objects.create(partner=other, number=1)
         mine = self.sit()
@@ -90,6 +90,15 @@ class IdleSessionTests(ExpiryFixture):
         self.assertEqual(expire_idle_table_sessions(now=self.later(3)), 1)
         self.assertEqual(self.refresh(mine).status, TableSession.Status.TIMED_OUT)
         self.assertEqual(self.refresh(theirs).status, TableSession.Status.ACTIVE)
+
+    def test_the_window_can_be_minutes(self):
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            table_session_idle_minutes=40)
+        session = self.sit()
+        self.assertEqual(expire_idle_table_sessions(now=self.later(minutes=30)), 0)
+        self.assertEqual(self.refresh(session).status, TableSession.Status.ACTIVE)
+        self.assertEqual(expire_idle_table_sessions(now=self.later(minutes=45)), 1)
+        self.assertEqual(self.refresh(session).status, TableSession.Status.TIMED_OUT)
 
     def test_a_session_with_an_unpaid_order_stays_for_the_staff(self):
         session = self.sit()
@@ -159,13 +168,17 @@ class IdleSessionTests(ExpiryFixture):
 
 
 class SettingTests(TestCase):
-    def test_four_hours_by_default_and_at_least_one(self):
+    def test_240_minutes_by_default_from_15_minutes_to_72_hours(self):
         partner = make_venue("Setting")
         settings = PartnerBotSettings.objects.get(partner=partner)
-        self.assertEqual(settings.table_session_idle_hours, 4)
-        settings.table_session_idle_hours = 0
-        with self.assertRaises(ValidationError):
+        self.assertEqual(settings.table_session_idle_minutes, 240)
+        for allowed in (15, 40, 120, 72 * 60):
+            settings.table_session_idle_minutes = allowed
             settings.full_clean()
+        for refused in (0, 14, 72 * 60 + 1):
+            settings.table_session_idle_minutes = refused
+            with self.assertRaises(ValidationError):
+                settings.full_clean()
 
     def test_the_task_runs_on_the_schedule(self):
         from django.conf import settings

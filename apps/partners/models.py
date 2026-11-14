@@ -560,13 +560,14 @@ class PartnerBotSettings(TimeStampedModel):
         default=True,
         verbose_name=_lazy("Закрывать стол после полной оплаты"),
     )
-    table_session_idle_hours = models.PositiveSmallIntegerField(
-        default=4,
-        validators=[MinValueValidator(1), MaxValueValidator(72)],
-        verbose_name=_lazy("Закрывать пустую сессию стола через, часов"),
+    table_session_idle_minutes = models.PositiveSmallIntegerField(
+        default=240,
+        validators=[MinValueValidator(15), MaxValueValidator(72 * 60)],
+        verbose_name=_lazy("Закрывать пустую сессию стола через, минут"),
         help_text=_lazy(
             "Гость отсканировал QR-код и ушёл: сессия без заказов и долгов "
-            "закрывается сама, если столько часов ничего не происходило. "
+            "закрывается сама, если столько минут ничего не происходило "
+            "(120 — два часа; от 15 минут до 72 часов). "
             "С неоплаченным заказом сессию закрывает персонал."
         ),
     )

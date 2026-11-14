@@ -578,7 +578,8 @@ def close_table_session_if_settled(session: TableSession) -> TableSession:
     return _close_locked_table_session(locked_session)
 
 
-IDLE_SESSION_HOURS_DEFAULT = 4
+IDLE_SESSION_MINUTES_DEFAULT = 240
+IDLE_SESSION_MINUTES_MIN = 15
 _OPEN_BILLING_REQUEST = (BillingRequest.Status.OPEN, BillingRequest.Status.AUTO_PREPARED)
 
 
@@ -587,16 +588,16 @@ def expire_idle_table_sessions(*, now: datetime | None = None) -> int:
 
     The guest scanned the QR code and left. A session with no order (a
     cancelled one does not count) and no open billing request expires once
-    nothing happened for ``PartnerBotSettings.table_session_idle_hours``
-    (4 by default): it becomes ``timed_out`` and its visit closes when nobody
+    nothing happened for ``PartnerBotSettings.table_session_idle_minutes``
+    (240 by default, at least 15): it becomes ``timed_out`` and its visit closes when nobody
     else sits in it. A session with an unpaid order stays for the staff. The
     guest's cart keeps its items (``apps/orders/services.py:_align_cart_with_session``).
     Returns how many sessions expired.
     """
 
     now = now or timezone.now()
-    hours_by_partner = dict(
-        PartnerBotSettings.objects.values_list("partner_id", "table_session_idle_hours")
+    minutes_by_partner = dict(
+        PartnerBotSettings.objects.values_list("partner_id", "table_session_idle_minutes")
     )
     with_orders = Order.objects.filter(table_session_id__isnull=False).exclude(
         status=Order.Status.CANCELED
@@ -604,7 +605,7 @@ def expire_idle_table_sessions(*, now: datetime | None = None) -> int:
     candidates = (
         TableSession.objects.filter(
             status=TableSession.Status.ACTIVE,
-            started_at__lte=now - timedelta(hours=1),
+            started_at__lte=now - timedelta(minutes=IDLE_SESSION_MINUTES_MIN),
         )
         .exclude(id__in=with_orders)
         .order_by("started_at")
@@ -612,9 +613,9 @@ def expire_idle_table_sessions(*, now: datetime | None = None) -> int:
     )
     expired = 0
     for session_id, partner_id in list(candidates):
-        hours = hours_by_partner.get(partner_id) or IDLE_SESSION_HOURS_DEFAULT
+        minutes = minutes_by_partner.get(partner_id) or IDLE_SESSION_MINUTES_DEFAULT
         if _expire_idle_session(session_id, partner_id=partner_id,
-                                quiet_since=now - timedelta(hours=hours), now=now):
+                                quiet_since=now - timedelta(minutes=minutes), now=now):
             expired += 1
     return expired
 

@@ -39,7 +39,7 @@ flowchart LR
 | Management-команды, `runserver` | `manage.py` | миграции, наполнение демо-данными, `runbot`, `ensure_admin` | `core.settings.local` |
 | Telegram-бот | `manage.py runbot` → `bot/supervisor.py:BotSupervisor` | сервис ботов: polling всех исправных активных `BotInstance`, список перечитывается раз в минуту; в одном процессе или с `--processes N` в N процессах, каждый бот ровно в одном (`bot/services/runtime.py:configs_for_shard`). `bot/main.py:run_polling` — только эмулятор и нагрузочный тест | `core.settings.local` (через `manage.py`) |
 | Воркер Celery | `celery -A core.celery worker` → `core/celery.py` | уведомления персонала и гостей, сообщения о возврате, рассылки, метрики, снимок нагрузки | `core.settings.local` |
-| Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `record-system-snapshot` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `cancel-expired-transfer-orders` (5 мин), `expire-idle-table-sessions` (10 мин), `refresh-daily-partner-metrics` (15 мин), `forget-old-network-message-points` (1 день) | `core.settings.local` |
+| Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `record-system-snapshot` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `cancel-expired-transfer-orders` (5 мин), `expire-idle-table-sessions` (5 мин), `refresh-daily-partner-metrics` (15 мин), `forget-old-network-message-points` (1 день) | `core.settings.local` |
 | PostgreSQL 16, Redis 7 | `docker-compose.yml` | долговечные данные; брокер и хранилище результатов Celery | — |
 
 `docker-compose.yml` объявляет `db`, `redis` (оба с healthcheck), разовый
@@ -365,9 +365,9 @@ apps.notifications.tasks` — цикл, разорванный только им
    сидит и он рассчитан (нет неоплаченных заказов и открытого счёта);
    `close_table_visit` — команда персонала. Пустая сессия истекает сама
    (PQ-008, `tables/services.py:expire_idle_table_sessions`, beat каждые
-   10 минут): без заказов (отменённые не в счёт) и без открытого запроса счёта,
-   если `PartnerBotSettings.table_session_idle_hours` (4 по умолчанию, «За
-   столом») ничего не происходило — последнее из начала сессии и изменений её
+   5 минут): без заказов (отменённые не в счёт) и без открытого запроса счёта,
+   если `PartnerBotSettings.table_session_idle_minutes` (240 по умолчанию,
+   от 15 минут до 72 часов, «За столом») ничего не происходило — последнее из начала сессии и изменений её
    корзины, заказов и запросов счёта. Сессия становится `timed_out`, визит
    закрывается, если в нём больше никто не сидит; корзина гостя сохраняет
    позиции. Блокировки: активные корзины гостя → сессия → визит; оформление за
@@ -934,7 +934,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1215 тестов после истечения пустых сессий стола, зелёные на SQLite и на PostgreSQL 16.
+- 1216 тестов после истечения пустых сессий стола, зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
