@@ -286,3 +286,4 @@ PQ-033) и отправка почтой ([SHIPPING.md](../architecture/SHIPPING
 | Сверка документации и инструкций (ветка `docs-audit`; AA-051–AA-053) | — | ARCHITECTURE_AUDIT.md |
 | Истечение пустой сессии стола (ветка `session-expiry`) | PQ-008 | AS_IS_ARCHITECTURE.md, BACKGROUND_JOBS.md |
 | Бонусы не видны гостю без работающих программ (ветка `bonus-visibility`) | PQ-001 | AS_IS_ARCHITECTURE.md, MINI_APP.md |
+| У нового заведения все модули выключены (ветка `modules-off-by-default`) | PQ-053 | AS_IS_ARCHITECTURE.md |
