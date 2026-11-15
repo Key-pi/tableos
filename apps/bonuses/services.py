@@ -526,17 +526,33 @@ def _preview_bonus_amount(
     purchase_total: Decimal,
     bonus_paid_amount: Decimal = Decimal("0.00"),
 ) -> Decimal:
+    return preview_bonus_amount(
+        partner_id=partner_id, guest=guest, purchase_total=purchase_total,
+        bonus_paid_amount=bonus_paid_amount,
+    )
+
+
+def preview_bonus_amount(
+    *,
+    partner_id,
+    guest: GuestProfile,
+    purchase_total: Decimal,
+    bonus_paid_amount: Decimal = Decimal("0.00"),
+    event: str = BonusProgram.TriggerEvent.MANUAL_PURCHASE,
+) -> Decimal:
+    """What the guest would earn for a purchase, before it is made (the
+    till's preview). The anonymous guest earns nothing (PQ-052)."""
+
+    if guest.telegram_account_id is None:
+        return Decimal("0.00")
     context = BonusContext(
-        event=BonusProgram.TriggerEvent.MANUAL_PURCHASE,
+        event=event,
         guest=guest,
         purchase_total=purchase_total,
         bonus_paid_amount=bonus_paid_amount,
     )
     total_awarded = Decimal("0.00")
-    for program in BonusProgramRepository.active_for_partner_event(
-        partner_id,
-        BonusProgram.TriggerEvent.MANUAL_PURCHASE,
-    ):
+    for program in BonusProgramRepository.active_for_partner_event(partner_id, event):
         strategy = resolve_bonus_strategy(program)
         amount = Decimal(strategy(program, context)).quantize(Decimal("0.01"))
         if amount > 0:

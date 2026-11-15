@@ -41,4 +41,9 @@ paths:
   возвратом.
 - Ядро счёта `apps/billing/services.py` про каналы не знает; поведение
   стола — `apps/billing/table_bills.py`, удалённых каналов —
-  `apps/billing/remote_orders.py` (ADR-0009).
+  `apps/billing/remote_orders.py`, продажи на кассе —
+  `apps/billing/counter_sales.py` (ADR-0009).
+- **Продажа на кассе (PQ-054):** заказ «На кассе» сразу выдан, личный счёт и
+  оплата наличными или картой (и/или бонусами по коду) — одним действием
+  продавца; кешбэк — программы «Покупка на кассе» (`MANUAL_PURCHASE`,
+  `bonuses/selectors.py:purchase_event_for`); возврат — как у любого счёта.

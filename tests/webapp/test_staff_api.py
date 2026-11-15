@@ -531,6 +531,11 @@ class StaffSaleAndReportTests(StaffFixture):
         self.cashier = staff(self.partner, "kava_cashier", User.Role.CASHIER, 7700204)
 
     def test_a_quick_sale_with_the_guest_code(self):
+        """A sale at the counter (PQ-054): an order «На кассе», its bill and
+        the payment by the method the cashier pressed."""
+
+        from apps.billing.models import Bill, Payment
+
         menu = self.staff_call("sale_menu", user_id=7700204)[1]
         latte = next(item for item in menu["categories"][0]["items"] if item["name"] == "Лате")
         guest = GuestProfile.objects.get_or_create(
@@ -543,13 +548,28 @@ class StaffSaleAndReportTests(StaffFixture):
         self.assertEqual((preview["sale"]["total"], preview["sale"]["items"][0]["quantity"]),
                          ("160.00", 2))
         self.assertTrue(preview["sale"]["guest"])
-        status, done = self.staff_call("sale_confirm", body, user_id=7700204)
+        # Cash or card: without a method the sale is not made.
+        status, refused = self.staff_call("sale_confirm", body, user_id=7700204)
+        self.assertEqual(status, 400, refused)
+        status, done = self.staff_call(
+            "sale_confirm", {**body, "payment": "terminal", "to_pay": "160.00"}, user_id=7700204
+        )
         self.assertEqual(status, 200, done)
-        from apps.bonuses.models import WalkInSale
+        order = Order.objects.get(channel=Order.Channel.COUNTER)
+        self.assertEqual((order.total_amount, order.guest_id, order.status),
+                         (Decimal("160.00"), guest.id, Order.Status.COMPLETED))
+        payment = Payment.objects.get(bill__bill_orders__order=order)
+        self.assertEqual((payment.method, payment.created_by),
+                         (Payment.Method.TERMINAL, self.cashier.user))
+        self.assertEqual(Bill.objects.get(bill_orders__order=order).status, Bill.Status.PAID)
+        self.assertIn("160", done["notice"])
 
-        sale = WalkInSale.objects.get()
-        self.assertEqual((sale.amount, sale.guest_id, sale.created_by), (Decimal("160.00"),
-                         guest.id, self.cashier.user))
+    def test_a_changed_amount_is_refused(self):
+        menu = self.staff_call("sale_menu", user_id=7700204)[1]
+        latte = next(item for item in menu["categories"][0]["items"] if item["name"] == "Лате")
+        body = {"items": {latte["id"]: 1}, "payment": "cash", "to_pay": "1.00"}
+        self.assertEqual(self.staff_call("sale_confirm", body, user_id=7700204)[0], 400)
+        self.assertFalse(Order.objects.filter(channel=Order.Channel.COUNTER).exists())
 
     def _sale_with_bonuses(self):
         from apps.bonuses.models import BonusProgram, BonusTransaction
@@ -581,24 +601,27 @@ class StaffSaleAndReportTests(StaffFixture):
         """A slow line: the screen gave up waiting, the cashier presses again —
         the same key, the same sale; no second accrual or spend (PQ-048)."""
 
-        from apps.bonuses.models import BonusTransaction, WalkInSale
+        from apps.bonuses.models import BonusTransaction
 
         guest, body = self._sale_with_bonuses()
-        body["key"] = "6f1c2a4e-0b9d-4c55-9d3a-8a1f0f7e2b10"
+        body.update(key="6f1c2a4e-0b9d-4c55-9d3a-8a1f0f7e2b10", payment="cash")
         first = self.staff_call("sale_confirm", body, user_id=7700204)
         again = self.staff_call("sale_confirm", body, user_id=7700204)
         self.assertEqual((first[0], again[0]), (200, 200), (first, again))
-        self.assertEqual(WalkInSale.objects.count(), 1)
-        sale = WalkInSale.objects.get()
-        self.assertGreater(sale.bonus_spent_amount, 0)
+        self.assertTrue(again[1]["repeated"])
+        sales = Order.objects.filter(channel=Order.Channel.COUNTER)
+        self.assertEqual(sales.count(), 1)
+        sale = sales.get()
+        self.assertGreater(sale.bonus_spent, 0)
         self.assertEqual(
-            BonusTransaction.objects.filter(walk_in_sale=sale).count(), 2  # spend + accrual
+            BonusTransaction.objects.filter(guest=guest).exclude(source_type="test").count(),
+            2,  # spend + accrual
         )
-        self.assertIn(str(sale.amount), again[1]["notice"])
+        self.assertIn(str(sale.total_amount), again[1]["notice"])
         # A new sale has a new key.
         body["key"] = "0a7d3b51-55e2-4a3e-b1a6-2c4f9e8d7c61"
         self.assertEqual(self.staff_call("sale_confirm", body, user_id=7700204)[0], 200)
-        self.assertEqual(WalkInSale.objects.count(), 2)
+        self.assertEqual(sales.count(), 2)
 
     def test_a_broken_key_is_refused(self):
         _guest, body = self._sale_with_bonuses()

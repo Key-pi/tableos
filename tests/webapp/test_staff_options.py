@@ -3,8 +3,8 @@ owner 2026-11-07)."""
 
 from decimal import Decimal
 
-from apps.bonuses.models import WalkInSale
 from apps.menu.models import MenuItemVariant, Modifier, ModifierGroup
+from apps.orders.models import Order
 from apps.partners.models import PartnerBotSettings
 from apps.users.models import User
 from tests.apps.menu.test_options import options_module
@@ -45,19 +45,23 @@ class StaffSaleOptionsTests(StaffFixture):
         line = preview["sale"]["items"][0]
         self.assertEqual((line["name"], line["total"]), ("Лате, 400 мл (Вівсяне)", "220.00"))
         self.assertTrue(line["key"])
-        status, done = self.sale("sale_confirm", body)
+        status, done = self.sale("sale_confirm", {**body, "payment": "cash"})
         self.assertEqual(status, 200, done)
-        self.assertEqual(WalkInSale.objects.get().amount, Decimal("220.00"))
+        order = Order.objects.get(channel=Order.Channel.COUNTER)
+        self.assertEqual(order.total_amount, Decimal("220.00"))
+        self.assertEqual(order.items.get().item_name, "Лате, 400 мл (Вівсяне)")
 
     def test_without_the_choice_there_is_no_sale(self):
         menu = self.sale("sale_menu", None)[1]
         latte = next(item for item in menu["categories"][0]["items"] if item["name"] == "Лате")
-        status, body = self.sale("sale_confirm", {"items": [{"item": latte["id"], "quantity": 1}]})
+        status, body = self.sale(
+            "sale_confirm", {"items": [{"item": latte["id"], "quantity": 1}], "payment": "cash"}
+        )
         self.assertEqual(status, 400)
         self.assertIn("Лате", body["error"])
         for items in ([{"item": latte["id"], "quantity": 1, "options": "oat"}], ["latte"]):
             self.assertEqual(self.sale("sale_preview", {"items": items})[0], 400, items)
-        self.assertFalse(WalkInSale.objects.exists())
+        self.assertFalse(Order.objects.filter(channel=Order.Channel.COUNTER).exists())
 
     def test_a_screen_opened_before_still_sends_items_by_id(self):
         options_module(self.partner, on=False)

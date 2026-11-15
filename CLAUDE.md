@@ -46,9 +46,9 @@
 - Имя «TableOS» убираем из всего, что видят люди. Внутренние имена (`tableos`
   в `pyproject.toml`, пакеты, таблицы, имя навыка) не трогаем.
 - Стол — один из каналов заказа: `Order.channel` = `table` / `pickup` /
-  `delivery` / `shipping`. Гость сначала выбирает способ (кнопка или QR
-  стола), он хранится в `Cart.channel`; у позиций меню — отметки, в каких
-  способах они продаются.
+  `delivery` / `shipping` / `counter` (на кассе — проводит продавец, PQ-054).
+  Гость сначала выбирает способ (кнопка или QR стола), он хранится в
+  `Cart.channel`; у позиций меню — отметки, в каких способах они продаются.
 - Одна модель заказа, счёта и оплаты на все каналы (ADR-0009), без
   «ЗаказДоставки». Данные канала — поля заказа (`requested_for`,
   `delivery_*`, `shipping_*`); стол — `apps/tables` +
@@ -186,7 +186,7 @@ docker compose logs init        # логины и ссылки на столы �
 | Решения владельца и открытые вопросы | `docs/product/OPEN_PRODUCT_QUESTIONS.md` |
 | Направление сети Botera | `docs/product/ECOSYSTEM_DIRECTION.md` |
 | Визиты, правка и аннулирование счёта, кешбэк | `docs/architecture/B3_2_VISITS_AND_BILL_CHANGES.md`, ADR-0007 |
-| Каналы заказа | ADR-0009, `docs/architecture/PICKUP.md`, `DELIVERY.md`, `SHIPPING.md`, `PAYMENT_OPTIONS.md` |
+| Каналы заказа | ADR-0009, `docs/architecture/PICKUP.md`, `DELIVERY.md`, `SHIPPING.md`, `PAYMENT_OPTIONS.md`, `COUNTER_SALE.md` |
 | Возвраты | `docs/architecture/REFUNDS.md` |
 | Языки бота и Admin | `docs/architecture/LANGUAGES.md` |
 | Уведомления и рассылки | `docs/architecture/BACKGROUND_JOBS.md`, ADR-0008 |

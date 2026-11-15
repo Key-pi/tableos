@@ -1344,30 +1344,45 @@
         style: "width:100%;padding:10px 12px;margin-top:8px;border-radius:10px;border:1px solid var(--separator);background:var(--bg)",
         onchange: function (event) { C().comment = event.target.value; C().key = ""; } });
       summary.appendChild(comment);
-      summary.appendChild(el("div", { class: "acts" },
+      // A sale at the counter is paid at once (PQ-054): «Наличные» or
+      // «Карта»; when bonuses pay it all, one «Провести».
+      function confirmSale(payment) {
+        if (busy) return;
+        busy = true;
+        api("sale_confirm", { customer_code: C().code, items: saleItems(), redeem: C().redeem, comment: C().comment,
+                              key: saleKey(), payment: payment, to_pay: preview.to_pay })
+          .then(function (result) {
+            if (result.ok) sale = newSale(sale.category);
+            after(result);
+          });
+      }
+      var acts = el("div", { class: "acts" },
         el("button", { type: "button", class: "act", text: T.clear, onclick: function () {
           if (forTable) { tableOrder.lines = []; tableOrder.preview = null; tableOrder.key = ""; }
           else sale = newSale(sale.category);
           render();
-        } }),
-        el("button", { type: "button", class: "act primary" + (forTable ? " order-send" : ""), text: forTable ? T.send_order : T.sale_confirm, disabled: busy, onclick: function () {
+        } }));
+      if (forTable) {
+        acts.appendChild(el("button", { type: "button", class: "act primary order-send", text: T.send_order, disabled: busy, onclick: function () {
           if (busy) return;
           busy = true;
-          if (forTable) {
-            api("table_order", { table: tableOrder.table.id, visit: tableOrder.visit, customer_code: tableOrder.code,
-                                 items: saleItems(), comment: tableOrder.comment, key: saleKey() })
-              .then(function (result) {
-                if (result.ok) { tableOrder = null; tabData.tables = null; tab = "tables"; }
-                after(result, function () { return load(true); });
-              });
-            return;
-          }
-          api("sale_confirm", { customer_code: C().code, items: saleItems(), redeem: C().redeem, comment: C().comment, key: saleKey() })
+          api("table_order", { table: tableOrder.table.id, visit: tableOrder.visit, customer_code: tableOrder.code,
+                               items: saleItems(), comment: tableOrder.comment, key: saleKey() })
             .then(function (result) {
-              if (result.ok) sale = newSale(sale.category);
-              after(result);
+              if (result.ok) { tableOrder = null; tabData.tables = null; tab = "tables"; }
+              after(result, function () { return load(true); });
             });
-        } })));
+        } }));
+      } else if (Number(preview.to_pay) > 0) {
+        acts.appendChild(el("button", { type: "button", class: "act primary", text: T.sale_cash, disabled: busy,
+                                        onclick: function () { confirmSale("cash"); } }));
+        acts.appendChild(el("button", { type: "button", class: "act primary", text: T.sale_card, disabled: busy,
+                                        onclick: function () { confirmSale("terminal"); } }));
+      } else {
+        acts.appendChild(el("button", { type: "button", class: "act primary", text: T.sale_confirm, disabled: busy,
+                                        onclick: function () { confirmSale(""); } }));
+      }
+      summary.appendChild(acts);
       page.appendChild(summary);
     }
   }

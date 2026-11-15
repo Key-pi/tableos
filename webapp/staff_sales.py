@@ -1,23 +1,22 @@
-"""Quick sale and the day report on the Mini App's staff screen (PQ-048).
+"""The sale at the counter and the day report on the Mini App's staff screen
+(PQ-048, PQ-054).
 
-As the bot's work mode: the same rights (``bot/services/staff_rights.py``),
-the same services (``preview_walk_in_sale_by_customer_code``,
-``register_walk_in_sale_from_menu_items_by_customer_code``,
-``build_daily_operations_report``). The screen keeps the chosen items itself
-and sends them whole each time; nothing is saved until «Провести».
+The same rights as the bot's work mode (``bot/services/staff_rights.py``).
+A sale is an order «На кассе» with its bill and payment
+(``apps/billing/counter_sales.py``): the cashier presses «Наличные» or
+«Карта». The screen keeps the chosen items itself and sends them whole each
+time; nothing is saved until then.
 """
 
 from __future__ import annotations
 
 import re
 import uuid
+from decimal import Decimal, InvalidOperation
 
 from apps.analytics.services import build_daily_operations_report
-from apps.bonuses.services import (
-    preview_walk_in_sale_by_customer_code,
-    register_walk_in_sale_from_menu_items_by_customer_code,
-    walk_in_sale_by_request_key,
-)
+from apps.billing.counter_sales import preview_counter_sale, sell_at_counter
+from apps.billing.models import Payment
 from apps.menu.options import catalog_choices, has_choices, needs_choice, price_from
 from apps.menu.repositories import MenuItemRepository
 from apps.menu.stock import stock_on
@@ -135,24 +134,21 @@ def menu_json(staff: StaffRequest, items: list) -> dict:
     return {"categories": list(categories.values())}
 
 
-def _preview_json(preview, redeem: bool) -> dict:
-    spend = preview.redeemable_bonus_amount if redeem else 0
+def _preview_json(preview) -> dict:
     return {
         "guest": preview.guest.staff_label() if preview.guest is not None else "",
         "items": [
             {
-                "id": item["menu_item_id"].hex if hasattr(item["menu_item_id"], "hex")
-                else str(item["menu_item_id"]).replace("-", ""),
-                "name": item["item_name"], "quantity": item["quantity"],
-                "key": item.get("key", ""),
-                "total": _money(item["unit_price"] * item["quantity"]),
+                "id": line["menu_item_id"].hex, "name": line["item_name"],
+                "quantity": line["quantity"], "key": line["key"],
+                "total": _money(line["unit_price"] * line["quantity"]),
             }
-            for item in preview.items
+            for line in preview.lines
         ],
-        "total": _money(preview.total_amount),
-        "redeemable": _money(preview.redeemable_bonus_amount),
-        "to_pay": _money(preview.total_amount - spend),
-        "bonus_awarded": _money(preview.projected_bonus_amount),
+        "total": _money(preview.total),
+        "redeemable": _money(preview.redeemable),
+        "to_pay": _money(preview.to_pay),
+        "bonus_awarded": _money(preview.bonus_awarded),
     }
 
 
@@ -161,22 +157,36 @@ def sale_preview_view(request, staff: StaffRequest, body: dict) -> dict:
     """The current sale: who (a guest code or nobody), what, how much."""
 
     _sales(staff)
-    redeem = _redeem(body)
-    preview = preview_walk_in_sale_by_customer_code(
+    preview = preview_counter_sale(
         partner_id=staff.partner.id,
         customer_code=_text(body, "customer_code"),
         items=_items(body) if body.get("items") else [],
-        redeem_bonus=redeem,
+        use_bonuses=_redeem(body),
     )
-    return {"sale": _preview_json(preview, redeem)}
+    return {"sale": _preview_json(preview)}
 
 
 # The screen makes one key per sale (staff.js) and sends it again on a retry.
 SALE_KEY = re.compile(r"[A-Za-z0-9_-]{8,64}")
 
 
+def _expected_to_pay(body: dict) -> Decimal | None:
+    """The amount the cashier saw; a screen without it (opened before PQ-054)
+    is not checked."""
+
+    raw = body.get("to_pay")
+    if raw in (None, ""):
+        return None
+    try:
+        return Decimal(str(raw))
+    except InvalidOperation as exc:
+        raise WebAppDenied(400, N_("Проверьте сумму ещё раз.")) from exc
+
+
 @staff_api("POST")
 def sale_confirm_view(request, staff: StaffRequest, body: dict) -> dict:
+    """«Наличные» or «Карта»: the sale is made and paid (PQ-054)."""
+
     _sales(staff)
     items = _items(body)
     if not items:
@@ -184,25 +194,32 @@ def sale_confirm_view(request, staff: StaffRequest, body: dict) -> dict:
     key = _text(body, "key")
     if key and not SALE_KEY.fullmatch(key):
         raise WebAppDenied(400, N_("Обновите экран и проведите продажу ещё раз."))
-    repeated = walk_in_sale_by_request_key(staff.partner.id, key) is not None
-    sale = register_walk_in_sale_from_menu_items_by_customer_code(
+    sale = sell_at_counter(
         partner_id=staff.partner.id,
+        seller=staff.employee,
         customer_code=_text(body, "customer_code"),
         items=items,
+        payment=_text(body, "payment"),
+        use_bonuses=_redeem(body),
+        expected_to_pay=_expected_to_pay(body),
         comment=_text(body, "comment"),
-        created_by=staff.employee.user,
-        redeem_bonus=_redeem(body),
         request_key=key,
     )
+    methods = ", ".join(
+        str(Payment.Method(method).label) for method in sale.bill.payments.filter(
+            status=Payment.Status.PAID
+        ).values_list("method", flat=True)
+    )
     text = (
-        N_("Эта продажа уже сохранена: {amount} грн, бонусов начислено {bonus}.")
-        if repeated
-        else N_("Продажа сохранена: {amount} грн, бонусов начислено {bonus}.")
+        N_("Эта продажа уже проведена: {amount} грн ({methods}), бонусов начислено {bonus}.")
+        if sale.repeated
+        else N_("Продажа проведена: {amount} грн ({methods}), бонусов начислено {bonus}.")
     )
     return {
         "ok": True,
-        "repeated": repeated,
-        "notice": _(text, amount=sale.amount, bonus=sale.bonus_awarded_amount),
+        "repeated": sale.repeated,
+        "notice": _(text, amount=sale.order.total_amount, methods=methods,
+                    bonus=sale.bonus_awarded),
     }
 
 

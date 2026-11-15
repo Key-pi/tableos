@@ -684,6 +684,30 @@ msgstr "#{public_id}: {item_name} × {quantity} — {line_total} UAH"
 msgid "Счета и оплаты"
 msgstr "Bills and payments"
 
+#: apps/billing/counter_sales.py apps/orders/services.py
+msgid "Гость с кодом {code} не найден."
+msgstr "No guest with code {code}."
+
+#: apps/billing/counter_sales.py
+msgid "Продажу на кассе проводит владелец, менеджер или кассир этого заведения."
+msgstr "A counter sale is made by the owner, a manager or a cashier of this venue."
+
+#: apps/billing/counter_sales.py
+msgid "Быстрые продажи в этом заведении выключены."
+msgstr "Quick sales are switched off at this venue."
+
+#: apps/billing/counter_sales.py
+msgid "Выберите, чем платит гость: наличными или картой."
+msgstr "Choose how the guest pays: cash or card."
+
+#: apps/billing/counter_sales.py apps/orders/models.py
+msgid "На кассе"
+msgstr "At the counter"
+
+#: apps/billing/counter_sales.py apps/billing/remote_orders.py
+msgid "Сумма к оплате изменилась — проверьте её ещё раз."
+msgstr "The amount to pay has changed, please check it again."
+
 #: apps/billing/forms.py
 msgid "Оплату бонусами нужно запускать из карточки счёта, не через Admin."
 msgstr "Pay with bonuses from the bill card, not through Admin."
@@ -928,7 +952,7 @@ msgstr "Refunded"
 msgid "Отменена"
 msgstr "Canceled"
 
-#: apps/billing/models.py apps/orders/models.py bot/keyboards/staff.py webapp/staff_billing.py
+#: apps/billing/models.py apps/orders/models.py bot/keyboards/staff.py webapp/staff_billing.py webapp/staff_views.py
 msgid "Наличные"
 msgstr "Cash"
 
@@ -1315,10 +1339,6 @@ msgstr "Your cart has changed, please check the new total."
 #: apps/billing/remote_orders.py
 msgid "Бонусы сейчас списать нельзя — проверьте сумму ещё раз."
 msgstr "Bonuses cannot be used now, please check the total again."
-
-#: apps/billing/remote_orders.py
-msgid "Сумма к оплате изменилась — проверьте её ещё раз."
-msgstr "The amount to pay has changed, please check it again."
 
 #: apps/billing/remote_orders.py
 msgid "Телефон: {phone}."
@@ -1909,8 +1929,8 @@ msgid "Оплаченный заказ"
 msgstr "Paid order"
 
 #: apps/bonuses/models.py
-msgid "Покупка, внесённая вручную"
-msgstr "Purchase entered manually"
+msgid "Покупка на кассе"
+msgstr "Purchase at the counter"
 
 #: apps/bonuses/models.py
 msgid "Кешбэк"
@@ -3931,6 +3951,10 @@ msgid "Нельзя создать заказ без позиций."
 msgstr "An order cannot be created without items."
 
 #: apps/orders/services.py
+msgid "Продажу на кассе проводит продавец."
+msgstr "A counter sale is made by a seller."
+
+#: apps/orders/services.py
 msgid "Неизвестный способ оплаты заказа."
 msgstr "Unknown order payment method."
 
@@ -4141,10 +4165,6 @@ msgstr "Some items are unavailable now — refresh the menu."
 #: apps/orders/services.py
 msgid "Количество — от 1 до 99."
 msgstr "Quantity is 1 to 99."
-
-#: apps/orders/services.py
-msgid "Гость с кодом {code} не найден."
-msgstr "No guest with code {code}."
 
 #: apps/orders/services.py
 msgid "Заказ на стол делают официант, кассир, менеджер или владелец этого заведения."
@@ -8936,17 +8956,21 @@ msgstr "Table {table} is booked for {time}."
 msgid "Компания за столом не найдена."
 msgstr "The company at the table was not found."
 
+#: webapp/staff_sales.py webapp/views.py
+msgid "Проверьте сумму ещё раз."
+msgstr "Check the amount again."
+
 #: webapp/staff_sales.py
 msgid "Обновите экран и проведите продажу ещё раз."
 msgstr "Refresh the screen and make the sale again."
 
 #: webapp/staff_sales.py
-msgid "Эта продажа уже сохранена: {amount} грн, бонусов начислено {bonus}."
-msgstr "This sale is already saved: {amount} UAH, bonuses awarded {bonus}."
+msgid "Эта продажа уже проведена: {amount} грн ({methods}), бонусов начислено {bonus}."
+msgstr "This sale is already made: {amount} UAH ({methods}), bonuses earned {bonus}."
 
 #: webapp/staff_sales.py
-msgid "Продажа сохранена: {amount} грн, бонусов начислено {bonus}."
-msgstr "Sale saved: {amount} UAH, bonuses earned {bonus}."
+msgid "Продажа проведена: {amount} грн ({methods}), бонусов начислено {bonus}."
+msgstr "Sale made: {amount} UAH ({methods}), bonuses earned {bonus}."
 
 #: webapp/staff_sales.py
 msgid "Всего выручка"
@@ -9169,6 +9193,10 @@ msgid "Провести продажу"
 msgstr "Record the sale"
 
 #: webapp/staff_views.py
+msgid "Карта"
+msgstr "Card"
+
+#: webapp/staff_views.py
 msgid "ост. {count}"
 msgstr "left {count}"
 
@@ -9379,10 +9407,6 @@ msgstr "The order status will come as a message in the bot chat."
 #: webapp/views.py
 msgid "Выберите заведение ещё раз."
 msgstr "Choose the venue again."
-
-#: webapp/views.py
-msgid "Проверьте сумму ещё раз."
-msgstr "Check the amount again."
 
 #: webapp/views.py
 msgid "Заказ #{public_id} принят: {total} грн. Статус — «{status}»."

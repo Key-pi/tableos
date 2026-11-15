@@ -166,6 +166,9 @@ STAFF_TEXTS = {
     "sale_redeem": N_("Списать бонусы: до {amount} грн"),
     "sale_bonus": N_("Гостю начислится бонусов: {bonus}"),
     "sale_confirm": N_("Провести продажу"),
+    # A sale at the counter is paid at once (PQ-054): the cashier presses how.
+    "sale_cash": N_("Наличные"),
+    "sale_card": N_("Карта"),
     # Variants and add-ons in the sale (catalog step 2), as the guest's page.
     "price_from": N_("от {price}"),
     "left": N_("ост. {count}"),

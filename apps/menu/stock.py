@@ -162,7 +162,8 @@ def _wanted(lines) -> tuple[dict, dict]:
 
 def reserve_for_order(order) -> None:
     """Take an order's goods at checkout; ``StockError`` when there is not
-    enough of something (nothing is taken then)."""
+    enough of something (nothing is taken then). A sale at the counter
+    (PQ-054) takes them as the quick sale did: below zero if need be."""
 
     from apps.menu.models import StockMovement
 
@@ -173,6 +174,12 @@ def reserve_for_order(order) -> None:
     if not wanted:
         return
     rows = _lock(wanted)
+    if order.channel == "counter":
+        for key in _sorted(wanted):
+            if key in rows:
+                _record(rows[key], key, -wanted[key], StockMovement.Reason.QUICK_SALE,
+                        (ORDER_SOURCE, str(order.id)), order.assigned_employee.user)
+        return
     for key, quantity in wanted.items():
         row = rows.get(key)
         if row is None:

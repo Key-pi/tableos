@@ -10,6 +10,18 @@ def active_bonus_programs_for_partner(partner_id):
     return BonusProgramRepository.active_for_partner(partner_id)
 
 
+def purchase_event_for(order) -> str:
+    """Which programmes a paid order earns by: a sale at the counter
+    (PQ-054) by «Покупка на кассе», as the quick sale did; other orders by
+    «Оплаченный заказ»."""
+
+    from apps.bonuses.models import BonusProgram
+
+    if order.channel == "counter":
+        return BonusProgram.TriggerEvent.MANUAL_PURCHASE
+    return BonusProgram.TriggerEvent.ORDER_COMPLETED
+
+
 def bonuses_work_at(partner_id) -> bool:
     """Whether the venue has a working bonus programme (PQ-001).
 

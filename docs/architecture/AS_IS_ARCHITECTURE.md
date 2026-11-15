@@ -157,7 +157,7 @@ whitenoise и кэш в Redis. Сервисы:
 | `module_orders_enabled` | Заказы | выкл. | меню; столы, самовывоз, доставка или отправка | этот документ, «Сессия гостя, меню, корзина и заказ» |
 | `module_billing_enabled` | Счета и оплаты | выкл. | заказы (запрос счёта гостем — при столах) | [B3_2_VISITS_AND_BILL_CHANGES.md](B3_2_VISITS_AND_BILL_CHANGES.md), [REFUNDS.md](REFUNDS.md) |
 | `module_staff_call_enabled` | Вызов персонала | выкл. | столы | этот документ, «Уведомления и рассылки» |
-| `module_quick_sale_enabled` | Быстрые продажи | выкл. | меню | этот документ, «Лояльность и быстрая продажа» |
+| `module_quick_sale_enabled` | Быстрые продажи | выкл. | меню | продажа на кассе ([COUNTER_SALE.md](COUNTER_SALE.md)); в боте пока «Лояльность и быстрая продажа» |
 | `module_reports_enabled` | Отчёт дня | выкл. | — | этот документ, модуль «Аналитика» |
 | `module_webapp_enabled` | Mini App (меню и заказ в приложении) | выкл. | корзина, `WEBAPP_BASE_URL` | [MINI_APP.md](MINI_APP.md) |
 | `module_staff_screen_enabled` | Рабочий экран персонала (Mini App) | выкл. | `WEBAPP_BASE_URL` | [MINI_APP.md](MINI_APP.md) |
@@ -483,6 +483,15 @@ apps.notifications.tasks` — цикл, разорванный только им
    которого возвращены все строки (кроме завершённого), и после коммита
    сообщает гостю. Бот — `bot/handlers/staff_refunds.py`, Admin — действие
    строк счёта. Отчёт дня вычитает возвраты.
+   **Продажа на кассе** (`Order.channel = counter`, [COUNTER_SALE.md](COUNTER_SALE.md),
+   PQ-054) — продавец проводит её сам одним действием
+   (`billing/counter_sales.py:sell_at_counter`): заказ сразу `completed` и его,
+   личный счёт, оплата наличными или картой (`record_payment`) и/или бонусами
+   (`pay_bill_with_bonuses`); гость — по коду или анонимный гость продажи;
+   остатки могут уйти ниже нуля; кешбэк — по программам «Покупка на кассе»
+   (`bonuses/selectors.py:purchase_event_for`); повтор по `Order.request_key`
+   возвращает ту же продажу. Пока — рабочий экран Mini App; бот персонала
+   до шага 2 проводит быструю продажу по-старому (`WalkInSale`).
 6. Подтверждение получения гостем (`confirm_order_received_by_guest`)
    блокирует заказ и переводит его в `completed` из любого статуса из
    `GUEST_RECEIPT_CONFIRMABLE_STATUSES` (все нефинальные, включая `new`;
@@ -561,9 +570,11 @@ apps.notifications.tasks` — цикл, разорванный только им
 `BonusTransaction`. Каждое изменение блокирует строку гостя, отказывает, если
 кэшированный баланс расходится с журналом (`assert_bonus_balance_reconciled`),
 и затем синхронизирует его. Ключи идемпотентности с привязкой к источнику
-уникальны в пределах партнёра. Быстрая продажа (`register_walk_in_sale*`)
+уникальны в пределах партнёра. Быстрая продажа в боте (`register_walk_in_sale*`)
 требует положительной суммы, по желанию списывает бонусы до начисления и
-начисляет программы `MANUAL_PURCHASE`. У программ кешбэка есть база
+начисляет программы `MANUAL_PURCHASE` («Покупка на кассе»); продажа на кассе
+с экрана Mini App — заказ и счёт (PQ-054), её кешбэк — те же программы
+(`bonuses/selectors.py:purchase_event_for`). У программ кешбэка есть база
 начисления (`BonusProgram.accrual_base`, PQ-030): `full_total` (по умолчанию)
 — со всей покупки; `money_paid` — за вычетом части, оплаченной бонусами: для
 быстрой продажи её `bonus_spent_amount`, для оплаченного заказа — его доля
@@ -912,8 +923,8 @@ Telegram Mini App для гостя (PQ-048, этап 1, [MINI_APP.md](MINI_APP.
 кухне (`MenuCategory.station`) каждый экран отмечает свою часть
 (`OrderStationReady`), заказ «Готов», когда отмечены все; блокировка — строка
 заказа; место без работающего экрана считается «не указано»
-(`covered_stations`). Быстрая продажа с экрана сохраняется один раз на ключ
-(`WalkInSale.request_key`).
+(`covered_stations`). Продажа на кассе с экрана проводится один раз на ключ
+(`Order.request_key`, [COUNTER_SALE.md](COUNTER_SALE.md)).
 
 ## Состояния и защиты, которые реально соблюдаются
 
@@ -939,7 +950,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1232 теста после одной кнопки «Выставить счёт» для одного гостя, зелёные на SQLite и на PostgreSQL 16.
+- 1254 теста после продажи на кассе (шаг 1), зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -978,9 +989,9 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Цифры кодовой базы на 2026-11-14
 
-502 отслеживаемых Python-файла (около 81 300 строк), 123 пронумерованные
-миграции, 132 тестовых модуля. Крупнейшие нетестовые модули:
-`bot/handlers/staff.py` (3921 строка), `apps/orders/services.py` (1493),
+506 отслеживаемых Python-файлов (около 82 200 строк), 125 пронумерованных
+миграций, 133 тестовых модуля. Крупнейшие нетестовые модули:
+`bot/handlers/staff.py` (3921 строка), `apps/orders/services.py` (1516),
 `apps/billing/services.py` (1485), `apps/notifications/services.py` (1464),
 `apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1037),
 `apps/partners/management/commands/seed_baseline_demo.py` (1006). Инвентарь

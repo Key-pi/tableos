@@ -20,6 +20,10 @@ paths:
   `TableSession` → `TableVisit` (`apps/tables/services.py:_expire_idle_session`).
   Оформление заказа за столом тоже сначала блокирует корзину и после этого
   перепроверяет, что сессия ещё `active` — так оно не проскочит в закрытую.
+- Продажа на кассе (PQ-054) — как удалённый заказ: названный `GuestProfile` →
+  новый заказ и строки остатков → `Bill` → `Order` → `GuestProfile` (уже
+  удержан) (`apps/billing/counter_sales.py`); повтор — уникальный
+  `Order.request_key`.
 - Изменение счёта и возврат: `Bill → BillItem → GuestProfile → Order`.
 - Вызов персонала «Иду»: только `GuestCall` (`take_guest_call`).
 - Приглашение сотрудника: `StaffInvite → EmployeeProfile`.

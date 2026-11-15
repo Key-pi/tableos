@@ -37,6 +37,9 @@ class Order(PartnerBoundModel):
         PICKUP = "pickup", _lazy("Самовывоз")
         DELIVERY = "delivery", _lazy("Доставка")
         SHIPPING = "shipping", _lazy("Отправка почтой")
+        # A sale at the counter (PQ-054): made by the seller, handed over and
+        # paid at once (apps/billing/counter_sales.py); never picked by a guest.
+        COUNTER = "counter", _lazy("На кассе")
 
     class Carrier(models.TextChoices):
         # Shipping by post (PQ-034); no carrier API, staff enter the ТТН.

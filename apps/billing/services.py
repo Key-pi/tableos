@@ -17,7 +17,8 @@ from apps.billing.models import (
     Refund,
     RefundLine,
 )
-from apps.bonuses.models import BonusProgram, BonusTransaction
+from apps.bonuses.models import BonusTransaction
+from apps.bonuses.selectors import purchase_event_for
 from apps.bonuses.services import (
     BonusServiceError,
     apply_bonus_programs,
@@ -741,7 +742,7 @@ def _sync_orders_after_bill_paid(bill: Bill) -> int:
             try:
                 apply_bonus_programs(
                     partner_id=bill.partner_id,
-                    event=BonusProgram.TriggerEvent.ORDER_COMPLETED,
+                    event=purchase_event_for(order),
                     guest=order.guest,
                     order=order,
                     purchase_total=order.total_amount,

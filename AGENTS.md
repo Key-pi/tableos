@@ -13,7 +13,8 @@ Redis — брокер и хранилище результатов Celery.
 - продукт: `docs/product/PRODUCT_SPEC.md`, `FEATURE_MATRIX.md` и
   `OPEN_PRODUCT_QUESTIONS.md`; направление сети (этот репозиторий — **Botera
   Shop** в сети Botera; стол — один из каналов заказа наравне с самовывозом,
-  доставкой и отправкой; никакой связности с другими продуктами Botera):
+  доставкой, отправкой и продажей на кассе; никакой связности с другими
+  продуктами Botera):
   `docs/product/ECOSYSTEM_DIRECTION.md`;
 - как устроено сейчас: `docs/architecture/AS_IS_ARCHITECTURE.md`;
 - целевые правила модулей и слоёв: `docs/architecture/TARGET_ARCHITECTURE.md`,

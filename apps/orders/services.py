@@ -234,9 +234,16 @@ def create_order(
     shipping_carrier: str = "",
     shipping_destination: str = "",
     shipping_cost: str = "",
+    served_by: EmployeeProfile | None = None,
 ) -> Order:
+    """``served_by`` — the seller of a sale at the counter (PQ-054): such an
+    order is handed over at once, so it is created completed and theirs."""
+
     if not items:
         raise OrderFlowError(_("Нельзя создать заказ без позиций."))
+    is_counter = channel == Order.Channel.COUNTER
+    if is_counter != (served_by is not None):
+        raise OrderFlowError(_("Продажу на кассе проводит продавец."))
     if payment_timing and payment_timing not in Order.PaymentTiming.values:
         raise OrderFlowError(_("Неизвестный способ оплаты заказа."))
     if bool(payment_timing) != (channel in Order.REMOTE_CHANNELS):
@@ -289,6 +296,16 @@ def create_order(
         shipping_carrier=shipping_carrier,
         shipping_destination=shipping_destination.strip(),
         shipping_cost=shipping_cost,
+        **(
+            {
+                "status": Order.Status.COMPLETED,
+                "assigned_employee": served_by,
+                "accepted_at": timezone.now(),
+                "received_at": timezone.now(),
+            }
+            if is_counter
+            else {}
+        ),
     )
 
     subtotal = Decimal("0.00")
@@ -325,7 +342,8 @@ def create_order(
         )
 
     # Stock (catalog step 3): the order takes its goods now; not enough of
-    # something stops the whole checkout.
+    # something stops the whole checkout (a sale at the counter may go below
+    # zero: the goods are in the seller's hands).
     try:
         reserve_for_order(order)
     except StockError as exc:
@@ -1366,11 +1384,14 @@ def may_take_table_orders(employee) -> bool:
     )
 
 
-def resolve_staff_order_lines(*, partner_id, items: list[dict]) -> list[dict]:
+def resolve_staff_order_lines(
+    *, partner_id, items: list[dict], channel: str = Order.Channel.TABLE
+) -> list[dict]:
     """The chosen items as order lines, by the rules of a guest's table order:
     sold at the table, on sale now, the variant and add-ons valid
     (``resolve_choice``). ``items`` — ``{"menu_item_id", "quantity",
-    "variant_id", "modifier_ids"}``."""
+    "variant_id", "modifier_ids"}``. At the counter (PQ-054) the seller has
+    the goods in hand: any available item, as the quick sale sold."""
 
     if not items:
         raise OrderFlowError(_("Нельзя создать заказ без позиций."))
@@ -1385,14 +1406,15 @@ def resolve_staff_order_lines(*, partner_id, items: list[dict]) -> list[dict]:
     }
     if len(menu_items) != len(ids):
         raise OrderFlowError(_("Часть позиций сейчас недоступна — обновите меню."))
-    not_sold = [item.name for item in menu_items.values()
-                if not item.is_sold_in(Order.Channel.TABLE)]
-    if not_sold:
-        raise OrderFlowError(_("Недоступно для заказа к столу: {not_sold}.",
-                               not_sold=", ".join(sorted(not_sold))))
-    closed = first_not_on_sale(menu_items.values())
-    if closed:
-        raise OrderFlowError(closed)
+    if channel == Order.Channel.TABLE:
+        not_sold = [item.name for item in menu_items.values()
+                    if not item.is_sold_in(Order.Channel.TABLE)]
+        if not_sold:
+            raise OrderFlowError(_("Недоступно для заказа к столу: {not_sold}.",
+                                   not_sold=", ".join(sorted(not_sold))))
+        closed = first_not_on_sale(menu_items.values())
+        if closed:
+            raise OrderFlowError(closed)
     choices = catalog_choices(partner_id, menu_items.values())
     lines = []
     for item in items:
@@ -1409,6 +1431,7 @@ def resolve_staff_order_lines(*, partner_id, items: list[dict]) -> list[dict]:
             "menu_item_id": menu_item.id, "item_name": choice.name,
             "unit_price": choice.unit_price, "quantity": quantity,
             "variant_id": choice.variant_id, "modifiers": choice.snapshot(),
+            "key": choice.key,
         })
     return lines
 

@@ -16,7 +16,8 @@ class BonusProgram(PartnerBoundModel):
     class TriggerEvent(models.TextChoices):
         VISIT = "visit", _lazy("Визит")
         ORDER_COMPLETED = "order_completed", _lazy("Оплаченный заказ")
-        MANUAL_PURCHASE = "manual_purchase", _lazy("Покупка, внесённая вручную")
+        # A sale at the counter (PQ-054; before it, the quick sale).
+        MANUAL_PURCHASE = "manual_purchase", _lazy("Покупка на кассе")
 
     class ProgramType(models.TextChoices):
         CASHBACK = "cashback", _lazy("Кешбэк")
