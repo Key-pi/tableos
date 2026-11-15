@@ -8620,6 +8620,10 @@ msgstr "{title}: спільний рахунок"
 msgid "По гостям"
 msgstr "За гостями"
 
+#: bot/keyboards/staff.py
+msgid "{title}: выставить счёт"
+msgstr "{title}: виставити рахунок"
+
 #: bot/keyboards/staff.py webapp/staff_views.py
 msgid "Закрыть визит"
 msgstr "Закрити візит"
@@ -9099,6 +9103,10 @@ msgstr "Гостей: {count}"
 #: webapp/staff_views.py
 msgid "Без счёта: {count} на {total} грн"
 msgstr "Без рахунку: {count} на {total} грн"
+
+#: webapp/staff_views.py
+msgid "Выставить счёт"
+msgstr "Виставити рахунок"
 
 #: webapp/staff_views.py
 msgid "Счёт каждому"

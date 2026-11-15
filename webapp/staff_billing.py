@@ -444,6 +444,9 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
             "unbilled_total": _money(sum(order.total_amount for order in visit_orders)),
             "bills": [_bill_json(bill) for bill in bills if bill.visit_id == visit.id],
             "can_bill": can_bill and bool(visit_orders),
+            # "A bill to each" splits by guest: with one guest's orders it is
+            # the same single bill, so only one button is shown.
+            "can_split": can_bill and len({order.guest_id for order in visit_orders}) > 1,
             "can_close": can_close,
         })
     result = {"tables": sorted(tables.values(), key=lambda table: table["number"])}

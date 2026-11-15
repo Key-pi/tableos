@@ -901,15 +901,17 @@ def build_staff_table_actions_keyboard(
     can_create_shared_bill: bool,
     can_create_personal_bills: bool,
     session_actions: list[tuple[str, str]] | None = None,
-    visit_actions: list[tuple[str, str, bool]] | None = None,
+    visit_actions: list[tuple[str, str, bool, bool]] | None = None,
 ) -> InlineKeyboardMarkup:
-    """Table card actions; ``visit_actions`` are (visit id, title, has unbilled orders)."""
+    """Table card actions; ``visit_actions`` are (visit id, title, has unbilled
+    orders, two or more guests ordered). "By guests" with one guest's orders
+    would be the same single bill, so it is shown only for two or more."""
 
     keyboard: list[list[InlineKeyboardButton]] = []
-    for visit_id, title, can_bill in visit_actions or []:
+    for visit_id, title, can_bill, can_split in visit_actions or []:
         visit_hex = str(visit_id).replace("-", "")
         row = []
-        if can_bill:
+        if can_bill and can_split:
             row.extend(
                 [
                     InlineKeyboardButton(
@@ -921,6 +923,13 @@ def build_staff_table_actions_keyboard(
                         callback_data=f"stafftvpersonal:{visit_hex}",
                     ),
                 ]
+            )
+        elif can_bill:
+            row.append(
+                InlineKeyboardButton(
+                    text=_("{title}: выставить счёт", title=title),
+                    callback_data=f"stafftvshared:{visit_hex}",
+                )
             )
         row.append(
             InlineKeyboardButton(

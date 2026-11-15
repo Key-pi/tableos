@@ -12,7 +12,11 @@ from apps.menu.models import MenuCategory, MenuItem
 from apps.orders.services import create_order_from_session
 from apps.partners.models import Partner, PartnerBotSettings
 from apps.tables.models import Table, TableVisit
-from apps.tables.services import VISIT_CHOICE_NEW, activate_table_session
+from apps.tables.services import (
+    VISIT_CHOICE_JOIN_PREFIX,
+    VISIT_CHOICE_NEW,
+    activate_table_session,
+)
 from apps.users.models import TelegramAccount, User
 from bot.handlers import staff
 from tests.modules import TABLE_VENUE_MODULES
@@ -96,6 +100,27 @@ class StaffTableVisitHandlerTests(TestCase):
         old_hex = str(self.old_party.visit_id).replace("-", "")
         self.assertIn(f"stafftvshared:{old_hex}", data)
         self.assertTrue(all(len(item) <= 64 for item in data))
+
+    def test_a_split_by_guests_only_where_two_guests_ordered(self):
+        # One guest per visit: "by guests" would give the same single bill.
+        old_hex = str(self.old_party.visit_id).replace("-", "")
+        new_hex = str(self.new_party.visit_id).replace("-", "")
+        friend = self._scan(781003, choice=f"{VISIT_CHOICE_JOIN_PREFIX}{self.old_party.visit_id}")
+        self.assertEqual(friend.visit_id, self.old_party.visit_id)
+        self._order(friend)
+
+        callback = self._callback(f"stafftableopen:{self.table.id}")
+        self._run(staff.staff_table_open_callback_handler, callback)
+
+        markup = callback.message.edit_text.call_args.kwargs["reply_markup"]
+        buttons = {button.callback_data: button.text
+                   for row in markup.inline_keyboard for button in row}
+        self.assertIn(f"stafftvshared:{old_hex}", buttons)
+        self.assertIn(f"stafftvpersonal:{old_hex}", buttons)
+        self.assertIn(f"stafftvshared:{new_hex}", buttons)
+        self.assertNotIn(f"stafftvpersonal:{new_hex}", buttons)
+        self.assertIn("выставить счёт", buttons[f"stafftvshared:{new_hex}"])
+        self.assertIn("общий счёт", buttons[f"stafftvshared:{old_hex}"])
 
     def test_overview_marks_the_table(self):
         sessions, unbilled, visit_counts = staff._load_tables_feed_data(self.partner.id)

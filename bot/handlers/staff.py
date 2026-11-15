@@ -1571,10 +1571,16 @@ def _build_table_ops_view(*, partner_id, table_id):
         table_id=str(table.id),
         # Table-level buttons bill orders without a visit (created before visits).
         can_create_shared_bill=bool(legacy_unbilled) and not visits,
-        can_create_personal_bills=bool(legacy_unbilled) and not visits,
+        # "By guests" only when two or more guests ordered: otherwise it is
+        # the same single bill.
+        can_create_personal_bills=(
+            not visits and len({order.guest_id for order in legacy_unbilled}) > 1
+        ),
         session_actions=_build_session_close_actions(active_sessions),
         visit_actions=[
-            (summary["id"], summary["title"], summary["unbilled"] > 0) for summary in visits
+            (summary["id"], summary["title"], summary["unbilled"] > 0,
+             summary["unbilled_guests"] > 1)
+            for summary in visits
         ],
     )
     return text, keyboard
@@ -1599,6 +1605,11 @@ def _table_visit_summaries(*, partner_id, table_id, active_sessions, unbilled_or
                     for order in unbilled_orders
                     if order.table_session_id and order.table_session.visit_id == visit.id
                 ),
+                "unbilled_guests": len({
+                    order.guest_id
+                    for order in unbilled_orders
+                    if order.table_session_id and order.table_session.visit_id == visit.id
+                }),
                 "open_bills": sum(1 for bill in open_bills if bill.visit_id == visit.id),
             }
         )

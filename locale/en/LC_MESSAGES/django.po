@@ -8620,6 +8620,10 @@ msgstr "{title}: shared bill"
 msgid "По гостям"
 msgstr "Per guest"
 
+#: bot/keyboards/staff.py
+msgid "{title}: выставить счёт"
+msgstr "{title}: issue the bill"
+
 #: bot/keyboards/staff.py webapp/staff_views.py
 msgid "Закрыть визит"
 msgstr "Close visit"
@@ -9099,6 +9103,10 @@ msgstr "Guests: {count}"
 #: webapp/staff_views.py
 msgid "Без счёта: {count} на {total} грн"
 msgstr "Not billed: {count} for {total} UAH"
+
+#: webapp/staff_views.py
+msgid "Выставить счёт"
+msgstr "Issue the bill"
 
 #: webapp/staff_views.py
 msgid "Счёт каждому"

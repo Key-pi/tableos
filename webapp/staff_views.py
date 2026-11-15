@@ -140,6 +140,7 @@ STAFF_TEXTS = {
     "guests": N_("Гостей: {count}"),
     "not_billed": N_("Без счёта: {count} на {total} грн"),
     "shared_bill": N_("Общий счёт"),
+    "issue_bill": N_("Выставить счёт"),
     "personal_bills": N_("Счёт каждому"),
     "close_visit": N_("Закрыть визит"),
     "close_visit_confirm": N_("Закрыть визит? Стол освободится, гости больше не смогут заказать."),

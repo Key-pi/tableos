@@ -625,10 +625,15 @@
         });
         var acts = el("div", { class: "acts" });
         if (visit.can_bill) {
-          acts.appendChild(el("button", { type: "button", class: "act primary", text: T.shared_bill,
+          // "A bill to each" only when two or more guests ordered: otherwise
+          // it is the same single bill.
+          acts.appendChild(el("button", { type: "button", class: "act primary",
+                                         text: visit.can_split ? T.shared_bill : T.issue_bill,
                                          onclick: function () { visitAction(visit, "shared"); } }));
-          acts.appendChild(el("button", { type: "button", class: "act", text: T.personal_bills,
-                                         onclick: function () { visitAction(visit, "personal"); } }));
+          if (visit.can_split) {
+            acts.appendChild(el("button", { type: "button", class: "act", text: T.personal_bills,
+                                           onclick: function () { visitAction(visit, "personal"); } }));
+          }
         }
         if (data.rights.table_orders) {
           acts.appendChild(el("button", { type: "button", class: "act primary", text: T.add_order,

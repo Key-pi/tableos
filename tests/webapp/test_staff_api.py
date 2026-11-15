@@ -2,17 +2,20 @@
 as the bot's work mode through the same services."""
 
 from decimal import Decimal
+from uuid import UUID
 
 from django.test import TestCase as DjangoTestCase
 from django.urls import reverse
 
 from apps.billing.staff_actions import staff_order_actions
 from apps.employees.models import EmployeeProfile
+from apps.menu.models import MenuItem
 from apps.notifications.models import GuestCall
 from apps.orders.models import Order
+from apps.orders.services import create_order_from_session
 from apps.partners.models import PartnerBotSettings
 from apps.tables.models import Table
-from apps.tables.services import activate_table_session
+from apps.tables.services import VISIT_CHOICE_JOIN_PREFIX, activate_table_session
 from apps.users.models import GuestProfile, TelegramAccount, User
 from bot.handlers.staff import _order_actions_keyboard
 from tests.webapp.test_guest_api import TG, MiniAppFixture, make_venue
@@ -318,9 +321,26 @@ class StaffBillsAndTablesTests(BillsFixture):
         )
         self.assertEqual(status, 403)
 
+    def test_a_bill_to_each_once_two_guests_ordered(self):
+        visit = self.visit()
+        friend = activate_table_session(
+            partner_id=self.partner.id, telegram_id=7700999,
+            payload=self.table.deep_link_payload,
+            visit_choice=f"{VISIT_CHOICE_JOIN_PREFIX}{UUID(visit['id'])}",
+        )
+        item = MenuItem.objects.filter(partner=self.partner).first()
+        create_order_from_session(partner_id=self.partner.id, table_session=friend, items=[{
+            "menu_item_id": item.id, "item_name": item.name, "unit_price": item.price,
+            "quantity": 1,
+        }])
+        visit = self.visit()
+        self.assertEqual((len(visit["guests"]), visit["can_split"]), (2, True))
+
     def test_bill_the_visit_take_the_money_close_the_visit(self):
         visit = self.visit()
         self.assertEqual((visit["unbilled"], visit["can_bill"], len(visit["guests"])), (1, True, 1))
+        # One guest ordered: "a bill to each" would be the same single bill.
+        self.assertFalse(visit["can_split"])
         status, body = self.staff_call(
             "visit_action", {"visit": visit["id"], "action": "shared"}, user_id=7700204
         )
