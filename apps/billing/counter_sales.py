@@ -13,8 +13,9 @@ cashback by the «Покупка на кассе» programmes,
 anonymous guest (PQ-052, PQ-055).
 
 Lock order, as a remote order (``remote_orders.py:place_remote_order``): the
-named ``GuestProfile`` → the new order and its stock rows → ``Bill`` →
-``Order`` → ``GuestProfile`` (already held). A repeated ``request_key``
+named ``GuestProfile`` → the new order and its stock rows → (with bonuses, in
+a network with shared bonuses) ``NetworkWallet`` → ``Bill`` → ``Order`` →
+``GuestProfile`` (already held). A repeated ``request_key``
 returns the sale already made; two at once — the second waits on the unique
 key, its work is rolled back and it gets the first sale.
 """
@@ -36,7 +37,12 @@ from apps.billing.services import (
     record_payment,
 )
 from apps.bonuses.models import BonusTransaction
-from apps.bonuses.services import get_redeemable_bonus_amount, preview_bonus_amount
+from apps.bonuses.services import (
+    BonusServiceError,
+    assert_bonus_balance_reconciled,
+    get_redeemable_bonus_amount,
+    preview_bonus_amount,
+)
 from apps.employees.models import EmployeeProfile
 from apps.orders.models import Order
 from apps.orders.services import OrderFlowError, create_order, resolve_staff_order_lines
@@ -241,10 +247,19 @@ def _ring_up(
         label=f"{_('На кассе')} #{order.public_id}",
     )
     bill = issue_bill(bill)
-    if use_bonuses and guest.telegram_account_id is not None and get_redeemable_bonus_amount(
-        partner_id=partner_id, guest=guest, purchase_total=bill.total_amount
-    ) > 0:
-        pay_bill_with_bonuses(bill=bill, created_by=seller.user)
+    if use_bonuses and guest.telegram_account_id is not None:
+        # The guest's row is held; in a network with shared bonuses this locks
+        # the shared balance too (GuestProfile → NetworkWallet), so what can
+        # be spent is read under the lock. Another venue spent it a moment
+        # ago — nothing left: the sale goes on without bonuses.
+        try:
+            assert_bonus_balance_reconciled(guest)
+        except BonusServiceError as exc:
+            raise CounterSaleError(str(exc)) from exc
+        if get_redeemable_bonus_amount(
+            partner_id=partner_id, guest=guest, purchase_total=bill.total_amount
+        ) > 0:
+            pay_bill_with_bonuses(bill=bill, created_by=seller.user)
     bill.refresh_from_db()
     if bill.bonus_spent_amount:
         Order.objects.filter(id=order.id).update(bonus_spent=bill.bonus_spent_amount)

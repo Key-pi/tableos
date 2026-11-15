@@ -120,7 +120,7 @@ whitenoise и кэш в Redis. Сервисы:
 | Меню | `MenuCategory`, `MenuBadge`, `MenuItem`, `MenuItemPhoto`, `MenuItemAttribute`, `MenuItemVariant`, `ModifierGroup`, `Modifier`, `StockMovement` | чтение — `menu/repositories.py`, `menu/catalog.py` (дерево, расписание); выбор и цена — `menu/options.py:resolve_choice`; остатки — `menu/stock.py`; переводы — `menu/translations.py`; фото — `menu/photos.py`; остальное — Admin | Цена должна быть положительной (`menu_item_price_positive`). Отметки каналов: `available_at_table`, `available_for_pickup`, `available_for_delivery`, `available_for_shipping`; `MenuItem.is_sold_in(channel)`. Подробно — [CATALOG.md](CATALOG.md). |
 | Заказы | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory`, `KitchenScreen`, `OrderStationReady` | `orders/services.py`; удалённые каналы — в `billing/remote_orders.py`; экран кухни и бара — `orders/kitchen.py` | Корзина, создание заказа по каналу (стол / самовывоз / доставка / отправка), заказ на стол с планшета, машина статусов, подтверждение получения гостем. `Order.channel`, `Order.requested_for`, `Order.payment_timing`, `Order.request_key`, `Order.REMOTE_CHANNELS` (старое имя `PREPAID_CHANNELS` — синоним). |
 | Счета | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment`, `BillAdjustment`, `Refund`, `RefundLine` | ядро — `billing/services.py`; стол — `billing/table_bills.py`; удалённые каналы — `billing/remote_orders.py`; кнопки персонала для бота, Mini App и Admin — `billing/staff_actions.py` | Создание и расширение счёта, оплата деньгами и бонусами, изменения и аннулирование, возвраты, действия после оплаты. |
-| Бонусы | `BonusProgram`, `BonusTransaction`, `WalkInSale`, `WalkInSaleItem` | `bonuses/services.py`, `bonuses/strategies.py` | Баланс на основе журнала с проверкой сверки (в сети с общими бонусами — по всем точкам); быстрая продажа. Модуля нет (PQ-001): без работающей программы у заведения (`bonuses/selectors.py:bonuses_work_at`) гостю не показываются код для бонусов, баланс и кнопка «Бонусы» в боте и баланс в Mini App, а списание недоступно. |
+| Бонусы | `BonusProgram`, `BonusTransaction` | `bonuses/services.py`, `bonuses/strategies.py` | Баланс на основе журнала с проверкой сверки (в сети с общими бонусами — по всем точкам). Быстрая продажа — заказ «На кассе» (`billing/counter_sales.py`, PQ-054); старые `WalkInSale` удалены миграцией `bonuses.0013` (строки журнала бонусов остались). Модуля нет (PQ-001): без работающей программы у заведения (`bonuses/selectors.py:bonuses_work_at`) гостю не показываются код для бонусов, баланс и кнопка «Бонусы» в боте и баланс в Mini App, а списание недоступно. |
 | Сотрудники | `EmployeeProfile`, `StaffInvite` | `employees/selectors.py:get_staff_employee_by_telegram`, `employees/invites.py` (приглашения), `employees/network_staff.py` (копии персонала сети) | Профиль создаёт Admin или подтверждённое приглашение (PQ-046). |
 | Уведомления | `NotificationPreference`, `GuestCall`, `StaffNotification`, `BroadcastCampaign`, `BroadcastDelivery` | `notifications/services.py`, `tasks.py`, `telegram_transport.py` | Вся отправка в Telegram из воркера — здесь. |
 | Аналитика | `PartnerDailyMetric`, `TrafficSource`, `SourceVisit`, `SystemSnapshot` | `analytics/services.py`, `analytics/sources.py`, `analytics/selectors.py` (отчёт сети), `analytics/dashboard.py` (стартовая страница), `analytics/system_load.py` (нагрузка) | Отчёт за день для персонала по запросу (с разбивкой по каналам заказа); снимок метрик раз в 15 минут; источники переходов (PQ-031); снимок нагрузки раз в минуту (PQ-051). |
@@ -157,7 +157,7 @@ whitenoise и кэш в Redis. Сервисы:
 | `module_orders_enabled` | Заказы | выкл. | меню; столы, самовывоз, доставка или отправка | этот документ, «Сессия гостя, меню, корзина и заказ» |
 | `module_billing_enabled` | Счета и оплаты | выкл. | заказы (запрос счёта гостем — при столах) | [B3_2_VISITS_AND_BILL_CHANGES.md](B3_2_VISITS_AND_BILL_CHANGES.md), [REFUNDS.md](REFUNDS.md) |
 | `module_staff_call_enabled` | Вызов персонала | выкл. | столы | этот документ, «Уведомления и рассылки» |
-| `module_quick_sale_enabled` | Быстрые продажи | выкл. | меню | продажа на кассе ([COUNTER_SALE.md](COUNTER_SALE.md)); в боте пока «Лояльность и быстрая продажа» |
+| `module_quick_sale_enabled` | Быстрые продажи | выкл. | меню | продажа на кассе ([COUNTER_SALE.md](COUNTER_SALE.md)) |
 | `module_reports_enabled` | Отчёт дня | выкл. | — | этот документ, модуль «Аналитика» |
 | `module_webapp_enabled` | Mini App (меню и заказ в приложении) | выкл. | корзина, `WEBAPP_BASE_URL` | [MINI_APP.md](MINI_APP.md) |
 | `module_staff_screen_enabled` | Рабочий экран персонала (Mini App) | выкл. | `WEBAPP_BASE_URL` | [MINI_APP.md](MINI_APP.md) |
@@ -333,8 +333,8 @@ apps.notifications.tasks` — цикл, разорванный только им
 остаток варианта): заказ списывает при оформлении
 (`apps/menu/stock.py:reserve_for_order` из `create_order`), отмена
 возвращает (`release_order` из `transition_order_status`), корзина не берёт
-больше, чем есть (`check_room`), быстрая продажа списывает и может уйти ниже
-нуля (`take_for_walk_in_sale`), возврат кладёт на склад только с отметкой
+больше, чем есть (`check_room`), продажа на кассе списывает и может уйти ниже
+нуля (`reserve_for_order`, канал `counter`), возврат кладёт на склад только с отметкой
 персонала (`refund_bill_lines(restock=True)`, `refund_can_restock`). Каждое
 изменение — `StockMovement` с остатком после; гость видит только «нет в
 наличии» и «осталось мало» (`state_of`), персонал — число. Admin: новое
@@ -490,8 +490,8 @@ apps.notifications.tasks` — цикл, разорванный только им
    (`pay_bill_with_bonuses`); гость — по коду или анонимный гость продажи;
    остатки могут уйти ниже нуля; кешбэк — по программам «Покупка на кассе»
    (`bonuses/selectors.py:purchase_event_for`); повтор по `Order.request_key`
-   возвращает ту же продажу. Пока — рабочий экран Mini App; бот персонала
-   до шага 2 проводит быструю продажу по-старому (`WalkInSale`).
+   возвращает ту же продажу. Рабочий экран Mini App («Наличные» / «Карта») и
+   бот персонала («💵 Наличные» / «💳 Карта», `staffsale:pay:<способ>:<сумма>`).
 6. Подтверждение получения гостем (`confirm_order_received_by_guest`)
    блокирует заказ и переводит его в `completed` из любого статуса из
    `GUEST_RECEIPT_CONFIRMABLE_STATUSES` (все нефинальные, включая `new`;
@@ -564,20 +564,19 @@ apps.notifications.tasks` — цикл, разорванный только им
 блокировки, не присоединённым (после ожидания PostgreSQL перечитывает только
 заблокированную строку).
 
-### Лояльность и быстрая продажа
+### Лояльность
 
 `GuestProfile.loyalty_balance` — кэшированная проекция неизменяемого журнала
 `BonusTransaction`. Каждое изменение блокирует строку гостя, отказывает, если
 кэшированный баланс расходится с журналом (`assert_bonus_balance_reconciled`),
 и затем синхронизирует его. Ключи идемпотентности с привязкой к источнику
-уникальны в пределах партнёра. Быстрая продажа в боте (`register_walk_in_sale*`)
-требует положительной суммы, по желанию списывает бонусы до начисления и
-начисляет программы `MANUAL_PURCHASE` («Покупка на кассе»); продажа на кассе
-с экрана Mini App — заказ и счёт (PQ-054), её кешбэк — те же программы
-(`bonuses/selectors.py:purchase_event_for`). У программ кешбэка есть база
+уникальны в пределах партнёра. Продажа на кассе (PQ-054,
+[COUNTER_SALE.md](COUNTER_SALE.md)) — заказ и счёт: бонусы по желанию
+списываются оплатой счёта до денег, кешбэк — программы `MANUAL_PURCHASE`
+(«Покупка на кассе», `bonuses/selectors.py:purchase_event_for`). У программ кешбэка есть база
 начисления (`BonusProgram.accrual_base`, PQ-030): `full_total` (по умолчанию)
 — со всей покупки; `money_paid` — за вычетом части, оплаченной бонусами: для
-быстрой продажи её `bonus_spent_amount`, для оплаченного заказа — его доля
+оплаченного заказа (и продажи на кассе) — его доля
 бонусов счёта (`apps/billing/services.py:_bill_bonus_share_by_order`,
 пропорционально его строкам в счёте, остаток — последнему заказу).
 Минимальная сумма заказа сравнивается с полным итогом. `expires_at`
@@ -851,9 +850,9 @@ Mini App (`staff_order_actions`, подписи — `describe_order_action`, о�
 (`CHANNEL_MODULES`), его отметка сохраняется. Список заказов заведения: номер,
 следующий шаг, способ заказа, статус, сумма, гость; стол — пока включены
 столы. Модуль заведения для страницы — `ScopedAdminMixin.module_on`
-(одно чтение настроек на запрос). Счёт и быструю продажу заведение в Admin
+(одно чтение настроек на запрос). Счёт заведение в Admin
 не удаляет — ни со страницы, ни «удалить выбранные» (`allow_partner_delete =
-False` у `BillAdmin` и `WalkInSaleAdmin`, владелец 2026-11-10): счёт
+False` у `BillAdmin`, владелец 2026-11-10; продажа на кассе — тоже счёт): счёт
 аннулируется с причиной, оплаченный — возврат; удалить может платформа.
 
 Сети заведений (PQ-047, этап 1, [NETWORKS.md](NETWORKS.md)). Точка остаётся
@@ -939,7 +938,7 @@ Telegram Mini App для гостя (PQ-048, этап 1, [MINI_APP.md](MINI_APP.
 | Оплата | `record_payment`, `pay_bill_with_bonuses`, `confirm_transfer` | Блокировка счёта; сумма положительна и ≤ остатка; Admin не может править существующие оплаты |
 | Журнал бонусов | сервисы бонусов, оплата счёта бонусами | Блокировка гостя; проверка сверки; ключ идемпотентности уникален в пределах партнёра |
 | Рассылка | сервис и задача уведомлений | Блокировка кампании; строка `BroadcastDelivery` на получателя, захват skip-locked, повторно не отправляется (B4, ADR-0008) |
-| Остаток позиции | `apps/menu/stock.py` (заказ, отмена, быстрая продажа, возврат, пересчёт) | Строки остатка блокируются последними, `no_key`; каждое изменение — `StockMovement`; отмена и возврат не возвращают больше, чем заказ взял |
+| Остаток позиции | `apps/menu/stock.py` (заказ, отмена, продажа на кассе, возврат, пересчёт) | Строки остатка блокируются последними, `no_key`; каждое изменение — `StockMovement`; отмена и возврат не возвращают больше, чем заказ взял |
 | Приглашение сотрудника | `apps/employees/invites.py` | Блокировка приглашения: одноразовое, 24 часа; `StaffInvite → EmployeeProfile` |
 | Бронь стола | `apps/tables/reservations.py` | Блокировка строки стола перед проверкой пересечения (`Table → Reservation`); «не пришли» только после времени |
 
@@ -950,7 +949,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1254 теста после продажи на кассе (шаг 1), зелёные на SQLite и на PostgreSQL 16.
+- 1241 тест после продажи на кассе (шаг 2: бот, старая быстрая продажа удалена), зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -989,10 +988,10 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Цифры кодовой базы на 2026-11-14
 
-506 отслеживаемых Python-файлов (около 82 200 строк), 125 пронумерованных
+506 отслеживаемых Python-файлов (около 81 100 строк), 126 пронумерованных
 миграций, 133 тестовых модуля. Крупнейшие нетестовые модули:
-`bot/handlers/staff.py` (3921 строка), `apps/orders/services.py` (1516),
-`apps/billing/services.py` (1485), `apps/notifications/services.py` (1464),
+`bot/handlers/staff.py` (3882 строки), `apps/orders/services.py` (1516),
+`apps/billing/services.py` (1486), `apps/notifications/services.py` (1464),
 `apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1037),
 `apps/partners/management/commands/seed_baseline_demo.py` (1006). Инвентарь
 на момент аудита 2026-07-27 сохранён в

@@ -249,14 +249,6 @@ msgid "Позиций: {total} • заказов: {count} • гость: {gues
 msgstr "Items: {total} • orders: {count} • guest: {guest}"
 
 #: apps/analytics/services.py
-msgid "{created_at} • {loyalty} • {amount} грн • {staff_user}"
-msgstr "{created_at} • {loyalty} • {amount} UAH • {staff_user}"
-
-#: apps/analytics/services.py
-msgid "Позиции: {count} • бонусов: {bonus_awarded_amount} • комментарий: {comment}"
-msgstr "Items: {count} • bonuses: {bonus_awarded_amount} • comment: {comment}"
-
-#: apps/analytics/services.py
 msgid "Стол {number} • сессий {count} • заказов {count2} • счетов {count3}"
 msgstr "Table {number} • sessions {count} • orders {count2} • bills {count3}"
 
@@ -788,7 +780,7 @@ msgstr "Items total"
 msgid "Скидка"
 msgstr "Discount"
 
-#: apps/billing/models.py apps/bonuses/models.py apps/orders/models.py
+#: apps/billing/models.py apps/orders/models.py
 msgid "Оплачено бонусами"
 msgstr "Paid with bonuses"
 
@@ -892,15 +884,15 @@ msgstr "Orders in bills"
 msgid "Строка заказа"
 msgstr "Order line"
 
-#: apps/billing/models.py apps/bonuses/models.py apps/menu/models.py apps/orders/models.py
+#: apps/billing/models.py apps/menu/models.py apps/orders/models.py
 msgid "Позиция"
 msgstr "Item"
 
-#: apps/billing/models.py apps/bonuses/models.py apps/menu/models.py apps/orders/models.py
+#: apps/billing/models.py apps/menu/models.py apps/orders/models.py
 msgid "Цена"
 msgstr "Price"
 
-#: apps/billing/models.py apps/bonuses/models.py apps/orders/models.py
+#: apps/billing/models.py apps/orders/models.py
 msgid "Количество"
 msgstr "Quantity"
 
@@ -996,7 +988,7 @@ msgstr "Payment provider"
 msgid "Номер платежа у провайдера"
 msgstr "Provider payment ID"
 
-#: apps/billing/models.py apps/bonuses/models.py
+#: apps/billing/models.py
 msgid "Кто создал"
 msgstr "Created by"
 
@@ -1900,30 +1892,6 @@ msgstr "A processed bill request cannot be canceled."
 msgid "Отмена"
 msgstr "Cancel"
 
-#: apps/bonuses/admin.py
-msgid "Данные гостя"
-msgstr "Guest details"
-
-#: apps/bonuses/admin.py apps/bonuses/forms.py apps/users/models.py webapp/staff_views.py
-msgid "Код клиента"
-msgstr "Customer code"
-
-#: apps/bonuses/forms.py
-msgid "Код клиента из профиля гостя в боте. Быстрая продажа записывается только на известного гостя."
-msgstr "The customer code from the guest's profile in the bot. A quick sale is recorded only for a known guest."
-
-#: apps/bonuses/forms.py webapp/context.py
-msgid "Сначала выберите заведение."
-msgstr "Choose the venue first."
-
-#: apps/bonuses/forms.py apps/bonuses/services.py
-msgid "Гость с таким кодом в этом заведении не найден."
-msgstr "No guest with this code in this venue."
-
-#: apps/bonuses/forms.py
-msgid "Неверный код клиента."
-msgstr "Invalid customer code."
-
 #: apps/bonuses/models.py
 msgid "Оплаченный заказ"
 msgstr "Paid order"
@@ -2044,10 +2012,6 @@ msgstr "Manual"
 msgid "Программа"
 msgstr "Program"
 
-#: apps/bonuses/models.py apps/menu/models.py apps/users/admin_dashboard.py bot/keyboards/staff.py
-msgid "Быстрая продажа"
-msgstr "Quick sale"
-
 #: apps/bonuses/models.py
 msgid "Операция"
 msgstr "Operation"
@@ -2076,58 +2040,6 @@ msgstr "bonus transaction"
 msgid "Бонусные операции"
 msgstr "Bonus transactions"
 
-#: apps/bonuses/models.py
-msgid "Код клиента (на момент продажи)"
-msgstr "Customer code (at the time of sale)"
-
-#: apps/bonuses/models.py
-msgid "Сумма продажи"
-msgstr "Sale amount"
-
-#: apps/bonuses/models.py
-msgid "Начислено бонусов"
-msgstr "Bonuses accrued"
-
-#: apps/bonuses/models.py
-msgid "Ключ запроса"
-msgstr "Request key"
-
-#: apps/bonuses/models.py
-msgid "быстрая продажа"
-msgstr "quick sale"
-
-#: apps/bonuses/models.py apps/partners/models.py bot/handlers/staff.py bot/keyboards/staff.py webapp/staff_sales.py
-msgid "Быстрые продажи"
-msgstr "Quick sales"
-
-#: apps/bonuses/models.py
-msgid "Аноним"
-msgstr "Anonymous"
-
-#: apps/bonuses/models.py webapp/staff_views.py
-msgid "Продажа"
-msgstr "Sale"
-
-#: apps/bonuses/models.py apps/orders/models.py
-msgid "Позиция меню"
-msgstr "Menu item"
-
-#: apps/bonuses/models.py apps/menu/models.py apps/orders/models.py webapp/staff_views.py webapp/texts.py
-msgid "Вариант"
-msgstr "Variant"
-
-#: apps/bonuses/models.py apps/menu/models.py apps/orders/models.py
-msgid "Добавки"
-msgstr "Add-ons"
-
-#: apps/bonuses/models.py
-msgid "позиция быстрой продажи"
-msgstr "quick sale item"
-
-#: apps/bonuses/models.py
-msgid "Позиции быстрых продаж"
-msgstr "Quick sale items"
-
 #: apps/bonuses/services.py
 msgid "Баланс бонусов требует сверки с историей операций перед изменением."
 msgstr "The bonus balance must be reconciled with the transaction history before changing it."
@@ -2151,18 +2063,6 @@ msgstr "The bill is not from this venue."
 #: apps/bonuses/services.py
 msgid "Сумма покупки"
 msgstr "Purchase total"
-
-#: apps/bonuses/services.py
-msgid "Сумма быстрой продажи"
-msgstr "Quick sale amount"
-
-#: apps/bonuses/services.py
-msgid "Добавьте хотя бы одну позицию в быструю продажу."
-msgstr "Add at least one item to the quick sale."
-
-#: apps/bonuses/services.py
-msgid "Часть позиций быстрой продажи недоступна в этом заведении."
-msgstr "Some quick sale items are not available in this venue."
 
 #: apps/employees/admin.py
 msgid "Права в счетах"
@@ -2872,6 +2772,10 @@ msgstr "characteristic"
 msgid "Характеристики"
 msgstr "Characteristics"
 
+#: apps/menu/models.py apps/orders/models.py webapp/staff_views.py webapp/texts.py
+msgid "Вариант"
+msgstr "Variant"
+
 #: apps/menu/models.py
 msgid "Как увидит гость: 250 мл, M, червона, 500 г."
 msgstr "As the guest will see it: 250 ml, M, red, 500 g."
@@ -2952,9 +2856,17 @@ msgstr "0 — free."
 msgid "добавка"
 msgstr "add-on"
 
+#: apps/menu/models.py apps/orders/models.py
+msgid "Добавки"
+msgstr "Add-ons"
+
 #: apps/menu/models.py
 msgid "Отмена заказа"
 msgstr "Order cancelled"
+
+#: apps/menu/models.py bot/keyboards/staff.py
+msgid "Быстрая продажа"
+msgstr "Quick sale"
 
 #: apps/menu/models.py
 msgid "Возврат на склад"
@@ -3809,6 +3721,10 @@ msgstr "cart"
 #: apps/orders/models.py
 msgid "Корзины"
 msgstr "Carts"
+
+#: apps/orders/models.py
+msgid "Позиция меню"
+msgstr "Menu item"
 
 #: apps/orders/models.py
 msgid "Вид строки"
@@ -4883,6 +4799,10 @@ msgstr "Bills, payments and bonus spending. Needs the orders module. A guest's b
 #: apps/partners/models.py
 msgid "Кнопка вызова официанта/бара/кальянщика. Требует столы."
 msgstr "Button to call a waiter, the bar or the hookah master. Needs tables."
+
+#: apps/partners/models.py
+msgid "Быстрые продажи"
+msgstr "Quick sales"
 
 #: apps/partners/models.py
 msgid "Продажа на кассе по коду клиента. Требует меню."
@@ -6180,6 +6100,10 @@ msgstr "Telegram account"
 msgid "Аккаунты Telegram"
 msgstr "Telegram accounts"
 
+#: apps/users/models.py webapp/staff_views.py
+msgid "Код клиента"
+msgstr "Customer code"
+
 #: apps/users/models.py
 msgid "Первый визит"
 msgstr "First visit"
@@ -7301,10 +7225,6 @@ msgid "По счетам: {bill_revenue} грн"
 msgstr "From bills: {bill_revenue} UAH"
 
 #: bot/handlers/staff.py
-msgid "Быстрые продажи: {walk_in_revenue} грн"
-msgstr "Quick sales: {walk_in_revenue} UAH"
-
-#: bot/handlers/staff.py
 msgid "Возвраты: −{refunds_total} грн"
 msgstr "Refunds: −{refunds_total} UAH"
 
@@ -7315,10 +7235,6 @@ msgstr "<b>Operations</b>"
 #: bot/handlers/staff.py
 msgid "Оплаченных счетов: {paid_bills_count}"
 msgstr "Paid bills: {paid_bills_count}"
-
-#: bot/handlers/staff.py
-msgid "Быстрых продаж: {walk_in_sales_count}"
-msgstr "Quick sales: {walk_in_sales_count}"
 
 #: bot/handlers/staff.py
 msgid "Создано заказов: {created_orders_count}"
@@ -7353,8 +7269,8 @@ msgid "<b>По сотрудникам</b>"
 msgstr "<b>By staff</b>"
 
 #: bot/handlers/staff.py
-msgid "• {label}: {total_amount} грн (платежей {payments_count}, быстрых продаж {walk_in_sales_count})"
-msgstr "• {label}: {total_amount} UAH (payments {payments_count}, quick sales {walk_in_sales_count})"
+msgid "• {label}: {total_amount} грн (платежей {payments_count})"
+msgstr "• {label}: {total_amount} UAH (payments {payments_count})"
 
 #: bot/handlers/staff.py
 msgid "Счета дня"
@@ -7387,38 +7303,6 @@ msgstr "No entries in this section right now."
 #: bot/handlers/staff.py
 msgid "Открыть {label}"
 msgstr "Open {label}"
-
-#: bot/handlers/staff.py
-msgid "<b>Быстрая продажа</b>"
-msgstr "<b>Quick sale</b>"
-
-#: bot/handlers/staff.py
-msgid "Время: {created_at}"
-msgstr "Time: {created_at}"
-
-#: bot/handlers/staff.py
-msgid "Код клиента: {loyalty}"
-msgstr "Customer code: {loyalty}"
-
-#: bot/handlers/staff.py
-msgid "Сумма: {amount} грн"
-msgstr "Amount: {amount} UAH"
-
-#: bot/handlers/staff.py
-msgid "Бонусов начислено: {bonus_awarded_amount}"
-msgstr "Bonuses accrued: {bonus_awarded_amount}"
-
-#: bot/handlers/staff.py
-msgid "Сотрудник: {staff}"
-msgstr "Staff: {staff}"
-
-#: bot/handlers/staff.py
-msgid "Позиции:"
-msgstr "Items:"
-
-#: bot/handlers/staff.py
-msgid "• {item_name} x{quantity} • {unit_price} грн"
-msgstr "• {item_name} x{quantity} • {unit_price} UAH"
 
 #: bot/handlers/staff.py
 msgid "<b>Стол #{table_number} за день</b>"
@@ -7677,6 +7561,10 @@ msgid "от {price}"
 msgstr "from {price}"
 
 #: bot/handlers/staff.py
+msgid "<b>Продажа на кассе</b>"
+msgstr "<b>Counter sale</b>"
+
+#: bot/handlers/staff.py
 msgid "Покупатель: Аноним (без кода клиента)"
 msgstr "Buyer: anonymous (no customer code)"
 
@@ -7699,6 +7587,10 @@ msgstr "First visit: {first_visit}"
 #: bot/handlers/staff.py
 msgid "Последний визит: {last_visit}"
 msgstr "Last visit: {last_visit}"
+
+#: bot/handlers/staff.py
+msgid "Позиции:"
+msgstr "Items:"
 
 #: bot/handlers/staff.py
 msgid "• {item_name} x{quantity} = {line_total} грн"
@@ -7843,18 +7735,6 @@ msgstr "Invalid log page."
 #: bot/handlers/staff.py
 msgid "Раздел журнала открыт"
 msgstr "Log section opened"
-
-#: bot/handlers/staff.py
-msgid "Продажа не найдена."
-msgstr "Sale not found."
-
-#: bot/handlers/staff.py
-msgid "Некорректная ссылка на продажу."
-msgstr "Invalid sale link."
-
-#: bot/handlers/staff.py
-msgid "Карточка продажи открыта"
-msgstr "Sale card opened"
 
 #: bot/handlers/staff.py
 msgid "Некорректная ссылка на стол."
@@ -8085,6 +7965,10 @@ msgid "Черновик обновлён"
 msgstr "Draft updated"
 
 #: bot/handlers/staff.py
+msgid "<b>Быстрая продажа</b>"
+msgstr "<b>Quick sale</b>"
+
+#: bot/handlers/staff.py
 msgid "Комментарий сохранён."
 msgstr "Comment saved."
 
@@ -8092,33 +7976,13 @@ msgstr "Comment saved."
 msgid "Комментарий очищен."
 msgstr "Comment cleared."
 
+#: bot/handlers/staff.py
+msgid "Это действие устарело. Откройте продажу ещё раз."
+msgstr "This action is out of date. Open the sale again."
+
 #: bot/handlers/staff.py webapp/staff_sales.py
 msgid "Сначала добавьте позиции."
 msgstr "Add items first."
-
-#: bot/handlers/staff.py
-msgid "<b>Быстрая продажа оформлена</b>"
-msgstr "<b>Quick sale recorded</b>"
-
-#: bot/handlers/staff.py
-msgid "Клиент: {loyalty}"
-msgstr "Customer: {loyalty}"
-
-#: bot/handlers/staff.py
-msgid "Списано бонусами: {bonus_spent_amount}"
-msgstr "Paid with bonuses: {bonus_spent_amount}"
-
-#: bot/handlers/staff.py
-msgid "К оплате: {net_amount} грн"
-msgstr "To pay: {net_amount} UAH"
-
-#: bot/handlers/staff.py
-msgid "Начислено бонусов: +{bonus_awarded_amount}"
-msgstr "Bonuses accrued: +{bonus_awarded_amount}"
-
-#: bot/handlers/staff.py
-msgid "Позиций: {items_count}"
-msgstr "Items: {items_count}"
 
 #: bot/handlers/staff.py
 msgid "➕ Новая продажа"
@@ -8129,8 +7993,48 @@ msgid "← Рабочий режим"
 msgstr "← Work mode"
 
 #: bot/handlers/staff.py
-msgid "Продажа сохранена"
-msgstr "Sale saved"
+msgid "Продажа уже проведена"
+msgstr "The sale is already made"
+
+#: bot/handlers/staff.py
+msgid "Продажа проведена"
+msgstr "Sale made"
+
+#: bot/handlers/staff.py
+msgid "<b>Продажа на кассе проведена</b>"
+msgstr "<b>Counter sale made</b>"
+
+#: bot/handlers/staff.py
+msgid "<b>Эта продажа уже проведена</b>"
+msgstr "<b>This sale is already made</b>"
+
+#: bot/handlers/staff.py
+msgid "Клиент: {loyalty}"
+msgstr "Customer: {loyalty}"
+
+#: bot/handlers/staff.py
+msgid "Аноним"
+msgstr "Anonymous"
+
+#: bot/handlers/staff.py
+msgid "Сумма: {amount} грн"
+msgstr "Amount: {amount} UAH"
+
+#: bot/handlers/staff.py
+msgid "Списано бонусами: {bonus_spent_amount}"
+msgstr "Paid with bonuses: {bonus_spent_amount}"
+
+#: bot/handlers/staff.py
+msgid "Оплата: {methods}"
+msgstr "Payment: {methods}"
+
+#: bot/handlers/staff.py
+msgid "Начислено бонусов: +{bonus_awarded_amount}"
+msgstr "Bonuses accrued: +{bonus_awarded_amount}"
+
+#: bot/handlers/staff.py
+msgid "Позиций: {items_count}"
+msgstr "Items: {items_count}"
 
 #: bot/handlers/staff.py webapp/staff_billing.py
 msgid "Позиция уже убрана из счёта."
@@ -8565,10 +8469,6 @@ msgid "К сводке дня"
 msgstr "To the day summary"
 
 #: bot/keyboards/staff.py
-msgid "К списку продаж"
-msgstr "To the sales list"
-
-#: bot/keyboards/staff.py
 msgid "К списку столов"
 msgstr "To the tables list"
 
@@ -8595,6 +8495,14 @@ msgstr "Cancel bonus spending"
 #: bot/keyboards/staff.py webapp/texts.py
 msgid "Списать бонусы"
 msgstr "Spend bonuses"
+
+#: bot/keyboards/staff.py
+msgid "💵 Наличные"
+msgstr "💵 Cash"
+
+#: bot/keyboards/staff.py
+msgid "💳 Карта"
+msgstr "💳 Card"
 
 #: bot/keyboards/staff.py
 msgid "Подтвердить продажу"
@@ -8836,6 +8744,10 @@ msgstr "This menu no longer works. Open the menu from the bot again."
 msgid "Откройте меню из бота ещё раз."
 msgstr "Open the menu from the bot again."
 
+#: webapp/context.py
+msgid "Сначала выберите заведение."
+msgstr "Choose the venue first."
+
 #: webapp/context.py webapp/kitchen_views.py webapp/staff_context.py
 msgid "Заведение сейчас не принимает заказы."
 msgstr "The venue is not taking orders right now."
@@ -8983,10 +8895,6 @@ msgstr "From bills"
 #: webapp/staff_sales.py
 msgid "Оплаченных счетов"
 msgstr "Paid bills"
-
-#: webapp/staff_sales.py
-msgid "Быстрых продаж"
-msgstr "Quick sales"
 
 #: webapp/staff_sales.py
 msgid "Создано заказов"
@@ -9175,6 +9083,10 @@ msgstr "Remove «{name}» from the bill?"
 #: webapp/staff_views.py
 msgid "Отменить заказ #{id}"
 msgstr "Cancel order #{id}"
+
+#: webapp/staff_views.py
+msgid "Продажа"
+msgstr "Sale"
 
 #: webapp/staff_views.py
 msgid "Код клиента — для бонусов; без кода — анонимная продажа"

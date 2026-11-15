@@ -448,20 +448,17 @@ def build_staff_report_summary_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
+                # A sale at the counter is a bill too (PQ-054).
                 InlineKeyboardButton(
                     text=_("Счета"),
                     callback_data="staffreportsec:bills:1",
                 ),
                 InlineKeyboardButton(
-                    text=_("Быстрые продажи"),
-                    callback_data="staffreportsec:walkins:1",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
                     text=_("Столы"),
                     callback_data="staffreportsec:tables:1",
                 ),
+            ],
+            [
                 InlineKeyboardButton(
                     text=_("Не закрыто"),
                     callback_data="staffreportsec:tails:1",
@@ -524,25 +521,6 @@ def build_staff_report_section_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 
 
-def build_staff_report_walkin_detail_keyboard(*, section: str, page: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=_("К списку продаж"),
-                    callback_data=f"staffreportsec:{section}:{page}",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text=_("К сводке дня"),
-                    callback_data="staffreport:today",
-                )
-            ],
-        ]
-    )
-
-
 def build_staff_report_table_detail_keyboard(*, page: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -572,7 +550,12 @@ def build_staff_sale_keyboard(
     has_comment: bool,
     can_redeem: bool = False,
     redeem_active: bool = False,
+    to_pay=None,
 ) -> InlineKeyboardMarkup:
+    """``to_pay`` — what is left after bonuses: a sale at the counter is paid
+    at once (PQ-054), so the cashier presses cash or card; the button carries
+    the amount shown, and a changed amount is not charged."""
+
     keyboard: list[list[InlineKeyboardButton]] = []
     category_row: list[InlineKeyboardButton] = []
     for category_id, label in categories:
@@ -670,14 +653,35 @@ def build_staff_sale_keyboard(
             ),
         ]
     )
-    keyboard.append(
-        [
-            InlineKeyboardButton(
-                text=_("Подтвердить продажу") if can_confirm else _("Добавьте позиции"),
-                callback_data="staffsale:confirm" if can_confirm else "staffsale:noop",
-            )
-        ]
-    )
+    if can_confirm and to_pay is not None and to_pay > 0:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=_("💵 Наличные"), callback_data=f"staffsale:pay:cash:{to_pay:.2f}"
+                ),
+                InlineKeyboardButton(
+                    text=_("💳 Карта"), callback_data=f"staffsale:pay:terminal:{to_pay:.2f}"
+                ),
+            ]
+        )
+    elif can_confirm and to_pay is not None:
+        # Bonuses pay it all: no money to take.
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=_("Подтвердить продажу"), callback_data="staffsale:pay:-:0.00"
+                )
+            ]
+        )
+    else:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text=_("Подтвердить продажу") if can_confirm else _("Добавьте позиции"),
+                    callback_data="staffsale:confirm" if can_confirm else "staffsale:noop",
+                )
+            ]
+        )
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 

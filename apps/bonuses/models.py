@@ -1,11 +1,9 @@
-from decimal import Decimal
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Q
 
 from core.database.models import PartnerBoundModel
-from core.i18n import _
 from core.i18n import gettext_lazy as _lazy
 from core.labels import venue_label, within_one_venue
 
@@ -145,14 +143,6 @@ class BonusTransaction(PartnerBoundModel):
         related_name="bonus_transactions",
         verbose_name=_lazy("Счёт"),
     )
-    walk_in_sale = models.ForeignKey(
-        "bonuses.WalkInSale",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="bonus_transactions",
-        verbose_name=_lazy("Быстрая продажа"),
-    )
     transaction_type = models.CharField(
         max_length=16,
         choices=TransactionType.choices,
@@ -185,122 +175,3 @@ class BonusTransaction(PartnerBoundModel):
         if within_one_venue():
             return f"{self.get_transaction_type_display()} · {self.amount}"
         return f"{self.partner.name} / {self.transaction_type} / {self.amount}"
-
-
-class WalkInSale(PartnerBoundModel):
-    """Manual cashier sale without a table session but with loyalty accrual support."""
-
-    guest = models.ForeignKey(
-        "users.GuestProfile",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="walk_in_sales",
-        verbose_name=_lazy("Гость"),
-    )
-    customer_code_snapshot = models.CharField(
-        max_length=12,
-        blank=True,
-        verbose_name=_lazy("Код клиента (на момент продажи)"),
-    )
-    amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal("0.01"))],
-        verbose_name=_lazy("Сумма продажи"),
-    )
-    bonus_awarded_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0,
-        verbose_name=_lazy("Начислено бонусов"),
-    )
-    bonus_spent_amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        default=0,
-        verbose_name=_lazy("Оплачено бонусами"),
-    )
-    comment = models.CharField(max_length=255, blank=True, verbose_name=_lazy("Комментарий"))
-    created_by = models.ForeignKey(
-        "users.User",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="created_walk_in_sales",
-        verbose_name=_lazy("Кто создал"),
-    )
-    # One sale per key: a repeated request (a slow line, a second press)
-    # gets the sale already saved (Mini App, PQ-048).
-    request_key = models.CharField(
-        max_length=64, blank=True, default="", editable=False,
-        verbose_name=_lazy("Ключ запроса"),
-    )
-
-    class Meta:
-        verbose_name = _lazy("быстрая продажа")
-        verbose_name_plural = _lazy("Быстрые продажи")
-        ordering = ["-created_at"]
-        constraints = [
-            models.CheckConstraint(
-                condition=Q(amount__gt=0),
-                name="walk_in_sale_amount_positive",
-            ),
-            models.UniqueConstraint(
-                fields=["partner", "request_key"],
-                condition=~Q(request_key=""),
-                name="walk_in_sale_request_key_unique",
-            ),
-        ]
-
-    def __str__(self) -> str:
-        if within_one_venue():
-            return f"{self._meta.verbose_name} · {self.amount}"
-        return f"{self.partner.name} / walk-in {self.amount}"
-
-    @property
-    def loyalty_label(self) -> str:
-        if self.customer_code_snapshot:
-            return self.customer_code_snapshot
-        return _("Аноним")
-
-    @property
-    def net_amount(self):
-        # Amount the customer actually pays after bonus redemption.
-        return self.amount - self.bonus_spent_amount
-
-
-class WalkInSaleItem(PartnerBoundModel):
-    """Persisted line item for a walk-in cashier sale created outside table ordering."""
-
-    sale = models.ForeignKey(
-        WalkInSale,
-        on_delete=models.CASCADE,
-        related_name="items",
-        verbose_name=_lazy("Продажа"),
-    )
-    menu_item = models.ForeignKey(
-        "menu.MenuItem",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="walk_in_sale_items",
-        verbose_name=_lazy("Позиция меню"),
-    )
-    item_name = models.CharField(max_length=255, verbose_name=_lazy("Позиция"))
-    unit_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name=_lazy("Цена"))
-    quantity = models.PositiveIntegerField(default=1, verbose_name=_lazy("Количество"))
-    # What was chosen (catalog step 2): already in the name and price.
-    variant = models.ForeignKey(
-        "menu.MenuItemVariant", on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="walk_in_sale_items", verbose_name=_lazy("Вариант"),
-    )
-    modifiers = models.JSONField(default=list, blank=True, verbose_name=_lazy("Добавки"))
-
-    class Meta:
-        verbose_name = _lazy("позиция быстрой продажи")
-        verbose_name_plural = _lazy("Позиции быстрых продаж")
-        ordering = ["created_at", "item_name"]
-
-    def __str__(self) -> str:
-        return f"{self.sale} / {self.item_name} x{self.quantity}"

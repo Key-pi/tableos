@@ -241,7 +241,7 @@ class RefundRulesTests(RefundFixture):
         self.assertEqual(report.refunds_total, Decimal("80.00"))
         self.assertEqual(
             report.total_revenue,
-            report.bill_revenue + report.walk_in_revenue - Decimal("80.00"),
+            report.bill_revenue - Decimal("80.00"),
         )
 
 

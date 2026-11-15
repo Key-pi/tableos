@@ -125,8 +125,8 @@ class RightsTests(DashboardFixture):
         _response, board = self.page()
         self.assertEqual(self.titles(board), ["Новые заказы: 1"])
         self.assertIsNone(board["today"])
-        self.assertEqual([str(action["title"]) for action in board["actions"]],
-                         ["Быстрая продажа"])
+        # A sale is rung up at the counter (Mini App, bot), not in Admin (PQ-054).
+        self.assertEqual([str(action["title"]) for action in board["actions"]], [])
         # Setting up the venue is not a cashier's job.
         self.assertEqual(board["setup"], [])
 

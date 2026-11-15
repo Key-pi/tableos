@@ -186,7 +186,7 @@ def _today(request, partner_id) -> dict | None:
     from apps.analytics.services import build_daily_operations_report
 
     report = build_daily_operations_report(partner_id=partner_id)
-    sales = report.paid_bills_count + report.walk_in_sales_count
+    sales = report.paid_bills_count
     average = report.total_revenue / sales if sales else None
     return {
         "revenue": _money(report.total_revenue),
@@ -205,7 +205,6 @@ def _money(amount: Decimal) -> str:
 
 
 QUICK_ACTIONS = (
-    ("bonuses.walkinsale", "point_of_sale", N_("Быстрая продажа"), "module_quick_sale_enabled"),
     ("menu.menuitem", "restaurant_menu", N_("Новая позиция"), ""),
     ("notifications.broadcastcampaign", "campaign", N_("Рассылка"), ""),
     ("employees.staffinvite", "person_add", N_("Пригласить сотрудника"), ""),

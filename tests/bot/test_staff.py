@@ -142,7 +142,8 @@ class StaffKeyboardVisibilityTests(SimpleTestCase):
             for button in row
         ]
         self.assertIn("Счета", button_texts)
-        self.assertIn("Быстрые продажи", button_texts)
+        # A sale at the counter is a bill (PQ-054): no separate section.
+        self.assertNotIn("Быстрые продажи", button_texts)
         self.assertIn("Столы", button_texts)
         self.assertIn("Не закрыто", button_texts)
 

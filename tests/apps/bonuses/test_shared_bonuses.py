@@ -14,6 +14,9 @@ from django.db import close_old_connections, connection
 from django.test import RequestFactory, TestCase, TransactionTestCase
 
 from apps.analytics.selectors import network_summary
+from apps.billing import counter_sales
+from apps.billing import services as billing_services
+from apps.billing.counter_sales import sell_at_counter
 from apps.bonuses import services
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.selectors import recent_bonus_transactions_for_guest
@@ -22,10 +25,11 @@ from apps.bonuses.services import (
     apply_bonus_programs,
     assert_bonus_balance_reconciled,
     bonus_balance,
-    register_walk_in_sale,
 )
+from apps.employees.models import EmployeeProfile
+from apps.menu.models import MenuCategory, MenuItem
 from apps.partners.admin import NetworkAdmin
-from apps.partners.models import Network, NetworkWallet, Partner
+from apps.partners.models import Network, NetworkWallet, Partner, PartnerBotSettings
 from apps.users.models import GuestProfile, TelegramAccount, User
 from apps.users.services import find_guest_by_customer_code, get_or_create_guest_profile
 from bot.handlers.profile import _render_profile_bonuses
@@ -54,6 +58,15 @@ class SharedBonusFixture:
             trigger_event=BonusProgram.TriggerEvent.MANUAL_PURCHASE, percent=D(percent),
             max_redeem_share=D("100"),
         )
+        PartnerBotSettings.objects.create(
+            partner=partner, module_menu_enabled=True, module_quick_sale_enabled=True
+        )
+        MenuCategory.objects.create(partner=partner, name="Каса")
+        user = User.objects.create_user(
+            username=f"till-{partner.slug}", password="x", partner=partner,
+            role=User.Role.CASHIER,
+        )
+        EmployeeProfile.objects.create(partner=partner, user=user)
         return partner
 
     def share(self):
@@ -66,9 +79,19 @@ class SharedBonusFixture:
         )
 
     def spend(self, guest, total):
-        return register_walk_in_sale(
-            partner_id=guest.partner_id, guest=guest, amount=D(total), redeem_bonus=True
+        """A sale at the counter (PQ-054) paid with bonuses, the rest in cash;
+        returns its bill."""
+
+        item = MenuItem.objects.create(
+            partner_id=guest.partner_id, name=f"Покупка {total}", price=D(total),
+            category=MenuCategory.objects.get(partner_id=guest.partner_id),
         )
+        return sell_at_counter(
+            partner_id=guest.partner_id,
+            seller=EmployeeProfile.objects.get(partner_id=guest.partner_id),
+            customer_code=guest.customer_code, payment="cash", use_bonuses=True,
+            items=[{"menu_item_id": item.id, "quantity": 1}],
+        ).bill
 
     def balance(self, guest):
         guest.refresh_from_db()
@@ -210,7 +233,9 @@ class SharedSpendRaceTests(SharedBonusFixture, TransactionTestCase):
             for guest in (self.at_kyiv, self.at_kharkiv)
         ]
         # Patched once around both threads (patching inside threads races).
-        with patch.object(services, "get_redeemable_bonus_amount", new=slow_redeemable):
+        with patch.object(counter_sales, "get_redeemable_bonus_amount", new=slow_redeemable), \
+                patch.object(billing_services, "get_redeemable_bonus_amount",
+                             new=slow_redeemable):
             for thread in threads:
                 thread.start()
             for thread in threads:
@@ -247,69 +272,3 @@ class SettingAndHistoryTests(SharedBonusFixture, TestCase):
         self.share()
         self.network.refresh_from_db()
         self.assertEqual(model_admin.get_readonly_fields(request, self.network), ("bonus_mode",))
-
-
-@unittest.skipUnless(connection.vendor == "postgresql", "unique keys under load need PostgreSQL")
-class RepeatedSaleRaceTests(TransactionTestCase):
-    """The same quick sale sent twice at the same moment (a retry while the
-    first is still saving, Mini App PQ-048): one sale, one spend, one accrual."""
-
-    def test_two_copies_of_one_sale_at_once(self):
-        from apps.bonuses.models import WalkInSale
-        from apps.bonuses.services import (
-            register_walk_in_sale_from_menu_items_by_customer_code,
-            sync_bonus_balance_from_ledger,
-        )
-        from apps.menu.models import MenuCategory, MenuItem
-
-        partner = Partner.objects.create(
-            name="Кава", slug="kava-race", status=Partner.Status.ACTIVE
-        )
-        BonusProgram.objects.create(
-            partner=partner, name="Кешбэк", program_type=BonusProgram.ProgramType.CASHBACK,
-            trigger_event=BonusProgram.TriggerEvent.MANUAL_PURCHASE, percent=D("10"),
-            max_redeem_share=D("50"),
-        )
-        category = MenuCategory.objects.create(partner=partner, name="Кава")
-        latte = MenuItem.objects.create(
-            partner=partner, category=category, name="Лате", price="80.00", public_id="RACELAT"
-        )
-        guest = get_or_create_guest_profile(partner_id=partner.id, telegram_id=PERSON)
-        BonusTransaction.objects.create(
-            partner=partner, guest=guest, transaction_type="manual", amount=D("30.00"),
-            source_type="test", source_id="seed", idempotency_key="race-seed",
-        )
-        sync_bonus_balance_from_ledger(guest)
-        real_preview = services.preview_walk_in_sale_by_customer_code
-        barrier = threading.Barrier(2)
-
-        def slow_preview(**kwargs):
-            barrier.wait()  # both copies are past the "already saved?" check
-            return real_preview(**kwargs)
-
-        errors = []
-
-        def sell():
-            try:
-                register_walk_in_sale_from_menu_items_by_customer_code(
-                    partner_id=partner.id, customer_code=guest.customer_code,
-                    items=[{"menu_item_id": latte.id, "quantity": 2}],
-                    redeem_bonus=True, request_key="race-key-0001",
-                )
-            except Exception as exc:  # noqa: BLE001 — reported below
-                errors.append(exc)
-            finally:
-                close_old_connections()
-
-        with patch.object(services, "preview_walk_in_sale_by_customer_code", slow_preview):
-            threads = [threading.Thread(target=sell) for _copy in range(2)]
-            for thread in threads:
-                thread.start()
-            for thread in threads:
-                thread.join()
-        self.assertEqual(errors, [])
-        self.assertEqual(WalkInSale.objects.count(), 1)
-        sale = WalkInSale.objects.get()
-        self.assertEqual(BonusTransaction.objects.filter(walk_in_sale=sale).count(), 2)
-        guest.refresh_from_db()
-        assert_bonus_balance_reconciled(guest)

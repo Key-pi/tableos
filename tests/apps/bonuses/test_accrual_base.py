@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
+from apps.billing.counter_sales import preview_counter_sale, sell_at_counter
 from apps.billing.models import Bill, Payment
 from apps.billing.services import (
     _bill_bonus_share_by_order,
@@ -15,16 +16,15 @@ from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.services import (
     BonusServiceError,
     apply_bonus_programs,
-    preview_walk_in_sale_by_customer_code,
-    register_walk_in_sale,
 )
 from apps.bonuses.strategies import BonusContext, _cashback_bonus
+from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
 from apps.orders.services import create_order_from_session
 from apps.partners.models import Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.tables.services import activate_table_session
-from apps.users.models import GuestProfile, TelegramAccount
+from apps.users.models import GuestProfile, TelegramAccount, User
 
 MONEY_PAID = BonusProgram.AccrualBase.MONEY_PAID
 FULL_TOTAL = BonusProgram.AccrualBase.FULL_TOTAL
@@ -252,12 +252,18 @@ class PaidOrderAccrualBaseTests(TestCase):
         self.assertEqual(_bill_bonus_share_by_order(bill), {})
 
 
-class WalkInSaleAccrualBaseTests(TestCase):
+class CounterSaleAccrualBaseTests(TestCase):
+    """A sale at the counter (PQ-054): «Покупка на кассе» programmes, on the
+    money part when the programme says so — as the quick sale was."""
+
     def setUp(self):
         self.partner = Partner.objects.create(
             name="Walk Base Venue",
             slug="walk-base-venue",
             status=Partner.Status.ACTIVE,
+        )
+        PartnerBotSettings.objects.create(
+            partner=self.partner, module_menu_enabled=True, module_quick_sale_enabled=True
         )
         account = TelegramAccount.objects.create(telegram_id=7700201)
         self.guest = GuestProfile.objects.create(partner=self.partner, telegram_account=account)
@@ -279,50 +285,42 @@ class WalkInSaleAccrualBaseTests(TestCase):
             price="100.00",
             sort_order=1,
         )
+        user = User.objects.create_user(
+            username="base_till", password="x", partner=self.partner, role=User.Role.CASHIER
+        )
+        self.seller = EmployeeProfile.objects.create(partner=self.partner, user=user)
+
+    def sell(self, use_bonuses=False):
+        return sell_at_counter(
+            partner_id=self.partner.id, seller=self.seller,
+            customer_code=self.guest.customer_code, payment="cash", use_bonuses=use_bonuses,
+            items=[{"menu_item_id": self.coffee.id, "quantity": 3}],
+        )
 
     def test_sale_with_redemption_accrues_on_money_part(self):
-        sale = register_walk_in_sale(
-            partner_id=self.partner.id,
-            guest=self.guest,
-            amount="300.00",
-            redeem_bonus=True,
-        )
-        self.assertEqual(sale.bonus_spent_amount, Decimal("90.00"))
-        self.assertEqual(sale.bonus_awarded_amount, Decimal("21.00"))
+        sale = self.sell(use_bonuses=True)
+        self.assertEqual(sale.bill.bonus_spent_amount, Decimal("90.00"))
+        self.assertEqual(sale.bonus_awarded, Decimal("21.00"))
 
     def test_sale_without_redemption_accrues_on_full_amount(self):
-        sale = register_walk_in_sale(
-            partner_id=self.partner.id,
-            guest=self.guest,
-            amount="300.00",
-        )
-        self.assertEqual(sale.bonus_awarded_amount, Decimal("30.00"))
+        self.assertEqual(self.sell().bonus_awarded, Decimal("30.00"))
 
     def test_full_total_programme_ignores_redemption(self):
         self.program.accrual_base = FULL_TOTAL
         self.program.save(update_fields=["accrual_base", "updated_at"])
-        sale = register_walk_in_sale(
-            partner_id=self.partner.id,
-            guest=self.guest,
-            amount="300.00",
-            redeem_bonus=True,
-        )
-        self.assertEqual(sale.bonus_spent_amount, Decimal("90.00"))
-        self.assertEqual(sale.bonus_awarded_amount, Decimal("30.00"))
+        sale = self.sell(use_bonuses=True)
+        self.assertEqual(sale.bill.bonus_spent_amount, Decimal("90.00"))
+        self.assertEqual(sale.bonus_awarded, Decimal("30.00"))
 
     def test_preview_projects_accrual_for_the_chosen_redemption(self):
         items = [{"menu_item_id": str(self.coffee.id), "quantity": 3}]
-        plain = preview_walk_in_sale_by_customer_code(
-            partner_id=self.partner.id,
-            customer_code=self.guest.customer_code,
-            items=items,
+        plain = preview_counter_sale(
+            partner_id=self.partner.id, customer_code=self.guest.customer_code, items=items,
         )
-        redeemed = preview_walk_in_sale_by_customer_code(
-            partner_id=self.partner.id,
-            customer_code=self.guest.customer_code,
-            items=items,
-            redeem_bonus=True,
+        redeemed = preview_counter_sale(
+            partner_id=self.partner.id, customer_code=self.guest.customer_code, items=items,
+            use_bonuses=True,
         )
-        self.assertEqual(plain.projected_bonus_amount, Decimal("30.00"))
-        self.assertEqual(redeemed.redeemable_bonus_amount, Decimal("90.00"))
-        self.assertEqual(redeemed.projected_bonus_amount, Decimal("21.00"))
+        self.assertEqual(plain.bonus_awarded, Decimal("30.00"))
+        self.assertEqual(redeemed.redeemable, Decimal("90.00"))
+        self.assertEqual(redeemed.bonus_awarded, Decimal("21.00"))

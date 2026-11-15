@@ -15,8 +15,9 @@ from unittest import skipUnless
 from django.db import close_old_connections, connection
 from django.test import TestCase, TransactionTestCase
 
+from apps.billing.counter_sales import sell_at_counter
 from apps.billing.services import cancel_order
-from apps.bonuses.services import register_walk_in_sale_from_menu_items_by_customer_code
+from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuItem, MenuItemVariant, StockMovement
 from apps.menu.stock import (
     LOW_STOCK,
@@ -185,9 +186,17 @@ class ModuleIndependenceTests(StockFixture):
 
 class QuickSaleTests(StockFixture):
     def test_the_till_takes_and_may_go_below_zero(self):
-        register_walk_in_sale_from_menu_items_by_customer_code(
-            partner_id=self.partner.id, customer_code="",
-            items=[{"menu_item_id": self.mouthpiece.id, "quantity": 3}],
+        # A sale at the counter (PQ-054): the goods are in the buyer's hands.
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            module_quick_sale_enabled=True, module_menu_enabled=True
+        )
+        cashier = User.objects.create_user(
+            username="till", password="x", partner=self.partner, role=User.Role.CASHIER
+        )
+        seller = EmployeeProfile.objects.create(partner=self.partner, user=cashier)
+        sell_at_counter(
+            partner_id=self.partner.id, seller=seller, customer_code="",
+            items=[{"menu_item_id": self.mouthpiece.id, "quantity": 3}], payment="cash",
         )
         self.assertEqual(self.stock(self.mouthpiece), -2)
         movement = StockMovement.objects.get()

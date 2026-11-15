@@ -10,11 +10,13 @@ anonymous guest.
 from decimal import Decimal
 from threading import Barrier, Thread
 from unittest import skipUnless
+from unittest.mock import patch
 
 from django.db import connection, connections
 from django.test import TestCase, TransactionTestCase
 
 from apps.analytics.services import build_daily_operations_report
+from apps.billing import counter_sales
 from apps.billing.counter_sales import CounterSaleError, preview_counter_sale, sell_at_counter
 from apps.billing.models import Bill, Payment
 from apps.billing.services import refund_bill_lines
@@ -153,6 +155,9 @@ class CounterSaleTests(CounterFixture):
         with self.assertRaises(CounterSaleError):
             self.sell(customer_code="NOPE00")
 
+    def test_the_comment_is_kept(self):
+        self.assertEqual(self.sell(comment="  без пакета ").order.comment, "без пакета")
+
     def test_no_lines_is_refused(self):
         with self.assertRaises(CounterSaleError):
             self.sell(items=[])
@@ -280,10 +285,14 @@ class CounterRepeatRaceTests(TransactionTestCase):
         programme(partner, BonusProgram.TriggerEvent.MANUAL_PURCHASE)
         barrier = Barrier(2)
         results, errors = [], []
+        real_lines = counter_sales._lines
+
+        def slow_lines(*args, **kwargs):
+            barrier.wait()  # both copies are past the "already made?" check
+            return real_lines(*args, **kwargs)
 
         def press():
             try:
-                barrier.wait()
                 results.append(sell_at_counter(
                     partner_id=partner.id, seller=seller, customer_code=guest.customer_code,
                     items=[{"menu_item_id": tobacco.id, "quantity": 1}],
@@ -295,10 +304,11 @@ class CounterRepeatRaceTests(TransactionTestCase):
                 connections.close_all()
 
         threads = [Thread(target=press) for _ in range(2)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        with patch.object(counter_sales, "_lines", slow_lines):
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
         self.assertEqual(errors, [])
         self.assertEqual(Order.objects.filter(partner=partner).count(), 1)
         self.assertEqual({result.order.id for result in results},

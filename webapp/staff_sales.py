@@ -236,13 +236,11 @@ def report_view(request, staff: StaffRequest, body: dict) -> dict:
         "money": [
             {"label": _("Всего выручка"), "value": _money(report.total_revenue), "strong": True},
             {"label": _("По счетам"), "value": _money(report.bill_revenue)},
-            {"label": _("Быстрые продажи"), "value": _money(report.walk_in_revenue)},
             *([{"label": _("Возвраты"), "value": "-" + _money(report.refunds_total)}]
               if report.refunds_total else []),
         ],
         "counts": [
             {"label": _("Оплаченных счетов"), "value": report.paid_bills_count},
-            {"label": _("Быстрых продаж"), "value": report.walk_in_sales_count},
             {"label": _("Создано заказов"), "value": report.created_orders_count},
             {"label": _("Открытых заказов"), "value": report.open_orders_count},
             {"label": _("Открытых счетов"), "value": report.open_bills_count},
@@ -260,7 +258,7 @@ def report_view(request, staff: StaffRequest, body: dict) -> dict:
         ],
         "staff": [
             {"label": item["label"], "amount": _money(item["total_amount"]),
-             "payments": item["payments_count"], "sales": item["walk_in_sales_count"]}
+             "payments": item["payments_count"]}
             for item in report.staff_breakdown[:12]
         ],
     }

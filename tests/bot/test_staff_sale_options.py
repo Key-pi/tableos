@@ -1,6 +1,6 @@
-"""A variant and add-ons in the bot's quick sale (catalog step 2, owner
-2026-11-07): chosen as the guest chooses them, sold at the price of the
-choice."""
+"""A variant and add-ons in the bot's sale at the counter (catalog step 2,
+owner 2026-11-07): chosen as the guest chooses them, sold at the price of the
+choice. The sale is an order «На кассе» paid in cash or by card (PQ-054)."""
 
 from decimal import Decimal
 from types import SimpleNamespace
@@ -11,9 +11,9 @@ from aiogram.fsm.storage.base import StorageKey
 from aiogram.fsm.storage.memory import MemoryStorage
 from asgiref.sync import async_to_sync
 
-from apps.bonuses.models import WalkInSale
-from apps.bonuses.services import register_walk_in_sale_from_menu_items_by_customer_code
+from apps.billing.models import Payment
 from apps.menu.models import MenuItem, MenuItemVariant, Modifier, ModifierGroup
+from apps.orders.models import Order
 from apps.partners.models import PartnerBotSettings
 from bot.handlers import staff
 from bot.states.staff_sale import StaffQuickSaleStates
@@ -48,7 +48,7 @@ class StaffSaleChoiceTests(StaffFlowFixture):
         async_to_sync(self.state.set_data)({
             "preview_chat_id": OWNER_TG, "preview_message_id": 10, "customer_code": "",
             "items": {}, "selected_category_id": str(self.item.category_id), "comment": "",
-            "redeem_bonus": False,
+            "redeem_bonus": False, "sale_key": "draft-key-0001",
         })
 
     def press(self, handler, data):
@@ -88,18 +88,53 @@ class StaffSaleChoiceTests(StaffFlowFixture):
         self.press(staff.staff_sale_line_quantity_handler, "staffsale:ladd:0")
         self.assertEqual(list(self.items().values()), [2])
 
-        sale = register_walk_in_sale_from_menu_items_by_customer_code(
-            partner_id=self.partner.id, customer_code="",
-            items=staff._build_quick_sale_items_payload(self.items()),
-        )
-        self.assertEqual(sale.amount, Decimal("700.00"))
+        text, keyboard = self.sale_screen()
+        # Paid at once (PQ-054): the cashier presses cash or card; the button
+        # carries the amount shown.
+        self.assertIn("staffsale:pay:cash:700.00", _data(keyboard))
+        self.assertIn("staffsale:pay:terminal:700.00", _data(keyboard))
+        callback = self.press(staff.staff_sale_pay_handler, "staffsale:pay:terminal:700.00")
+        sale = Order.objects.get(channel=Order.Channel.COUNTER)
+        self.assertEqual(sale.total_amount, Decimal("700.00"))
         self.assertEqual(sale.items.get().item_name, "Сырники, 5 шт (Варенье)")
+        self.assertEqual(Payment.objects.get().method, Payment.Method.TERMINAL)
+        self.assertIn("700.00", callback.message.edit_text.call_args.args[0])
+
+    def test_a_changed_amount_is_not_charged(self):
+        self.press(staff.staff_sale_item_quantity_handler, "staffsale:add:" + str(
+            MenuItem.objects.get(public_id="FLOW0002").id))
+        callback = self.press(staff.staff_sale_pay_handler, "staffsale:pay:cash:1.00")
+        self.assertTrue(callback.answer.call_args.kwargs.get("show_alert"))
+        self.assertFalse(Order.objects.filter(channel=Order.Channel.COUNTER).exists())
+
+    def test_the_old_confirm_button_asks_how_the_guest_pays(self):
+        self.press(staff.staff_sale_item_quantity_handler, "staffsale:add:" + str(
+            MenuItem.objects.get(public_id="FLOW0002").id))
+        callback = self.press(staff.staff_sale_confirm_handler, "staffsale:confirm")
+        self.assertIn("наличными или картой", callback.answer.call_args.args[0])
+        self.assertFalse(Order.objects.filter(channel=Order.Channel.COUNTER).exists())
+
+    def test_a_double_press_makes_one_sale(self):
+        self.press(staff.staff_sale_item_quantity_handler, "staffsale:add:" + str(
+            MenuItem.objects.get(public_id="FLOW0002").id))
+        data = async_to_sync(self.state.get_data)()
+        total = staff._compose_staff_sale_view(
+            partner_id=self.partner.id, customer_code="", items_map=data["items"],
+            selected_category_id=None,
+        )
+        pay = next(d for d in _data(total[1]) if d.startswith("staffsale:pay:cash:"))
+        self.press(staff.staff_sale_pay_handler, pay)
+        # The second tap came with the old draft before the state was cleared.
+        async_to_sync(self.state.set_state)(StaffQuickSaleStates.browsing_menu)
+        async_to_sync(self.state.set_data)(data)
+        self.press(staff.staff_sale_pay_handler, pay)
+        self.assertEqual(Order.objects.filter(channel=Order.Channel.COUNTER).count(), 1)
 
     def test_a_choice_without_the_required_sauce_is_not_added(self):
         callback = self.press(staff.staff_sale_choice_add_handler, "sa:FLOW0001:0:0")
         self.assertIn("Соус", callback.answer.call_args.args[0])
         self.assertEqual(self.items(), {})
-        self.assertFalse(WalkInSale.objects.exists())
+        self.assertFalse(Order.objects.filter(channel=Order.Channel.COUNTER).exists())
 
     def test_a_draft_line_number_out_of_range_changes_nothing(self):
         callback = self.press(staff.staff_sale_line_quantity_handler, "staffsale:lsub:3")

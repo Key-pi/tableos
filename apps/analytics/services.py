@@ -14,7 +14,6 @@ from django.utils import timezone
 from apps.analytics.models import PartnerDailyMetric
 from apps.billing.models import Bill, BillingRequest, Payment, Refund
 from apps.billing.services import get_bill_context_label
-from apps.bonuses.models import WalkInSale
 from apps.orders.models import Order
 from apps.partners.models import Partner
 from apps.tables.models import Table, TableSession
@@ -27,10 +26,9 @@ class DailyOperationsReport:
     partner_name: str
     local_date_label: str
     total_revenue: Decimal
+    # Every sale goes through a bill, a sale at the counter too (PQ-054).
     bill_revenue: Decimal
-    walk_in_revenue: Decimal
     paid_bills_count: int
-    walk_in_sales_count: int
     created_orders_count: int
     open_orders_count: int
     open_bills_count: int
@@ -138,16 +136,6 @@ def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOpera
         closed_at__gte=day_start,
         closed_at__lte=day_end,
     ).count()
-    walk_in_sales = WalkInSale.objects.filter(
-        partner_id=partner_id,
-        created_at__gte=day_start,
-        created_at__lte=day_end,
-    )
-    walk_in_revenue = walk_in_sales.aggregate(
-        total=Coalesce(Sum("amount"), Decimal("0.00")),
-    )["total"]
-    walk_in_sales_count = walk_in_sales.count()
-
     created_orders_count = Order.objects.filter(
         partner_id=partner_id,
         created_at__gte=day_start,
@@ -181,15 +169,6 @@ def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOpera
         )
         .order_by("-total_amount")
     )
-    walk_in_staff_rows = list(
-        walk_in_sales.exclude(created_by__isnull=True)
-        .values("created_by__username", "created_by__first_name", "created_by__last_name")
-        .annotate(
-            sales_count=Count("id"),
-            total_amount=Coalesce(Sum("amount"), Decimal("0.00")),
-        )
-        .order_by("-total_amount")
-    )
     staff_breakdown_map: dict[str, dict] = {}
 
     for row in payment_staff_rows:
@@ -197,23 +176,8 @@ def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOpera
         staff_breakdown_map[label] = {
             "label": label,
             "payments_count": row["payments_count"],
-            "walk_in_sales_count": 0,
             "total_amount": row["total_amount"],
         }
-
-    for row in walk_in_staff_rows:
-        label = _staff_label(row)
-        entry = staff_breakdown_map.setdefault(
-            label,
-            {
-                "label": label,
-                "payments_count": 0,
-                "walk_in_sales_count": 0,
-                "total_amount": Decimal("0.00"),
-            },
-        )
-        entry["walk_in_sales_count"] += row["sales_count"]
-        entry["total_amount"] += row["total_amount"]
 
     staff_breakdown = sorted(
         staff_breakdown_map.values(),
@@ -255,12 +219,10 @@ def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOpera
     return DailyOperationsReport(
         partner_name=partner.name,
         local_date_label=day_start_local.strftime("%d.%m.%Y"),
-        total_revenue=(bill_revenue + walk_in_revenue - refunds_total).quantize(Decimal("0.01")),
+        total_revenue=(bill_revenue - refunds_total).quantize(Decimal("0.01")),
         refunds_total=Decimal(refunds_total).quantize(Decimal("0.01")),
         bill_revenue=Decimal(bill_revenue).quantize(Decimal("0.01")),
-        walk_in_revenue=Decimal(walk_in_revenue).quantize(Decimal("0.01")),
         paid_bills_count=paid_bills_count,
-        walk_in_sales_count=walk_in_sales_count,
         created_orders_count=created_orders_count,
         open_orders_count=open_orders_count,
         open_bills_count=open_bills_count,
@@ -295,15 +257,7 @@ def refresh_partner_daily_metric(*, partner_id, bucket_date=None) -> PartnerDail
             created_at__lte=day_end,
         ).values_list("guest_id", flat=True)
     )
-    walk_in_guest_ids = set(
-        WalkInSale.objects.filter(
-            partner_id=partner_id,
-            created_at__gte=day_start,
-            created_at__lte=day_end,
-            guest_id__isnull=False,
-        ).values_list("guest_id", flat=True)
-    )
-    active_guest_ids = session_guest_ids | order_guest_ids | walk_in_guest_ids
+    active_guest_ids = session_guest_ids | order_guest_ids
 
     repeat_visits = 0
     if active_guest_ids:
@@ -315,7 +269,7 @@ def refresh_partner_daily_metric(*, partner_id, bucket_date=None) -> PartnerDail
             last_visit_at__lte=day_end,
         ).count()
 
-    sales_count = report.paid_bills_count + report.walk_in_sales_count
+    sales_count = report.paid_bills_count
     average_check = Decimal("0.00")
     if sales_count > 0:
         average_check = (report.total_revenue / sales_count).quantize(Decimal("0.01"))
@@ -410,47 +364,6 @@ def build_daily_paid_bills_page(*, partner_id, page: int = 1) -> ReportPage:
         for bill in bills
     ]
     return _paginate_items(section="bills", items=items, page=page)
-
-
-def build_daily_walk_in_sales_page(*, partner_id, page: int = 1) -> ReportPage:
-    _partner, _day_start_local, day_start, day_end = _resolve_partner_day_bounds(
-        partner_id=partner_id
-    )
-    sales = list(
-        WalkInSale.objects.filter(
-            partner_id=partner_id,
-            created_at__gte=day_start,
-            created_at__lte=day_end,
-        )
-        .select_related("guest", "guest__telegram_account", "created_by")
-        .prefetch_related("items")
-        .order_by("-created_at")
-    )
-    items = [
-        {
-            "kind": "walkin",
-            "id": str(sale.id),
-            "label": (
-                _(
-                    "{created_at} • {loyalty} • {amount} грн • {staff_user}",
-                    created_at=_format_dt(sale.created_at),
-                    loyalty=sale.loyalty_label,
-                    amount=sale.amount,
-                    staff_user=_staff_user_label(sale.created_by),
-                )
-            ),
-            "subtitle": (
-                _(
-                    "Позиции: {count} • бонусов: {bonus_awarded_amount} • комментарий: {comment}",
-                    count=sale.items.count(),
-                    bonus_awarded_amount=sale.bonus_awarded_amount,
-                    comment=sale.comment or '—',
-                )
-            ),
-        }
-        for sale in sales
-    ]
-    return _paginate_items(section="walkins", items=items, page=page)
 
 
 def build_daily_tables_page(*, partner_id, page: int = 1) -> ReportPage:

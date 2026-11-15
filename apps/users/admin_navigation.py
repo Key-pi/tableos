@@ -71,8 +71,6 @@ GROUPS = (
     )),
     (_lazy("Гости и бонусы"), (
         Page("users.guestprofile", "group"),
-        Page("bonuses.walkinsale", "point_of_sale", add=True,
-             module="module_quick_sale_enabled"),
         Page("bonuses.bonustransaction", "history"),
         Page("bonuses.bonusprogram", "loyalty", add=True),
     )),
@@ -133,7 +131,7 @@ TABS = (
      "tables.tablesession"),
     ("menu.menuitem", "menu.menucategory", "menu.modifiergroup", "menu.menubadge",
      "menu.stockmovement"),
-    ("users.guestprofile", "bonuses.walkinsale", "bonuses.bonustransaction",
+    ("users.guestprofile", "bonuses.bonustransaction",
      "bonuses.bonusprogram", "notifications.notificationpreference"),
     ("notifications.broadcastcampaign", "notifications.broadcastdelivery"),
     ("employees.employeeprofile", "employees.staffinvite", "notifications.staffnotification"),

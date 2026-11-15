@@ -1,20 +1,8 @@
 from django.contrib import admin
-from unfold.admin import TabularInline
 
-from apps.bonuses.forms import WalkInSaleAdminForm
-from apps.bonuses.models import BonusProgram, BonusTransaction, WalkInSale, WalkInSaleItem
-from apps.bonuses.services import register_walk_in_sale_by_customer_code
+from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.users.constants import AdminSection
 from core.admin_mixins import ScopedAdminMixin
-from core.i18n import gettext_lazy as _lazy
-
-
-class WalkInSaleItemInline(TabularInline):
-    model = WalkInSaleItem
-    extra = 0
-    can_delete = False
-    fields = ("item_name", "unit_price", "quantity")
-    readonly_fields = ("item_name", "unit_price", "quantity")
 
 
 @admin.register(BonusProgram)
@@ -55,7 +43,6 @@ class BonusTransactionAdmin(ScopedAdminMixin):
         "program",
         "order",
         "bill",
-        "walk_in_sale",
         "transaction_type",
         "amount",
         "expires_at",
@@ -77,105 +64,3 @@ class BonusTransactionAdmin(ScopedAdminMixin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-
-
-@admin.register(WalkInSale)
-class WalkInSaleAdmin(ScopedAdminMixin):
-    admin_section = AdminSection.BONUSES
-    # A money record: a venue does not delete it (owner 2026-11-10, PQ-050).
-    allow_partner_delete = False
-    form = WalkInSaleAdminForm
-    inlines = (WalkInSaleItemInline,)
-    list_display = (
-        "loyalty_customer",
-        "guest",
-        "partner",
-        "amount",
-        "bonus_awarded_amount",
-        "bonus_spent_amount",
-        "created_by",
-        "created_at",
-    )
-    list_filter = ("partner",)
-    search_fields = (
-        "customer_code_snapshot",
-        "guest__customer_code",
-        "guest__telegram_account__username",
-        "partner__name",
-        "comment",
-    )
-    readonly_fields = (
-        "guest",
-        "customer_code_snapshot",
-        "bonus_awarded_amount",
-        "bonus_spent_amount",
-        "created_by",
-        "created_at",
-        "updated_at",
-    )
-    fieldsets = (
-        (
-            None,
-            {
-                "fields": (
-                    "partner",
-                    "customer_code_input",
-                    "amount",
-                    "comment",
-                )
-            },
-        ),
-        (
-            _lazy("Данные гостя"),
-            {
-                "fields": (
-                    "guest",
-                    "customer_code_snapshot",
-                    "bonus_awarded_amount",
-                    "created_by",
-                    "created_at",
-                    "updated_at",
-                )
-            },
-        ),
-    )
-
-    def get_form(self, request, obj=None, change=False, **kwargs):
-        form_class = super().get_form(request, obj, change, **kwargs)
-
-        class RequestBoundForm(form_class):
-            def __init__(self, *args, **inner_kwargs):
-                inner_kwargs["request"] = request
-                super().__init__(*args, **inner_kwargs)
-
-        return RequestBoundForm
-
-    @admin.display(description=_lazy("Код клиента"))
-    def loyalty_customer(self, obj: WalkInSale) -> str:
-        return obj.customer_code_snapshot or "anonymous"
-
-    def has_change_permission(self, request, obj=None):
-        if obj is not None:
-            return False
-        return super().has_change_permission(request, obj)
-
-    def save_model(self, request, obj, form, change):
-        if change:
-            super().save_model(request, obj, form, change)
-            return
-
-        partner = form.cleaned_data["partner"]
-        obj.partner = partner
-        sale = register_walk_in_sale_by_customer_code(
-            partner_id=partner.id,
-            customer_code=form.cleaned_data.get("normalized_customer_code", ""),
-            amount=obj.amount,
-            comment=obj.comment,
-            created_by=request.user,
-        )
-        obj.pk = sale.pk
-        obj.partner = sale.partner
-        obj.guest = sale.guest
-        obj.customer_code_snapshot = sale.customer_code_snapshot
-        obj.bonus_awarded_amount = sale.bonus_awarded_amount
-        obj.created_by = sale.created_by

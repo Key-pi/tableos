@@ -7,10 +7,8 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from apps.bonuses.services import (
-    BonusServiceError,
-    register_walk_in_sale_from_menu_items_by_customer_code,
-)
+from apps.billing.counter_sales import CounterSaleError, sell_at_counter
+from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuItem, MenuItemVariant, Modifier, ModifierGroup
 from apps.orders.models import CartItem, OrderItem
 from apps.orders.services import (
@@ -24,7 +22,7 @@ from apps.orders.services import (
 )
 from apps.tables.models import Table
 from apps.tables.services import activate_table_session
-from apps.users.models import GuestProfile, TelegramAccount
+from apps.users.models import GuestProfile, TelegramAccount, User
 from tests.apps.menu.test_options import options_module
 from tests.webapp.test_guest_api import make_venue
 
@@ -171,19 +169,29 @@ class TableCheckoutTests(ChoicesFixture):
 
 
 class QuickSaleTests(ChoicesFixture):
+    """A sale at the counter (PQ-054) is at the price of the choice."""
+
     def sell(self, **line):
-        return register_walk_in_sale_from_menu_items_by_customer_code(
-            partner_id=self.partner.id, customer_code="", items=[
-                {"menu_item_id": self.latte.id, "quantity": 2, **line},
-            ],
+        from apps.partners.models import PartnerBotSettings
+
+        PartnerBotSettings.objects.filter(partner=self.partner).update(
+            module_quick_sale_enabled=True, module_menu_enabled=True
+        )
+        user = User.objects.get_or_create(
+            username="till", partner=self.partner, role=User.Role.CASHIER
+        )[0]
+        seller = EmployeeProfile.objects.get_or_create(partner=self.partner, user=user)[0]
+        return sell_at_counter(
+            partner_id=self.partner.id, seller=seller, customer_code="", payment="cash",
+            items=[{"menu_item_id": self.latte.id, "quantity": 2, **line}],
         )
 
     def test_the_sale_is_at_the_price_of_the_choice(self):
         sale = self.sell(variant_id=self.big.id.hex, modifier_ids=[self.oat.id.hex])
-        self.assertEqual(sale.amount, Decimal("220.00"))
-        line = sale.items.get()
+        self.assertEqual(sale.order.total_amount, Decimal("220.00"))
+        line = sale.order.items.get()
         self.assertEqual((line.item_name, line.variant), ("Лате, 400 мл (Вівсяне)", self.big))
 
     def test_without_the_choice_there_is_no_sale(self):
-        with self.assertRaises(BonusServiceError):
+        with self.assertRaises(CounterSaleError):
             self.sell()

@@ -12,9 +12,9 @@ Owner's decisions:
   gives them back (``release_order`` from ``transition_order_status``);
 - the guest sees «нет в наличии» (not orderable) and «осталось мало» (up to
   ``LOW_STOCK``), never the number (``state_of``);
-- the staff quick sale takes too and may go below zero
-  (``take_for_walk_in_sale``): the goods are in the buyer's hands, the count
-  is what is wrong;
+- a sale at the counter (PQ-054) takes too and may go below zero
+  (``reserve_for_order``, an order «На кассе»): the goods are in the buyer's
+  hands, the count is what is wrong;
 - a refund puts goods back only when the staff tick it
   (``return_for_refund``).
 
@@ -270,23 +270,6 @@ def return_for_refund(bill_items, actor=None) -> None:
         if key in rows:
             _record(rows[key], key, amount, StockMovement.Reason.REFUND,
                     (ORDER_SOURCE, str(order_id)), actor)
-
-
-def take_for_walk_in_sale(sale, actor=None) -> None:
-    """The quick sale takes its goods; the stock may go below zero."""
-
-    from apps.menu.models import StockMovement
-
-    if not stock_on(sale.partner_id):
-        return
-    wanted, _names = _wanted(sale.items.select_related("menu_item", "variant"))
-    if not wanted:
-        return
-    rows = _lock(wanted)
-    for key in _sorted(wanted):
-        if key in rows:
-            _record(rows[key], key, -wanted[key], StockMovement.Reason.QUICK_SALE,
-                    ("walk_in_sale", str(sale.id)), actor)
 
 
 def count_stock(*, item, variant, quantity: int, actor=None) -> None:

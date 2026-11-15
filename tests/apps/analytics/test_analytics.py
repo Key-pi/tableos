@@ -14,16 +14,16 @@ from apps.analytics.services import (
     build_daily_table_detail,
     build_daily_tables_page,
     build_daily_tails_page,
-    build_daily_walk_in_sales_page,
     refresh_daily_partner_metrics,
     refresh_partner_daily_metric,
 )
+from apps.billing.counter_sales import sell_at_counter
 from apps.billing.models import Payment
 from apps.billing.services import create_bill_from_orders, record_payment
-from apps.bonuses.services import register_walk_in_sale
+from apps.employees.models import EmployeeProfile
 from apps.menu.models import MenuCategory, MenuItem
 from apps.orders.services import create_order, create_order_from_session
-from apps.partners.models import Partner
+from apps.partners.models import Partner, PartnerBotSettings
 from apps.tables.models import Table
 from apps.tables.services import activate_table_session
 from apps.users.models import TelegramAccount, User
@@ -85,7 +85,25 @@ class DailyOperationsReportTests(TestCase):
         )
         self.guest_account = TelegramAccount.objects.get(telegram_id=710001)
 
-    def test_daily_report_aggregates_bills_walk_in_and_methods(self):
+    def _counter_sale(self):
+        """A 150 UAH sale at the counter to the table's guest, by name (PQ-054)."""
+
+        PartnerBotSettings.objects.update_or_create(
+            partner=self.partner,
+            defaults={"module_quick_sale_enabled": True, "module_menu_enabled": True},
+        )
+        hookah = MenuItem.objects.create(
+            partner=self.partner, category=self.menu_item.category, public_id="REP002",
+            name="Tobacco", price="150.00",
+        )
+        seller = EmployeeProfile.objects.get_or_create(partner=self.partner, user=self.cashier)[0]
+        return sell_at_counter(
+            partner_id=self.partner.id, seller=seller,
+            customer_code=self.session.guest.customer_code, comment="Bar", payment="cash",
+            items=[{"menu_item_id": hookah.id, "quantity": 1}],
+        )
+
+    def test_daily_report_aggregates_bills_counter_sales_and_methods(self):
         bill = create_bill_from_orders(
             partner_id=self.partner.id,
             order_ids=[str(self.order.id)],
@@ -96,23 +114,17 @@ class DailyOperationsReportTests(TestCase):
             method=Payment.Method.CASH,
             created_by=self.cashier,
         )
-        register_walk_in_sale(
-            partner_id=self.partner.id,
-            guest=self.session.guest,
-            customer_code_snapshot=self.session.guest.customer_code,
-            amount="150.00",
-            comment="Bar",
-            created_by=self.cashier,
-        )
+        self._counter_sale()
 
         report = build_daily_operations_report(partner_id=self.partner.id)
 
-        self.assertEqual(report.bill_revenue, Decimal("200.00"))
-        self.assertEqual(report.walk_in_revenue, Decimal("150.00"))
+        # The sale at the counter is a bill too (PQ-054).
+        self.assertEqual(report.bill_revenue, Decimal("350.00"))
         self.assertEqual(report.total_revenue, Decimal("350.00"))
-        self.assertEqual(report.paid_bills_count, 1)
-        self.assertEqual(report.walk_in_sales_count, 1)
-        self.assertEqual(report.payment_method_totals[Payment.Method.CASH], Decimal("200.00"))
+        self.assertEqual(report.paid_bills_count, 2)
+        self.assertEqual(report.payment_method_totals[Payment.Method.CASH], Decimal("350.00"))
+        counter = next(row for row in report.channel_breakdown if row["channel"] == "counter")
+        self.assertEqual((counter["orders_count"], counter["revenue"]), (1, Decimal("150.00")))
         self.assertTrue(any(item["label"] == "Cash ier" for item in report.staff_breakdown))
 
     def test_daily_report_pages_return_operational_journal_entries(self):
@@ -126,27 +138,15 @@ class DailyOperationsReportTests(TestCase):
             method=Payment.Method.CASH,
             created_by=self.cashier,
         )
-        register_walk_in_sale(
-            partner_id=self.partner.id,
-            guest=self.session.guest,
-            customer_code_snapshot=self.session.guest.customer_code,
-            amount="150.00",
-            comment="Bar",
-            created_by=self.cashier,
-        )
+        self._counter_sale()
 
         bills_page = build_daily_paid_bills_page(partner_id=self.partner.id, page=1)
-        walkins_page = build_daily_walk_in_sales_page(partner_id=self.partner.id, page=1)
         tables_page = build_daily_tables_page(partner_id=self.partner.id, page=1)
         tails_page = build_daily_tails_page(partner_id=self.partner.id, page=1)
 
         self.assertEqual(bills_page.section, "bills")
-        self.assertEqual(bills_page.total_count, 1)
+        self.assertEqual(bills_page.total_count, 2)  # the table's and the counter's
         self.assertEqual(bills_page.items[0]["kind"], "bill")
-
-        self.assertEqual(walkins_page.section, "walkins")
-        self.assertEqual(walkins_page.total_count, 1)
-        self.assertEqual(walkins_page.items[0]["kind"], "walkin")
 
         self.assertEqual(tables_page.section, "tables")
         self.assertGreaterEqual(tables_page.total_count, 1)
@@ -216,19 +216,12 @@ class DailyOperationsReportTests(TestCase):
             method=Payment.Method.CASH,
             created_by=self.cashier,
         )
-        register_walk_in_sale(
-            partner_id=self.partner.id,
-            guest=self.session.guest,
-            customer_code_snapshot=self.session.guest.customer_code,
-            amount="150.00",
-            comment="Bar",
-            created_by=self.cashier,
-        )
+        self._counter_sale()
 
         metric = refresh_partner_daily_metric(partner_id=self.partner.id)
 
         self.assertEqual(metric.revenue, Decimal("350.00"))
-        self.assertEqual(metric.orders_count, 1)
+        self.assertEqual(metric.orders_count, 2)
         self.assertEqual(metric.average_check, Decimal("175.00"))
         self.assertGreaterEqual(metric.active_guests, 1)
 

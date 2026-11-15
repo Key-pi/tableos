@@ -1,4 +1,5 @@
 import re
+import uuid
 from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -26,8 +27,8 @@ from apps.analytics.services import (
     build_daily_table_detail,
     build_daily_tables_page,
     build_daily_tails_page,
-    build_daily_walk_in_sales_page,
 )
+from apps.billing.counter_sales import preview_counter_sale, sell_at_counter
 from apps.billing.models import Bill, BillAdjustment, BillingRequest, BillItem, Payment
 from apps.billing.remote_orders import (
     RemoteOrderError,
@@ -68,13 +69,10 @@ from apps.billing.table_bills import (
     create_shared_bill_for_table,
     mark_billing_request_processed,
 )
-from apps.bonuses.models import WalkInSale
 from apps.bonuses.services import (
     BonusServiceError,
     bonus_balance,
     get_redeemable_bonus_amount,
-    preview_walk_in_sale_by_customer_code,
-    register_walk_in_sale_from_menu_items_by_customer_code,
 )
 from apps.employees.models import EmployeeProfile
 from apps.employees.selectors import get_staff_employee_by_telegram
@@ -145,7 +143,6 @@ from bot.keyboards.staff import (
     build_staff_report_section_keyboard,
     build_staff_report_summary_keyboard,
     build_staff_report_table_detail_keyboard,
-    build_staff_report_walkin_detail_keyboard,
     build_staff_sale_code_prompt_keyboard,
     build_staff_sale_keyboard,
     build_staff_table_actions_keyboard,
@@ -559,7 +556,6 @@ def _render_day_report(report) -> str:
         _("<b>Деньги</b>"),
         _("Всего выручка: {total_revenue} грн", total_revenue=report.total_revenue),
         _("По счетам: {bill_revenue} грн", bill_revenue=report.bill_revenue),
-        _("Быстрые продажи: {walk_in_revenue} грн", walk_in_revenue=report.walk_in_revenue),
         *([_(
             "Возвраты: −{refunds_total} грн",
             refunds_total=report.refunds_total,
@@ -567,7 +563,6 @@ def _render_day_report(report) -> str:
         "",
         _("<b>Операции</b>"),
         _("Оплаченных счетов: {paid_bills_count}", paid_bills_count=report.paid_bills_count),
-        _("Быстрых продаж: {walk_in_sales_count}", walk_in_sales_count=report.walk_in_sales_count),
         _(
             "Создано заказов: {created_orders_count}",
             created_orders_count=report.created_orders_count,
@@ -605,12 +600,10 @@ def _render_day_report(report) -> str:
         for item in report.staff_breakdown[:8]:
             lines.append(
                 _(
-                    "• {label}: {total_amount} грн (платежей {payments_count}, быстрых продаж "
-                    "{walk_in_sales_count})",
+                    "• {label}: {total_amount} грн (платежей {payments_count})",
                     label=escape_html(item['label']),
                     total_amount=item['total_amount'],
                     payments_count=item['payments_count'],
-                    walk_in_sales_count=item['walk_in_sales_count'],
                 )
             )
     return "\n".join(lines)
@@ -619,7 +612,6 @@ def _render_day_report(report) -> str:
 def _render_report_section(page_result) -> str:
     titles = {
         "bills": _("Счета дня"),
-        "walkins": _("Быстрые продажи"),
         "tables": _("Столы за день"),
         "tails": _("Не закрыто"),
     }
@@ -680,49 +672,7 @@ def _build_report_section_shortcuts(page_result) -> list[tuple[str, str]]:
                     "Открыть {label}",
                     label=item['label'],
                 ), f"staffbillreqrefresh:{target}"))
-        elif item["kind"] == "walkin":
-            target = item.get("id")
-            if target:
-                shortcuts.append(
-                    (
-                        _("Открыть {label}", label=item['label']),
-                        f"staffreportsaleopen:{target}:{page_result.page}",
-                    )
-                )
     return shortcuts
-
-
-def _render_walk_in_sale_card(sale: WalkInSale) -> str:
-    sale_items = list(sale.items.all())
-    staff_label = (
-        sale.created_by.get_full_name().strip() or sale.created_by.username
-        if sale.created_by
-        else "—"
-    )
-    lines = [
-        _("<b>Быстрая продажа</b>"),
-        _("Время: {created_at}", created_at=timezone.localtime(sale.created_at).strftime('%H:%M')),
-        _("Код клиента: {loyalty}", loyalty=sale.loyalty_label),
-        _("Сумма: {amount} грн", amount=sale.amount),
-        _(
-            "Бонусов начислено: {bonus_awarded_amount}",
-            bonus_awarded_amount=sale.bonus_awarded_amount,
-        ),
-        _("Сотрудник: {staff}", staff=escape_html(staff_label)),
-        _("Комментарий: {comment}", comment=escape_html(sale.comment) or '—'),
-    ]
-    if sale_items:
-        lines.extend(["", _("Позиции:")])
-        for item in sale_items:
-            lines.append(
-                _(
-                    "• {item_name} x{quantity} • {unit_price} грн",
-                    item_name=escape_html(item.item_name),
-                    quantity=item.quantity,
-                    unit_price=item.unit_price,
-                )
-            )
-    return "\n".join(lines)
 
 
 def _render_report_table_detail(detail) -> str:
@@ -1253,21 +1203,13 @@ def _compose_staff_sale_view(
     if selected_category_id not in category_ids:
         selected_category_id = str(categories[0].id)
 
-    guest_preview = None
-    draft_payload = _build_quick_sale_items_payload(items_map)
-    if draft_payload:
-        guest_preview = preview_walk_in_sale_by_customer_code(
-            partner_id=partner_id,
-            customer_code=customer_code,
-            redeem_bonus=redeem_bonus,
-            items=draft_payload,
-        )
-    else:
-        guest_preview = preview_walk_in_sale_by_customer_code(
-            partner_id=partner_id,
-            customer_code=customer_code,
-            items=[],
-        )
+    # A sale at the counter (PQ-054): an order «На кассе», paid at once.
+    guest_preview = preview_counter_sale(
+        partner_id=partner_id,
+        customer_code=customer_code,
+        items=_build_quick_sale_items_payload(items_map),
+        use_bonuses=redeem_bonus,
+    )
 
     category_items = list(
         MenuItemRepository.active_for_partner(partner_id)
@@ -1297,24 +1239,25 @@ def _compose_staff_sale_view(
             str(item["menu_item_id"]), item["item_name"], item["quantity"],
             f"staffsale:ladd:{index}", f"staffsale:lsub:{index}",
         )
-    can_redeem = guest_preview.guest is not None and guest_preview.redeemable_bonus_amount > 0
+    can_redeem = guest_preview.guest is not None and guest_preview.redeemable > 0
     redeem_active = redeem_bonus and can_redeem
     keyboard = build_staff_sale_keyboard(
         categories=[(str(category.id), category.full_name) for category in categories],
         selected_category_id=selected_category_id,
         category_items=[item_button(item) for item in category_items],
         draft_items=[
-            draft_button(index, item) for index, item in enumerate(guest_preview.items)
+            draft_button(index, item) for index, item in enumerate(guest_preview.lines)
         ],
-        can_confirm=bool(guest_preview.items),
+        can_confirm=bool(guest_preview.lines),
         has_comment=bool(comment),
         can_redeem=can_redeem,
         redeem_active=redeem_active,
+        to_pay=guest_preview.to_pay,
     )
 
     if guest_preview.guest is None:
         lines = [
-            _("<b>Быстрая продажа</b>"),
+            _("<b>Продажа на кассе</b>"),
             _("Покупатель: Аноним (без кода клиента)"),
             _("Бонусы за эту продажу не начисляются."),
             "",
@@ -1332,7 +1275,7 @@ def _compose_staff_sale_view(
         )
 
         lines = [
-            _("<b>Быстрая продажа</b>"),
+            _("<b>Продажа на кассе</b>"),
             _("Гость: {guest}", guest=escape_html(guest_preview.guest.staff_label())),
             _(
                 "Текущий баланс: {loyalty_balance} бонусов",
@@ -1349,9 +1292,9 @@ def _compose_staff_sale_view(
                 "",
             ]
         )
-    if guest_preview.items:
+    if guest_preview.lines:
         lines.append(_("Позиции:"))
-        for item in guest_preview.items:
+        for item in guest_preview.lines:
             line_total = item["unit_price"] * item["quantity"]
             lines.append(
                 _(
@@ -1364,27 +1307,25 @@ def _compose_staff_sale_view(
         lines.extend(
             [
                 "",
-                _("Итого: {total_amount} грн", total_amount=guest_preview.total_amount),
+                _("Итого: {total_amount} грн", total_amount=guest_preview.total),
                 _(
                     "Ожидаемое начисление: +{projected_bonus_amount} бонусов",
-                    projected_bonus_amount=guest_preview.projected_bonus_amount,
+                    projected_bonus_amount=guest_preview.bonus_awarded,
                 ),
             ]
         )
         if can_redeem:
             lines.append(_(
                 "Доступно списать: {redeemable_bonus_amount} бонусов",
-                redeemable_bonus_amount=guest_preview.redeemable_bonus_amount,
+                redeemable_bonus_amount=guest_preview.redeemable,
             ))
             if redeem_active:
-                net_amount = (
-                    guest_preview.total_amount - guest_preview.redeemable_bonus_amount
-                )
+                net_amount = guest_preview.to_pay
                 lines.append(
                     _(
                         "Списываем бонусами: {redeemable_bonus_amount} • к оплате: {net_amount} "
                         "грн",
-                        redeemable_bonus_amount=guest_preview.redeemable_bonus_amount,
+                        redeemable_bonus_amount=guest_preview.redeemable,
                         net_amount=net_amount,
                     )
                 )
@@ -2092,7 +2033,6 @@ async def staff_report_section_callback_handler(callback: CallbackQuery, bot: Bo
         page = int(raw_page)
         builder_map = {
             "bills": build_daily_paid_bills_page,
-            "walkins": build_daily_walk_in_sales_page,
             "tables": build_daily_tables_page,
             "tails": build_daily_tails_page,
         }
@@ -2118,45 +2058,6 @@ async def staff_report_section_callback_handler(callback: CallbackQuery, bot: Bo
         ),
     )
     await callback.answer(_("Раздел журнала открыт") if updated else _("Без изменений"))
-
-
-@router.callback_query(lambda c: c.data and c.data.startswith("staffreportsaleopen:"))
-async def staff_report_walk_in_sale_open_callback_handler(
-    callback: CallbackQuery,
-    bot: Bot,
-) -> None:
-    try:
-        partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
-        if not _can_view_day_report(employee):
-            raise OrderFlowError(
-                _("Отчёт дня сейчас доступен только владельцу, менеджеру или кассиру.")
-            )
-        _prefix, sale_id, raw_page = (callback.data or "").split(":", 2)
-        sale = await sync_to_async(
-            lambda: WalkInSale.objects.select_related("created_by").prefetch_related("items").get(
-                partner_id=partner.id,
-                id=sale_id,
-            )
-        )()
-        page = int(raw_page)
-    except WalkInSale.DoesNotExist:
-        await callback.answer(_("Продажа не найдена."), show_alert=True)
-        return
-    except ValueError:
-        await callback.answer(_("Некорректная ссылка на продажу."), show_alert=True)
-        return
-    except OrderFlowError as exc:
-        await callback.answer(str(exc), show_alert=True)
-        return
-
-    await callback.message.answer(
-        _render_walk_in_sale_card(sale),
-        reply_markup=build_staff_report_walkin_detail_keyboard(
-            section="walkins",
-            page=page,
-        ),
-    )
-    await callback.answer(_("Карточка продажи открыта"))
 
 
 @router.callback_query(lambda c: c.data and c.data.startswith("staffreporttableopen:"))
@@ -2983,7 +2884,7 @@ async def staff_sale_customer_code_handler(
             items_map={},
             selected_category_id=None,
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await message.answer(
             str(exc),
             reply_markup=_build_staff_home_markup(employee),
@@ -2997,6 +2898,7 @@ async def staff_sale_customer_code_handler(
         selected_category_id=selected_category_id,
         comment="",
         redeem_bonus=False,
+        sale_key=uuid.uuid4().hex,
     )
     sent_message = await message.answer(text, reply_markup=keyboard)
     await state.update_data(
@@ -3033,7 +2935,7 @@ async def staff_sale_redeem_toggle_handler(
             comment=preview_data["comment"],
             redeem_bonus=new_redeem,
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
@@ -3064,7 +2966,7 @@ async def staff_sale_anonymous_handler(
             items_map={},
             selected_category_id=None,
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
@@ -3075,6 +2977,7 @@ async def staff_sale_anonymous_handler(
         selected_category_id=selected_category_id,
         comment="",
         redeem_bonus=False,
+        sale_key=uuid.uuid4().hex,
     )
     sent_message = await callback.message.answer(text, reply_markup=keyboard)
     await state.update_data(
@@ -3146,7 +3049,7 @@ async def staff_sale_comment_clear_handler(
             comment="",
             redeem_bonus=preview_data["redeem_bonus"],
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
@@ -3188,7 +3091,7 @@ async def staff_sale_clear_handler(
             comment=preview_data["comment"],
             redeem_bonus=preview_data["redeem_bonus"],
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
@@ -3227,7 +3130,7 @@ async def staff_sale_category_handler(
             comment=preview_data["comment"],
             redeem_bonus=preview_data["redeem_bonus"],
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
@@ -3284,7 +3187,7 @@ async def staff_sale_item_quantity_handler(
             comment=preview_data["comment"],
             redeem_bonus=preview_data["redeem_bonus"],
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
@@ -3314,7 +3217,7 @@ async def _rerender_staff_sale(
             comment=preview_data["comment"],
             redeem_bonus=preview_data["redeem_bonus"],
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return False
     await state.update_data(
@@ -3351,7 +3254,7 @@ async def _staff_sale_choice_context(callback: CallbackQuery, bot: Bot, state: F
     except ValueError:
         await callback.answer()
         return None
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return None
     item, choices = await sync_to_async(_sale_choice_item)(partner.id, public_id)
@@ -3507,7 +3410,7 @@ async def staff_sale_comment_message_handler(
             comment=comment,
             redeem_bonus=preview_data["redeem_bonus"],
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await message.answer(
             str(exc),
             reply_markup=_build_staff_home_markup(employee),
@@ -3530,6 +3433,37 @@ async def staff_sale_confirm_handler(
     bot: Bot,
     state: FSMContext,
 ) -> None:
+    """A button from before PQ-054: without a method the service asks how
+    the guest pays (unless bonuses pay it all)."""
+
+    await _sell_at_counter(callback, bot, state, payment="", expected_to_pay=None)
+
+
+@router.callback_query(
+    StaffQuickSaleStates.browsing_menu,
+    lambda c: c.data and c.data.startswith("staffsale:pay:"),
+)
+async def staff_sale_pay_handler(
+    callback: CallbackQuery,
+    bot: Bot,
+    state: FSMContext,
+) -> None:
+    """«💵 Наличные» / «💳 Карта» (PQ-054): ``staffsale:pay:<method|->:<amount
+    shown>``; a changed amount is not charged."""
+
+    try:
+        _prefix, _pay, method, amount = (callback.data or "").split(":", 3)
+        expected = Decimal(amount)
+    except (ValueError, ArithmeticError):
+        await callback.answer(_("Это действие устарело. Откройте продажу ещё раз."),
+                              show_alert=True)
+        return
+    await _sell_at_counter(
+        callback, bot, state, payment="" if method == "-" else method, expected_to_pay=expected
+    )
+
+
+async def _sell_at_counter(callback, bot, state, *, payment: str, expected_to_pay) -> None:
     data = await state.get_data()
     try:
         preview_data = _require_staff_sale_preview_state(data)
@@ -3544,44 +3478,28 @@ async def staff_sale_confirm_handler(
     try:
         partner, employee = await _resolve_staff_employee_from_callback(callback, bot)
         _ensure_quick_sale_allowed(employee)
-        items_count = len(items_payload)
-        sale = await sync_to_async(register_walk_in_sale_from_menu_items_by_customer_code)(
+        # One key per draft: a second tap on the same draft returns the sale
+        # already made, with no second payment or bonuses.
+        sale = await sync_to_async(sell_at_counter)(
             partner_id=partner.id,
+            seller=employee,
             customer_code=preview_data["customer_code"],
             items=items_payload,
+            payment=payment,
+            use_bonuses=preview_data["redeem_bonus"],
+            expected_to_pay=expected_to_pay,
             comment=preview_data["comment"],
-            created_by=employee.user,
-            redeem_bonus=preview_data["redeem_bonus"],
+            request_key=f"bot-{data['sale_key']}" if data.get("sale_key") else "",
         )
-    except (OrderFlowError, BonusServiceError) as exc:
+        text = await sync_to_async(_render_counter_sale_done)(sale)
+    except (OrderFlowError, BonusServiceError, BillingServiceError) as exc:
         await callback.answer(str(exc), show_alert=True)
         return
 
     await state.clear()
-    result_lines = [
-        _("<b>Быстрая продажа оформлена</b>"),
-        _("Клиент: {loyalty}", loyalty=sale.loyalty_label),
-        _("Сумма: {amount} грн", amount=sale.amount),
-    ]
-    if sale.bonus_spent_amount > 0:
-        result_lines.append(_(
-            "Списано бонусами: {bonus_spent_amount}",
-            bonus_spent_amount=sale.bonus_spent_amount,
-        ))
-        result_lines.append(_("К оплате: {net_amount} грн", net_amount=sale.net_amount))
-    if sale.bonus_awarded_amount:
-        result_lines.append(
-            _(
-                "Начислено бонусов: +{bonus_awarded_amount}",
-                bonus_awarded_amount=sale.bonus_awarded_amount,
-            )
-        )
-    result_lines.append(_("Позиций: {items_count}", items_count=items_count))
-    if sale.comment:
-        result_lines.append(_("Комментарий: {comment}", comment=escape_html(sale.comment)))
     await _safe_edit_message_text(
         callback.message,
-        "\n".join(result_lines),
+        text,
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -3593,7 +3511,39 @@ async def staff_sale_confirm_handler(
             ]
         ),
     )
-    await callback.answer(_("Продажа сохранена"))
+    await callback.answer(_("Продажа уже проведена") if sale.repeated else _("Продажа проведена"))
+
+
+def _render_counter_sale_done(sale) -> str:
+    order, bill = sale.order, sale.bill
+    guest = order.guest
+    methods = ", ".join(
+        str(Payment.Method(method).label)
+        for method in bill.payments.filter(status=Payment.Status.PAID)
+        .values_list("method", flat=True)
+    )
+    lines = [
+        _("<b>Продажа на кассе проведена</b>") if not sale.repeated
+        else _("<b>Эта продажа уже проведена</b>"),
+        _("Клиент: {loyalty}", loyalty=escape_html(guest.staff_label())
+          if guest.telegram_account_id else _("Аноним")),
+        _("Сумма: {amount} грн", amount=order.total_amount),
+    ]
+    if bill.bonus_spent_amount > 0:
+        lines.append(_(
+            "Списано бонусами: {bonus_spent_amount}",
+            bonus_spent_amount=bill.bonus_spent_amount,
+        ))
+    lines.append(_("Оплата: {methods}", methods=methods))
+    if sale.bonus_awarded:
+        lines.append(_(
+            "Начислено бонусов: +{bonus_awarded_amount}",
+            bonus_awarded_amount=sale.bonus_awarded,
+        ))
+    lines.append(_("Позиций: {items_count}", items_count=order.items.count()))
+    if order.comment:
+        lines.append(_("Комментарий: {comment}", comment=escape_html(order.comment)))
+    return "\n".join(lines)
 
 
 # --- Bill changes (B3.2 part A, PQ-028) -------------------------------------------

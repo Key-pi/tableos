@@ -128,7 +128,7 @@ class OwnerMenuTests(NavigationFixture):
         _response, navigation = self.sidebar()
         links = self.links(navigation)
         for name in ("menu_modifiergroup", "menu_menubadge", "menu_stockmovement",
-                     "bonuses_walkinsale", "orders_kitchenscreen", "tables_table"):
+                     "orders_kitchenscreen", "tables_table"):
             with self.subTest(name, on=False):
                 self.assertNotIn(url(f"{name}_changelist"), links)
 
@@ -138,7 +138,7 @@ class OwnerMenuTests(NavigationFixture):
         _response, navigation = self.sidebar()
         links = self.links(navigation)
         for name in ("menu_modifiergroup", "menu_menubadge", "menu_stockmovement",
-                     "bonuses_walkinsale", "orders_kitchenscreen", "tables_table"):
+                     "orders_kitchenscreen", "tables_table"):
             with self.subTest(name, on=True):
                 self.assertIn(url(f"{name}_changelist"), links)
 
@@ -205,10 +205,8 @@ class CashierMenuTests(NavigationFixture):
         _response, navigation = self.sidebar()
         self.assertEqual(list(self.groups(navigation)), ["", "Заказы и счета", "Гости и бонусы"])
         items = {item["link"]: item for group in navigation for item in group["items"]}
-        self.assertEqual(
-            items[url("bonuses_walkinsale_changelist")].get("add_link"),
-            url("bonuses_walkinsale_add"),
-        )
+        # The quick sale is a sale at the counter now (PQ-054): no page of its own.
+        self.assertFalse([link for link in items if "walkinsale" in link])
         # «+» follows the right to add: orders are only changed.
         self.assertNotIn("add_link", items[url("orders_order_changelist")])
         self.assertNotIn(url("menu_menuitem_changelist"), items)
@@ -217,7 +215,7 @@ class CashierMenuTests(NavigationFixture):
     def test_tabs_show_only_pages_they_may_open(self):
         response = self.client.get(url("users_guestprofile_changelist"))
         html = response.content.decode()
-        self.assertIn(f'href="{url("bonuses_walkinsale_changelist")}"', html)
+        self.assertIn(f'href="{url("users_guestprofile_changelist")}"', html)
         self.assertNotIn(f'href="{url("notifications_notificationpreference_changelist")}"', html)
 
 

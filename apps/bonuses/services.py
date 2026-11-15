@@ -1,37 +1,24 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from apps.bonuses.models import BonusProgram, BonusTransaction, WalkInSale, WalkInSaleItem
+from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.bonuses.repositories import BonusProgramRepository
 from apps.bonuses.strategies import (
     BonusContext,
     BonusServiceError,
     resolve_bonus_strategy,
 )
-from apps.menu.models import MenuItem
-from apps.menu.options import ChoiceError, catalog_choices, resolve_choice
-from apps.menu.stock import take_for_walk_in_sale
 from apps.orders.models import Order
 from apps.partners.models import NetworkWallet
 from apps.partners.networks import shared_bonus_scope
 from apps.users.models import GuestProfile
 from apps.users.services import find_guest_by_customer_code
 from core.i18n import _
-
-
-@dataclass(slots=True)
-class WalkInSalePreview:
-    guest: GuestProfile | None
-    items: list[dict]
-    total_amount: Decimal
-    projected_bonus_amount: Decimal
-    redeemable_bonus_amount: Decimal = Decimal("0.00")
 
 
 def get_bonus_ledger_balance(*, partner_id, guest_id) -> Decimal:
@@ -173,7 +160,6 @@ def apply_bonus_programs(
     guest: GuestProfile,
     order: Order | None = None,
     bill=None,
-    walk_in_sale: WalkInSale | None = None,
     purchase_total: Decimal | None = None,
     bonus_paid_amount: Decimal | str = Decimal("0.00"),
     source_type: str = "",
@@ -202,8 +188,6 @@ def apply_bonus_programs(
         )
     if bill is not None and bill.partner_id != partner_id:
         raise BonusServiceError(_("Счёт не из этого заведения."))
-    if walk_in_sale is not None and walk_in_sale.partner_id != partner_id:
-        raise BonusServiceError("Walk-in sale does not belong to the selected venue.")
 
     transactions: list[BonusTransaction] = []
     context = BonusContext(
@@ -242,7 +226,6 @@ def apply_bonus_programs(
             program=program,
             order=order,
             bill=bill,
-            walk_in_sale=walk_in_sale,
             transaction_type=BonusTransaction.TransactionType.ACCRUAL,
             amount=amount,
             expires_at=expires_at,
@@ -275,260 +258,6 @@ def apply_manual_purchase_bonus(
         guest=guest,
         purchase_total=total,
         comment=comment or f"Manual purchase bonus for customer code {guest.customer_code}.",
-    )
-
-
-@transaction.atomic
-def register_walk_in_sale(
-    *,
-    partner_id,
-    guest: GuestProfile | None = None,
-    customer_code_snapshot: str = "",
-    amount: Decimal | str,
-    comment: str = "",
-    created_by=None,
-    redeem_bonus: bool = False,
-    request_key: str = "",
-) -> WalkInSale:
-    total = _parse_positive_money(amount, label=_("Сумма быстрой продажи"))
-    if guest is not None and guest.partner_id != partner_id:
-        raise BonusServiceError(_("Гость не из этого заведения."))
-    if guest is not None:
-        guest = GuestProfile.objects.select_for_update().get(
-            id=guest.id,
-            partner_id=partner_id,
-        )
-        assert_bonus_balance_reconciled(guest)
-    sale = WalkInSale.objects.create(
-        partner_id=partner_id,
-        guest=guest,
-        customer_code_snapshot=customer_code_snapshot or (guest.customer_code if guest else ""),
-        amount=total,
-        comment=comment,
-        created_by=created_by,
-        request_key=request_key,
-    )
-
-    # Redemption uses the balance the guest walked in with (before this sale's
-    # accrual) and is capped by program max_redeem_share and the sale total.
-    bonus_spent = Decimal("0.00")
-    if guest is not None and redeem_bonus:
-        bonus_spent = get_redeemable_bonus_amount(
-            partner_id=partner_id,
-            guest=guest,
-            purchase_total=total,
-        )
-        if bonus_spent > 0:
-            BonusTransaction.objects.create(
-                partner_id=partner_id,
-                guest=guest,
-                program=None,
-                order=None,
-                walk_in_sale=sale,
-                transaction_type=BonusTransaction.TransactionType.REDEMPTION,
-                amount=bonus_spent,
-                source_type="walk_in_sale",
-                source_id=str(sale.id),
-                idempotency_key=f"walk_in_sale:{sale.id}:redemption",
-                comment=(
-                    comment
-                    or f"Walk-in sale redemption for customer code {guest.customer_code}."
-                ),
-            )
-            sync_bonus_balance_from_ledger(guest)
-
-    transactions = []
-    if guest is not None:
-        transactions = apply_bonus_programs(
-            partner_id=partner_id,
-            event=BonusProgram.TriggerEvent.MANUAL_PURCHASE,
-            guest=guest,
-            walk_in_sale=sale,
-            purchase_total=total,
-            bonus_paid_amount=bonus_spent,
-            source_type="walk_in_sale",
-            source_id=str(sale.id),
-            comment=comment or f"Walk-in sale bonus for customer code {guest.customer_code}.",
-        )
-    sale.bonus_awarded_amount = sum(
-        (transaction.amount for transaction in transactions),
-        Decimal("0.00"),
-    )
-    sale.bonus_spent_amount = bonus_spent
-    sale.save(update_fields=["bonus_awarded_amount", "bonus_spent_amount", "updated_at"])
-    return sale
-
-
-def register_walk_in_sale_by_customer_code(
-    *,
-    partner_id,
-    customer_code: str = "",
-    amount: Decimal | str,
-    comment: str = "",
-    created_by=None,
-) -> WalkInSale:
-    # Empty code means an anonymous walk-in sale: the venue still tracks the sale
-    # in the day report, but no guest is attached and no loyalty bonus is awarded.
-    normalized_customer_code = customer_code.strip().upper()
-    guest = None
-    if normalized_customer_code:
-        try:
-            guest = find_guest_by_customer_code(partner_id, normalized_customer_code)
-        except GuestProfile.DoesNotExist as exc:
-            raise BonusServiceError(_("Гость с таким кодом в этом заведении не найден.")) from exc
-    return register_walk_in_sale(
-        partner_id=partner_id,
-        guest=guest,
-        customer_code_snapshot=normalized_customer_code,
-        amount=amount,
-        comment=comment,
-        created_by=created_by,
-    )
-
-
-def preview_walk_in_sale_by_customer_code(
-    *,
-    partner_id,
-    customer_code: str,
-    items: list[dict],
-    redeem_bonus: bool = False,
-) -> WalkInSalePreview:
-    # Empty code is allowed: this is an anonymous walk-in sale with no loyalty guest.
-    normalized_customer_code = customer_code.strip().upper()
-    guest = None
-    if normalized_customer_code:
-        try:
-            guest = find_guest_by_customer_code(partner_id, normalized_customer_code)
-        except GuestProfile.DoesNotExist as exc:
-            raise BonusServiceError(_("Гость с таким кодом в этом заведении не найден.")) from exc
-    normalized_items: list[dict] = []
-    total_amount = Decimal("0.00")
-    projected_bonus_amount = Decimal("0.00")
-    if items:
-        normalized_items = _normalize_walk_in_sale_items(
-            partner_id=partner_id,
-            items=items,
-        )
-        total_amount = sum(
-            (item["unit_price"] * item["quantity"] for item in normalized_items),
-            Decimal("0.00"),
-        )
-    redeemable_bonus_amount = Decimal("0.00")
-    if guest is not None and total_amount > 0:
-        redeemable_bonus_amount = get_redeemable_bonus_amount(
-            partner_id=partner_id,
-            guest=guest,
-            purchase_total=total_amount,
-        )
-        projected_bonus_amount = _preview_bonus_amount(
-            partner_id=partner_id,
-            guest=guest,
-            purchase_total=total_amount,
-            bonus_paid_amount=redeemable_bonus_amount if redeem_bonus else Decimal("0.00"),
-        )
-    return WalkInSalePreview(
-        guest=guest,
-        items=normalized_items,
-        total_amount=total_amount,
-        projected_bonus_amount=projected_bonus_amount,
-        redeemable_bonus_amount=redeemable_bonus_amount,
-    )
-
-
-def walk_in_sale_by_request_key(partner_id, request_key: str) -> WalkInSale | None:
-    if not request_key:
-        return None
-    return WalkInSale.objects.filter(partner_id=partner_id, request_key=request_key).first()
-
-
-def register_walk_in_sale_from_menu_items_by_customer_code(
-    *,
-    partner_id,
-    customer_code: str,
-    items: list[dict],
-    comment: str = "",
-    created_by=None,
-    redeem_bonus: bool = False,
-    request_key: str = "",
-) -> WalkInSale:
-    """A sale from menu items. With ``request_key`` it is saved once: a
-    repeated request returns the sale already saved, with no second accrual
-    or spend. Two copies at the same moment: the second waits on the unique
-    key, its work is rolled back and it gets the first sale."""
-
-    saved = walk_in_sale_by_request_key(partner_id, request_key)
-    if saved is not None:
-        return saved
-    try:
-        with transaction.atomic():
-            return _register_walk_in_sale_from_menu_items(
-                partner_id=partner_id, customer_code=customer_code, items=items,
-                comment=comment, created_by=created_by, redeem_bonus=redeem_bonus,
-                request_key=request_key,
-            )
-    except IntegrityError:
-        saved = walk_in_sale_by_request_key(partner_id, request_key)
-        if saved is None:
-            raise
-        return saved
-
-
-def _register_walk_in_sale_from_menu_items(
-    *,
-    partner_id,
-    customer_code: str,
-    items: list[dict],
-    comment: str,
-    created_by,
-    redeem_bonus: bool,
-    request_key: str,
-) -> WalkInSale:
-    preview = preview_walk_in_sale_by_customer_code(
-        partner_id=partner_id,
-        customer_code=customer_code,
-        items=items,
-        redeem_bonus=redeem_bonus,
-    )
-    sale = register_walk_in_sale(
-        partner_id=partner_id,
-        guest=preview.guest,
-        customer_code_snapshot=preview.guest.customer_code if preview.guest else "",
-        amount=preview.total_amount,
-        comment=comment,
-        created_by=created_by,
-        redeem_bonus=redeem_bonus,
-        request_key=request_key,
-    )
-    WalkInSaleItem.objects.bulk_create(
-        [
-            WalkInSaleItem(
-                partner_id=partner_id,
-                sale=sale,
-                menu_item_id=item["menu_item_id"],
-                item_name=item["item_name"],
-                unit_price=item["unit_price"],
-                quantity=item["quantity"],
-                variant_id=item.get("variant_id"),
-                modifiers=item.get("modifiers") or [],
-            )
-            for item in preview.items
-        ]
-    )
-    # Stock (catalog step 3): the till takes its goods, below zero if need be.
-    take_for_walk_in_sale(sale)
-    return sale
-
-
-def _preview_bonus_amount(
-    *,
-    partner_id,
-    guest: GuestProfile,
-    purchase_total: Decimal,
-    bonus_paid_amount: Decimal = Decimal("0.00"),
-) -> Decimal:
-    return preview_bonus_amount(
-        partner_id=partner_id, guest=guest, purchase_total=purchase_total,
-        bonus_paid_amount=bonus_paid_amount,
     )
 
 
@@ -585,50 +314,3 @@ def get_redeemable_bonus_amount(
         share_cap,
         total,
     ).quantize(Decimal("0.01"))
-
-
-def _normalize_walk_in_sale_items(*, partner_id, items: list[dict]) -> list[dict]:
-    if not items:
-        raise BonusServiceError(_("Добавьте хотя бы одну позицию в быструю продажу."))
-
-    menu_item_ids = [str(item["menu_item_id"]) for item in items]
-    menu_items = {
-        str(menu_item.id): menu_item
-        for menu_item in MenuItem.objects.filter(
-            partner_id=partner_id,
-            id__in=menu_item_ids,
-            is_available=True,
-        ).select_related("category")
-    }
-    normalized_items: list[dict] = []
-    missing_ids = [menu_item_id for menu_item_id in menu_item_ids if menu_item_id not in menu_items]
-    if missing_ids:
-        raise BonusServiceError(_("Часть позиций быстрой продажи недоступна в этом заведении."))
-
-    # The variant and add-ons as the guest would choose them (owner,
-    # 2026-11-07): the sale is at the price of the choice.
-    choices = catalog_choices(partner_id, menu_items.values())
-    for item in items:
-        menu_item = menu_items[str(item["menu_item_id"])]
-        quantity = int(item.get("quantity", 0))
-        if quantity <= 0:
-            raise BonusServiceError("Quick-sale item quantity must be greater than zero.")
-        try:
-            choice = resolve_choice(
-                menu_item, item.get("variant_id"), item.get("modifier_ids") or (),
-                choices=choices[menu_item.id],
-            )
-        except ChoiceError as exc:
-            raise BonusServiceError(str(exc)) from exc
-        normalized_items.append(
-            {
-                "menu_item_id": menu_item.id,
-                "item_name": choice.name,
-                "unit_price": choice.unit_price,
-                "quantity": quantity,
-                "variant_id": choice.variant_id,
-                "modifiers": choice.snapshot(),
-                "key": choice.key,
-            }
-        )
-    return normalized_items

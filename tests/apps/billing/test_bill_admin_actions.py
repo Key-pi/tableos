@@ -157,21 +157,6 @@ class MoneyRecordsAreNotDeletedTests(BillAdminFixture):
         })
         self.assertTrue(Bill.objects.filter(pk=bill.pk).exists())
 
-    def test_a_venue_cannot_delete_a_quick_sale(self):
-        from apps.bonuses.models import WalkInSale
-
-        sale = WalkInSale.objects.create(
-            partner=self.partner, amount=Decimal("120.00"), created_by=self.owner
-        )
-        response = self.client.post(
-            reverse("admin:bonuses_walkinsale_delete", args=[sale.pk]), {"post": "yes"}
-        )
-        self.assertEqual(response.status_code, 403)
-        self.client.post(reverse("admin:bonuses_walkinsale_changelist"), {
-            "action": "delete_selected", "_selected_action": str(sale.pk), "post": "yes",
-        })
-        self.assertTrue(WalkInSale.objects.filter(pk=sale.pk).exists())
-
     def test_the_platform_keeps_the_right(self):
         from django.contrib import admin
 
