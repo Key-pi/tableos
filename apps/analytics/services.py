@@ -243,11 +243,14 @@ def refresh_partner_daily_metric(*, partner_id, bucket_date=None) -> PartnerDail
     )
     report = build_daily_operations_report(partner_id=partner_id, bucket_date=bucket_date)
 
+    # People, not companies: the anonymous guest of a visit or a counter
+    # sale is not counted (PQ-055).
     session_guest_ids = set(
         TableSession.objects.filter(
             partner_id=partner_id,
             started_at__gte=day_start,
             started_at__lte=day_end,
+            guest__telegram_account__isnull=False,
         ).values_list("guest_id", flat=True)
     )
     order_guest_ids = set(
@@ -255,6 +258,7 @@ def refresh_partner_daily_metric(*, partner_id, bucket_date=None) -> PartnerDail
             partner_id=partner_id,
             created_at__gte=day_start,
             created_at__lte=day_end,
+            guest__telegram_account__isnull=False,
         ).values_list("guest_id", flat=True)
     )
     active_guest_ids = session_guest_ids | order_guest_ids
@@ -709,6 +713,9 @@ def _staff_user_label(user) -> str:
 def _guest_label(guest) -> str:
     if guest is None:
         return _("несколько гостей")
+    if guest.is_anonymous:
+        # The anonymous guest of a visit or a sale: never its code (PQ-055).
+        return guest.staff_label()
     telegram_account = getattr(guest, "telegram_account", None)
     if telegram_account and telegram_account.username:
         return f"@{telegram_account.username}"

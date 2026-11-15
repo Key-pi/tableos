@@ -5197,8 +5197,12 @@ msgid "Нет активных сессий."
 msgstr "No active sessions."
 
 #: apps/tables/admin.py
-msgid "Гость: {} • код {} • с {}"
-msgstr "Guest: {} • code {} • since {}"
+msgid "Гость: {guest} • с {started}"
+msgstr "Guest: {guest} • since {started}"
+
+#: apps/tables/admin.py
+msgid "Гость: {guest} • код {code} • с {started}"
+msgstr "Guest: {guest} • code {code} • since {started}"
 
 #: apps/tables/admin.py
 msgid "Заказы стола"

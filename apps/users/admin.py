@@ -319,6 +319,24 @@ class GuestProfileAdmin(ScopedAdminMixin):
         "updated_at",
     )
 
+    def get_queryset(self, request):
+        """The list has people only (PQ-055): the anonymous guest of a visit
+        or a counter sale is not a person. A link from an order still opens
+        its page."""
+
+        queryset = super().get_queryset(request)
+        match = getattr(request, "resolver_match", None)
+        if match is not None and match.url_name == "users_guestprofile_changelist":
+            queryset = queryset.filter(telegram_account__isnull=False)
+        return queryset
+
+    def get_fields(self, request, obj=None):
+        fields = list(super().get_fields(request, obj))
+        if obj is not None and obj.is_anonymous:
+            # Nobody can name it at the till: its code is never shown.
+            fields = [name for name in fields if name != "customer_code"]
+        return fields
+
 
 @admin.register(AdminAccessProfile)
 class AdminAccessProfileAdmin(ScopedAdminMixin):

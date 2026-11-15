@@ -164,14 +164,18 @@ class TableAdmin(ScopedAdminMixin):
             return _("Нет активных сессий.")
         return format_html_join(
             "<br>",
-            _("Гость: {} • код {} • с {}"),
+            "{}",
             (
+                # The anonymous guest of a visit has no code to show (PQ-055).
                 (
-                    session.guest.staff_label() if session.guest.is_anonymous
-                    else session.guest.telegram_account.username
-                    or session.guest.telegram_account.telegram_id,
-                    session.guest.customer_code,
-                    session.started_at.strftime("%d.%m %H:%M"),
+                    _("Гость: {guest} • с {started}", guest=session.guest.staff_label(),
+                      started=session.started_at.strftime("%d.%m %H:%M"))
+                    if session.guest.is_anonymous
+                    else _("Гость: {guest} • код {code} • с {started}",
+                           guest=session.guest.telegram_account.username
+                           or session.guest.telegram_account.telegram_id,
+                           code=session.guest.customer_code,
+                           started=session.started_at.strftime("%d.%m %H:%M")),
                 )
                 for session in sessions
             ),
