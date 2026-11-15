@@ -288,3 +288,4 @@ PQ-033) и отправка почтой ([SHIPPING.md](../architecture/SHIPPING
 | Бонусы не видны гостю без работающих программ (ветка `bonus-visibility`) | PQ-001 | AS_IS_ARCHITECTURE.md, MINI_APP.md |
 | У нового заведения все модули выключены (ветка `modules-off-by-default`) | PQ-053 | AS_IS_ARCHITECTURE.md |
 | Одна кнопка «Выставить счёт» для одного гостя (ветка `bill-buttons`) | PQ-057 | MINI_APP.md, FLOOR_PLAN.md |
+| Продажа на кассе — канал заказа, старая быстрая продажа удалена (ветка `counter-sale`) | PQ-054 | COUNTER_SALE.md, ADR-0009 |
