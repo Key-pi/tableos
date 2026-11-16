@@ -406,7 +406,11 @@ def record_payment(
     provider_code: str = "",
     external_payment_id: str = "",
     mark_bill_issued: bool = True,
+    split_part: int | None = None,
 ) -> Payment:
+    """``split_part`` — the equal part of a split bill this pays (PQ-009,
+    ``apps/billing/bill_split.py:pay_split_part`` checks it)."""
+
     if method not in Payment.Method.values:
         raise BillingServiceError(_("Неизвестный способ оплаты."))
     if method == Payment.Method.BONUSES:
@@ -448,6 +452,7 @@ def record_payment(
         comment=comment,
         paid_at=timezone.now(),
         created_by=created_by,
+        split_part=split_part,
     )
 
     bill = Bill.objects.prefetch_related("items", "payments").get(id=bill.id)

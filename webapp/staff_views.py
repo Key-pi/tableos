@@ -169,6 +169,12 @@ STAFF_TEXTS = {
     # A sale at the counter is paid at once (PQ-054): the cashier presses how.
     "sale_cash": N_("Наличные"),
     "sale_card": N_("Карта"),
+    # A bill paid in equal parts (PQ-009).
+    "split_equally": N_("➗ Поровну"),
+    "split_how": N_("На сколько частей делить счёт?"),
+    "split_title": N_("Поровну на {parts}"),
+    "split_part": N_("Часть {number}"),
+    "split_undo": N_("Не делить"),
     # Variants and add-ons in the sale (catalog step 2), as the guest's page.
     "price_from": N_("от {price}"),
     "left": N_("ост. {count}"),

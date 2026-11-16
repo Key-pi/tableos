@@ -117,6 +117,11 @@ class Bill(PartnerBoundModel):
     pos_tab_id = models.CharField(max_length=255, blank=True, verbose_name=_lazy(
         "Счёт в кассе (POS)",
     ))
+    # Paid in equal parts (PQ-009): N people pay one bill, each their part
+    # (``apps/billing/bill_split.py``); 0 — not split.
+    split_parts = models.PositiveSmallIntegerField(
+        default=0, editable=False, verbose_name=_lazy("Поровну на частей"),
+    )
     issued_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Выставлен"))
     closed_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Закрыт"))
 
@@ -383,11 +388,23 @@ class Payment(PartnerBoundModel):
         related_name="billing_payments",
         verbose_name=_lazy("Кто создал"),
     )
+    # Which equal part of a split bill this payment paid (PQ-009).
+    split_part = models.PositiveSmallIntegerField(
+        null=True, blank=True, editable=False, verbose_name=_lazy("Часть"),
+    )
 
     class Meta:
         verbose_name = _lazy("оплата")
         verbose_name_plural = _lazy("Оплаты")
         ordering = ["-created_at"]
+        constraints = [
+            # A part of a split bill is paid once, whoever taps twice.
+            models.UniqueConstraint(
+                fields=["bill", "split_part"],
+                condition=Q(split_part__isnull=False, status="paid"),
+                name="unique_paid_split_part_per_bill",
+            )
+        ]
 
     def __str__(self) -> str:
         return f"{self.bill.public_id} / {self.method} / {self.amount}"

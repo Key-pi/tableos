@@ -143,8 +143,9 @@ class PaymentInline(RecordsInlineMixin, TabularInline):
     model = Payment
     extra = 0
     can_delete = False
-    fields = ("method", "status", "amount", "paid_at", "comment", "created_by")
-    readonly_fields = ("method", "status", "amount", "paid_at", "comment", "created_by")
+    fields = ("method", "status", "amount", "split_part", "paid_at", "comment", "created_by")
+    readonly_fields = ("method", "status", "amount", "split_part", "paid_at", "comment",
+                       "created_by")
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -264,6 +265,7 @@ class BillAdmin(ObjectActionsMixin, ScopedAdminMixin):
         "paid_amount",
         "refunded_amount",
         "remaining_amount",
+        "split_parts",
         "issued_at",
         "closed_at",
         "created_at",
@@ -289,7 +291,7 @@ class BillAdmin(ObjectActionsMixin, ScopedAdminMixin):
             ("subtotal_amount", "discount_amount"),
             ("bonus_spent_amount", "total_amount"),
             ("paid_amount", "refunded_amount"),
-            "remaining_amount",
+            ("remaining_amount", "split_parts"),
         )}),
         (_lazy("Время"), {"classes": ["tab"], "fields": (
             ("created_at", "issued_at"),
@@ -621,7 +623,8 @@ class PaymentAdmin(ScopedAdminMixin):
     list_display = ("bill", "method", "status", "amount", "partner", "paid_at")
     list_filter = ("partner", "method", "status")
     search_fields = ("bill__public_id", "external_payment_id", "provider_code", "partner__name")
-    readonly_fields = ("status", "paid_at", "created_by", "created_at", "updated_at")
+    readonly_fields = ("status", "split_part", "paid_at", "created_by", "created_at",
+                       "updated_at")
 
     def has_change_permission(self, request, obj=None):
         if obj is not None:

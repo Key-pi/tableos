@@ -6,7 +6,8 @@ them (``bot/services/staff_rights.py``), what a bill card offers
 call (``issue_bill``, ``record_payment``, ``pay_bill_with_bonuses``,
 ``create_shared_bill_for_table`` / ``create_personal_bills_for_table``,
 ``close_table_visit``, billing requests). Changing and voiding a bill and
-refunds stay in the bot: they take reasons and comments.
+refunds stay in the bot: they take reasons and comments. A bill paid in equal
+parts (PQ-009) is the Mini App's own for now: ``apps/billing/bill_split.py``.
 """
 
 from __future__ import annotations
@@ -17,6 +18,12 @@ from decimal import Decimal
 from django.utils import timezone
 
 from apps.billing import staff_actions as actions
+from apps.billing.bill_split import (
+    OPEN_STATUSES,
+    pay_split_part,
+    split_bill_equally,
+    split_parts_of,
+)
 from apps.billing.models import Bill, BillAdjustment, BillingRequest, Payment, Refund
 from apps.billing.repositories import (
     BillingOperationsRepository,
@@ -129,6 +136,7 @@ def _bill_json(bill: Bill, *, full: bool = False, actor=None) -> dict:
         return data
     items = list(bill.items.all())
     offer = bill_bonus_offer(bill)
+    parts = split_parts_of(bill)
     can_edit, can_void = bill_change_rights(bill, actor) if actor is not None else (False, False)
     active = [item for item in items if item.is_active]
     orders = {
@@ -156,6 +164,18 @@ def _bill_json(bill: Bill, *, full: bool = False, actor=None) -> dict:
         bonus_offer=_money(offer) if offer > 0 else "",
         bonus_balance=_money(bonus_balance(bill.primary_guest)) if offer > 0 else "",
         label=bill.label,
+        # Equal parts (PQ-009): each part's amount, paid or not; split again
+        # or undo only before a part is paid.
+        split_parts=bill.split_parts,
+        split=[
+            {
+                "number": part.number, "amount": _money(part.amount), "paid": part.paid,
+                "method": str(Payment.Method(part.method).label) if part.paid else "",
+            }
+            for part in parts
+        ],
+        can_split=bill.status in OPEN_STATUSES and remaining > 0
+        and not any(part.paid for part in parts),
         actions=[
             {
                 "code": code,
@@ -252,6 +272,51 @@ def bill_action_view(request, staff: StaffRequest, body: dict) -> dict:
     bill = BillRepository.all_for_partner(staff.partner.id).get(id=bill.id)
     return {
         "ok": True, "notice": notice,
+        "bill": _bill_json(bill, full=True, actor=staff.employee.user),
+    }
+
+
+@staff_api("POST")
+def bill_split_view(request, staff: StaffRequest, body: dict) -> dict:
+    """``{"bill", "parts"}`` — paid in ``parts`` equal parts (2–20); 0 — not
+    split any more (PQ-009)."""
+
+    _billing(staff)
+    bill = _load_bill(staff, _text(body, "bill"))
+    try:
+        parts = int(body.get("parts"))
+    except (TypeError, ValueError) as exc:
+        raise WebAppDenied(400, N_("Укажите, на сколько частей делить.")) from exc
+    split_bill_equally(partner_id=staff.partner.id, employee=staff.employee, bill_id=bill.id,
+                       parts=parts)
+    bill = BillRepository.all_for_partner(staff.partner.id).get(id=bill.id)
+    return {
+        "ok": True,
+        "notice": _("Счёт делят поровну на {parts}.", parts=parts) if parts
+        else _("Счёт больше не делят."),
+        "bill": _bill_json(bill, full=True, actor=staff.employee.user),
+    }
+
+
+SPLIT_PAY_METHODS = {"cash": Payment.Method.CASH, "terminal": Payment.Method.TERMINAL}
+
+
+@staff_api("POST")
+def bill_split_pay_view(request, staff: StaffRequest, body: dict) -> dict:
+    """``{"bill", "part", "method": "cash" | "terminal", "amount"}`` — one
+    part paid; ``amount`` is what the screen showed (PQ-009)."""
+
+    _billing(staff)
+    bill = _load_bill(staff, _text(body, "bill"))
+    method = SPLIT_PAY_METHODS.get(_text(body, "method"))
+    part = body.get("part")
+    if method is None or not isinstance(part, int) or isinstance(part, bool):
+        raise WebAppDenied(400, N_("Обновите экран и попробуйте ещё раз."))
+    pay_split_part(partner_id=staff.partner.id, employee=staff.employee, bill_id=bill.id,
+                   part=part, method=method, expected_amount=_text(body, "amount") or None)
+    bill = BillRepository.all_for_partner(staff.partner.id).get(id=bill.id)
+    return {
+        "ok": True, "notice": _("Часть {part} оплачена.", part=part),
         "bill": _bill_json(bill, full=True, actor=staff.employee.user),
     }
 

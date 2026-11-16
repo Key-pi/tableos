@@ -676,6 +676,54 @@ msgstr "#{public_id}: {item_name} × {quantity} — {line_total} грн"
 msgid "Счета и оплаты"
 msgstr "Рахунки й оплати"
 
+#: apps/billing/bill_split.py
+msgid "Делят счёт владелец, менеджер или кассир этого заведения."
+msgstr "Ділять рахунок власник, менеджер або касир цього закладу."
+
+#: apps/billing/bill_split.py
+msgid "Счёт не найден — обновите экран."
+msgstr "Рахунок не знайдено — оновіть екран."
+
+#: apps/billing/bill_split.py
+msgid "Счёт уже закрыт — обновите экран."
+msgstr "Рахунок уже закрито — оновіть екран."
+
+#: apps/billing/bill_split.py webapp/staff_billing.py
+msgid "Укажите, на сколько частей делить."
+msgstr "Вкажіть, на скільки частин ділити."
+
+#: apps/billing/bill_split.py
+msgid "Делить можно на 2–{most} частей."
+msgstr "Ділити можна на 2–{most} частин."
+
+#: apps/billing/bill_split.py
+msgid "Часть уже оплачена — делить заново нельзя."
+msgstr "Частину вже оплачено — ділити заново не можна."
+
+#: apps/billing/bill_split.py
+msgid "Делить нечего — счёт оплачен."
+msgstr "Ділити нічого — рахунок оплачено."
+
+#: apps/billing/bill_split.py
+msgid "Часть оплачивают наличными или картой."
+msgstr "Частину оплачують готівкою або карткою."
+
+#: apps/billing/bill_split.py
+msgid "Этот счёт не делили на части — обновите экран."
+msgstr "Цей рахунок не ділили на частини — оновіть екран."
+
+#: apps/billing/bill_split.py
+msgid "Такой части нет — обновите экран."
+msgstr "Такої частини немає — оновіть екран."
+
+#: apps/billing/bill_split.py
+msgid "Эта часть уже оплачена."
+msgstr "Цю частину вже оплачено."
+
+#: apps/billing/bill_split.py
+msgid "Сумма части изменилась — обновите экран."
+msgstr "Сума частини змінилася — оновіть екран."
+
 #: apps/billing/counter_sales.py apps/orders/services.py apps/tables/reservations.py
 msgid "Гость с кодом {code} не найден."
 msgstr "Гостя з кодом {code} не знайдено."
@@ -803,6 +851,10 @@ msgstr "Зовнішній номер"
 #: apps/billing/models.py
 msgid "Счёт в кассе (POS)"
 msgstr "Рахунок у касі (POS)"
+
+#: apps/billing/models.py
+msgid "Поровну на частей"
+msgstr "Порівну на частин"
 
 #: apps/billing/models.py apps/tables/models.py
 msgid "Закрыт"
@@ -991,6 +1043,10 @@ msgstr "Номер платежу в провайдера"
 #: apps/billing/models.py
 msgid "Кто создал"
 msgstr "Хто створив"
+
+#: apps/billing/models.py
+msgid "Часть"
+msgstr "Частина"
 
 #: apps/billing/models.py
 msgid "оплата"
@@ -8872,6 +8928,22 @@ msgstr "усе"
 msgid "Экран кухни и бара выключен в настройках заведения."
 msgstr "Екран кухні й бару вимкнено в налаштуваннях закладу."
 
+#: webapp/staff_billing.py
+msgid "Счёт делят поровну на {parts}."
+msgstr "Рахунок ділять порівну на {parts}."
+
+#: webapp/staff_billing.py
+msgid "Счёт больше не делят."
+msgstr "Рахунок більше не ділять."
+
+#: webapp/staff_billing.py
+msgid "Обновите экран и попробуйте ещё раз."
+msgstr "Оновіть екран і спробуйте ще раз."
+
+#: webapp/staff_billing.py
+msgid "Часть {part} оплачена."
+msgstr "Частину {part} оплачено."
+
 #: webapp/staff_billing.py webapp/staff_views.py
 msgid "Выберите причину."
 msgstr "Оберіть причину."
@@ -9155,6 +9227,26 @@ msgstr "Провести продаж"
 #: webapp/staff_views.py
 msgid "Карта"
 msgstr "Картка"
+
+#: webapp/staff_views.py
+msgid "➗ Поровну"
+msgstr "➗ Порівну"
+
+#: webapp/staff_views.py
+msgid "На сколько частей делить счёт?"
+msgstr "На скільки частин ділити рахунок?"
+
+#: webapp/staff_views.py
+msgid "Поровну на {parts}"
+msgstr "Порівну на {parts}"
+
+#: webapp/staff_views.py
+msgid "Часть {number}"
+msgstr "Частина {number}"
+
+#: webapp/staff_views.py
+msgid "Не делить"
+msgstr "Не ділити"
 
 #: webapp/staff_views.py
 msgid "ост. {count}"

@@ -676,6 +676,54 @@ msgstr "#{public_id}: {item_name} × {quantity} — {line_total} UAH"
 msgid "Счета и оплаты"
 msgstr "Bills and payments"
 
+#: apps/billing/bill_split.py
+msgid "Делят счёт владелец, менеджер или кассир этого заведения."
+msgstr "Only the owner, a manager or a cashier of this venue splits a bill."
+
+#: apps/billing/bill_split.py
+msgid "Счёт не найден — обновите экран."
+msgstr "Bill not found — refresh the screen."
+
+#: apps/billing/bill_split.py
+msgid "Счёт уже закрыт — обновите экран."
+msgstr "The bill is already closed — refresh the screen."
+
+#: apps/billing/bill_split.py webapp/staff_billing.py
+msgid "Укажите, на сколько частей делить."
+msgstr "Say how many parts to split into."
+
+#: apps/billing/bill_split.py
+msgid "Делить можно на 2–{most} частей."
+msgstr "A bill splits into 2–{most} parts."
+
+#: apps/billing/bill_split.py
+msgid "Часть уже оплачена — делить заново нельзя."
+msgstr "A part is already paid — the bill cannot be split again."
+
+#: apps/billing/bill_split.py
+msgid "Делить нечего — счёт оплачен."
+msgstr "Nothing to split — the bill is paid."
+
+#: apps/billing/bill_split.py
+msgid "Часть оплачивают наличными или картой."
+msgstr "A part is paid in cash or by card."
+
+#: apps/billing/bill_split.py
+msgid "Этот счёт не делили на части — обновите экран."
+msgstr "This bill was not split into parts — refresh the screen."
+
+#: apps/billing/bill_split.py
+msgid "Такой части нет — обновите экран."
+msgstr "No such part — refresh the screen."
+
+#: apps/billing/bill_split.py
+msgid "Эта часть уже оплачена."
+msgstr "This part is already paid."
+
+#: apps/billing/bill_split.py
+msgid "Сумма части изменилась — обновите экран."
+msgstr "The part amount has changed — refresh the screen."
+
 #: apps/billing/counter_sales.py apps/orders/services.py apps/tables/reservations.py
 msgid "Гость с кодом {code} не найден."
 msgstr "No guest with code {code}."
@@ -803,6 +851,10 @@ msgstr "External number"
 #: apps/billing/models.py
 msgid "Счёт в кассе (POS)"
 msgstr "Till bill (POS)"
+
+#: apps/billing/models.py
+msgid "Поровну на частей"
+msgstr "Equal parts"
 
 #: apps/billing/models.py apps/tables/models.py
 msgid "Закрыт"
@@ -991,6 +1043,10 @@ msgstr "Provider payment ID"
 #: apps/billing/models.py
 msgid "Кто создал"
 msgstr "Created by"
+
+#: apps/billing/models.py
+msgid "Часть"
+msgstr "Part"
 
 #: apps/billing/models.py
 msgid "оплата"
@@ -8872,6 +8928,22 @@ msgstr "everything"
 msgid "Экран кухни и бара выключен в настройках заведения."
 msgstr "The kitchen and bar screen is switched off in the venue's settings."
 
+#: webapp/staff_billing.py
+msgid "Счёт делят поровну на {parts}."
+msgstr "The bill is split equally into {parts}."
+
+#: webapp/staff_billing.py
+msgid "Счёт больше не делят."
+msgstr "The bill is no longer split."
+
+#: webapp/staff_billing.py
+msgid "Обновите экран и попробуйте ещё раз."
+msgstr "Refresh the screen and try again."
+
+#: webapp/staff_billing.py
+msgid "Часть {part} оплачена."
+msgstr "Part {part} is paid."
+
 #: webapp/staff_billing.py webapp/staff_views.py
 msgid "Выберите причину."
 msgstr "Choose a reason."
@@ -9155,6 +9227,26 @@ msgstr "Record the sale"
 #: webapp/staff_views.py
 msgid "Карта"
 msgstr "Card"
+
+#: webapp/staff_views.py
+msgid "➗ Поровну"
+msgstr "➗ Equal parts"
+
+#: webapp/staff_views.py
+msgid "На сколько частей делить счёт?"
+msgstr "How many parts to split the bill into?"
+
+#: webapp/staff_views.py
+msgid "Поровну на {parts}"
+msgstr "Split equally into {parts}"
+
+#: webapp/staff_views.py
+msgid "Часть {number}"
+msgstr "Part {number}"
+
+#: webapp/staff_views.py
+msgid "Не делить"
+msgstr "Do not split"
 
 #: webapp/staff_views.py
 msgid "ост. {count}"

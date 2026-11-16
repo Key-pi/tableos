@@ -67,6 +67,11 @@ urlpatterns += [
     path("<str:bot_hex>/api/staff/order", staff_views.staff_order_view, name="staff_order"),
     path("<str:bot_hex>/api/staff/bill_change", staff_billing.bill_change_view,
          name="staff_bill_change"),
+    # PQ-009: a bill paid in equal parts.
+    path("<str:bot_hex>/api/staff/bill_split", staff_billing.bill_split_view,
+         name="staff_bill_split"),
+    path("<str:bot_hex>/api/staff/bill_split_pay", staff_billing.bill_split_pay_view,
+         name="staff_bill_split_pay"),
     path("<str:bot_hex>/api/staff/refund", staff_billing.refund_view, name="staff_refund"),
     path("<str:bot_hex>/api/staff/refund_preview", staff_billing.refund_preview_view,
          name="staff_refund_preview"),

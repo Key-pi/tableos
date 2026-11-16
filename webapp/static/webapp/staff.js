@@ -1101,11 +1101,31 @@
       box.appendChild(el("div", { class: "note", style: "margin-top:8px", text: T.change_bill }));
       box.appendChild(edit);
     }
+    // Paid in equal parts (PQ-009): each part by cash or card.
+    if (bill.split.length) {
+      box.appendChild(el("div", { class: "note", style: "margin-top:8px", text: t("split_title", { parts: bill.split_parts }) }));
+      bill.split.forEach(function (part) {
+        var row = el("div", { class: "acts", style: "align-items:center" },
+          el("span", { style: "flex:1", text: t("split_part", { number: part.number }) + " — " + money(part.amount) }));
+        if (part.paid) row.appendChild(el("span", { class: "status", text: "✓ " + part.method }));
+        else if (Number(part.amount) > 0) {
+          row.appendChild(el("button", { type: "button", class: "act", text: T.sale_cash,
+                                         onclick: function () { payPart(bill, part, "cash"); } }));
+          row.appendChild(el("button", { type: "button", class: "act", text: T.sale_card,
+                                         onclick: function () { payPart(bill, part, "terminal"); } }));
+        }
+        box.appendChild(row);
+      });
+    }
     var acts = el("div", { class: "acts" });
     bill.actions.forEach(function (action) {
+      // A split bill is paid part by part, not all at once.
+      if (bill.split.length && (action.code === "pay_cash" || action.code === "pay_terminal")) return;
       acts.appendChild(el("button", { type: "button", class: "act" + (action.style ? " " + action.style : ""),
                                      text: action.label, onclick: function () { billAction(bill, action); } }));
     });
+    if (bill.can_split) acts.appendChild(el("button", { type: "button", class: "act", text: T.split_equally,
+                                                       onclick: function () { splitBill(bill); } }));
     if (bill.can_void) acts.appendChild(el("button", { type: "button", class: "act danger", text: T.void_bill,
       onclick: function () { billChange(bill, { action: "void" }, T.void_bill + " #" + bill.id + "?"); } }));
     acts.appendChild(el("button", { type: "button", class: "act", text: T.back,
@@ -1125,6 +1145,48 @@
         if (result.ok && result.data.bill) showBill(result.data.bill);
         after(result, function () { return load(true); });
       });
+    });
+  }
+
+  // How many parts: a few quick choices, any other number, or «don't split».
+  function splitBill(bill) {
+    var back = el("div", { class: "sheet-back", style: "z-index:40", onclick: function (event) {
+      if (event.target === back) back.remove();
+    } });
+    var send = function (parts) {
+      back.remove();
+      if (busy) return;
+      busy = true;
+      api("bill_split", { bill: bill.id, parts: parts }).then(function (result) {
+        if (result.ok && result.data.bill) showBill(result.data.bill);
+        after(result, function () { return load(true); });
+      });
+    };
+    var count = el("input", { type: "number", min: 2, max: 20, inputmode: "numeric", placeholder: "2–20",
+                              style: "width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--separator);background:var(--bg)" });
+    var quick = el("div", { class: "acts" });
+    [2, 3, 4, 5, 6].forEach(function (parts) {
+      quick.appendChild(el("button", { type: "button", class: "act" + (parts === bill.split_parts ? " primary" : ""),
+                                       text: String(parts), onclick: function () { send(parts); } }));
+    });
+    var acts = el("div", { class: "acts" },
+      el("button", { type: "button", class: "act", text: T.back, onclick: function () { back.remove(); } }));
+    if (bill.split_parts) acts.appendChild(el("button", { type: "button", class: "act danger", text: T.split_undo,
+                                                         onclick: function () { send(0); } }));
+    acts.appendChild(el("button", { type: "button", class: "act primary", text: T.confirm, onclick: function () {
+      if (Number(count.value)) send(Number(count.value));
+    } }));
+    back.appendChild(el("div", { class: "sheet", role: "dialog" },
+      el("p", null, el("b", { text: T.split_how })), quick, count, acts));
+    document.body.appendChild(back);
+  }
+
+  function payPart(bill, part, method) {
+    if (busy) return;
+    busy = true;
+    api("bill_split_pay", { bill: bill.id, part: part.number, method: method, amount: part.amount }).then(function (result) {
+      if (result.ok && result.data.bill) showBill(result.data.bill);
+      after(result, function () { return load(true); });
     });
   }
 
