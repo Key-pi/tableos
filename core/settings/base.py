@@ -168,11 +168,16 @@ CELERY_BEAT_SCHEDULE = {
         "task": "notifications.recover_stalled_broadcast_campaigns",
         "schedule": timedelta(minutes=5),
     },
-    # PQ-036: unconfirmed transfers past the venue's wait are canceled.
     "expire-idle-table-sessions": {
         "task": "tables.expire_idle_table_sessions",
         "schedule": timedelta(minutes=5),
     },
+    # PQ-056: the bot reminds a booking's guest before the time, once.
+    "remind-reservations": {
+        "task": "tables.remind_reservations",
+        "schedule": timedelta(minutes=5),
+    },
+    # PQ-036: unconfirmed transfers past the venue's wait are canceled.
     "cancel-expired-transfer-orders": {
         "task": "billing.cancel_expired_transfer_orders",
         "schedule": timedelta(minutes=5),

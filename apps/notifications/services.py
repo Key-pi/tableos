@@ -51,6 +51,7 @@ DELIVER_STAFF_NOTIFICATION_TASK = "notifications.deliver_staff_notification"
 SEND_GUEST_ORDER_STATUS_UPDATE_TASK = "notifications.send_guest_order_status_update"
 SEND_BROADCAST_CAMPAIGN_TASK = "notifications.send_broadcast_campaign"
 SEND_GUEST_REFUND_NOTICE_TASK = "notifications.send_guest_refund_notice"
+SEND_RESERVATION_NOTICE_TASK = "notifications.send_reservation_notice"
 PROCESS_SCHEDULED_BROADCAST_CAMPAIGNS_TASK = "notifications.process_scheduled_broadcast_campaigns"
 RECOVER_STALLED_BROADCASTS_TASK = "notifications.recover_stalled_broadcast_campaigns"
 # A claimed broadcast message whose result is not recorded within this time is
@@ -644,6 +645,70 @@ def send_guest_refund_notice_now(refund_id: str) -> bool:
         [(guest.telegram_account.telegram_id, text)],
     )
     _remember_points(bot_instance, refund.partner_id, results)
+    _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
+    if should_mark_blocked:
+        guest.telegram_account.is_blocked = True
+        guest.telegram_account.save(update_fields=["is_blocked", "updated_at"])
+    if not is_sent and _is_retryable_result(results[0]):
+        raise RetryableDeliveryError(error_message or "Transient Telegram delivery failure.")
+    return is_sent
+
+
+RESERVATION_NOTICE_KINDS = ("confirm", "changed", "reminder")
+
+
+def send_reservation_notice(reservation_id, kind: str) -> None:
+    """Tell the booking's guest after the commit (PQ-056): ``confirm`` — the
+    booking is made, ``changed`` — a new time or table, ``reminder`` — soon."""
+
+    from apps.notifications.tasks import send_reservation_notice_task
+
+    transaction.on_commit(
+        lambda: send_reservation_notice_task.delay(str(reservation_id), kind)
+    )
+
+
+def render_reservation_notice(booking, kind: str) -> str:
+    title = {
+        "confirm": _("<b>Бронь подтверждена</b>"),
+        "changed": _("<b>Бронь изменена</b>"),
+        "reminder": _("<b>Напоминаем о брони</b>"),
+    }[kind]
+    starts = timezone.localtime(booking.starts_at)
+    return "\n".join([
+        title,
+        _("{venue}: стол {table}, {day} в {time}.",
+          venue=_escape_html(booking.partner.name), table=booking.table.number,
+          day=starts.strftime("%d.%m"), time=starts.strftime("%H:%M")),
+        _("Гостей: {guests}.", guests=booking.guests),
+    ])
+
+
+def send_reservation_notice_now(reservation_id: str, kind: str) -> bool:
+    """A booking still «Ждём» whose guest has the bot; else nothing is sent."""
+
+    from apps.tables.models import Reservation
+
+    if kind not in RESERVATION_NOTICE_KINDS:
+        return False
+    booking = (
+        Reservation.objects.select_related("guest__telegram_account", "table", "partner")
+        .filter(id=reservation_id, status=Reservation.Status.BOOKED)
+        .first()
+    )
+    if booking is None or booking.guest is None or booking.guest.telegram_account_id is None:
+        return False
+    try:
+        bot_instance = _active_partner_bot(booking.partner_id)
+    except NotificationDeliveryError:
+        return False
+    guest = booking.guest
+    with speaking_to_guest(guest):
+        text = render_reservation_notice(booking, kind)
+    results = async_to_sync(_send_telegram_messages)(
+        bot_instance.token, [(guest.telegram_account.telegram_id, text)],
+    )
+    _remember_points(bot_instance, booking.partner_id, results)
     _chat_id, is_sent, error_message, should_mark_blocked = _unpack_delivery_result(results[0])
     if should_mark_blocked:
         guest.telegram_account.is_blocked = True

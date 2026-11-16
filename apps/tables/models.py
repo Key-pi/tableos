@@ -244,6 +244,14 @@ class Reservation(PartnerBoundModel):
                               verbose_name=_lazy("Статус"))
     visit = models.ForeignKey(TableVisit, on_delete=models.SET_NULL, null=True, blank=True,
                               related_name="reservations", verbose_name=_lazy("Визит"))
+    # A guest with the bot, named by customer code (PQ-056): «Пришли» seats
+    # them, and the bot confirms and reminds; empty — an ordinary visitor.
+    guest = models.ForeignKey(
+        "users.GuestProfile", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="reservations", verbose_name=_lazy("Гость"),
+    )
+    reminded_at = models.DateTimeField(null=True, blank=True, editable=False,
+                                       verbose_name=_lazy("Напомнили гостю"))
     created_by = models.ForeignKey(
         "users.User", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="+", verbose_name=_lazy("Забронировал"),

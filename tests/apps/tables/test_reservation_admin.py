@@ -8,6 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.tables.models import Reservation
+from apps.tables.reservations import seat_reservation
 from apps.users.constants import AdminAccessPreset
 from tests.apps.tables.test_reservations import ReservationFixture, venue
 from tests.apps.users.test_admin_navigation import admin_user
@@ -48,6 +49,31 @@ class ReservationAdminTests(ReservationFixture):
                          {"object_action": "seat"})
         booking.refresh_from_db()
         self.assertEqual(booking.status, Reservation.Status.SEATED)
+
+    def test_booked_for_a_guest_by_code(self):
+        """PQ-056: the name and phone may stay empty — the profile has them;
+        the change page shows the code, and still shows it once seated."""
+
+        from tests.apps.tables.test_reservation_guest import make_guest
+
+        guest = make_guest(self.partner)
+        at = self.now + timedelta(minutes=30)
+        response = self.post_form(at, name="", phone="", customer_code=guest.customer_code)
+        self.assertEqual(response.status_code, 302, getattr(response, "context", None)
+                         and response.context["adminform"].form.errors)
+        booking = Reservation.objects.get()
+        self.assertEqual((booking.guest, booking.name), (guest, "Олена Коваль"))
+        page = self.client.get(reverse("admin:tables_reservation_change", args=[booking.pk]))
+        self.assertEqual(page.context["adminform"].form["customer_code"].value(),
+                         guest.customer_code)
+        seat_reservation(partner_id=self.partner.id, actor=self.owner, reservation_id=booking.id)
+        page = self.client.get(reverse("admin:tables_reservation_change", args=[booking.pk]))
+        self.assertContains(page, guest.customer_code)
+
+    def test_an_unknown_code_is_the_form_error(self):
+        response = self.post_form(self.now + timedelta(days=1), customer_code="NOPE00")
+        self.assertContains(response, "не найден")
+        self.assertFalse(Reservation.objects.exists())
 
     def test_only_this_venue(self):
         other = venue("Other")

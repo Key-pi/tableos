@@ -116,7 +116,7 @@ whitenoise и кэш в Redis. Сервисы:
 |---|---|---|---|
 | Партнёры | `Partner`, `Network`, `BotInstance`, `PartnerBotSettings`, `OpeningHours`, `BotText`, `NetworkGuestChoice`, `BotMessagePoint`, `NetworkWallet` | `clean()` моделей (`Partner.clean` отклоняет неизвестные часовые пояса), `BotInstance.set_token`, `partners/opening_hours.py`, `partners/networks.py` (точки сети, точка обновления, бот точки), `partners/languages.py` и `bot_texts.py` (языки, свои тексты), `partners/mini_app.py`, `partners/services.py:record_bot_runtime_states` | `PartnerBotSettings` хранит флаги модулей, их настройки и реквизиты для перевода; подписи кнопок и сообщения — каталог текстов и `BotText` (PQ-040). Часовой пояс по умолчанию `Europe/Kyiv`. Часы работы — интервалы через полночь, свои у самовывоза и доставки (PQ-038). |
 | Пользователи и личность | `User`, глобальный `TelegramAccount`, партнёрский `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile`, `find_guest_by_customer_code`, `create_anonymous_guest` | Одна Telegram-личность → один профиль гостя на партнёра; у анонимного гостя визита Telegram нет (PQ-052). Телефон, адрес и получатель гостя хранятся в профиле. Меню и стартовая страница Admin — `users/admin_navigation.py`, `admin_dashboard.py`. |
-| Столы | `Hall`, `Table`, `TableVisit`, `TableSession`, `Reservation` | `tables/services.py` (активация, визиты, стол с планшета), `tables/floor_plan.py` (схема и статусы), `tables/reservations.py` (бронь) | Активация по QR, визиты стола, закрытие только после расчёта. `timed_out` и `expires_at` есть, но ничто их не выставляет. |
+| Столы | `Hall`, `Table`, `TableVisit`, `TableSession`, `Reservation` | `tables/services.py` (активация, визиты, стол с планшета), `tables/floor_plan.py` (схема и статусы), `tables/reservations.py` (бронь) | Активация по QR, визиты стола, закрытие только после расчёта. `timed_out` выставляет beat `tables.expire_idle_table_sessions` (PQ-008); `expires_at` есть, но ничто его не выставляет. Бронь с гостем по коду, сообщения гостю и напоминание (PQ-056). |
 | Меню | `MenuCategory`, `MenuBadge`, `MenuItem`, `MenuItemPhoto`, `MenuItemAttribute`, `MenuItemVariant`, `ModifierGroup`, `Modifier`, `StockMovement` | чтение — `menu/repositories.py`, `menu/catalog.py` (дерево, расписание); выбор и цена — `menu/options.py:resolve_choice`; остатки — `menu/stock.py`; переводы — `menu/translations.py`; фото — `menu/photos.py`; остальное — Admin | Цена должна быть положительной (`menu_item_price_positive`). Отметки каналов: `available_at_table`, `available_for_pickup`, `available_for_delivery`, `available_for_shipping`; `MenuItem.is_sold_in(channel)`. Подробно — [CATALOG.md](CATALOG.md). |
 | Заказы | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory`, `KitchenScreen`, `OrderStationReady` | `orders/services.py`; удалённые каналы — в `billing/remote_orders.py`; экран кухни и бара — `orders/kitchen.py` | Корзина, создание заказа по каналу (стол / самовывоз / доставка / отправка), заказ на стол с планшета, машина статусов, подтверждение получения гостем. `Order.channel`, `Order.requested_for`, `Order.payment_timing`, `Order.request_key`, `Order.REMOTE_CHANNELS` (старое имя `PREPAID_CHANNELS` — синоним). |
 | Счета | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment`, `BillAdjustment`, `Refund`, `RefundLine` | ядро — `billing/services.py`; стол — `billing/table_bills.py`; удалённые каналы — `billing/remote_orders.py`; кнопки персонала для бота, Mini App и Admin — `billing/staff_actions.py` | Создание и расширение счёта, оплата деньгами и бонусами, изменения и аннулирование, возвраты, действия после оплаты. |
@@ -721,6 +721,19 @@ Reservation`), «Пришли» — визит через `open_staff_table_sess
 (список дня, сохранение, действия); Admin: `ReservationAdmin` (форма через
 сервис, кнопки действий).
 
+Бронь гостя с ботом (PQ-056): необязательный код клиента
+(`Reservation.guest`). Имя и телефон, если их не ввели, берутся из профиля
+(имя и фамилия Telegram, `GuestProfile.phone`); неизвестный код — отказ.
+«Пришли» сажает этого гостя (`open_staff_table_session(guest=…)`, с
+`visit_id` — к уже сидящей компании); без кода — анонимный гость визита.
+Блокировки «Пришли» с гостем: `GuestProfile → Table (no_key) → Reservation`,
+как у активации по QR. После коммита бот пишет гостю
+(`notifications.send_reservation_notice`): подтверждение при брони и
+смене гостя, «Бронь изменена» при новом времени или столе
+(`PartnerBotSettings.reservation_confirm_guest`), напоминание за
+`reservation_reminder_minutes` до времени (beat `tables.remind_reservations`,
+`Reservation.reminded_at` — один раз; перенос обнуляет). Об отмене не пишет.
+
 ### Нагрузка платформы (PQ-051)
 
 Страница «Нагрузка» в меню «Платформа» Admin — только для суперпользователя
@@ -945,7 +958,7 @@ Telegram Mini App для гостя (PQ-048, этап 1, [MINI_APP.md](MINI_APP.
 | Рассылка | сервис и задача уведомлений | Блокировка кампании; строка `BroadcastDelivery` на получателя, захват skip-locked, повторно не отправляется (B4, ADR-0008) |
 | Остаток позиции | `apps/menu/stock.py` (заказ, отмена, продажа на кассе, возврат, пересчёт) | Строки остатка блокируются последними, `no_key`; каждое изменение — `StockMovement`; отмена и возврат не возвращают больше, чем заказ взял |
 | Приглашение сотрудника | `apps/employees/invites.py` | Блокировка приглашения: одноразовое, 24 часа; `StaffInvite → EmployeeProfile` |
-| Бронь стола | `apps/tables/reservations.py` | Блокировка строки стола перед проверкой пересечения (`Table → Reservation`); «не пришли» только после времени |
+| Бронь стола | `apps/tables/reservations.py` | Блокировка строки стола перед проверкой пересечения (`Table → Reservation`); «Пришли» с гостем по коду — сначала его строка (`GuestProfile → Table → Reservation`); «не пришли» только после времени; напоминание захватывается `reminded_at` один раз |
 
 Admin показывает поля жизненного цикла, производные и журнальные поля только
 для чтения у заказов, корзин, счетов, распределений, оплат, сессий, балансов
@@ -954,7 +967,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1247 тестов после скрытия анонимных гостей, зелёные на SQLite и на PostgreSQL 16.
+- 1270 тестов после брони с кодом клиента, зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -970,10 +983,12 @@ Admin показывает поля жизненного цикла, произ�
   возврата одной строки (`tests/apps/billing/test_refund_concurrency.py`); планы
   запросов открытых заказов и счетов используют частичные индексы (AA-045,
   `tests/apps/orders/test_open_indexes.py`); два человека расставляют один
-  зал, два нажатия на один свободный стол, две брони одного стола
+  зал, два нажатия на один свободный стол, две брони одного стола, «Пришли»
+  для гостя брони, пока он сканирует QR, и два запуска напоминаний о брони
   (`tests/apps/tables/test_floor_plan.py`,
   `tests/apps/orders/test_staff_table_orders.py`,
-  `tests/apps/tables/test_reservations.py`). Тест
+  `tests/apps/tables/test_reservations.py`,
+  `tests/apps/tables/test_reservation_guest.py`). Тест
   миграции (`tests/apps/tables/test_visit_migration.py`) прогоняет заполнение
   визитов назад и вперёд.
 - Документация сверяется с кодом в каждом полном прогоне:
@@ -991,13 +1006,13 @@ Admin показывает поля жизненного цикла, произ�
   Полные прогоны перед коммитом по-прежнему обязательны — CI их не заменяет,
   а страхует.
 
-## Цифры кодовой базы на 2026-11-14
+## Цифры кодовой базы на 2026-11-16
 
-507 отслеживаемых Python-файлов (около 81 200 строк), 126 пронумерованных
-миграций, 134 тестовых модуля. Крупнейшие нетестовые модули:
-`bot/handlers/staff.py` (3882 строки), `apps/orders/services.py` (1516),
-`apps/billing/services.py` (1486), `apps/notifications/services.py` (1464),
-`apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1037),
+510 отслеживаемых Python-файлов (около 82 000 строк), 128 пронумерованных
+миграций, 135 тестовых модулей. Крупнейшие нетестовые модули:
+`bot/handlers/staff.py` (3882 строки), `apps/notifications/services.py` (1529),
+`apps/orders/services.py` (1516), `apps/billing/services.py` (1486),
+`apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1050),
 `apps/partners/management/commands/seed_baseline_demo.py` (1006). Инвентарь
 на момент аудита 2026-07-27 сохранён в
 [`../audits/CODEBASE_INVENTORY.md`](../audits/CODEBASE_INVENTORY.md).

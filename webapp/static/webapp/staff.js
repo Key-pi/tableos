@@ -859,7 +859,8 @@
       el("div", { class: "top" }, el("span", { class: "num", text: booking.time + "–" + booking.until }),
          el("span", { class: "status", text: booking.late ? T.plan_late : booking.status_label })),
       el("div", { class: "place", text: t("table", { number: booking.table }) + " · " + t("guests", { count: booking.guests }) }),
-      el("div", null, el("b", { text: booking.name }), " · ", el("a", { href: "tel:" + booking.phone, text: booking.phone })));
+      el("div", null, el("b", { text: booking.name }), " · ", el("a", { href: "tel:" + booking.phone, text: booking.phone }),
+         booking.customer_code ? " · 👤 " + booking.customer_code : ""));
     if (booking.comment) card.appendChild(el("div", { class: "note", text: booking.comment }));
     if (booking.status !== "booked") return card;
     var acts = el("div", { class: "acts" });
@@ -937,6 +938,9 @@
                                           selected: count === (value.minutes || 120) ? true : undefined }));
     });
     var guests = input({ type: "number", min: 1, max: 99, inputmode: "numeric", value: String(value.guests || 2) });
+    // The guest's customer code (PQ-056): the name and phone come from their profile.
+    var code = input({ type: "text", maxlength: 32, autocapitalize: "characters", value: value.customer_code || "",
+                       placeholder: T.customer_code, autocomplete: "off" });
     var name = input({ type: "text", maxlength: 80, value: value.name || "", autocomplete: "off" });
     var phone = input({ type: "tel", maxlength: 32, value: value.phone || "", autocomplete: "off" });
     var comment = input({ type: "text", maxlength: 300, value: value.comment || "" });
@@ -950,7 +954,8 @@
       busy = true;
       save.disabled = true;
       var body = { table: table.value, date: date.value, time: time.value, minutes: Number(minutes.value),
-                   guests: Number(guests.value), name: name.value, phone: phone.value, comment: comment.value };
+                   guests: Number(guests.value), customer_code: code.value.trim(), name: name.value,
+                   phone: phone.value, comment: comment.value };
       if (booking) body.id = booking.id;
       api("reservation_save", body).then(function (result) {
         busy = false;
@@ -971,7 +976,8 @@
     back.appendChild(el("div", { class: "sheet", role: "dialog", style: "max-height:90vh;overflow:auto" },
       el("p", null, el("b", { text: booking ? T.edit_booking : T.new_booking })),
       field(T.f_table, table), field(T.f_date, date), field(T.f_time, time), field(T.f_minutes, minutes),
-      field(T.f_guests, guests), field(T.f_name, name), field(T.phone, phone), field(T.comment, comment),
+      field(T.f_guests, guests), field(T.booking_code_hint, code), field(T.f_name, name),
+      field(T.phone, phone), field(T.comment, comment),
       problem,
       el("div", { class: "acts" },
         el("button", { type: "button", class: "act", text: T.back, onclick: function () { back.remove(); } }), save)));

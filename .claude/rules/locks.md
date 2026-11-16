@@ -32,7 +32,10 @@ paths:
 - Схема зала: `Hall` (`no_key=True`) → `Table` (`floor_plan.save_hall_layout`).
 - Бронь: `Table (no_key) → Reservation` (`apps/tables/reservations.py`);
   перенос на другой стол — оба стола по порядку id; «Пришли» затем открывает
-  визит через `open_staff_table_session`.
+  визит через `open_staff_table_session`. «Пришли» для гостя по коду
+  (PQ-056): `GuestProfile → Table (no_key) → Reservation` — гостя первым, как
+  активация по QR. Напоминание о брони — захват `reminded_at` условным
+  `UPDATE`, без блокировки.
 - Остатки: строки `MenuItem`/`MenuItemVariant` — последними в транзакции,
   сначала позиции, затем варианты, каждые по id, `no_key=True`
   (`apps/menu/stock.py:_lock`).

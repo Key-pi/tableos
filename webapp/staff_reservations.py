@@ -63,7 +63,7 @@ def list_view(request, staff: StaffRequest, body: dict) -> dict:
     bookings = (
         Reservation.objects.filter(partner_id=staff.partner.id, starts_at__gte=start,
                                    starts_at__lt=start + timedelta(days=1))
-        .select_related("table", "partner").order_by("starts_at", "table__number")
+        .select_related("table", "partner", "guest").order_by("starts_at", "table__number")
     )
     return {
         "date": day.isoformat(),
@@ -96,7 +96,9 @@ def _number(body: dict, key: str) -> int:
 @staff_api("POST")
 def save_view(request, staff: StaffRequest, body: dict) -> dict:
     """``{"id"?, "table", "date", "time", "minutes", "guests", "name",
-    "phone", "comment"?}`` — a new booking, or another time for one."""
+    "phone", "comment"?, "customer_code"?}`` — a new booking, or another
+    time for one. With the guest's code the name and phone may be empty —
+    the service takes them from the profile (PQ-056)."""
 
     _right(staff)
     fields = {
@@ -105,6 +107,7 @@ def save_view(request, staff: StaffRequest, body: dict) -> dict:
         "starts_at": _starts_at(body, staff), "minutes": _number(body, "minutes"),
         "guests": _number(body, "guests"), "name": _text(body, "name"),
         "phone": _text(body, "phone"), "comment": _text(body, "comment"),
+        "customer_code": _text(body, "customer_code"),
     }
     if _text(body, "id"):
         booking = update_reservation(
@@ -116,7 +119,7 @@ def save_view(request, staff: StaffRequest, body: dict) -> dict:
         booking = create_reservation(**fields)
         notice = _("Стол {table} забронирован на {time}.", table=booking.table.number,
                    time=booking_json(booking)["time"])
-    booking = Reservation.objects.select_related("table", "partner").get(id=booking.id)
+    booking = Reservation.objects.select_related("table", "partner", "guest").get(id=booking.id)
     return {"ok": True, "notice": notice, "reservation": booking_json(booking)}
 
 

@@ -676,7 +676,7 @@ msgstr "#{public_id}: {item_name} × {quantity} — {line_total} грн"
 msgid "Счета и оплаты"
 msgstr "Рахунки й оплати"
 
-#: apps/billing/counter_sales.py apps/orders/services.py
+#: apps/billing/counter_sales.py apps/orders/services.py apps/tables/reservations.py
 msgid "Гость с кодом {code} не найден."
 msgstr "Гостя з кодом {code} не знайдено."
 
@@ -3361,6 +3361,26 @@ msgid "Причина: {reason_code}."
 msgstr "Причина: {reason_code}."
 
 #: apps/notifications/services.py
+msgid "<b>Бронь подтверждена</b>"
+msgstr "<b>Бронювання підтверджено</b>"
+
+#: apps/notifications/services.py
+msgid "<b>Бронь изменена</b>"
+msgstr "<b>Бронювання змінено</b>"
+
+#: apps/notifications/services.py
+msgid "<b>Напоминаем о брони</b>"
+msgstr "<b>Нагадуємо про бронювання</b>"
+
+#: apps/notifications/services.py
+msgid "{venue}: стол {table}, {day} в {time}."
+msgstr "{venue}: стіл {table}, {day} о {time}."
+
+#: apps/notifications/services.py
+msgid "Гостей: {guests}."
+msgstr "Гостей: {guests}."
+
+#: apps/notifications/services.py
 msgid "Позвать персонал можно только после сканирования QR-кода стола."
 msgstr "Покликати персонал можна лише після сканування QR-коду столу."
 
@@ -4829,6 +4849,22 @@ msgid "Закрывать стол после полной оплаты"
 msgstr "Закривати стіл після повної оплати"
 
 #: apps/partners/models.py
+msgid "Подтверждать бронь гостю в боте"
+msgstr "Підтверджувати бронювання гостю в боті"
+
+#: apps/partners/models.py
+msgid "Если в брони указан код клиента, бот пишет гостю, на какой стол и время его ждут, и ещё раз — если время или стол изменили."
+msgstr "Якщо в бронюванні вказано код клієнта, бот пише гостю, за яким столом і на котру його чекають, і ще раз — якщо час або стіл змінили."
+
+#: apps/partners/models.py
+msgid "Напоминать гостю о брони за, минут"
+msgstr "Нагадувати гостю про бронювання за, хвилин"
+
+#: apps/partners/models.py
+msgid "Гостю с кодом клиента бот напоминает о брони за столько минут до неё (120 — за два часа). 0 — не напоминать."
+msgstr "Гостю з кодом клієнта бот нагадує про бронювання за стільки хвилин до нього (120 — за дві години). 0 — не нагадувати."
+
+#: apps/partners/models.py
 msgid "Закрывать пустую сессию стола через, минут"
 msgstr "Закривати порожню сесію столу через, хвилин"
 
@@ -5356,6 +5392,14 @@ msgstr "до сплати {sum} грн"
 msgid "Схема пришла с ошибкой — обновите страницу."
 msgstr "Схема прийшла з помилкою — оновіть сторінку."
 
+#: apps/tables/admin.py apps/users/models.py webapp/staff_views.py
+msgid "Код клиента"
+msgstr "Код клієнта"
+
+#: apps/tables/admin.py
+msgid "Необязательно. Гость с ботом: имя и телефон подтянутся из профиля, при «Пришли» за стол сядет он сам, бот пришлёт подтверждение и напоминание."
+msgstr "Необов’язково. Гість із ботом: ім’я і телефон підтягнуться з профілю, після «Прийшли» за стіл сяде він сам, бот надішле підтвердження і нагадування."
+
 #: apps/tables/admin.py apps/tables/models.py webapp/staff_views.py
 msgid "Пришли"
 msgstr "Прийшли"
@@ -5531,6 +5575,10 @@ msgstr "Ім'я"
 #: apps/tables/models.py apps/users/models.py webapp/staff_views.py webapp/texts.py
 msgid "Телефон"
 msgstr "Телефон"
+
+#: apps/tables/models.py
+msgid "Напомнили гостю"
+msgstr "Нагадали гостю"
 
 #: apps/tables/models.py
 msgid "Забронировал"
@@ -6103,10 +6151,6 @@ msgstr "акаунт Telegram"
 #: apps/users/models.py
 msgid "Аккаунты Telegram"
 msgstr "Акаунти Telegram"
-
-#: apps/users/models.py webapp/staff_views.py
-msgid "Код клиента"
-msgstr "Код клієнта"
 
 #: apps/users/models.py
 msgid "Первый визит"
@@ -9199,6 +9243,10 @@ msgstr "Дата"
 #: webapp/staff_views.py
 msgid "Длительность"
 msgstr "Тривалість"
+
+#: webapp/staff_views.py
+msgid "Код клиента — если гость с ботом: имя и телефон из профиля, бот пришлёт подтверждение и напоминание"
+msgstr "Код клієнта — якщо гість із ботом: ім’я і телефон із профілю, бот надішле підтвердження і нагадування"
 
 #: webapp/staff_views.py
 msgid "{hours} ч"

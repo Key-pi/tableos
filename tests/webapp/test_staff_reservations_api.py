@@ -83,3 +83,29 @@ class StaffReservationTests(StaffFixture):
         )
         self.assertFalse(self.staff_call("state", user_id=WAITER_TG)[1]["rights"]["reservations"])
         self.assertEqual(self.staff_call("reservations", user_id=WAITER_TG)[0], 403)
+
+    def test_booked_for_a_guest_by_code(self):
+        """PQ-056: the code instead of the name and phone; the list shows it."""
+
+        from unittest.mock import patch
+
+        from tests.apps.tables.test_reservation_guest import Sent, make_guest
+
+        guest = make_guest(self.partner)
+        with patch("apps.notifications.services._send_telegram_messages", new=Sent()):
+            status, body = self.staff_call(
+                "reservation_save",
+                self.form(name="", phone="", customer_code=guest.customer_code.lower()),
+                user_id=WAITER_TG,
+            )
+        self.assertEqual(status, 200, body)
+        self.assertEqual((body["reservation"]["name"], body["reservation"]["customer_code"]),
+                         ("Олена Коваль", guest.customer_code))
+        status, body = self.staff_call(
+            "reservations", query=f"?date={self.later:%Y-%m-%d}", user_id=WAITER_TG)
+        self.assertEqual(body["reservations"][0]["customer_code"], guest.customer_code)
+        status, body = self.staff_call("reservation_save",
+                                       self.form(customer_code="NOPE00", time="23:59"),
+                                       user_id=WAITER_TG)
+        self.assertEqual(status, 400)
+        self.assertIn("NOPE00", body["error"])

@@ -560,6 +560,24 @@ class PartnerBotSettings(TimeStampedModel):
         default=True,
         verbose_name=_lazy("Закрывать стол после полной оплаты"),
     )
+    # Messages to a guest named by code in a booking (PQ-056).
+    reservation_confirm_guest = models.BooleanField(
+        default=True,
+        verbose_name=_lazy("Подтверждать бронь гостю в боте"),
+        help_text=_lazy(
+            "Если в брони указан код клиента, бот пишет гостю, на какой стол и время "
+            "его ждут, и ещё раз — если время или стол изменили."
+        ),
+    )
+    reservation_reminder_minutes = models.PositiveSmallIntegerField(
+        default=120,
+        validators=[MaxValueValidator(24 * 60)],
+        verbose_name=_lazy("Напоминать гостю о брони за, минут"),
+        help_text=_lazy(
+            "Гостю с кодом клиента бот напоминает о брони за столько минут до неё "
+            "(120 — за два часа). 0 — не напоминать."
+        ),
+    )
     table_session_idle_minutes = models.PositiveSmallIntegerField(
         default=240,
         validators=[MinValueValidator(15), MaxValueValidator(72 * 60)],

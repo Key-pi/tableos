@@ -83,6 +83,7 @@ BOT_SETTINGS_GROUPS = (
         "module_floor_plan_enabled",
         "module_table_orders_enabled",
         "module_reservations_enabled",
+        ("reservation_confirm_guest", "reservation_reminder_minutes"),
         "module_staff_call_enabled",
         ("staff_call_waiter_enabled", "staff_call_bartender_enabled",
          "staff_call_hookah_enabled"),

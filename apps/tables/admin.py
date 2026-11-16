@@ -1,5 +1,6 @@
 import json
 
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import Http404, JsonResponse
@@ -522,7 +523,33 @@ class HallAdmin(ScopedAdminMixin):
         return JsonResponse(floor_plan(partner_id))
 
 
-BOOKING_FIELDS = ("table", "starts_at", "minutes", "guests", "name", "phone", "comment")
+BOOKING_FIELDS = ("table", "starts_at", "minutes", "guests", "customer_code", "name", "phone",
+                  "comment")
+
+
+class ReservationForm(forms.ModelForm):
+    """The guest's customer code (PQ-056) is not a column: the service finds
+    the guest by it. With a code the name and phone may stay empty — the
+    service takes them from the guest's profile."""
+
+    customer_code = forms.CharField(
+        label=_lazy("Код клиента"), required=False, max_length=32,
+        help_text=_lazy("Необязательно. Гость с ботом: имя и телефон подтянутся из профиля, "
+                        "при «Пришли» за стол сядет он сам, бот пришлёт подтверждение "
+                        "и напоминание."),
+    )
+
+    class Meta:
+        model = Reservation
+        fields = ("partner", "table", "starts_at", "minutes", "guests", "name", "phone", "comment")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in ("name", "phone"):
+            if field in self.fields:
+                self.fields[field].required = False
+        if "customer_code" in self.fields and self.instance.guest_id:
+            self.fields["customer_code"].initial = self.instance.guest.customer_code
 
 
 @admin.register(Reservation)
@@ -536,6 +563,7 @@ class ReservationAdmin(ObjectActionsMixin, ScopedAdminMixin):
     admin_section = AdminSection.TABLES
     allow_partner_delete = False
     object_action_errors = (ReservationError,)
+    form = ReservationForm
     list_display = ("starts_at", "table", "name", "phone", "guests", "minutes", "status")
     list_filter = ("status", "partner")
     search_fields = ("name", "phone", "comment")
@@ -587,7 +615,7 @@ class ReservationAdmin(ObjectActionsMixin, ScopedAdminMixin):
             "table_id": data["table"].id if data.get("table") else None,
             "starts_at": data["starts_at"], "minutes": data["minutes"],
             "guests": data["guests"], "name": data["name"], "phone": data["phone"],
-            "comment": data.get("comment", ""),
+            "comment": data.get("comment", ""), "customer_code": data.get("customer_code", ""),
         }
         try:
             if obj is None:
@@ -636,6 +664,12 @@ class ReservationAdmin(ObjectActionsMixin, ScopedAdminMixin):
         booking = mark_reservation(partner_id=obj.partner_id, actor=request.user,
                                    reservation_id=obj.id, status=status)
         return _("Бронь отмечена: «{status}».", status=booking.get_status_display())
+
+    @admin.display(description=_lazy("Код клиента"))
+    def customer_code(self, obj):
+        """Shown when the booking is closed and the form is read-only."""
+
+        return obj.guest.customer_code if obj.guest_id else "—"
 
     @admin.display(description=_lazy("Следующий шаг"))
     def next_step(self, obj):

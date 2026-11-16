@@ -18,6 +18,16 @@ time, duration (2 hours by default), comment. The only writer of
 Who: the owner, a manager, a cashier, a waiter of this venue (the platform
 too, from Admin). The module ``module_reservations_enabled`` needs the
 floor plan.
+
+A guest with the bot (PQ-056): the staff may give the customer code — the
+profile fills in the name and phone (what the staff typed wins), «Пришли»
+seats that guest (``open_staff_table_session(guest=…)``), and the bot writes
+to them after the commit: a confirmation, again when the time or table
+changes (``reservation_confirm_guest``), and a reminder before the time
+(``reservation_reminder_minutes``, beat ``tables.remind_reservations``; a
+booking is claimed by ``reminded_at`` so it is reminded once). Seating a
+named guest locks their row first (``GuestProfile → Table → Reservation``),
+as the QR activation does.
 """
 
 from __future__ import annotations
@@ -32,6 +42,7 @@ from django.utils import timezone
 
 from apps.partners.models import PartnerBotSettings
 from apps.tables.models import Reservation, Table, TableVisit
+from apps.users.models import GuestProfile
 from core.i18n import _
 
 RESERVATION_ROLES = frozenset({"owner", "manager", "cashier", "waiter"})
@@ -140,16 +151,63 @@ def _refuse_overlap(table: Table, starts_at, minutes, *, exclude_id=None) -> Non
         ))
 
 
+def _named_guest(partner_id, customer_code: str) -> GuestProfile | None:
+    """The guest named by code, or nobody (an ordinary visitor)."""
+
+    from apps.users.services import find_guest_by_customer_code
+
+    code = (customer_code or "").strip()
+    if not code:
+        return None
+    try:
+        return find_guest_by_customer_code(partner_id, code)
+    except GuestProfile.DoesNotExist as exc:
+        raise ReservationError(_("Гость с кодом {code} не найден.", code=code.upper())) from exc
+
+
+def _guest_name(guest: GuestProfile) -> str:
+    account = guest.telegram_account
+    name = " ".join(part for part in (account.first_name, account.last_name) if part)
+    return name or (f"@{account.username}" if account.username else "")
+
+
+def _with_profile(guest, name, phone) -> tuple[str, str]:
+    """What the staff typed wins; the rest comes from the guest's profile."""
+
+    if guest is None:
+        return name, phone
+    return ((name or "").strip() or _guest_name(guest),
+            (phone or "").strip() or guest.phone)
+
+
+def _tell_guest(booking: Reservation, kind: str) -> None:
+    """After the commit, if the venue confirms bookings to guests."""
+
+    from apps.notifications.services import send_reservation_notice
+
+    if booking.guest_id is None or booking.guest.telegram_account_id is None:
+        return
+    if not PartnerBotSettings.objects.filter(
+        partner_id=booking.partner_id, reservation_confirm_guest=True
+    ).exists():
+        return
+    send_reservation_notice(booking.id, kind)
+
+
 @transaction.atomic
 def create_reservation(*, partner_id, actor, table_id, starts_at, minutes=DEFAULT_MINUTES,
-                       guests, name, phone, comment="") -> Reservation:
+                       guests, name, phone, comment="", customer_code="") -> Reservation:
     _check(partner_id, actor)
+    guest = _named_guest(partner_id, customer_code)
+    name, phone = _with_profile(guest, name, phone)
     fields = _clean(starts_at=starts_at, minutes=minutes, guests=guests, name=name,
                     phone=phone, comment=comment, now=timezone.now())
     table = _lock_table(partner_id, table_id)
     _refuse_overlap(table, fields["starts_at"], fields["minutes"])
-    return Reservation.objects.create(partner_id=partner_id, table=table, created_by=actor,
-                                      **fields)
+    booking = Reservation.objects.create(partner_id=partner_id, table=table, created_by=actor,
+                                         guest=guest, **fields)
+    _tell_guest(booking, "confirm")
+    return booking
 
 
 def _locked_booking(partner_id, reservation_id) -> Reservation:
@@ -170,13 +228,19 @@ def _locked_booking(partner_id, reservation_id) -> Reservation:
 
 @transaction.atomic
 def update_reservation(*, partner_id, actor, reservation_id, table_id, starts_at, minutes,
-                       guests, name, phone, comment="") -> Reservation:
-    """Another time, table, size or contact for a booking still «Ждём»."""
+                       guests, name, phone, comment="", customer_code="") -> Reservation:
+    """Another time, table, size, contact or guest for a booking still «Ждём».
+
+    ``customer_code`` — the booking's guest from now on (empty — nobody). The
+    guest is told: a new guest gets the confirmation, the same guest — a
+    new time or table; a new time is reminded again."""
 
     _check(partner_id, actor)
     current = Reservation.objects.filter(partner_id=partner_id, id=reservation_id).first()
     if current is None:
         raise ReservationError(_("Бронь не найдена — обновите экран."))
+    guest = _named_guest(partner_id, customer_code)
+    name, phone = _with_profile(guest, name, phone)
     fields = _clean(starts_at=starts_at, minutes=minutes, guests=guests, name=name,
                     phone=phone, comment=comment, now=timezone.now(),
                     kept_start=current.starts_at)
@@ -191,10 +255,19 @@ def update_reservation(*, partner_id, actor, reservation_id, table_id, starts_at
         raise ReservationError(_("Бронь уже отмечена: «{status}». Обновите экран.",
                                  status=booking.get_status_display()))
     _refuse_overlap(target, fields["starts_at"], fields["minutes"], exclude_id=booking.id)
+    moved = booking.starts_at != fields["starts_at"] or booking.table_id != target.id
+    new_guest = booking.guest_id != (guest.id if guest is not None else None)
     for field, value in fields.items():
         setattr(booking, field, value)
     booking.table = target
+    booking.guest = guest
+    if moved or new_guest:
+        booking.reminded_at = None
     booking.save()
+    if new_guest:
+        _tell_guest(booking, "confirm")
+    elif moved:
+        _tell_guest(booking, "changed")
     return booking
 
 
@@ -205,13 +278,25 @@ def seat_reservation(*, partner_id, actor, reservation_id, visit_id=None) -> Res
     Somebody already sits there: refused — unless the screen asked «это гости
     брони?» and staff said yes (``visit_id`` — that company: they were seated
     before the booking was marked), then the booking joins their visit.
-    Lock order: ``Table → Reservation``, then the visit as
-    ``open_staff_table_session`` (its anonymous guest is a new row)."""
+    The booking's guest named by code (PQ-056) sits down themselves; without
+    one — the visit's anonymous guest (a new row). Lock order: the named
+    ``GuestProfile`` → ``Table → Reservation``, then the visit as
+    ``open_staff_table_session``."""
 
     from apps.tables.services import StaleTablePage, open_staff_table_session
 
     _check(partner_id, actor)
+    # A named guest (PQ-056) sits down as after scanning the QR: their row
+    # first, then the table — the order the activation locks in.
+    current = Reservation.objects.filter(partner_id=partner_id, id=reservation_id).first()
+    guest = None
+    if current is not None and current.guest_id is not None:
+        guest = GuestProfile.objects.select_for_update().filter(
+            id=current.guest_id, partner_id=partner_id
+        ).first()
     booking = _locked_booking(partner_id, reservation_id)
+    if booking.guest_id != (guest.id if guest is not None else None):
+        raise ReservationError(_("Бронь только что изменили — обновите экран."))
     if visit_id is not None:
         visit = TableVisit.objects.filter(
             partner_id=partner_id, table_id=booking.table_id, id=visit_id,
@@ -219,10 +304,13 @@ def seat_reservation(*, partner_id, actor, reservation_id, visit_id=None) -> Res
         ).first()
         if visit is None:
             raise ReservationError(_("Эта компания уже ушла — обновите экран."))
+        if guest is not None:
+            open_staff_table_session(partner_id=partner_id, table_id=booking.table_id,
+                                     visit_id=visit.id, guest=guest)
     else:
         try:
             visit = open_staff_table_session(partner_id=partner_id,
-                                             table_id=booking.table_id).visit
+                                             table_id=booking.table_id, guest=guest).visit
         except StaleTablePage as exc:
             raise ReservationError(_(
                 "За столом {table} ещё сидят: закройте их визит или перенесите бронь "
@@ -251,6 +339,42 @@ def mark_reservation(*, partner_id, actor, reservation_id, status) -> Reservatio
     return booking
 
 
+def remind_due_reservations(*, now=None) -> int:
+    """Remind guests with the bot of their booking (PQ-056), once each: the
+    bookings «Ждём» whose time is within the venue's
+    ``reservation_reminder_minutes``. A booking is claimed by ``reminded_at``
+    before the message is queued, so two runs never remind twice."""
+
+    from apps.notifications.services import send_reservation_notice
+
+    now = now or timezone.now()
+    minutes_by_partner = dict(
+        PartnerBotSettings.objects.filter(
+            module_reservations_enabled=True, reservation_reminder_minutes__gt=0,
+        ).values_list("partner_id", "reservation_reminder_minutes")
+    )
+    if not minutes_by_partner:
+        return 0
+    horizon = now + timedelta(minutes=max(minutes_by_partner.values()))
+    due = Reservation.objects.filter(
+        status=Reservation.Status.BOOKED, partner_id__in=minutes_by_partner,
+        guest__telegram_account__isnull=False, reminded_at__isnull=True,
+        starts_at__gt=now, starts_at__lte=horizon,
+    ).values_list("id", "partner_id", "starts_at")
+    reminded = 0
+    for booking_id, partner_id, starts_at in due:
+        if starts_at - timedelta(minutes=minutes_by_partner[partner_id]) > now:
+            continue
+        with transaction.atomic():
+            claimed = Reservation.objects.filter(
+                id=booking_id, status=Reservation.Status.BOOKED, reminded_at__isnull=True,
+            ).update(reminded_at=now)
+            if claimed:
+                send_reservation_notice(booking_id, "reminder")
+                reminded += 1
+    return reminded
+
+
 def plan_bookings(partner_id, *, now=None) -> dict:
     """``{table id: (booking, "reserved" | "late")}`` — the booking the plan
     shows for each table: «Ждём», from an hour before its time until its end;
@@ -261,7 +385,7 @@ def plan_bookings(partner_id, *, now=None) -> dict:
     for booking in Reservation.objects.filter(
         partner_id=partner_id, status=Reservation.Status.BOOKED,
         starts_at__lte=now + SHOWN_BEFORE, ends_at__gt=now,
-    ).select_related("partner", "table").order_by("starts_at"):
+    ).select_related("partner", "table", "guest").order_by("starts_at"):
         if booking.table_id in shown:
             continue
         shown[booking.table_id] = (
@@ -305,6 +429,9 @@ def booking_json(booking: Reservation) -> dict:
         "name": booking.name,
         "phone": booking.phone,
         "comment": booking.comment,
+        # The guest named by code (PQ-056): the screen shows it and keeps it
+        # on an edit.
+        "customer_code": booking.guest.customer_code if booking.guest_id else "",
         "status": booking.status,
         "status_label": str(booking.get_status_display()),
         "started": timezone.now() >= booking.starts_at,
