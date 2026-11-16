@@ -180,6 +180,20 @@ def _with_profile(guest, name, phone) -> tuple[str, str]:
             (phone or "").strip() or guest.phone)
 
 
+@transaction.atomic
+def booking_guest(*, partner_id, actor, customer_code) -> dict | None:
+    """Who the code names, for the form as the staff type it (PQ-056): the
+    guest as staff see them and what the booking takes from the profile.
+    ``None`` — no code; an unknown code — ``ReservationError``. In a network
+    the guest gets a profile here, as the booking itself would make."""
+
+    _check(partner_id, actor)
+    guest = _named_guest(partner_id, customer_code)
+    if guest is None:
+        return None
+    return {"guest": guest.staff_label(), "name": _guest_name(guest), "phone": guest.phone}
+
+
 def _tell_guest(booking: Reservation, kind: str) -> None:
     """After the commit, if the venue confirms bookings to guests."""
 

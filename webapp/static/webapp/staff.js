@@ -944,6 +944,32 @@
     var name = input({ type: "text", maxlength: 80, value: value.name || "", autocomplete: "off" });
     var phone = input({ type: "tel", maxlength: 32, value: value.phone || "", autocomplete: "off" });
     var comment = input({ type: "text", maxlength: 300, value: value.comment || "" });
+    // Whom the code names, as soon as it is typed (as on «Продажа»): the guest,
+    // or «not found»; their name and phone go into the fields still empty
+    // (or still holding what the previous code put there).
+    var who = el("div", { class: "note", hidden: true });
+    var filled = { name: "", phone: "" };
+    var findGuest = function () {
+      var typed = code.value.trim();
+      who.hidden = true;
+      if (!typed) return;
+      api("reservation_guest", { customer_code: typed }).then(function (result) {
+        if (code.value.trim() !== typed) return;  // another code was typed meanwhile
+        who.hidden = false;
+        if (!result.ok) {
+          who.className = "form-error";
+          who.textContent = result.data.error || T.error;
+          return;
+        }
+        who.className = "note";
+        who.textContent = "👤 " + result.data.guest;
+        [[name, "name"], [phone, "phone"]].forEach(function (pair) {
+          var box = pair[0], key = pair[1], found = result.data[key];
+          if (found && (!box.value || box.value === filled[key])) { box.value = found; filled[key] = found; }
+        });
+      });
+    };
+    code.addEventListener("change", findGuest);
     var back = el("div", { class: "sheet-back booking-form", style: "z-index:40", onclick: function (event) {
       if (event.target === back) back.remove();
     } });
@@ -976,12 +1002,13 @@
     back.appendChild(el("div", { class: "sheet", role: "dialog", style: "max-height:90vh;overflow:auto" },
       el("p", null, el("b", { text: booking ? T.edit_booking : T.new_booking })),
       field(T.f_table, table), field(T.f_date, date), field(T.f_time, time), field(T.f_minutes, minutes),
-      field(T.f_guests, guests), field(T.booking_code_hint, code), field(T.f_name, name),
+      field(T.f_guests, guests), field(T.booking_code_hint, code), who, field(T.f_name, name),
       field(T.phone, phone), field(T.comment, comment),
       problem,
       el("div", { class: "acts" },
         el("button", { type: "button", class: "act", text: T.back, onclick: function () { back.remove(); } }), save)));
     document.body.appendChild(back);
+    if (value.customer_code) findGuest();
     if (!booking) name.focus();
   }
 

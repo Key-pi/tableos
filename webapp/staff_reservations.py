@@ -13,6 +13,7 @@ from datetime import date, datetime, time, timedelta
 
 from apps.tables.models import Reservation, Table
 from apps.tables.reservations import (
+    booking_guest,
     booking_json,
     create_reservation,
     mark_reservation,
@@ -121,6 +122,17 @@ def save_view(request, staff: StaffRequest, body: dict) -> dict:
                    time=booking_json(booking)["time"])
     booking = Reservation.objects.select_related("table", "partner", "guest").get(id=booking.id)
     return {"ok": True, "notice": notice, "reservation": booking_json(booking)}
+
+
+@staff_api("POST")
+def guest_view(request, staff: StaffRequest, body: dict) -> dict:
+    """``{"customer_code"}`` — whom the booking form's code names, shown as
+    soon as it is typed, as on «Продажа» (PQ-056); an unknown code — 400."""
+
+    _right(staff)
+    found = booking_guest(partner_id=staff.partner.id, actor=staff.employee.user,
+                          customer_code=_text(body, "customer_code"))
+    return {"ok": True, **(found or {"guest": "", "name": "", "phone": ""})}
 
 
 ACTIONS = {"no_show": Reservation.Status.NO_SHOW, "cancel": Reservation.Status.CANCELED}

@@ -60,6 +60,8 @@ urlpatterns += [
          name="staff_reservation_save"),
     path("<str:bot_hex>/api/staff/reservation_action", staff_reservations.action_view,
          name="staff_reservation_action"),
+    path("<str:bot_hex>/api/staff/reservation_guest", staff_reservations.guest_view,
+         name="staff_reservation_guest"),
 ]
 urlpatterns += [
     path("<str:bot_hex>/api/staff/order", staff_views.staff_order_view, name="staff_order"),

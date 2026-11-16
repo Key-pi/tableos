@@ -109,3 +109,26 @@ class StaffReservationTests(StaffFixture):
                                        user_id=WAITER_TG)
         self.assertEqual(status, 400)
         self.assertIn("NOPE00", body["error"])
+
+    def test_the_form_shows_whom_the_code_names(self):
+        """As on «Продажа»: the guest as soon as the code is typed, or «not
+        found»; the form takes the name and phone from the answer."""
+
+        from tests.apps.tables.test_reservation_guest import make_guest
+
+        guest = make_guest(self.partner)
+        status, body = self.staff_call("reservation_guest",
+                                       {"customer_code": guest.customer_code.lower()},
+                                       user_id=WAITER_TG)
+        self.assertEqual(status, 200, body)
+        self.assertEqual((body["guest"], body["name"], body["phone"]),
+                         (guest.staff_label(), "Олена Коваль", "+380671234567"))
+        status, body = self.staff_call("reservation_guest", {"customer_code": "NOPE00"},
+                                       user_id=WAITER_TG)
+        self.assertEqual(status, 400)
+        self.assertIn("NOPE00", body["error"])
+        staff(self.partner, "kava_hookah_code", User.Role.HOOKAH_MASTER, 7700298)
+        self.assertEqual(self.staff_call("reservation_guest",
+                                         {"customer_code": guest.customer_code},
+                                         user_id=7700298)[0], 403)
+        self.assertFalse(Reservation.objects.exists())
