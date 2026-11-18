@@ -537,6 +537,10 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
             # "A bill to each" splits by guest: with one guest's orders it is
             # the same single bill, so only one button is shown.
             "can_split": can_bill and len({order.guest_id for order in visit_orders}) > 1,
+            # The settlement editor (PQ-009, step 3): lines to lay out or
+            # bills of the company to take money for.
+            "can_settle": can_bill and (bool(visit_orders) or any(
+                bill.visit_id == visit.id for bill in bills)),
             "can_close": can_close,
         })
     result = {"tables": sorted(tables.values(), key=lambda table: table["number"])}

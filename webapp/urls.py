@@ -5,6 +5,7 @@ from webapp import (
     staff_billing,
     staff_reservations,
     staff_sales,
+    staff_settlement,
     staff_table_orders,
     staff_views,
     views,
@@ -56,6 +57,13 @@ urlpatterns += [
     # PQ-009, step 2: how many sit at the table.
     path("<str:bot_hex>/api/staff/visit_guests", staff_billing.visit_guests_view,
          name="staff_visit_guests"),
+    # PQ-009, step 3: the settlement editor of a table.
+    path("<str:bot_hex>/api/staff/settlement", staff_settlement.settlement_view,
+         name="staff_settlement"),
+    path("<str:bot_hex>/api/staff/settlement_save", staff_settlement.settlement_save_view,
+         name="staff_settlement_save"),
+    path("<str:bot_hex>/api/staff/settlement_pay", staff_settlement.settlement_pay_view,
+         name="staff_settlement_pay"),
     # PQ-052, step 3: reservations.
     path("<str:bot_hex>/api/staff/reservations", staff_reservations.list_view,
          name="staff_reservations"),

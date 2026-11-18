@@ -181,11 +181,9 @@ def apply_bonus_programs(
     )
     assert_bonus_balance_reconciled(guest)
     if order is not None:
-        order = Order.objects.get(
-            id=order.id,
-            partner_id=partner_id,
-            guest_id=guest.id,
-        )
+        # Not necessarily the guest's own order: the cashback is theirs who
+        # pay the lines (PQ-009, step 3).
+        order = Order.objects.get(id=order.id, partner_id=partner_id)
     if bill is not None and bill.partner_id != partner_id:
         raise BonusServiceError(_("Счёт не из этого заведения."))
 

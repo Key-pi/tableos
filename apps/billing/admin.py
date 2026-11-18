@@ -12,6 +12,7 @@ from apps.billing.models import (
     BillingRequest,
     BillItem,
     BillOrder,
+    BillSplitShare,
     Payment,
     Refund,
     RefundLine,
@@ -151,6 +152,22 @@ class PaymentInline(RecordsInlineMixin, TabularInline):
         return False
 
 
+class BillSplitShareInline(RecordsInlineMixin, TabularInline):
+    """Whose part of «Общее» is which (PQ-009, step 3); made by the
+    settlement editor, read only."""
+
+    admin_section = AdminSection.BILLING
+    tab = True
+    model = BillSplitShare
+    extra = 0
+    can_delete = False
+    fields = ("number", "guest")
+    readonly_fields = ("number", "guest")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(BillingRequest)
 class BillingRequestAdmin(ScopedAdminMixin):
     admin_section = AdminSection.BILLING
@@ -275,10 +292,19 @@ class BillAdmin(ObjectActionsMixin, ScopedAdminMixin):
     inlines = [
         BillItemInline,
         PaymentInline,
+        BillSplitShareInline,
         RefundInline,
         BillAdjustmentInline,
         BillOrderInline,
     ]
+
+    def get_inlines(self, request, obj):
+        # «Части общего счёта» only on «Общее» of the settlement editor.
+        inlines = super().get_inlines(request, obj)
+        if obj is None or not obj.split_shares.exists():
+            inlines = [inline for inline in inlines if inline is not BillSplitShareInline]
+        return inlines
+
     fieldsets = (
         (None, {"fields": (
             "partner",

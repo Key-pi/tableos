@@ -655,6 +655,10 @@
                                            onclick: function () { visitAction(visit, "personal"); } }));
           }
         }
+        if (visit.can_settle) {
+          acts.appendChild(el("button", { type: "button", class: "act primary", text: T.settle,
+                                         onclick: function () { openSettlement(table, visit); } }));
+        }
         if (data.rights.table_orders) {
           acts.appendChild(el("button", { type: "button", class: "act primary", text: T.add_order,
                                          onclick: function () { startTableOrder(table, visit); } }));
@@ -665,6 +669,159 @@
         }
         if (acts.childNodes.length) card.appendChild(acts);
         return card;
+  }
+
+  // «Рассчитать» (PQ-009, step 3): the company's lines laid out by who pays —
+  // each to a guest or to «Общее», shared equally by the guests ticked; then
+  // each guest pays their bill and part of «Общее» with one tap.
+  function openSettlement(table, visit) {
+    var old = document.querySelector(".sheet-back.settle");
+    if (old) old.remove();
+    var back = el("div", { class: "sheet-back settle", style: "z-index:30" });
+    var box = el("div", { class: "sheet", role: "dialog", style: "max-height:88vh;overflow:auto" });
+    back.appendChild(box);
+    document.body.appendChild(back);
+    var state = null, places = {}, sharers = {}, mode = "layout";
+    var close = function () { back.remove(); load(true).then(render); };
+
+    var guestName = function (id) {
+      if (id === "shared") return T.settle_shared;
+      var guest = state.guests.filter(function (item) { return item.id === id; })[0];
+      return guest ? (guest.bot ? "👤 " : "") + guest.label : "?";
+    };
+    var sum = function (lines) {
+      return lines.reduce(function (total, line) { return total + Number(line.total); }, 0);
+    };
+    var sharerIds = function () {
+      return state.guests.filter(function (guest) { return sharers[guest.id]; }).map(function (guest) { return guest.id; });
+    };
+    var show = function (settlement) {
+      state = settlement;
+      places = {}; sharers = {};
+      state.lines.forEach(function (line) { places[line.id] = line.place; });
+      var given = state.sharers.length ? state.sharers : state.guests.filter(function (guest) { return guest.here; }).map(function (guest) { return guest.id; });
+      given.forEach(function (id) { sharers[id] = true; });
+      // Laid out and nothing new — the money; new lines — lay them out first.
+      var fresh = state.guests.some(function (guest) { return Number(guest.unbilled) > 0; });
+      mode = state.laid_out && !fresh ? "pay" : "layout";
+      if (state.laid_out && fresh) toast(T.settle_new_lines);
+      draw();
+    };
+    var choose = function (title, options, pick) {
+      var pop = el("div", { class: "sheet-back", style: "z-index:40", onclick: function (event) { if (event.target === pop) pop.remove(); } });
+      var list = el("div", { class: "acts", style: "flex-direction:column" });
+      options.forEach(function (id) {
+        list.appendChild(el("button", { type: "button", class: "act", text: guestName(id),
+                                        onclick: function () { pop.remove(); pick(id); } }));
+      });
+      pop.appendChild(el("div", { class: "sheet", role: "dialog" }, el("p", null, el("b", { text: title })), list));
+      document.body.appendChild(pop);
+    };
+    var draw = function () {
+      box.innerHTML = "";
+      if (mode === "pay") return drawPay();
+      box.appendChild(el("p", null, el("b", { text: t("settle_title", { number: table.number }) })));
+      box.appendChild(el("div", { class: "note", text: T.settle_hint }));
+      var shared = state.lines.filter(function (line) { return places[line.id] === "shared"; });
+      var sharing = sharerIds();
+      var part = sharing.length ? sum(shared.filter(function (line) { return !line.fixed; })) / sharing.length : 0;
+      var everyone = state.guests.map(function (guest) { return guest.id; });
+      var section = function (id) {
+        var lines = state.lines.filter(function (line) { return places[line.id] === id; });
+        var own = sum(lines);
+        var total = own + (id !== "shared" && sharers[id] ? part : 0);
+        if (id !== "shared" && !lines.length && !sharers[id]) return;
+        var head = el("div", { class: "row", style: "margin-top:10px" },
+          el("b", { text: guestName(id) }), el("b", { text: money(id === "shared" ? own : total) }));
+        box.appendChild(head);
+        if (id === "shared") {
+          var chips = el("div", { class: "filters", style: "padding:4px 0" });
+          state.guests.forEach(function (guest) {
+            chips.appendChild(el("button", { type: "button", class: "chip", text: guestName(guest.id),
+              "aria-pressed": String(!!sharers[guest.id]),
+              onclick: function () { sharers[guest.id] = !sharers[guest.id]; draw(); } }));
+          });
+          box.appendChild(el("div", { class: "note", text: T.settle_shared_hint + (sharing.length ? " · " + t("settle_per_guest", { amount: money(part) }) : "") }));
+          box.appendChild(chips);
+        } else if (lines.some(function (line) { return !line.fixed; })) {
+          head.appendChild(el("button", { type: "button", class: "act", style: "margin-left:8px", text: T.settle_move_all,
+            onclick: function () {
+              choose(T.settle_move_all, everyone.filter(function (other) { return other !== id; }), function (target) {
+                lines.forEach(function (line) { if (!line.fixed) places[line.id] = target; });
+                draw();
+              });
+            } }));
+        }
+        lines.forEach(function (line) {
+          var row = el("div", { class: "row" + (line.fixed ? " gone" : "") },
+            el("span", { text: line.name + " × " + line.quantity + (line.fixed ? " · 🔒 " + T.settle_locked : "") }),
+            el("span", { text: money(line.total) }));
+          if (!line.fixed) {
+            row.style.cursor = "pointer";
+            row.addEventListener("click", function () {
+              choose(t("settle_where", { name: line.name }), everyone.concat(["shared"]), function (target) {
+                places[line.id] = target; draw();
+              });
+            });
+          }
+          box.appendChild(row);
+        });
+      };
+      everyone.forEach(section);
+      section("shared");
+      var acts = el("div", { class: "acts", style: "margin-top:12px" },
+        el("button", { type: "button", class: "act", text: T.back, onclick: close }));
+      acts.appendChild(el("button", { type: "button", class: "act primary", text: T.settle_done, onclick: function () {
+        if (busy) return;
+        busy = true;
+        var movable = {};
+        state.lines.forEach(function (line) { if (!line.fixed) movable[line.id] = places[line.id]; });
+        api("settlement_save", { visit: visit.id, places: movable, sharers: sharerIds() }).then(function (result) {
+          busy = false;
+          if (!result.ok) { haptic("error"); toast(result.data.error || T.error); return; }
+          haptic("success");
+          if (result.data.notice) toast(result.data.notice);
+          show(result.data.settlement);
+        });
+      } }));
+      box.appendChild(acts);
+    };
+    var drawPay = function () {
+      box.appendChild(el("p", null, el("b", { text: t("settle_pay_title", { number: table.number }) })));
+      state.guests.forEach(function (guest) {
+        var row = el("div", { class: "row", style: "align-items:center;margin-top:8px" },
+          el("span", { style: "flex:1", text: guestName(guest.id) }));
+        if (Number(guest.to_pay) > 0) {
+          row.appendChild(el("b", { style: "margin-right:8px", text: money(guest.to_pay) }));
+          ["cash", "terminal"].forEach(function (method) {
+            row.appendChild(el("button", { type: "button", class: "act", text: method === "cash" ? T.sale_cash : T.sale_card,
+              onclick: function () {
+                if (busy) return;
+                busy = true;
+                api("settlement_pay", { visit: visit.id, guest: guest.id, method: method, amount: guest.to_pay }).then(function (result) {
+                  busy = false;
+                  if (!result.ok) { haptic("error"); toast(result.data.error || T.error); return; }
+                  haptic("success");
+                  if (result.data.notice) toast(result.data.notice);
+                  show(result.data.settlement);
+                });
+              } }));
+          });
+        } else row.appendChild(el("span", { class: "status", text: T.settle_paid }));
+        box.appendChild(row);
+      });
+      var acts = el("div", { class: "acts", style: "margin-top:12px" },
+        el("button", { type: "button", class: "act", text: T.back, onclick: close }));
+      if (state.lines.some(function (line) { return !line.fixed; })) {
+        acts.appendChild(el("button", { type: "button", class: "act", text: T.settle_relayout,
+                                        onclick: function () { mode = "layout"; draw(); } }));
+      }
+      box.appendChild(acts);
+    };
+    api("settlement", undefined, { visit: visit.id }).then(function (result) {
+      if (!result.ok) { back.remove(); toast(result.data.error || T.error); return; }
+      show(result.data.settlement);
+    });
   }
 
   function setHeadcount(visit, count) {

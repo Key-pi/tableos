@@ -705,6 +705,10 @@ msgid "Делить можно на 2–{most} частей."
 msgstr "Ділити можна на 2–{most} частин."
 
 #: apps/billing/bill_split.py
+msgid "Это «Общее» стола — делите его в «Рассчитать»."
+msgstr "Це «Спільне» столу — діліть його в «Розрахувати»."
+
+#: apps/billing/bill_split.py
 msgid "Часть уже оплачена — делить заново нельзя."
 msgstr "Частину вже оплачено — ділити заново не можна."
 
@@ -928,6 +932,18 @@ msgstr "запит рахунку"
 msgid "Запросы счёта"
 msgstr "Запити рахунку"
 
+#: apps/billing/models.py
+msgid "Часть"
+msgstr "Частина"
+
+#: apps/billing/models.py
+msgid "часть общего счёта"
+msgstr "частина спільного рахунку"
+
+#: apps/billing/models.py
+msgid "Части общего счёта"
+msgstr "Частини спільного рахунку"
+
 #: apps/billing/models.py apps/bonuses/models.py apps/menu/models.py apps/notifications/models.py apps/orders/models.py
 msgid "Заказ"
 msgstr "Замовлення"
@@ -1053,10 +1069,6 @@ msgid "Кто создал"
 msgstr "Хто створив"
 
 #: apps/billing/models.py
-msgid "Часть"
-msgstr "Частина"
-
-#: apps/billing/models.py
 msgid "оплата"
 msgstr "оплата"
 
@@ -1075,6 +1087,10 @@ msgstr "Замовлення скасовано"
 #: apps/billing/models.py webapp/staff_billing.py
 msgid "Счёт аннулирован"
 msgstr "Рахунок анульовано"
+
+#: apps/billing/models.py
+msgid "Счёт пересобран"
+msgstr "Рахунок перезібрано"
 
 #: apps/billing/models.py bot/keyboards/staff.py
 msgid "Ошибка ввода"
@@ -1617,6 +1633,22 @@ msgid "Один или несколько order items уже включены в
 msgstr "Один або кілька рядків замовлення вже включено в інший рахунок."
 
 #: apps/billing/services.py
+msgid "Нужно выбрать хотя бы одну позицию для счёта."
+msgstr "Потрібно вибрати хоча б одну позицію для рахунку."
+
+#: apps/billing/services.py
+msgid "Не все позиции найдены в этом заведении."
+msgstr "Не всі позиції знайдено в цьому закладі."
+
+#: apps/billing/services.py
+msgid "В один счёт можно объединять только позиции одного стола."
+msgstr "В один рахунок можна об’єднувати лише позиції одного столу."
+
+#: apps/billing/services.py apps/bonuses/services.py
+msgid "Гость не из этого заведения."
+msgstr "Гість не з цього закладу."
+
+#: apps/billing/services.py
 msgid "Выдать можно только draft-счёт."
 msgstr "Виставити можна лише рахунок-чернетку."
 
@@ -1956,6 +1988,50 @@ msgstr "Не можна скасувати вже оброблений запи�
 msgid "Отмена"
 msgstr "Скасувати"
 
+#: apps/billing/visit_settlement.py apps/tables/reservations.py apps/tables/services.py
+msgid "Эта компания уже ушла — обновите экран."
+msgstr "Ця компанія вже пішла — оновіть екран."
+
+#: apps/billing/visit_settlement.py
+msgid "Рассчитывают стол владелец, менеджер или кассир этого заведения."
+msgstr "Розраховують стіл власник, менеджер або касир цього закладу."
+
+#: apps/billing/visit_settlement.py
+msgid "Позиция уже оплачена — её не переносят. Обновите экран."
+msgstr "Позицію вже оплачено — її не переносять. Оновіть екран."
+
+#: apps/billing/visit_settlement.py
+msgid "Позиция не из этого стола — обновите экран."
+msgstr "Позиція не з цього столу — оновіть екран."
+
+#: apps/billing/visit_settlement.py
+msgid "Разложите все позиции по гостям или в «Общее»."
+msgstr "Розкладіть усі позиції по гостях або в «Спільне»."
+
+#: apps/billing/visit_settlement.py
+msgid "Этого гостя нет в компании — обновите экран."
+msgstr "Цього гостя немає в компанії — оновіть екран."
+
+#: apps/billing/visit_settlement.py
+msgid "«Общее» делят хотя бы два гостя."
+msgstr "«Спільне» ділять щонайменше двоє гостей."
+
+#: apps/billing/visit_settlement.py webapp/staff_views.py
+msgid "Общее"
+msgstr "Спільне"
+
+#: apps/billing/visit_settlement.py
+msgid "Гость платит наличными или картой."
+msgstr "Гість платить готівкою або карткою."
+
+#: apps/billing/visit_settlement.py
+msgid "Этому гостю платить нечего."
+msgstr "Цьому гостю нічого платити."
+
+#: apps/billing/visit_settlement.py
+msgid "Сумма гостя изменилась — обновите экран."
+msgstr "Сума гостя змінилася — оновіть екран."
+
 #: apps/bonuses/models.py
 msgid "Оплаченный заказ"
 msgstr "Оплачене замовлення"
@@ -2115,10 +2191,6 @@ msgstr "{label} має бути коректним грошовим значен
 #: apps/bonuses/services.py
 msgid "{label} должна быть больше нуля."
 msgstr "{label} має бути більшою за нуль."
-
-#: apps/bonuses/services.py
-msgid "Гость не из этого заведения."
-msgstr "Гість не з цього закладу."
 
 #: apps/bonuses/services.py
 msgid "Счёт не из этого заведения."
@@ -5728,10 +5800,6 @@ msgstr "Бронь щойно змінили — оновіть екран."
 msgid "Бронь уже отмечена: «{status}». Обновите экран."
 msgstr "Бронь уже позначено: «{status}». Оновіть екран."
 
-#: apps/tables/reservations.py apps/tables/services.py
-msgid "Эта компания уже ушла — обновите экран."
-msgstr "Ця компанія вже пішла — оновіть екран."
-
 #: apps/tables/reservations.py
 msgid "За столом {table} ещё сидят: закройте их визит или перенесите бронь на другой стол."
 msgstr "За столом {table} ще сидять: закрийте їхній візит або перенесіть бронь на інший стіл."
@@ -8988,7 +9056,7 @@ msgstr "Рахунок ділять порівну на {parts}."
 msgid "Счёт больше не делят."
 msgstr "Рахунок більше не ділять."
 
-#: webapp/staff_billing.py
+#: webapp/staff_billing.py webapp/staff_settlement.py
 msgid "Обновите экран и попробуйте ещё раз."
 msgstr "Оновіть екран і спробуйте ще раз."
 
@@ -9079,6 +9147,14 @@ msgstr "Відкритих замовлень"
 #: webapp/staff_sales.py
 msgid "Открытых счетов"
 msgstr "Відкритих рахунків"
+
+#: webapp/staff_settlement.py
+msgid "Счета готовы."
+msgstr "Рахунки готові."
+
+#: webapp/staff_settlement.py
+msgid "Оплачено."
+msgstr "Оплачено."
 
 #: webapp/staff_table_orders.py
 msgid "Заказ на стол делают официант, кассир, менеджер или владелец."
@@ -9215,6 +9291,54 @@ msgstr "Для кого"
 #: webapp/staff_views.py
 msgid "＋ Новый гость"
 msgstr "＋ Новий гість"
+
+#: webapp/staff_views.py
+msgid "🧾 Рассчитать"
+msgstr "🧾 Розрахувати"
+
+#: webapp/staff_views.py
+msgid "Стол {number} · расчёт"
+msgstr "Стіл {number} · розрахунок"
+
+#: webapp/staff_views.py
+msgid "Нажмите позицию — выберите, кто за неё платит."
+msgstr "Натисніть позицію — оберіть, хто за неї платить."
+
+#: webapp/staff_views.py
+msgid "Делят поровну — отметьте, кто"
+msgstr "Ділять порівну — позначте, хто"
+
+#: webapp/staff_views.py
+msgid "по {amount}"
+msgstr "по {amount}"
+
+#: webapp/staff_views.py
+msgid "Всё — к…"
+msgstr "Усе — до…"
+
+#: webapp/staff_views.py
+msgid "Кто платит за «{name}»?"
+msgstr "Хто платить за «{name}»?"
+
+#: webapp/staff_views.py
+msgid "Стол {number} · оплата"
+msgstr "Стіл {number} · оплата"
+
+#: webapp/staff_views.py
+msgid "✓ рассчитан"
+msgstr "✓ розрахований"
+
+#: webapp/staff_views.py
+msgid "Разложить заново"
+msgstr "Розкласти заново"
+
+#: webapp/staff_views.py
+msgid "Есть позиции без счёта — разложите их."
+msgstr "Є позиції без рахунку — розкладіть їх."
+
+#: webapp/staff_views.py
+msgid "оплачено"
+msgstr "оплачено"
 
 #: webapp/staff_views.py
 msgid "Без счёта: {count} на {total} грн"

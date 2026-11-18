@@ -29,6 +29,10 @@ paths:
   удержан) (`apps/billing/counter_sales.py`); повтор — уникальный
   `Order.request_key`.
 - Изменение счёта и возврат: `Bill → BillItem → GuestProfile → Order`.
+- Редактор расчёта стола (PQ-009, шаг 3, `apps/billing/visit_settlement.py`):
+  открытые счета визита по id → их `BillItem` → заказы и строки заказов
+  (`create_bill_from_lines`) → дальше как оплата; сумма гостя считается
+  только после блокировки счетов.
 - Вызов персонала «Иду»: только `GuestCall` (`take_guest_call`).
 - Приглашение сотрудника: `StaffInvite → EmployeeProfile`.
 - Экран кухни и бара «Готово»: только `Order` (до чтения `OrderStationReady`).

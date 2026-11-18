@@ -107,6 +107,9 @@ def split_bill_equally(*, partner_id, employee, bill_id, parts) -> Bill:
     if parts != 0 and not 2 <= parts <= SPLIT_MAX_PARTS:
         raise BillSplitError(_("Делить можно на 2–{most} частей.", most=SPLIT_MAX_PARTS))
     bill = _locked_bill(partner_id, employee, bill_id)
+    if bill.split_shares.exists():
+        # «Общее» of the settlement editor (step 3): its parts are guests'.
+        raise BillSplitError(_("Это «Общее» стола — делите его в «Рассчитать»."))
     if any(part.paid for part in split_parts_of(bill)):
         raise BillSplitError(_("Часть уже оплачена — делить заново нельзя."))
     if parts and bill.total_amount - bill.paid_amount <= 0:

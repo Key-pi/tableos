@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_DOWN, Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from apps.billing.models import (
@@ -378,6 +379,80 @@ def create_bill_from_orders(
     return recalculate_bill_totals(bill)
 
 
+OPEN_OR_PAID = (Bill.Status.DRAFT, Bill.Status.ISSUED, Bill.Status.PARTIALLY_PAID, Bill.Status.PAID)
+
+
+@transaction.atomic
+def create_bill_from_lines(
+    *,
+    partner_id,
+    order_item_ids: list,
+    kind: str = Bill.Kind.PERSONAL,
+    primary_guest=None,
+    label: str = "",
+) -> Bill:
+    """A bill of exactly these lines of one table visit, each line whole
+    (PQ-009, step 3): the settlement editor lays a company's lines out by
+    who pays. Orders of the lines may end up in several bills; a line is in
+    one (``unique_active_order_item_bill_allocation``).
+
+    Locks the orders, then the lines (as ``create_bill_from_orders``)."""
+
+    requested = {str(item_id) for item_id in order_item_ids}
+    if not requested:
+        raise BillingServiceError(_("Нужно выбрать хотя бы одну позицию для счёта."))
+    order_ids = set(
+        OrderItem.objects.filter(partner_id=partner_id, id__in=requested)
+        .values_list("order_id", flat=True)
+    )
+    orders = list(
+        Order.objects.select_for_update(of=("self",))
+        .select_related("table", "table_session")
+        .filter(partner_id=partner_id, id__in=order_ids)
+        .order_by("id")
+    )
+    items = list(
+        OrderItem.objects.select_for_update()
+        .filter(partner_id=partner_id, id__in=requested)
+        .order_by("id")
+    )
+    if len(items) != len(requested):
+        raise BillingServiceError(_("Не все позиции найдены в этом заведении."))
+    if any(order.status == Order.Status.CANCELED for order in orders):
+        raise BillingServiceError(_("Отменённые заказы нельзя включать в новый счёт."))
+    if {order.table_id for order in orders} != {orders[0].table_id} or orders[0].table_id is None:
+        raise BillingServiceError(_("В один счёт можно объединять только позиции одного стола."))
+    visit_ids = {_order_visit_id(order) for order in orders}
+    if len(visit_ids) != 1:
+        raise BillingServiceError(_("В один счёт можно объединять только заказы одного визита."))
+    if BillItem.objects.filter(
+        partner_id=partner_id, is_active=True, order_item_id__in=requested,
+        bill__status__in=OPEN_OR_PAID,
+    ).exists():
+        raise BillingServiceError(_("Часть позиций уже включена в другой счёт."))
+    if primary_guest is not None and primary_guest.partner_id != partner_id:
+        raise BillingServiceError(_("Гость не из этого заведения."))
+
+    bill = Bill.objects.create(
+        partner_id=partner_id, table=orders[0].table, visit_id=next(iter(visit_ids)),
+        primary_guest=primary_guest, kind=kind, label=label,
+    )
+    BillOrder.objects.bulk_create(
+        [BillOrder(partner_id=partner_id, bill=bill, order=order) for order in orders]
+    )
+    BillItem.objects.bulk_create([
+        BillItem(
+            partner_id=partner_id, bill=bill, order_id=item.order_id, order_item=item,
+            item_name=item.item_name, unit_price=item.unit_price, quantity=item.quantity,
+            line_total=(item.unit_price * item.quantity).quantize(Decimal("0.01")),
+            comment=item.comment,
+        )
+        for item in items
+    ])
+    bill = Bill.objects.prefetch_related("items", "payments").get(id=bill.id)
+    return recalculate_bill_totals(bill)
+
+
 @transaction.atomic
 def issue_bill(bill: Bill) -> Bill:
     try:
@@ -708,6 +783,65 @@ def _process_post_payment_updates(bill: Bill) -> None:
     after_table_bill_paid(bill)
 
 
+def _bill_payers(bill: Bill) -> list | None:
+    """Who pays a bill, for the cashback (PQ-009, step 3): the guests of the
+    equal parts of «Общее», the bill's own guest, or ``None`` — each order's
+    guest (a shared bill of several guests)."""
+
+    shares = list(bill.split_shares.select_related("guest").order_by("number"))
+    if shares:
+        return [share.guest for share in shares]
+    if bill.primary_guest_id is not None:
+        return [bill.primary_guest]
+    return None
+
+
+def _equal_parts(total: Decimal, count: int) -> list[Decimal]:
+    share = (total / count).quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+    return [share] * (count - 1) + [total - share * (count - 1)]
+
+
+def _award_bill_cashback(bill: Bill, order: Order, *, was_unpaid: bool, whole: bool,
+                         portion: Decimal, bonus_share: Decimal, payers: list | None) -> None:
+    """The cashback for this bill's lines of ``order`` goes to who pays them
+    (PQ-009, step 3, owner 2026-11-18), not to who ordered. A bill with all
+    of an order's lines, paid by the order's own guest, earns as it always
+    did (one accrual per order)."""
+
+    if payers is None:
+        payers = [order.guest]
+    if whole and payers == [order.guest]:
+        if not was_unpaid:
+            return
+        accruals = [(order.guest, order.total_amount, bonus_share, str(order.id))]
+    else:
+        # ``source_id`` fits 64 characters: the order, the bill's and the
+        # payer's codes (both unique in the venue).
+        accruals = [
+            (payer, amount, bonus, f"{order.id}:{bill.public_id}:{payer.customer_code}")
+            for payer, amount, bonus in zip(
+                payers, _equal_parts(portion, len(payers)),
+                _equal_parts(bonus_share, len(payers)), strict=True,
+            )
+        ]
+    for guest, purchase_total, bonus_paid, source_id in accruals:
+        try:
+            apply_bonus_programs(
+                partner_id=bill.partner_id,
+                event=purchase_event_for(order),
+                guest=guest,
+                order=order,
+                bill=bill,
+                purchase_total=purchase_total,
+                bonus_paid_amount=bonus_paid,
+                source_type="order_paid",
+                source_id=source_id,
+                comment=f"Paid order bonus for order #{order.public_id}.",
+            )
+        except BonusServiceError as exc:
+            raise BillingServiceError(str(exc)) from exc
+
+
 def _sync_orders_after_bill_paid(bill: Bill) -> int:
     paid_payments = list(bill.payments.filter(status=Payment.Status.PAID))
     order_payment_method = _derive_order_payment_method(
@@ -723,10 +857,30 @@ def _sync_orders_after_bill_paid(bill: Bill) -> int:
         .order_by("id")
     )
     bonus_shares = _bill_bonus_share_by_order(bill)
+    # An order laid out over several bills (PQ-009, step 3) is paid when the
+    # last of them is; this bill earns the cashback for its own lines.
+    portions: dict = {}
+    for line in bill.items.filter(is_active=True):
+        portions[line.order_id] = portions.get(line.order_id, Decimal("0.00")) + line.line_total
+    elsewhere = BillItem.objects.filter(
+        order_id__in=order_ids, is_active=True, bill__status__in=OPEN_OR_PAID,
+    ).exclude(bill_id=bill.id)
+    unpaid_elsewhere = set(
+        elsewhere.exclude(bill__status=Bill.Status.PAID).values_list("order_id", flat=True)
+    )
+    split_orders = set(elsewhere.values_list("order_id", flat=True))
+    payers = _bill_payers(bill)
     updated_count = 0
     now = timezone.now()
     for order in orders:
         was_unpaid = order.paid_at is None
+        _award_bill_cashback(
+            bill, order, was_unpaid=was_unpaid, whole=order.id not in split_orders,
+            portion=portions.get(order.id, Decimal("0.00")),
+            bonus_share=bonus_shares.get(order.id, Decimal("0.00")), payers=payers,
+        )
+        if order.id in unpaid_elsewhere:
+            continue
         if order_payment_method and order.payment_method != order_payment_method:
             order.payment_method = order_payment_method
             order.save(update_fields=["payment_method", "updated_at"])
@@ -743,21 +897,6 @@ def _sync_orders_after_bill_paid(bill: Bill) -> int:
         if order.paid_at is None:
             order.paid_at = now
             order.save(update_fields=["paid_at", "updated_at"])
-        if was_unpaid:
-            try:
-                apply_bonus_programs(
-                    partner_id=bill.partner_id,
-                    event=purchase_event_for(order),
-                    guest=order.guest,
-                    order=order,
-                    purchase_total=order.total_amount,
-                    bonus_paid_amount=bonus_shares.get(order.id, Decimal("0.00")),
-                    source_type="order_paid",
-                    source_id=str(order.id),
-                    comment=f"Paid order bonus for order #{order.public_id}.",
-                )
-            except BonusServiceError as exc:
-                raise BillingServiceError(str(exc)) from exc
         updated_count += 1
     return updated_count
 
@@ -1335,12 +1474,18 @@ def refund_bill_lines(
         )
 
     # Guests: the one whose bonuses paid the bill and those who earned
-    # cashback on its orders; locked in id order.
+    # cashback on its orders — by this bill (the payers, PQ-009 step 3) or,
+    # before bills knew it, the orders' own guests; locked in id order.
     order_ids = sorted({line.order_id for line in selected}, key=str)
+    earned = BonusTransaction.objects.filter(
+        partner_id=bill.partner_id, order_id__in=order_ids,
+        transaction_type=BonusTransaction.TransactionType.ACCRUAL, amount__gt=0,
+    ).filter(Q(bill=bill) | Q(bill__isnull=True))
     guest_ids = {bill.primary_guest_id} if bonus > 0 else set()
     guest_ids |= set(
         Order.objects.filter(id__in=order_ids).values_list("guest_id", flat=True)
     )
+    guest_ids |= set(earned.values_list("guest_id", flat=True))
     guests = {
         guest.id: guest
         for guest in GuestProfile.objects.select_for_update()
@@ -1385,17 +1530,14 @@ def refund_bill_lines(
             (Decimal(line.line_total) for line in order_lines if line.id in refunded_lines),
             Decimal("0.00"),
         )
-        accrued = sum(
-            BonusTransaction.objects.filter(
-                partner_id=bill.partner_id,
-                order=order,
-                transaction_type=BonusTransaction.TransactionType.ACCRUAL,
-                amount__gt=0,
-            ).values_list("amount", flat=True),
-            Decimal("0.00"),
-        )
-        guest = guests.get(order.guest_id)
-        if accrued > 0 and order_total > 0 and guest is not None:
+        # Who earned on these lines: each guest gives back their share.
+        by_guest: dict = {}
+        for guest_id, amount in earned.filter(order=order).values_list("guest_id", "amount"):
+            by_guest[guest_id] = by_guest.get(guest_id, Decimal("0.00")) + amount
+        for guest_id in sorted(by_guest, key=str):
+            accrued, guest = by_guest[guest_id], guests.get(guest_id)
+            if accrued <= 0 or order_total <= 0 or guest is None:
+                continue
             all_refunded = refunded_total >= order_total
             target = (
                 accrued
@@ -1406,8 +1548,9 @@ def refund_bill_lines(
                 BonusTransaction.objects.filter(
                     partner_id=bill.partner_id,
                     order=order,
+                    guest_id=guest_id,
                     source_type="refund_cashback",
-                ).values_list("amount", flat=True),
+                ).filter(Q(bill=bill) | Q(bill__isnull=True)).values_list("amount", flat=True),
                 Decimal("0.00"),
             )
             due = max(target - already, Decimal("0.00"))
@@ -1415,6 +1558,7 @@ def refund_bill_lines(
             # Not below the balance — the shared one in a network (PQ-047).
             take = min(due, max(bonus_balance(guest), Decimal("0.00")))
             if take > 0:
+                key = f"refund:{refund.id}:cashback:{order.id}"
                 BonusTransaction.objects.create(
                     partner_id=bill.partner_id,
                     guest=guest,
@@ -1424,7 +1568,8 @@ def refund_bill_lines(
                     amount=-take,
                     source_type="refund_cashback",
                     source_id=str(refund.id),
-                    idempotency_key=f"refund:{refund.id}:cashback:{order.id}",
+                    idempotency_key=(key if guest_id == order.guest_id
+                                     else f"{key}:{guest.customer_code}"),
                     comment=_(
                         "Возврат по заказу #{public_id}: кешбэк снят.",
                         public_id=order.public_id,

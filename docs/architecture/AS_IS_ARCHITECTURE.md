@@ -119,7 +119,7 @@ whitenoise и кэш в Redis. Сервисы:
 | Столы | `Hall`, `Table`, `TableVisit`, `TableSession`, `Reservation` | `tables/services.py` (активация, визиты, стол с планшета), `tables/floor_plan.py` (схема и статусы), `tables/reservations.py` (бронь) | Активация по QR, визиты стола, закрытие только после расчёта. `timed_out` выставляет beat `tables.expire_idle_table_sessions` (PQ-008); `expires_at` есть, но ничто его не выставляет. Бронь с гостем по коду, сообщения гостю и напоминание (PQ-056). |
 | Меню | `MenuCategory`, `MenuBadge`, `MenuItem`, `MenuItemPhoto`, `MenuItemAttribute`, `MenuItemVariant`, `ModifierGroup`, `Modifier`, `StockMovement` | чтение — `menu/repositories.py`, `menu/catalog.py` (дерево, расписание); выбор и цена — `menu/options.py:resolve_choice`; остатки — `menu/stock.py`; переводы — `menu/translations.py`; фото — `menu/photos.py`; остальное — Admin | Цена должна быть положительной (`menu_item_price_positive`). Отметки каналов: `available_at_table`, `available_for_pickup`, `available_for_delivery`, `available_for_shipping`; `MenuItem.is_sold_in(channel)`. Подробно — [CATALOG.md](CATALOG.md). |
 | Заказы | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory`, `KitchenScreen`, `OrderStationReady` | `orders/services.py`; удалённые каналы — в `billing/remote_orders.py`; экран кухни и бара — `orders/kitchen.py` | Корзина, создание заказа по каналу (стол / самовывоз / доставка / отправка), заказ на стол с планшета, машина статусов, подтверждение получения гостем. `Order.channel`, `Order.requested_for`, `Order.payment_timing`, `Order.request_key`, `Order.REMOTE_CHANNELS` (старое имя `PREPAID_CHANNELS` — синоним). |
-| Счета | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment`, `BillAdjustment`, `Refund`, `RefundLine` | ядро — `billing/services.py`; стол — `billing/table_bills.py`; удалённые каналы — `billing/remote_orders.py`; кнопки персонала для бота, Mini App и Admin — `billing/staff_actions.py` | Создание и расширение счёта, оплата деньгами и бонусами, изменения и аннулирование, возвраты, действия после оплаты. |
+| Счета | `BillingRequest`, `Bill`, `BillOrder`, `BillItem`, `Payment`, `BillAdjustment`, `Refund`, `RefundLine`, `BillSplitShare` | ядро — `billing/services.py`; стол — `billing/table_bills.py`; удалённые каналы — `billing/remote_orders.py`; кнопки персонала для бота, Mini App и Admin — `billing/staff_actions.py`; деление — `billing/bill_split.py`, `billing/visit_settlement.py` | Создание и расширение счёта, оплата деньгами и бонусами, изменения и аннулирование, возвраты, действия после оплаты, деление поровну и редактор расчёта стола (PQ-009). |
 | Бонусы | `BonusProgram`, `BonusTransaction` | `bonuses/services.py`, `bonuses/strategies.py` | Баланс на основе журнала с проверкой сверки (в сети с общими бонусами — по всем точкам). Быстрая продажа — заказ «На кассе» (`billing/counter_sales.py`, PQ-054); старые `WalkInSale` удалены миграцией `bonuses.0013` (строки журнала бонусов остались). Модуля нет (PQ-001): без работающей программы у заведения (`bonuses/selectors.py:bonuses_work_at`) гостю не показываются код для бонусов, баланс и кнопка «Бонусы» в боте и баланс в Mini App, а списание недоступно. |
 | Сотрудники | `EmployeeProfile`, `StaffInvite` | `employees/selectors.py:get_staff_employee_by_telegram`, `employees/invites.py` (приглашения), `employees/network_staff.py` (копии персонала сети) | Профиль создаёт Admin или подтверждённое приглашение (PQ-046). |
 | Уведомления | `NotificationPreference`, `GuestCall`, `StaffNotification`, `BroadcastCampaign`, `BroadcastDelivery` | `notifications/services.py`, `tasks.py`, `telegram_transport.py` | Вся отправка в Telegram из воркера — здесь. |
@@ -547,7 +547,13 @@ apps.notifications.tasks` — цикл, разорванный только им
    `apps/billing/bill_split.py` — `Bill.split_parts`, каждая часть —
    `record_payment(split_part=…)`; неоплаченные части делят остаток поровну,
    последняя берёт копейки; ограничение `unique_paid_split_part_per_bill`;
-   только экран персонала.
+   только экран персонала. Редактор расчёта стола (PQ-009, шаг 3):
+   `apps/billing/visit_settlement.py` раскладывает строки визита по гостям и
+   в «Общее» (`services.create_bill_from_lines`; «Общее» — счёт `split` с
+   `BillSplitShare`: чья часть), счета без денег пересобирает
+   (`BillAdjustment` вида `relayout`), гость платит своё одним нажатием
+   (`pay_for_guest`). Заказ оплачен, когда оплачены все счета с его
+   строками; кешбэк — тому, кто платит (`services._award_bill_cashback`).
 5. Когда счёт становится `paid`, `_process_post_payment_updates` ещё внутри
    транзакции оплаты: блокирует заказы счёта, завершает заказы в `ready` и
    `delivering`, выставляет `paid_at`, начисляет программы `ORDER_COMPLETED`
@@ -578,7 +584,10 @@ apps.notifications.tasks` — цикл, разорванный только им
 уникальны в пределах партнёра. Продажа на кассе (PQ-054,
 [COUNTER_SALE.md](COUNTER_SALE.md)) — заказ и счёт: бонусы по желанию
 списываются оплатой счёта до денег, кешбэк — программы `MANUAL_PURCHASE`
-(«Покупка на кассе», `bonuses/selectors.py:purchase_event_for`). У программ кешбэка есть база
+(«Покупка на кассе», `bonuses/selectors.py:purchase_event_for`). Кешбэк за
+оплаченный счёт — тому, кто платит (PQ-009, шаг 3): гостю счёта или гостям
+частей «Общего»; общий счёт без гостя — гостю каждого заказа; начисление
+помнит счёт, возврат снимает у получившего. У программ кешбэка есть база
 начисления (`BonusProgram.accrual_base`, PQ-030): `full_total` (по умолчанию)
 — со всей покупки; `money_paid` — за вычетом части, оплаченной бонусами: для
 оплаченного заказа (и продажи на кассе) — его доля
@@ -986,7 +995,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1310 тестов после гостей стола, зелёные на SQLite и на PostgreSQL 16.
+- 1332 теста после редактора расчёта стола, зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -1001,7 +1010,9 @@ Admin показывает поля жизненного цикла, произ�
   подтверждения перевода (`tests/apps/billing/test_unpaid_concurrency.py`); два
   возврата одной строки (`tests/apps/billing/test_refund_concurrency.py`); две
   оплаты одной части разделённого счёта (`tests/apps/billing/test_bill_split.py`); два
-  новых гостя одной компании разом (`tests/apps/tables/test_visit_guests.py`); планы
+  новых гостя одной компании разом (`tests/apps/tables/test_visit_guests.py`);
+  два кассира берут одного гостя разом и два гостя платят за «Общее» разом
+  (`tests/apps/billing/test_visit_settlement.py`); планы
   запросов открытых заказов и счетов используют частичные индексы (AA-045,
   `tests/apps/orders/test_open_indexes.py`); два человека расставляют один
   зал, два нажатия на один свободный стол, две брони одного стола, «Пришли»
@@ -1029,10 +1040,10 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Цифры кодовой базы на 2026-11-18
 
-519 отслеживаемых Python-файлов (около 83 400 строк), 131 пронумерованная
-миграция, 140 тестовых модулей. Крупнейшие нетестовые модули:
-`bot/handlers/staff.py` (3887 строк), `apps/orders/services.py` (1536),
-`apps/notifications/services.py` (1529), `apps/billing/services.py` (1491),
+524 отслеживаемых Python-файла (около 84 600 строк), 132 пронумерованные
+миграции, 142 тестовых модуля. Крупнейшие нетестовые модули:
+`bot/handlers/staff.py` (3887 строк), `apps/billing/services.py` (1636),
+`apps/orders/services.py` (1536), `apps/notifications/services.py` (1529),
 `apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1050),
 `apps/partners/management/commands/seed_baseline_demo.py` (1006). Инвентарь
 на момент аудита 2026-07-27 сохранён в

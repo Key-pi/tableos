@@ -236,6 +236,34 @@ class BillingRequest(PartnerBoundModel):
         return f"{self.partner.name} / billing request / {self.request_type}"
 
 
+class BillSplitShare(PartnerBoundModel):
+    """Whose equal part of a shared bill is which (PQ-009, step 3).
+
+    The settlement editor splits «Общее» between the guests who share it: part
+    ``number`` is ``guest``'s — they pay it with their own bill and the
+    cashback for it is theirs."""
+
+    bill = models.ForeignKey(
+        Bill, on_delete=models.CASCADE, related_name="split_shares", verbose_name=_lazy("Счёт"),
+    )
+    number = models.PositiveSmallIntegerField(verbose_name=_lazy("Часть"))
+    guest = models.ForeignKey(
+        "users.GuestProfile", on_delete=models.PROTECT, related_name="bill_split_shares",
+        verbose_name=_lazy("Гость"),
+    )
+
+    class Meta:
+        verbose_name = _lazy("часть общего счёта")
+        verbose_name_plural = _lazy("Части общего счёта")
+        ordering = ["bill", "number"]
+        constraints = [
+            models.UniqueConstraint(fields=["bill", "number"], name="unique_split_share_number"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.bill} · {self.number}"
+
+
 class BillOrder(PartnerBoundModel):
     """Join model that tracks which orders were grouped into one bill."""
 
@@ -417,6 +445,9 @@ class BillAdjustment(PartnerBoundModel):
         REMOVE_LINE = "remove_line", _lazy("Строка убрана")
         ORDER_CANCELED = "order_canceled", _lazy("Заказ отменён")
         VOID = "void", _lazy("Счёт аннулирован")
+        # A bill without money laid out again in the settlement editor
+        # (PQ-009, step 3): its lines went to the new bills.
+        RELAYOUT = "relayout", _lazy("Счёт пересобран")
 
     class ReasonCode(models.TextChoices):
         INPUT_ERROR = "input_error", _lazy("Ошибка ввода")
