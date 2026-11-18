@@ -291,3 +291,4 @@ PQ-033) и отправка почтой ([SHIPPING.md](../architecture/SHIPPING
 | Продажа на кассе — канал заказа, старая быстрая продажа удалена (ветка `counter-sale`) | PQ-054 | COUNTER_SALE.md, ADR-0009 |
 | Анонимный гость не виден в «Гостях», счётчиках и без кода (ветка `anonymous-guests`) | PQ-055 | AS_IS_ARCHITECTURE.md, FLOOR_PLAN.md |
 | Бронь с кодом клиента: профиль, «Пришли» сажает гостя, подтверждение и напоминание в боте (ветка `reservation-guest`) | PQ-056 | FLOOR_PLAN.md, BACKGROUND_JOBS.md |
+| Деление счёта, шаг 1: один счёт — N равных частей, каждая наличными или картой (ветка `bill-split`) | PQ-009 | BILL_SPLIT.md |
