@@ -52,12 +52,12 @@ class TableOrderFixture(TestCase):
         self.waiter = staff(self.partner, "kava_waiter", User.Role.WAITER, 7701001)
 
     def order(self, *, table=None, visit=None, code="", items=None, actor=None, key="",
-              comment=""):
+              comment="", session=None, new_guest=False):
         return create_staff_table_order(
             partner_id=self.partner.id, actor=actor or self.waiter,
             table_id=(table or self.table).id, visit_id=visit, customer_code=code,
             items=[{"menu_item_id": self.latte.id, "quantity": 2}] if items is None else items,
-            comment=comment, request_key=key,
+            comment=comment, request_key=key, session_id=session, new_guest=new_guest,
         )
 
     def scan(self, telegram_id, table=None):

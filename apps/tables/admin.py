@@ -405,13 +405,15 @@ class TableVisitAdmin(ScopedAdminMixin):
     service_table = True
     allow_partner_add = False
     allow_partner_delete = False
-    list_display = ("table", "partner", "status", "started_at", "closed_at", "closed_by")
+    list_display = ("table", "partner", "status", "guests_count", "started_at", "closed_at",
+                    "closed_by")
     list_filter = ("partner", "status")
     search_fields = ("table__number", "partner__name")
     readonly_fields = (
         "partner",
         "table",
         "status",
+        "guests_count",
         "started_at",
         "closed_at",
         "closed_by",

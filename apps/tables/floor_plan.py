@@ -129,12 +129,18 @@ def table_states(partner_id, *, now=None, reservations=None) -> dict[UUID, dict]
             continue
         state["state"] = "busy"
         state["since"] = min(filter(None, (state["since"], started_at)))
-    guests = defaultdict(int)
-    for table_id in TableSession.objects.filter(
+    # How many sit there (PQ-009, step 2): what the staff said, never fewer
+    # than the guests at the table — as ``visit_headcount``.
+    said = dict(visits.values_list("id", "guests_count"))
+    listed = defaultdict(set)
+    for visit_id, guest_id in TableSession.objects.filter(
         partner_id=partner_id, status=TableSession.Status.ACTIVE,
         visit__status=TableVisit.Status.ACTIVE,
-    ).values_list("table_id", flat=True):
-        guests[table_id] += 1
+    ).values_list("visit_id", "guest_id"):
+        listed[visit_id].add(guest_id)
+    guests = defaultdict(int)
+    for visit_id, table_id in visits.values_list("id", "table_id"):
+        guests[table_id] += max(said.get(visit_id, 0), len(listed.get(visit_id, ())))
     # Not billed yet — the same rule as the staff screen's «not billed» line.
     unbilled = BillingOperationsRepository.unbilled_open_orders_for_partner(partner_id).filter(
         table_session__visit__status=TableVisit.Status.ACTIVE,

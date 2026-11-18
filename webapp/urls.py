@@ -53,6 +53,9 @@ urlpatterns += [
          name="staff_table_order"),
     path("<str:bot_hex>/api/staff/visit_action", staff_billing.visit_action_view,
          name="staff_visit_action"),
+    # PQ-009, step 2: how many sit at the table.
+    path("<str:bot_hex>/api/staff/visit_guests", staff_billing.visit_guests_view,
+         name="staff_visit_guests"),
     # PQ-052, step 3: reservations.
     path("<str:bot_hex>/api/staff/reservations", staff_reservations.list_view,
          name="staff_reservations"),

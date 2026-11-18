@@ -26,6 +26,8 @@
 .order ul { margin: 2px 0; padding-left: 18px; }
 .order li { margin: 1px 0; }
 .row { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; padding: 2px 0; }
+/* A guest of the company who moved to another table (PQ-009, step 2). */
+.row.gone { color: var(--hint); }
 .row b { white-space: nowrap; }
 .row .meta { text-align: right; }
 .sheet .status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg2); }

@@ -181,15 +181,17 @@ class StaleTablePage(TableSessionError):
 
 @transaction.atomic
 def open_staff_table_session(
-    *, partner_id: UUID | str, table_id, visit_id=None, guest: GuestProfile | None = None
+    *, partner_id: UUID | str, table_id, visit_id=None, guest: GuestProfile | None = None,
+    new_guest: bool = False,
 ) -> TableSession:
     """The session a staff order from the tablet goes to (PQ-052, step 2).
 
     ``visit_id`` — the company at the table the order is for; ``None`` — a
     new company at a free table (a table that is no longer free is refused:
     the screen is out of date). ``guest`` — named by code: they sit at this
-    table now, as after scanning its QR; ``None`` — the visit's anonymous
-    guest, created once per visit.
+    table now, as after scanning its QR; ``None`` — the visit's first
+    anonymous guest, created when there is none; with ``new_guest`` — one
+    more person without the bot at the table («Гость 2», PQ-009 step 2).
 
     Lock order as activation: GuestProfile → Table → the guest's own
     TableSessions → TableVisit. The table lock makes two taps on one free
@@ -214,6 +216,15 @@ def open_staff_table_session(
         raise StaleTablePage(_("Эта компания уже ушла — обновите экран."))
 
     if guest is not None:
+        # Already at this table with this company: the order is theirs — the
+        # session stays (closing and reopening it would split the guest in
+        # two in the company's list).
+        here = TableSession.objects.select_for_update().filter(
+            partner_id=partner_id, guest=guest, visit_id=visit_id,
+            status=TableSession.Status.ACTIVE,
+        ).select_related("guest", "table").first() if visit_id is not None else None
+        if here is not None:
+            return here
         _close_guest_active_sessions(partner_id=partner_id, guest_profile=guest,
                                      keep_visit_id=visit_id)
         mark_guest_visit(guest)
@@ -222,11 +233,11 @@ def open_staff_table_session(
         else TableVisit.objects.create(partner_id=partner_id, table=table)
     )
     if guest is None:
-        session = (
+        session = None if new_guest else (
             TableSession.objects.filter(
                 partner_id=partner_id, visit=visit, status=TableSession.Status.ACTIVE,
                 guest__telegram_account__isnull=True,
-            ).select_related("guest", "table").first()
+            ).select_related("guest", "table").order_by("started_at", "id").first()
         )
         if session is not None:
             return session
@@ -249,6 +260,90 @@ def open_staff_table_session(
     )
     return session
 
+
+# --- the people of a visit (PQ-009, step 2) -------------------------------------
+
+VISIT_GUESTS_MAX = 99
+
+
+@dataclass(frozen=True)
+class VisitGuest:
+    session_id: UUID
+    guest: GuestProfile
+    label: str
+    has_bot: bool
+    active: bool
+
+
+def visit_guests(visit: TableVisit, sessions=None) -> list[VisitGuest]:
+    """The guests of a visit as the staff see them, in the order they sat
+    down: a guest with the bot by name, the others «Гость 1», «Гость 2»…
+    One row a guest however many sessions they had here (a guest who scanned
+    the QR again); ``session_id`` — their session at the table now, else the
+    last one. ``sessions`` — the visit's sessions already loaded (with
+    ``guest``)."""
+
+    if sessions is None:
+        sessions = TableSession.objects.filter(visit=visit).select_related(
+            "guest__telegram_account"
+        )
+    by_guest: dict = {}
+    for session in sorted(sessions, key=lambda item: (item.started_at, str(item.id))):
+        by_guest.setdefault(session.guest_id, []).append(session)
+    guests, number = [], 0
+    for own in by_guest.values():
+        guest = own[0].guest
+        current = [session for session in own if session.status == TableSession.Status.ACTIVE]
+        anonymous = guest.is_anonymous
+        if anonymous:
+            number += 1
+        guests.append(VisitGuest(
+            session_id=(current or own)[-1].id, guest=guest,
+            label=_("Гость {number}", number=number) if anonymous else guest.staff_label(),
+            has_bot=not anonymous, active=bool(current),
+        ))
+    return guests
+
+
+def visit_headcount(visit: TableVisit, sessions=None) -> int:
+    """How many people sit (sat) at the table: what the staff said, never
+    fewer than the guests of the visit — those still at the table while it
+    goes on (a guest who moved to another table is counted there), all of
+    them once it is over."""
+
+    if sessions is None:
+        sessions = TableSession.objects.filter(visit=visit)
+    counted = {
+        session.guest_id for session in sessions
+        if visit.status != TableVisit.Status.ACTIVE
+        or session.status == TableSession.Status.ACTIVE
+    }
+    return max(visit.guests_count, len(counted))
+
+
+def set_visit_guests_count(*, partner_id, actor, visit_id, count) -> TableVisit:
+    """The staff say how many sit at the table (1–99): the owner, a manager,
+    a cashier or a waiter of this venue, while the visit goes on. One
+    conditional ``UPDATE`` of a column no other command writes."""
+
+    from apps.orders.services import may_take_table_orders
+
+    if not (may_take_table_orders(actor) and actor.partner_id == partner_id):
+        raise TableSessionError(_(
+            "Число гостей меняют официант, кассир, менеджер или владелец этого заведения."
+        ))
+    try:
+        count = int(count)
+    except (TypeError, ValueError) as exc:
+        raise TableSessionError(_("Укажите, сколько гостей за столом.")) from exc
+    if not 1 <= count <= VISIT_GUESTS_MAX:
+        raise TableSessionError(_("Гостей за столом — от 1 до {most}.", most=VISIT_GUESTS_MAX))
+    updated = TableVisit.objects.filter(
+        partner_id=partner_id, id=visit_id, status=TableVisit.Status.ACTIVE
+    ).update(guests_count=count)
+    if not updated:
+        raise TableSessionError(_("Эта компания уже ушла — обновите экран."))
+    return TableVisit.objects.get(id=visit_id)
 
 
 def get_active_table_session(*, partner_id: UUID | str, telegram_id: int) -> TableSession | None:

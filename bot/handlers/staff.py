@@ -562,6 +562,11 @@ def _render_day_report(report) -> str:
         )] if report.refunds_total else []),
         "",
         _("<b>Операции</b>"),
+        _("Покупок: {count}", count=report.purchases_count),
+        _("Средний чек: {amount} грн", amount=report.average_check),
+        *([_("Гостей за столами: {count}", count=report.table_guests),
+           _("Чек на гостя: {amount} грн", amount=report.average_per_guest)]
+          if report.table_guests else []),
         _("Оплаченных счетов: {paid_bills_count}", paid_bills_count=report.paid_bills_count),
         _(
             "Создано заказов: {created_orders_count}",

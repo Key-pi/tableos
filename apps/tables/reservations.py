@@ -330,6 +330,12 @@ def seat_reservation(*, partner_id, actor, reservation_id, visit_id=None) -> Res
                 "За столом {table} ещё сидят: закройте их визит или перенесите бронь "
                 "на другой стол.", table=booking.table.number,
             )) from exc
+    # The booking says how many came (PQ-009, step 2): never fewer than the
+    # staff already said for a company that sits there.
+    if visit.guests_count < booking.guests:
+        TableVisit.objects.filter(id=visit.id, guests_count__lt=booking.guests).update(
+            guests_count=booking.guests)
+        visit.guests_count = booking.guests
     booking.status = Reservation.Status.SEATED
     booking.visit = visit
     booking.closed_by, booking.closed_at = actor, timezone.now()

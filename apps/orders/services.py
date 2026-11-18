@@ -1461,13 +1461,21 @@ def create_staff_table_order(
     items: list[dict],
     comment: str = "",
     request_key: str = "",
+    session_id=None,
+    new_guest: bool = False,
 ) -> Order:
     """A waiter, a bartender, a manager or the owner orders for a guest at a
     table (PQ-052, step 2). The order is an ordinary table order: accepted at
     once (the person entered it themselves), so it goes to the kitchen and
     bar screens; the table's bill grows. A retry with the same
-    ``request_key`` returns the order already made."""
+    ``request_key`` returns the order already made.
 
+    Whose order (PQ-009, step 2): ``session_id`` — a guest of the company
+    (``visit_id``) still at the table; ``customer_code`` — a guest with the
+    bot, who sits down here; ``new_guest`` — one more person without the
+    bot; none — the company's first guest without the bot."""
+
+    from apps.tables.models import TableSession
     from apps.tables.services import TableSessionError, open_staff_table_session
 
     if request_key:
@@ -1485,12 +1493,24 @@ def create_staff_table_order(
     if not table_orders_on(partner_id):
         raise OrderFlowError(_("Заказ на стол с планшета в этом заведении выключен."))
     lines = resolve_staff_order_lines(partner_id=partner_id, items=items)
-    guest = guest_for_staff_order(partner_id, customer_code)
+    if session_id is not None:
+        if (customer_code or "").strip():
+            raise OrderFlowError(_("Выберите гостя за столом или введите код — что-то одно."))
+        chosen = TableSession.objects.select_related("guest").filter(
+            partner_id=partner_id, id=session_id, visit_id=visit_id,
+            status=TableSession.Status.ACTIVE,
+        ).first() if visit_id is not None else None
+        if chosen is None:
+            raise OrderFlowError(_("Этого гостя уже нет за столом — обновите экран."))
+        guest = chosen.guest
+    else:
+        guest = guest_for_staff_order(partner_id, customer_code)
     try:
         with transaction.atomic():
             try:
                 session = open_staff_table_session(
                     partner_id=partner_id, table_id=table_id, visit_id=visit_id, guest=guest,
+                    new_guest=new_guest and guest is None,
                 )
             except TableSessionError as exc:
                 raise OrderFlowError(str(exc)) from exc

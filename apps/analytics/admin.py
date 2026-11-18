@@ -26,7 +26,10 @@ class PartnerDailyMetricAdmin(ScopedAdminMixin):
         "bucket_date",
         "revenue",
         "orders_count",
+        "sales_count",
         "average_check",
+        "table_guests",
+        "average_per_guest",
         "active_guests",
     )
     list_filter = ("partner", "bucket_date")

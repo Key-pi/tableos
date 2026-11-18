@@ -76,11 +76,11 @@ msgstr "Revenue"
 msgid "Заказов"
 msgstr "Orders"
 
-#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html templates/admin/index.html
-msgid "Продаж"
-msgstr "Sales"
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html templates/admin/index.html webapp/staff_sales.py
+msgid "Покупок"
+msgstr "Purchases"
 
-#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html templates/admin/index.html
+#: apps/analytics/models.py apps/partners/templates/admin/partners/network/report.html templates/admin/index.html webapp/staff_sales.py
 msgid "Средний чек"
 msgstr "Average check"
 
@@ -91,6 +91,14 @@ msgstr "Active guests"
 #: apps/analytics/models.py
 msgid "Повторных визитов"
 msgstr "Repeat visits"
+
+#: apps/analytics/models.py templates/admin/index.html webapp/staff_sales.py
+msgid "Гостей за столами"
+msgstr "Guests at tables"
+
+#: apps/analytics/models.py templates/admin/index.html webapp/staff_sales.py
+msgid "Чек на гостя"
+msgstr "Average per guest"
 
 #: apps/analytics/models.py
 msgid "метрика за день"
@@ -4166,6 +4174,14 @@ msgstr "Table orders are made by a waiter, cashier, manager or owner of this ven
 msgid "Заказ на стол с планшета в этом заведении выключен."
 msgstr "Table orders from the tablet are off in this venue."
 
+#: apps/orders/services.py
+msgid "Выберите гостя за столом или введите код — что-то одно."
+msgstr "Choose a guest at the table or enter a code — not both."
+
+#: apps/orders/services.py
+msgid "Этого гостя уже нет за столом — обновите экран."
+msgstr "This guest is no longer at the table — refresh the screen."
+
 #: apps/partners/admin.py
 msgid "Интервал работы"
 msgstr "Opening interval"
@@ -5241,8 +5257,8 @@ msgid "Каталог текстов"
 msgstr "Text catalog"
 
 #: apps/partners/templates/admin/partners/network/report.html
-msgid "Цифры обновляются каждые 15 минут. Продажи — оплаченные счета и быстрые продажи, средний чек — на продажу. Видны только точки, которые вам доступны."
-msgstr "Figures refresh every 15 minutes. Sales are paid bills and quick sales; the average check is per sale. Only venues you can open are shown."
+msgid "Цифры обновляются каждые 15 минут. Покупки — визит стола (сколько бы счетов его ни оплатили), заказ на самовывоз, доставку или почтой, продажа на кассе; средний чек — на покупку. Видны только точки, которые вам доступны."
+msgstr "Figures refresh every 15 minutes. Purchases: a table visit (however many bills paid it), a pickup, delivery or shipping order, a sale at the counter; the average check is per purchase. Only the venues you can open are shown."
 
 #: apps/partners/templates/admin/partners/network/report.html
 msgid "⚙ Настройки сети: название и бот"
@@ -5576,6 +5592,10 @@ msgstr "Ongoing"
 msgid "Начат"
 msgstr "Started"
 
+#: apps/tables/models.py webapp/staff_views.py
+msgid "Гостей за столом"
+msgstr "Guests at the table"
+
 #: apps/tables/models.py
 msgid "Кто закрыл"
 msgstr "Closed by"
@@ -5751,6 +5771,22 @@ msgstr "The table for this QR code is no longer available."
 #: apps/tables/services.py
 msgid "За этим столом уже сидят — обновите экран."
 msgstr "Someone already sits at this table — refresh the screen."
+
+#: apps/tables/services.py
+msgid "Гость {number}"
+msgstr "Guest {number}"
+
+#: apps/tables/services.py
+msgid "Число гостей меняют официант, кассир, менеджер или владелец этого заведения."
+msgstr "The number of guests is changed by a waiter, cashier, manager or the owner of this venue."
+
+#: apps/tables/services.py
+msgid "Укажите, сколько гостей за столом."
+msgstr "Say how many guests are at the table."
+
+#: apps/tables/services.py
+msgid "Гостей за столом — от 1 до {most}."
+msgstr "Guests at the table: 1 to {most}."
 
 #: apps/tables/services.py
 msgid "Эта компания за столом не найдена. Отсканируйте QR ещё раз."
@@ -7335,6 +7371,22 @@ msgstr "Refunds: −{refunds_total} UAH"
 #: bot/handlers/staff.py
 msgid "<b>Операции</b>"
 msgstr "<b>Operations</b>"
+
+#: bot/handlers/staff.py
+msgid "Покупок: {count}"
+msgstr "Purchases: {count}"
+
+#: bot/handlers/staff.py
+msgid "Средний чек: {amount} грн"
+msgstr "Average check: {amount} UAH"
+
+#: bot/handlers/staff.py
+msgid "Гостей за столами: {count}"
+msgstr "Guests at tables: {count}"
+
+#: bot/handlers/staff.py
+msgid "Чек на гостя: {amount} грн"
+msgstr "Average per guest: {amount} UAH"
 
 #: bot/handlers/staff.py
 msgid "Оплаченных счетов: {paid_bills_count}"
@@ -9037,6 +9089,10 @@ msgid "Обновите экран и отправьте заказ ещё ра�
 msgstr "Refresh the screen and send the order again."
 
 #: webapp/staff_table_orders.py
+msgid "Гость за столом не найден."
+msgstr "Guest at the table not found."
+
+#: webapp/staff_table_orders.py
 msgid "Заказ #{number} на стол {table} уже отправлен."
 msgstr "Order #{number} to table {table} was already sent."
 
@@ -9151,6 +9207,14 @@ msgstr "Visit since {since}"
 #: webapp/staff_views.py
 msgid "Гостей: {count}"
 msgstr "Guests: {count}"
+
+#: webapp/staff_views.py
+msgid "Для кого"
+msgstr "For whom"
+
+#: webapp/staff_views.py
+msgid "＋ Новый гость"
+msgstr "＋ New guest"
 
 #: webapp/staff_views.py
 msgid "Без счёта: {count} на {total} грн"

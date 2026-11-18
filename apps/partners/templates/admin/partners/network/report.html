@@ -2,7 +2,7 @@
 {% load botera_i18n %}
 {% block content %}
 <div class="px-4">
-  <p style="margin-bottom: 12px;">{% tr "Цифры обновляются каждые 15 минут. Продажи — оплаченные счета и быстрые продажи, средний чек — на продажу. Видны только точки, которые вам доступны." %}</p>
+  <p style="margin-bottom: 12px;">{% tr "Цифры обновляются каждые 15 минут. Покупки — визит стола (сколько бы счетов его ни оплатили), заказ на самовывоз, доставку или почтой, продажа на кассе; средний чек — на покупку. Видны только точки, которые вам доступны." %}</p>
   {% if settings_url %}<p style="margin-bottom: 12px;"><a href="{{ settings_url }}">{% tr "⚙ Настройки сети: название и бот" %}</a></p>{% endif %}
   <p style="margin-bottom: 12px; display: flex; gap: 12px;">
     {% for value, label in periods %}
@@ -14,7 +14,7 @@
       <tr>
         <th style="text-align: left;">{% tr "Точка" %}</th>
         <th style="text-align: right;">{% tr "Выручка" %}</th>
-        <th style="text-align: right;">{% tr "Продаж" %}</th>
+        <th style="text-align: right;">{% tr "Покупок" %}</th>
         <th style="text-align: right;">{% tr "Средний чек" %}</th>
         <th style="text-align: right;">{% tr "Заказов" %}</th>
         <th style="text-align: right;">{% tr "Бонусов начислено" %}</th>

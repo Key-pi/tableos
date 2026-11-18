@@ -137,6 +137,12 @@ class TableVisit(PartnerBoundModel):
     )
     started_at = models.DateTimeField(auto_now_add=True, verbose_name=_lazy("Начат"))
     closed_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Закрыт"))
+    # How many people the staff say sit at the table (PQ-009, step 2); 0 — not
+    # said. The headcount is never below the guests listed in the visit
+    # (``apps/tables/services.py:visit_headcount``).
+    guests_count = models.PositiveSmallIntegerField(
+        default=0, editable=False, verbose_name=_lazy("Гостей за столом"),
+    )
     closed_by = models.ForeignKey(
         "users.User",
         on_delete=models.SET_NULL,

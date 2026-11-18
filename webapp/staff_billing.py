@@ -60,8 +60,14 @@ from apps.orders.models import Order
 from apps.orders.repositories import OrderRepository
 from apps.partners.models import PartnerBotSettings
 from apps.tables.floor_plan import floor_plan
-from apps.tables.models import TableVisit
-from apps.tables.services import close_table_visit
+from apps.tables.models import TableSession, TableVisit
+from apps.tables.services import (
+    TableSessionError,
+    close_table_visit,
+    set_visit_guests_count,
+    visit_guests,
+    visit_headcount,
+)
 from bot.services.staff_rights import (
     can_manage_billing,
     can_manage_reservations,
@@ -476,7 +482,6 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
             or can_manage_reservations(staff.employee, staff.content)):
         _tables(staff)
     partner_id = staff.partner.id
-    sessions = list(BillingOperationsRepository.active_sessions_for_partner(partner_id))
     unbilled = list(
         BillingOperationsRepository.unbilled_open_orders_for_partner(partner_id)
         .select_related("table_session")
@@ -489,6 +494,14 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
     )
     can_bill = can_manage_billing(staff.employee, staff.content)
     can_close = can_view_tables(staff.employee, staff.content)
+    can_count = can_close or can_take_table_orders(staff.employee, staff.content)
+    # Every session of these visits, a guest who moved away too: their
+    # orders here are still to pay (PQ-009, step 2).
+    visit_sessions: dict = {}
+    for session in TableSession.objects.filter(visit__in=visits).select_related(
+        "guest__telegram_account"
+    ):
+        visit_sessions.setdefault(session.visit_id, []).append(session)
     tables: dict = {}
     for visit in visits:
         table = tables.setdefault(
@@ -499,12 +512,24 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
             order for order in unbilled
             if order.table_session_id and order.table_session.visit_id == visit.id
         ]
+        own_sessions = visit_sessions.get(visit.id, [])
         table["visits"].append({
             "id": visit.id.hex,
             "since": timezone.localtime(visit.started_at).strftime("%H:%M"),
+            # The people of the company (PQ-009, step 2): an order for one of
+            # them, how much is not billed yet; «Гостей за столом».
             "guests": [
-                session.guest.staff_label() for session in sessions if session.visit_id == visit.id
+                {
+                    "id": guest.session_id.hex, "label": guest.label, "bot": guest.has_bot,
+                    "here": guest.active,
+                    "unbilled": _money(sum(
+                        (order.total_amount for order in visit_orders
+                         if order.guest_id == guest.guest.id), Decimal("0.00"))),
+                }
+                for guest in visit_guests(visit, own_sessions)
             ],
+            "headcount": visit_headcount(visit, own_sessions),
+            "can_count": can_count,
             "unbilled": len(visit_orders),
             "unbilled_total": _money(sum(order.total_amount for order in visit_orders)),
             "bills": [_bill_json(bill) for bill in bills if bill.visit_id == visit.id],
@@ -522,6 +547,25 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
     ).exists():
         result["plan"] = floor_plan(partner_id)
     return result
+
+
+@staff_api("POST")
+def visit_guests_view(request, staff: StaffRequest, body: dict) -> dict:
+    """``{"visit", "count"}`` — how many sit at the table (PQ-009, step 2)."""
+
+    if not (can_view_tables(staff.employee, staff.content)
+            or can_take_table_orders(staff.employee, staff.content)):
+        _tables(staff)
+    try:
+        visit_id = uuid.UUID(hex=_text(body, "visit"))
+    except ValueError as exc:
+        raise WebAppDenied(404, N_("Визит не найден.")) from exc
+    try:
+        visit = set_visit_guests_count(partner_id=staff.partner.id, actor=staff.employee,
+                                       visit_id=visit_id, count=body.get("count"))
+    except TableSessionError as exc:
+        raise WebAppDenied(400, str(exc)) from exc
+    return {"ok": True, "headcount": visit_headcount(visit)}
 
 
 @staff_api("POST")

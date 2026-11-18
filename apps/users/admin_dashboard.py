@@ -186,14 +186,17 @@ def _today(request, partner_id) -> dict | None:
     from apps.analytics.services import build_daily_operations_report
 
     report = build_daily_operations_report(partner_id=partner_id)
-    sales = report.paid_bills_count
-    average = report.total_revenue / sales if sales else None
+    # Purchases, not bills: a table visit paid by several bills is one
+    # (PQ-009, step 2).
+    sales = report.purchases_count
     return {
         "revenue": _money(report.total_revenue),
         "refunds": _money(report.refunds_total) if report.refunds_total else "",
         "orders": report.created_orders_count,
         "sales": sales,
-        "average": _money(average) if average is not None else "—",
+        "average": _money(report.average_check) if sales else "—",
+        "table_guests": report.table_guests,
+        "per_guest": _money(report.average_per_guest),
         "open_orders": report.open_orders_count,
         "open_bills": report.open_bills_count,
         "link": _list("analytics.partnerdailymetric"),

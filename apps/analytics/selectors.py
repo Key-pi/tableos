@@ -26,7 +26,8 @@ class PointSummary:
 
     @property
     def average_check(self) -> Decimal:
-        # Per sale (paid bill or quick sale), as in the daily metrics.
+        # Per purchase (a table visit once, any other paid bill once — PQ-009,
+        # step 2), as in the daily metrics.
         if not self.sales:
             return Decimal("0.00")
         return (self.revenue / self.sales).quantize(Decimal("0.01"))

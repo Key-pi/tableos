@@ -15,7 +15,11 @@ paths:
   (стол — `select_for_update(no_key=True)`, AA-040).
 - Заказ на стол с планшета — как активация:
   `GuestProfile → Table (no_key) → свои TableSession → TableVisit`
-  (`apps/tables/services.py:open_staff_table_session`).
+  (`apps/tables/services.py:open_staff_table_session`). Гость уже в этой
+  компании — его сессия берётся под блокировкой и остаётся; ещё один гость
+  без бота (`new_guest`) — новая строка под блокировкой стола. «Гостей за
+  столом» — условный `UPDATE` одного столбца визита, без блокировки
+  (`set_visit_guests_count`).
 - Истечение пустой сессии стола (PQ-008): активные корзины гостя →
   `TableSession` → `TableVisit` (`apps/tables/services.py:_expire_idle_session`).
   Оформление заказа за столом тоже сначала блокирует корзину и после этого

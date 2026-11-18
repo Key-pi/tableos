@@ -39,6 +39,24 @@ class DailyOperationsReport:
     channel_breakdown: tuple[dict, ...] = ()
     # Money given back today (PQ-037); total_revenue is net of it.
     refunds_total: Decimal = Decimal("0.00")
+    # PQ-009, step 2: a table visit is one purchase however many bills paid
+    # it; the people at the tables (what the staff said, never fewer than
+    # the guests listed) and the tables' money.
+    purchases_count: int = 0
+    table_guests: int = 0
+    table_revenue: Decimal = Decimal("0.00")
+
+    @property
+    def average_check(self) -> Decimal:
+        if not self.purchases_count:
+            return Decimal("0.00")
+        return (self.total_revenue / self.purchases_count).quantize(Decimal("0.01"))
+
+    @property
+    def average_per_guest(self) -> Decimal:
+        if not self.table_guests:
+            return Decimal("0.00")
+        return (self.table_revenue / self.table_guests).quantize(Decimal("0.01"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,12 +148,17 @@ def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOpera
         for method, _label in Payment.Method.choices
     }
 
-    paid_bills_count = Bill.objects.filter(
+    paid_bills = Bill.objects.filter(
         partner_id=partner_id,
         status=Bill.Status.PAID,
         closed_at__gte=day_start,
         closed_at__lte=day_end,
-    ).count()
+    )
+    paid_bills_count = paid_bills.count()
+    purchases_count = (
+        paid_bills.filter(visit__isnull=True).count()
+        + paid_bills.filter(visit__isnull=False).values("visit_id").distinct().count()
+    )
     created_orders_count = Order.objects.filter(
         partner_id=partner_id,
         created_at__gte=day_start,
@@ -233,7 +256,31 @@ def build_daily_operations_report(*, partner_id, bucket_date=None) -> DailyOpera
         payment_method_counts=payment_method_counts,
         staff_breakdown=staff_breakdown,
         channel_breakdown=tuple(channel_breakdown),
+        purchases_count=purchases_count,
+        table_guests=_table_guests(partner_id, day_start, day_end),
+        table_revenue=next(
+            (item["revenue"] for item in channel_breakdown
+             if item["channel"] == Order.Channel.TABLE), Decimal("0.00"),
+        ),
     )
+
+
+def _table_guests(partner_id, day_start, day_end) -> int:
+    """The people of the table visits that started this day (PQ-009, step 2),
+    as ``apps/tables/services.py:visit_headcount`` counts them."""
+
+    from apps.tables.models import TableVisit
+    from apps.tables.services import visit_headcount
+
+    visits = list(TableVisit.objects.filter(
+        partner_id=partner_id, started_at__gte=day_start, started_at__lte=day_end,
+    ))
+    sessions: dict = {}
+    for session in TableSession.objects.filter(visit__in=visits).only(
+        "visit_id", "guest_id", "status"
+    ):
+        sessions.setdefault(session.visit_id, []).append(session)
+    return sum(visit_headcount(visit, sessions.get(visit.id, [])) for visit in visits)
 
 
 def refresh_partner_daily_metric(*, partner_id, bucket_date=None) -> PartnerDailyMetric:
@@ -273,10 +320,9 @@ def refresh_partner_daily_metric(*, partner_id, bucket_date=None) -> PartnerDail
             last_visit_at__lte=day_end,
         ).count()
 
-    sales_count = report.paid_bills_count
-    average_check = Decimal("0.00")
-    if sales_count > 0:
-        average_check = (report.total_revenue / sales_count).quantize(Decimal("0.01"))
+    # Purchases, not bills (PQ-009, step 2): a split bill is one visit.
+    sales_count = report.purchases_count
+    average_check = report.average_check
 
     metric, _created = PartnerDailyMetric.objects.update_or_create(
         partner=partner,
@@ -288,6 +334,8 @@ def refresh_partner_daily_metric(*, partner_id, bucket_date=None) -> PartnerDail
             "average_check": average_check,
             "active_guests": len(active_guest_ids),
             "repeat_visits": repeat_visits,
+            "table_guests": report.table_guests,
+            "average_per_guest": report.average_per_guest,
         },
     )
     return metric

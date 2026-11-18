@@ -19,8 +19,10 @@ class PartnerDailyMetric(PartnerBoundModel):
         verbose_name=_lazy("Выручка"),
     )
     orders_count = models.PositiveIntegerField(default=0, verbose_name=_lazy("Заказов"))
-    # Paid bills and quick sales: what the average check is counted over.
-    sales_count = models.PositiveIntegerField(default=0, verbose_name=_lazy("Продаж"))
+    # Paid purchases — what the average check is counted over: a table visit
+    # once however many bills paid it (PQ-009, step 2), any other bill (a
+    # pickup, a delivery, a sale at the counter) once.
+    sales_count = models.PositiveIntegerField(default=0, verbose_name=_lazy("Покупок"))
     average_check = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -29,6 +31,11 @@ class PartnerDailyMetric(PartnerBoundModel):
     )
     active_guests = models.PositiveIntegerField(default=0, verbose_name=_lazy("Активных гостей"))
     repeat_visits = models.PositiveIntegerField(default=0, verbose_name=_lazy("Повторных визитов"))
+    # The people at the tables, with the bot or without (PQ-009, step 2).
+    table_guests = models.PositiveIntegerField(default=0, verbose_name=_lazy("Гостей за столами"))
+    average_per_guest = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0, verbose_name=_lazy("Чек на гостя"),
+    )
 
     class Meta:
         verbose_name = _lazy("метрика за день")

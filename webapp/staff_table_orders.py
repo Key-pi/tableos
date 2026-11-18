@@ -92,7 +92,9 @@ def preview_view(request, staff: StaffRequest, body: dict) -> dict:
 
 @staff_api("POST")
 def order_view(request, staff: StaffRequest, body: dict) -> dict:
-    """``{"table", "visit"?, "customer_code"?, "items", "comment"?, "key"}``."""
+    """``{"table", "visit"?, "guest"?, "new_guest"?, "customer_code"?, "items",
+    "comment"?, "key"}`` — ``guest``: a guest of the company (their session),
+    ``new_guest``: one more person without the bot (PQ-009, step 2)."""
 
     _right(staff)
     key = _text(body, "key")
@@ -101,6 +103,8 @@ def order_view(request, staff: StaffRequest, body: dict) -> dict:
     table_id = _uuid(_text(body, "table"), N_("Стол не найден."))
     visit = _text(body, "visit")
     visit_id = _uuid(visit, N_("Компания за столом не найдена.")) if visit else None
+    guest = _text(body, "guest")
+    session_id = _uuid(guest, N_("Гость за столом не найден.")) if guest else None
     repeated = bool(key) and Order.objects.filter(
         partner_id=staff.partner.id, request_key=key
     ).exists()
@@ -108,7 +112,8 @@ def order_view(request, staff: StaffRequest, body: dict) -> dict:
         order = create_staff_table_order(
             partner_id=staff.partner.id, actor=staff.employee, table_id=table_id,
             visit_id=visit_id, customer_code=_text(body, "customer_code"), items=_items(body),
-            comment=_text(body, "comment"), request_key=key,
+            comment=_text(body, "comment"), request_key=key, session_id=session_id,
+            new_guest=body.get("new_guest") is True,
         )
     except OrderFlowError as exc:
         raise WebAppDenied(400, str(exc)) from exc

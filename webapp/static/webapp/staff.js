@@ -614,8 +614,28 @@
   function visitCard(table, visit) {
         var card = el("article", { class: "order" },
           el("div", { class: "top" }, el("span", { class: "num", text: t("table", { number: table.number }) }),
-             el("span", { class: "status", text: t("visit", { since: visit.since }) })),
-          el("div", { class: "meta", text: t("guests", { count: visit.guests.length }) + (visit.guests.length ? " · " + visit.guests.join(", ") : "") }));
+             el("span", { class: "status", text: t("visit", { since: visit.since }) })));
+        // How many sit at the table and who they are (PQ-009, step 2): a tap
+        // on a guest — an order for them.
+        var count = el("div", { class: "row" }, el("span", { text: T.headcount }));
+        if (visit.can_count) {
+          count.appendChild(el("span", { class: "stepper" },
+            el("button", { type: "button", text: "−", disabled: visit.headcount <= 1,
+                           onclick: function () { setHeadcount(visit, visit.headcount - 1); } }),
+            el("span", { text: String(visit.headcount) }),
+            el("button", { type: "button", text: "+", onclick: function () { setHeadcount(visit, visit.headcount + 1); } })));
+        } else count.appendChild(el("b", { text: String(visit.headcount) }));
+        card.appendChild(count);
+        visit.guests.forEach(function (guest) {
+          var line = el("div", { class: "row" + (guest.here ? "" : " gone") },
+            el("span", { text: (guest.bot ? "👤 " : "") + guest.label }),
+            el("span", { text: Number(guest.unbilled) > 0 ? money(guest.unbilled) : "" }));
+          if (guest.here && data.rights.table_orders) {
+            line.style.cursor = "pointer";
+            line.addEventListener("click", function () { startTableOrder(table, visit, guest); });
+          }
+          card.appendChild(line);
+        });
         if (visit.unbilled) card.appendChild(el("div", { class: "row" },
           el("b", { text: t("not_billed", { count: visit.unbilled, total: visit.unbilled_total }) })));
         visit.bills.forEach(function (bill) {
@@ -645,6 +665,14 @@
         }
         if (acts.childNodes.length) card.appendChild(acts);
         return card;
+  }
+
+  function setHeadcount(visit, count) {
+    if (busy || count < 1) return;
+    busy = true;
+    api("visit_guests", { visit: visit.id, count: count }).then(function (result) {
+      after(result, function () { return load(true); });
+    });
   }
 
   function renderTables(page) {
@@ -1232,14 +1260,20 @@
     });
   }
 
-  // «Новый заказ» on a free table, «＋ Заказ» to a company sitting there.
-  function startTableOrder(table, visit) {
+  // «Новый заказ» on a free table, «＋ Заказ» to a company sitting there,
+  // a tap on a guest of it — their order. «Для кого» (PQ-009, step 2): a
+  // guest at the table or «＋ Новый гость» (with a code — a guest with the
+  // bot); by default the company's first guest without the bot.
+  function startTableOrder(table, visit, guest) {
     var old = document.querySelector(".sheet-back.table");
     if (old) old.remove();
     tableOrder = newSale(tableOrder && tableOrder.category);
     tableOrder.table = { id: table.id, number: table.number };
     tableOrder.visit = visit ? visit.id : "";
     tableOrder.since = visit ? visit.since : "";
+    tableOrder.guests = visit ? visit.guests.filter(function (item) { return item.here; }) : [];
+    var plain = tableOrder.guests.filter(function (item) { return !item.bot; })[0];
+    tableOrder.who = guest ? guest.id : plain ? plain.id : "new";
     switchTab("table_order");
     window.scrollTo(0, 0);
   }
@@ -1379,10 +1413,28 @@
                          + (tableOrder.since ? " · " + t("visit", { since: tableOrder.since }) : "") })));
     }
     var section = el("div", { class: "section" });
+    if (forTable && tableOrder.guests.length) {
+      var whom = el("div", { class: "filters", style: "padding:0 0 8px" });
+      tableOrder.guests.concat([{ id: "new", label: T.new_guest }]).forEach(function (guest) {
+        whom.appendChild(el("button", { type: "button", class: "chip", text: (guest.bot ? "👤 " : "") + guest.label,
+          "aria-pressed": String(tableOrder.who === guest.id),
+          onclick: function () {
+            tableOrder.who = guest.id;
+            if (guest.id !== "new" && tableOrder.code) { tableOrder.code = ""; salePreview(); }
+            tableOrder.key = "";
+            render();
+          } }));
+      });
+      section.appendChild(el("div", { class: "note", text: T.order_for }));
+      section.appendChild(whom);
+    }
     var code = el("input", { type: "text", autocapitalize: "characters", value: C().code, placeholder: T.customer_code,
       style: "width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--separator);background:var(--bg)",
       onchange: function (event) { C().code = event.target.value.trim(); salePreview(); } });
-    section.appendChild(el("label", { class: "field" }, el("span", { text: forTable ? T.order_code_hint : T.customer_code_hint }), code));
+    // The code names a new guest; a guest already at the table is chosen above.
+    if (!forTable || tableOrder.who === "new") {
+      section.appendChild(el("label", { class: "field" }, el("span", { text: forTable ? T.order_code_hint : T.customer_code_hint }), code));
+    }
     if (C().preview && C().preview.guest) section.appendChild(el("div", { class: "note", text: "👤 " + C().preview.guest }));
     page.appendChild(section);
     if (!C().category && info.categories.length) C().category = info.categories[0].id;
@@ -1461,7 +1513,10 @@
         acts.appendChild(el("button", { type: "button", class: "act primary order-send", text: T.send_order, disabled: busy, onclick: function () {
           if (busy) return;
           busy = true;
-          api("table_order", { table: tableOrder.table.id, visit: tableOrder.visit, customer_code: tableOrder.code,
+          var chosen = tableOrder.who !== "new";
+          api("table_order", { table: tableOrder.table.id, visit: tableOrder.visit,
+                               guest: chosen ? tableOrder.who : "", new_guest: !chosen && !!tableOrder.visit,
+                               customer_code: chosen ? "" : tableOrder.code,
                                items: saleItems(), comment: tableOrder.comment, key: saleKey() })
             .then(function (result) {
               if (result.ok) { tableOrder = null; tabData.tables = null; tab = "tables"; }

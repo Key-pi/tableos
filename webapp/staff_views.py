@@ -138,6 +138,10 @@ STAFF_TEXTS = {
     "open_bill": N_("Открыть счёт"),
     "visit": N_("Визит с {since}"),
     "guests": N_("Гостей: {count}"),
+    # The people of a company at a table (PQ-009, step 2).
+    "headcount": N_("Гостей за столом"),
+    "order_for": N_("Для кого"),
+    "new_guest": N_("＋ Новый гость"),
     "not_billed": N_("Без счёта: {count} на {total} грн"),
     "shared_bill": N_("Общий счёт"),
     "issue_bill": N_("Выставить счёт"),

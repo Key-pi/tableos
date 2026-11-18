@@ -128,9 +128,19 @@ the platform sees Unfold's own start page, as before.
                                 <div class="vd-tile-value">{{ today.orders }}</div>
                             </div>
                             <div>
-                                <div class="vd-tile-label">{% tr "Продаж" %}</div>
+                                <div class="vd-tile-label">{% tr "Покупок" %}</div>
                                 <div class="vd-tile-value">{{ today.sales }}</div>
                             </div>
+                            {% if today.table_guests %}
+                                <div>
+                                    <div class="vd-tile-label">{% tr "Гостей за столами" %}</div>
+                                    <div class="vd-tile-value">{{ today.table_guests }}</div>
+                                </div>
+                                <div>
+                                    <div class="vd-tile-label">{% tr "Чек на гостя" %}</div>
+                                    <div class="vd-tile-value">{{ today.per_guest }}</div>
+                                </div>
+                            {% endif %}
                         </div>
                         <div class="vd-note">
                             {% tr "Сейчас открыто: заказов {orders}, счетов {bills}." orders=today.open_orders bills=today.open_bills %}

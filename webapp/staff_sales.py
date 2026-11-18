@@ -240,6 +240,13 @@ def report_view(request, staff: StaffRequest, body: dict) -> dict:
               if report.refunds_total else []),
         ],
         "counts": [
+            # PQ-009, step 2: purchases — a table visit once however many
+            # bills paid it; the people at the tables.
+            {"label": _("Покупок"), "value": report.purchases_count},
+            {"label": _("Средний чек"), "value": _money(report.average_check)},
+            *([{"label": _("Гостей за столами"), "value": report.table_guests},
+               {"label": _("Чек на гостя"), "value": _money(report.average_per_guest)}]
+              if report.table_guests else []),
             {"label": _("Оплаченных счетов"), "value": report.paid_bills_count},
             {"label": _("Создано заказов"), "value": report.created_orders_count},
             {"label": _("Открытых заказов"), "value": report.open_orders_count},
