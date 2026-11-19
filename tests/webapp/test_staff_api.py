@@ -348,6 +348,8 @@ class StaffBillsAndTablesTests(BillsFixture):
         bills = self.staff_call("bills", user_id=7700204)[1]["bills"]
         self.assertEqual([bill["total"] for bill in bills], ["80.00"])
         card = self.staff_call("bill", user_id=7700204, query=f"?id={bills[0]['id']}")[1]["bill"]
+        # The list shows whose the bill is and what is paid (design pass, 2026-11-19).
+        self.assertEqual((bills[0]["guest"], bills[0]["paid"]), (card["guest"], "0.00"))
         self.assertEqual([action["code"] for action in card["actions"]],
                          ["issue", "pay_cash", "pay_terminal"])
         status, body = self.staff_call(
@@ -644,6 +646,11 @@ class StaffSaleAndReportTests(StaffFixture):
         status, report = self.staff_call("report", user_id=7700204)
         self.assertEqual(status, 200, report)
         self.assertEqual(report["money"][0]["value"], "80.00")
+        # The tiles over the report: revenue, purchases, average check; the
+        # average check is money (design pass, 2026-11-19).
+        rows = report["money"] + report["counts"]
+        self.assertEqual([row["value"] for row in rows if row.get("tile")], ["80.00", 1, "80.00"])
+        self.assertEqual([row["value"] for row in rows if row.get("money")], ["80.00"])
         self.assertEqual(self.staff_call("state", user_id=7700204)[1]["rights"],
                          {"billing": False, "tables": True, "sale": True, "report": True,
                           "invite": False, "table_orders": False, "reservations": False})

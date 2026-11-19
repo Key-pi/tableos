@@ -4,9 +4,27 @@
 /* Secondary text a step stronger than Telegram's hint: on a dark theme the
    hint all but melts into the cards (design pass, 2026-11-19). */
 :root { --muted: color-mix(in srgb, var(--text) 66%, transparent); }
-.staff-head { background: var(--section); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.staff-head { background: var(--section); padding: 12px 16px 6px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .staff-head h1 { margin: 0; font-size: 18px; }
 .staff-head .who { color: var(--muted); font-size: 13px; }
+.staff-head select { font: inherit; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--separator); background: var(--bg2); color: var(--text); max-width: 40vw; }
+.staff-head .tools { display: flex; gap: 6px; }
+.icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--separator); background: var(--bg2); display: grid; place-items: center; font-size: 16px; padding: 0; }
+
+/* The tabs read as tabs (design pass, 2026-11-19): text with a line under
+   the open one; the filters of a tab are smaller chips below on the page. */
+.tabs-main { position: relative; display: flex; gap: 2px; overflow-x: auto; padding: 0 8px; background: var(--section); border-bottom: 1px solid var(--separator); scrollbar-width: none; }
+.tabs-main::-webkit-scrollbar { display: none; }
+.tab-main { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 12px 10px 9px; font-size: 15px; font-weight: 600; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; }
+.tab-main[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.tab-main .n { font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--bg2); color: var(--muted); font-variant-numeric: tabular-nums; }
+.tab-main .count { margin-left: 0; }
+.tab-main.fresh { animation: flash 1.6s ease-out 3; }
+@media (max-width: 520px) { .tab-main { padding: 12px 8px 9px; font-size: 14px; } }
+.filters.sub { padding: 10px 12px 0; background: none; border-bottom: 0; }
+.filters.sub .chip { padding: 6px 12px; font-size: 13px; background: var(--section); }
+.filters.sub .chip[aria-pressed="true"] { background: var(--accent); }
+.filters .push { margin-left: auto; }
 .filters { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; background: var(--section); border-bottom: 1px solid var(--separator); scrollbar-width: none; }
 .filters::-webkit-scrollbar { display: none; }
 .count { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
@@ -41,8 +59,37 @@
 .sheet .status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg2); }
 .order .note { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .order a { color: var(--link); }
+/* An order card (design pass, 2026-11-19): where it goes, the number and the
+   minutes, what to make with the count first, the amount large. */
+.order-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.order-head .title { font-size: 17px; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.order-head .title.time { font-size: 19px; font-variant-numeric: tabular-nums; }
+.order .sub, .banner .sub, .cart .sub, .col .sub { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.items { display: flex; flex-direction: column; gap: 3px; padding: 8px 0; margin: 2px 0; border-top: 1px solid var(--separator); border-bottom: 1px solid var(--separator); }
+.items > div { display: flex; gap: 8px; font-size: 15px; }
+.items .q { font-weight: 700; min-width: 32px; font-variant-numeric: tabular-nums; }
+.note.comment { color: var(--text); background: color-mix(in srgb, var(--warning) 16%, transparent); border-radius: 8px; padding: 6px 9px; font-size: 14px; }
+.order-total { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 2px; }
+.order-total .meta { color: var(--muted); font-size: 13px; min-width: 0; }
+.order-total b { font-size: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.order.link { cursor: pointer; }
+.order.link:hover { background: color-mix(in srgb, var(--accent) 7%, var(--section)); }
+.card-title { font-weight: 600; padding-bottom: 4px; }
+.board-title { grid-column: 1 / -1; font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 2px 0; }
+.banner { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; background: var(--section); border-radius: var(--radius); padding: 10px 14px; border-left: 4px solid var(--accent); }
+.banner .grow { flex: 1; min-width: 0; }
 .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.act { border: 0; border-radius: 10px; padding: 9px 12px; font-weight: 600; background: var(--bg2); color: var(--text); flex: 1 1 auto; min-width: 110px; }
+/* One main button over the width, the rest in a row, a destructive one a
+   quiet line at the end (design pass, 2026-11-19). */
+.acts.stack { flex-direction: column; flex-wrap: nowrap; }
+.acts.stack > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.acts.stack > div > .act:not(.quiet) { flex: 1 1 0; }
+.acts.stack > .quiet-row { justify-content: center; }
+.acts.stack .act.primary { padding: 11px 12px; }
+.act.quiet { flex: none; min-width: 0; background: none; color: var(--danger); font-weight: 500; font-size: 14px; padding: 6px 10px; }
+/* A secondary button a tint lighter than the card (design pass,
+   2026-11-19): on a dark theme the page colour made it a black hole. */
+.act { border: 0; border-radius: 10px; padding: 9px 12px; font-weight: 600; background: color-mix(in srgb, var(--text) 9%, var(--section)); color: var(--text); flex: 1 1 auto; min-width: 110px; }
 .act.primary { background: var(--accent); color: var(--accent-text); }
 .act.danger { background: none; color: var(--danger); border: 1px solid var(--separator); }
 .act[disabled] { opacity: 0.5; }
@@ -80,11 +127,9 @@
 @keyframes plan-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 35%, transparent); } }
 .plan-rest-title { color: var(--muted); font-size: 13px; }
 .plan-rest { display: flex; flex-wrap: wrap; gap: 8px; }
-.plan-rest .ptable { position: static; width: 84px; height: 64px; }
+.plan-rest .ptable { position: static; width: 100px; height: 80px; }
+.ptable small { display: block; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; }
 
-/* An order to a table from the tablet (PQ-052, step 2). */
-.order-for { display: flex; align-items: center; gap: 12px; }
-.order-for .act { flex: none; }
 
 /* Reservations (PQ-052, step 3). */
 .ptable.st-reserved > span, .plan-legend i.st-reserved { background: color-mix(in srgb, #8b5cf6 16%, var(--section)); border-color: #8b5cf6; border-style: dashed; }
@@ -93,10 +138,20 @@
 .ptable[data-booking] { overflow: visible; }
 .ptable[data-booking]::after { content: attr(data-booking); position: absolute; top: -4px; right: -2px; font-size: 10px; line-height: 14px; padding: 0 4px; border-radius: 7px; background: #8b5cf6; color: #fff; white-space: nowrap; }
 .ptable.booking-late::after { background: var(--danger); }
+/* The day of bookings: a small switch of days, «Забронировать» aside
+   (design pass, 2026-11-19). */
 .booking-day { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 12px 0; }
-.booking-day b { flex: 1 1 140px; text-align: center; }
-.booking-day .act { flex: none; min-width: 44px; }
-.booking-day .act.primary { flex: 1 0 auto; }
+.day-nav { display: flex; align-items: center; gap: 2px; background: var(--section); border-radius: 12px; padding: 3px; }
+.day-nav button { border: 0; background: none; width: 38px; height: 36px; border-radius: 9px; font-size: 20px; color: var(--text); }
+.day-nav button:hover { background: var(--bg2); }
+.day-nav b { padding: 0 8px; white-space: nowrap; text-align: center; }
+.booking-day .act { flex: none; min-width: 0; }
+.booking-day .act.primary { margin-left: auto; padding: 10px 18px; }
+@media (max-width: 520px) {
+  .day-nav { flex: 1 1 100%; justify-content: space-between; }
+  .booking-day .act.primary { flex: 1 1 auto; margin-left: 0; }
+}
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 10px; }
 .order.booking { border-left-color: #8b5cf6; }
 .order.booking.new { border-left-color: var(--danger); }
 .order.b-seated, .order.b-no_show, .order.b-canceled { opacity: 0.6; border-left-color: transparent; }
@@ -145,3 +200,72 @@ body.covered { overflow: hidden; }
   .screen-bar .act { min-width: 0; padding: 12px; }
   .screen-bar .total b { font-size: 18px; white-space: nowrap; }
 }
+
+/* The bill — a screen of its own (design pass, 2026-11-19): lines with ✕,
+   the payment beside, «К оплате» with cash and card in the bar. */
+.screen-head .act.small { flex: none; }
+.screen-head .status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg2); white-space: nowrap; }
+.bill-screen .screen-body { width: 100%; max-width: 820px; margin: 0 auto; }
+.bill-screen .columns { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.bill-row, .part { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--separator); font-size: 15px; }
+.bill-row .grow, .part .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.bill-row b, .part b { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.part .act.small { padding: 7px 12px; }
+.x { border: 0; background: none; color: var(--danger); width: 32px; height: 32px; border-radius: 8px; font-size: 15px; flex: none; padding: 0; }
+.x:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.col .row:last-of-type { font-size: 17px; }
+.col > .act { flex: none; }
+
+/* «Продажа» and an order to a table (design pass, 2026-11-19): the menu as
+   tiles, the receipt beside it; on a phone below, with a bar to it. */
+.sale-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0 12px 12px; align-items: start; }
+.sale-menu { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sale-menu .filters.sub { padding: 10px 0 0; }
+.sale-menu .section { border-radius: var(--radius); margin: 10px 0 0; padding: 4px 14px 14px; }
+.sale-menu .section .what { font-weight: 600; font-size: 16px; padding-top: 10px; }
+.menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; padding-top: 10px; }
+.item-tile { position: relative; background: var(--section); border-radius: 12px; padding: 12px; min-height: 84px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; cursor: pointer; border: 2px solid transparent; user-select: none; }
+.item-tile:active { transform: scale(0.98); }
+.item-tile.on { border-color: var(--accent); }
+.item-tile .name { font-weight: 600; overflow-wrap: anywhere; line-height: 1.25; padding-right: 18px; }
+.item-tile .meta { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.item-tile .qty { position: absolute; top: -7px; right: -7px; min-width: 26px; height: 26px; padding: 0 7px; border-radius: 13px; background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+.item-tile .minus { position: absolute; bottom: 8px; right: 8px; width: 32px; height: 32px; border-radius: 9px; border: 0; background: var(--bg2); color: var(--accent); font-size: 18px; padding: 0; }
+.cart { background: var(--section); border-radius: var(--radius); padding: 14px; display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.cart h3 { margin: 0; font-size: 17px; }
+.cart .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cart .field { padding: 0; }
+.cart input[type="text"] { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--separator); background: var(--bg); outline: none; }
+.cart input[type="text"]:focus { border-color: var(--accent); }
+.cart .note.found { color: var(--text); font-size: 14px; }
+.cart-empty { color: var(--muted); font-size: 14px; text-align: center; padding: 18px 8px; border: 1.5px dashed var(--separator); border-radius: 12px; }
+.cart-lines { display: flex; flex-direction: column; }
+.cart-line { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--separator); font-size: 15px; }
+.cart-line .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.cart-line b { min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.cart-total { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cart-total span { color: var(--muted); }
+.cart-total b { font-size: 26px; font-variant-numeric: tabular-nums; }
+.cart .acts.stack .act.primary { padding: 13px 12px; font-size: 16px; }
+.cart-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; gap: 10px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--section); border-top: 1px solid var(--separator); }
+.cart-bar .total { flex: 1; color: var(--muted); font-size: 13px; }
+.cart-bar .total b { display: block; color: var(--text); font-size: 20px; font-variant-numeric: tabular-nums; }
+.cart-bar .act { flex: none; padding: 12px 18px; }
+@media (min-width: 900px) {
+  .sale-layout { grid-template-columns: minmax(0, 1fr) 360px; }
+  .cart { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+  .cart-bar { display: none; }
+}
+.order-for { display: flex; align-items: center; gap: 12px; padding: 10px 12px 0; }
+.order-for b { font-size: 16px; }
+
+/* The day report (design pass, 2026-11-19): large tiles, the rest below. */
+.report-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 14px 14px 0; }
+.report-head h2 { margin: 0; font-size: 18px; }
+.report-head .meta { color: var(--muted); font-size: 14px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 12px 12px 0; }
+.tile { background: var(--section); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tile span { color: var(--muted); font-size: 13px; }
+.tile b { font-size: 24px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile.main { grid-column: span 2; background: color-mix(in srgb, var(--accent) 16%, var(--section)); }
+.tile.main b { font-size: 30px; }

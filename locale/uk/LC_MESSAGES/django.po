@@ -3710,7 +3710,7 @@ msgstr "Екран «{}»: відкрийте це посилання на пл�
 msgid "Выдать новую ссылку"
 msgstr "Видати нове посилання"
 
-#: apps/orders/apps.py apps/orders/models.py apps/partners/admin.py apps/partners/models.py apps/users/constants.py
+#: apps/orders/apps.py apps/orders/models.py apps/partners/admin.py apps/partners/models.py apps/users/constants.py webapp/staff_views.py
 msgid "Заказы"
 msgstr "Замовлення"
 
@@ -9491,6 +9491,26 @@ msgstr "Оберіть: {group}."
 #: webapp/staff_views.py webapp/texts.py
 msgid "{group}: не больше {count}."
 msgstr "{group}: не більше {count}."
+
+#: webapp/staff_views.py
+msgid "Чек"
+msgstr "Чек"
+
+#: webapp/staff_views.py
+msgid "Нажмите на позицию — она появится здесь."
+msgstr "Натисніть на позицію — вона з’явиться тут."
+
+#: webapp/staff_views.py
+msgid "{count} поз."
+msgstr "{count} поз."
+
+#: webapp/staff_views.py
+msgid "Оформить ↓"
+msgstr "Оформити ↓"
+
+#: webapp/staff_views.py
+msgid "Подробнее"
+msgstr "Детальніше"
 
 #: webapp/staff_views.py
 msgid "По способам заказа"

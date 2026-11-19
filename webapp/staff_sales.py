@@ -233,8 +233,11 @@ def report_view(request, staff: StaffRequest, body: dict) -> dict:
     report = build_daily_operations_report(partner_id=staff.partner.id)
     return {
         "date": report.local_date_label,
+        # ``tile``: shown big over the report; ``money``: a count that is an
+        # amount (design pass, 2026-11-19).
         "money": [
-            {"label": _("Всего выручка"), "value": _money(report.total_revenue), "strong": True},
+            {"label": _("Всего выручка"), "value": _money(report.total_revenue), "strong": True,
+             "tile": True},
             {"label": _("По счетам"), "value": _money(report.bill_revenue)},
             *([{"label": _("Возвраты"), "value": "-" + _money(report.refunds_total)}]
               if report.refunds_total else []),
@@ -242,10 +245,12 @@ def report_view(request, staff: StaffRequest, body: dict) -> dict:
         "counts": [
             # PQ-009, step 2: purchases — a table visit once however many
             # bills paid it; the people at the tables.
-            {"label": _("Покупок"), "value": report.purchases_count},
-            {"label": _("Средний чек"), "value": _money(report.average_check)},
-            *([{"label": _("Гостей за столами"), "value": report.table_guests},
-               {"label": _("Чек на гостя"), "value": _money(report.average_per_guest)}]
+            {"label": _("Покупок"), "value": report.purchases_count, "tile": True},
+            {"label": _("Средний чек"), "value": _money(report.average_check), "tile": True,
+             "money": True},
+            *([{"label": _("Гостей за столами"), "value": report.table_guests, "tile": True},
+               {"label": _("Чек на гостя"), "value": _money(report.average_per_guest),
+                "tile": True, "money": True}]
               if report.table_guests else []),
             {"label": _("Оплаченных счетов"), "value": report.paid_bills_count},
             {"label": _("Создано заказов"), "value": report.created_orders_count},

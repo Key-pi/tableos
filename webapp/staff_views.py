@@ -216,6 +216,13 @@ STAFF_TEXTS = {
     "at_most": N_("{group}: не больше {count}."),
     "clear": N_("Очистить"),
     "to_pay": N_("К оплате"),
+    # Design pass, 2026-11-19: the receipt beside the menu, the report's details.
+    "receipt": N_("Чек"),
+    "tap_to_add": N_("Нажмите на позицию — она появится здесь."),
+    "sale_lines": N_("{count} поз."),
+    "to_cart": N_("Оформить ↓"),
+    "orders_tab": N_("Заказы"),
+    "report_details": N_("Подробнее"),
     "by_channel": N_("По способам заказа"),
     "by_method": N_("Методы оплаты"),
     "by_staff": N_("По сотрудникам"),

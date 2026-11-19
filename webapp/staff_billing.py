@@ -137,6 +137,12 @@ def _bill_json(bill: Bill, *, full: bool = False, actor=None) -> dict:
         "status_label": bill.get_status_display(),
         "total": _money(bill.total_amount),
         "remaining": _money(remaining),
+        # Whose it is and what is paid: the list shows a bill by its guest
+        # (design pass, 2026-11-19).
+        "guest": (
+            bill.primary_guest.staff_label() if bill.primary_guest_id else _("несколько гостей")
+        ),
+        "paid": _money(bill.paid_amount),
     }
     if not full:
         return data
@@ -155,7 +161,6 @@ def _bill_json(bill: Bill, *, full: bool = False, actor=None) -> dict:
         reasons=_choices(CHANGE_REASONS, BillAdjustment.ReasonCode) if can_edit or can_void else [],
         orders=list(dict.fromkeys(orders[item.order_id] for item in active)) if can_edit else [],
         kind=bill.get_kind_display(),
-        guest=bill.primary_guest.staff_label() if bill.primary_guest_id else _("несколько гостей"),
         lines=[
             {
                 "id": str(item.order_item_id), "order": orders.get(item.order_id, ""),
@@ -165,7 +170,6 @@ def _bill_json(bill: Bill, *, full: bool = False, actor=None) -> dict:
             for item in active
         ],
         removed=sum(1 for item in items if not item.is_active),
-        paid=_money(bill.paid_amount),
         bonus_spent=_money(bill.bonus_spent_amount),
         bonus_offer=_money(offer) if offer > 0 else "",
         bonus_balance=_money(bonus_balance(bill.primary_guest)) if offer > 0 else "",

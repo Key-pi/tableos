@@ -3710,7 +3710,7 @@ msgstr "Screen “{}”: open this link on the tablet (it is shown only now, the
 msgid "Выдать новую ссылку"
 msgstr "Issue a new link"
 
-#: apps/orders/apps.py apps/orders/models.py apps/partners/admin.py apps/partners/models.py apps/users/constants.py
+#: apps/orders/apps.py apps/orders/models.py apps/partners/admin.py apps/partners/models.py apps/users/constants.py webapp/staff_views.py
 msgid "Заказы"
 msgstr "Orders"
 
@@ -9491,6 +9491,26 @@ msgstr "Choose: {group}."
 #: webapp/staff_views.py webapp/texts.py
 msgid "{group}: не больше {count}."
 msgstr "{group}: at most {count}."
+
+#: webapp/staff_views.py
+msgid "Чек"
+msgstr "Receipt"
+
+#: webapp/staff_views.py
+msgid "Нажмите на позицию — она появится здесь."
+msgstr "Tap an item and it appears here."
+
+#: webapp/staff_views.py
+msgid "{count} поз."
+msgstr "{count} items"
+
+#: webapp/staff_views.py
+msgid "Оформить ↓"
+msgstr "Checkout ↓"
+
+#: webapp/staff_views.py
+msgid "Подробнее"
+msgstr "Details"
 
 #: webapp/staff_views.py
 msgid "По способам заказа"

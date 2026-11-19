@@ -77,6 +77,32 @@
 
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
 
+  // The buttons of a card (design pass, 2026-11-19): one main action — the
+  // primary ones (cash and card together are one choice) or else the first
+  // ordinary one — over the whole width; the rest in a row; a destructive
+  // one is a quiet line at the end. ``kind``: "primary", "danger",
+  // "secondary" (never the main one) or "".
+  function actionsBox(list) {
+    var main = list.filter(function (item) { return item.kind === "primary"; });
+    if (!main.length) {
+      var first = list.filter(function (item) { return !item.kind; })[0];
+      if (first) main = [first];
+    }
+    var rest = list.filter(function (item) { return main.indexOf(item) < 0 && item.kind !== "danger"; });
+    var quiet = list.filter(function (item) { return item.kind === "danger"; });
+    var box = el("div", { class: "acts stack" });
+    [[main, "act primary"], [rest, "act"], [quiet, "act quiet"]].forEach(function (group) {
+      if (!group[0].length) return;
+      var row = el("div", { class: group[0] === quiet ? "quiet-row" : null });
+      group[0].forEach(function (item) {
+        row.appendChild(el("button", { type: "button", class: group[1], text: item.label, disabled: item.disabled,
+                                       onclick: item.onclick }));
+      });
+      box.appendChild(row);
+    });
+    return box;
+  }
+
   function toast(message) {
     var box = document.getElementById("toast");
     box.textContent = message;
@@ -413,49 +439,45 @@
 
   // --- drawing ---------------------------------------------------------------
 
+  // An order (design pass, 2026-11-19): where it goes first — a table,
+  // pickup, delivery — then the number and the minutes, what to make with
+  // the count first, the amount large at the bottom, one main button.
   function orderCard(order) {
     var card = el("article", { class: "order" + (order.status === "new" ? " new" : "") +
                                       (fresh[order.id] ? " fresh" : "") });
-    card.appendChild(el("div", { class: "top" },
-      el("span", null, el("span", { class: "num", text: "#" + order.id }), " ",
-         el("span", { class: "place", text: order.place })),
+    card.appendChild(el("div", { class: "order-head" },
+      el("span", { class: "title", text: order.place }),
       el("span", { class: "status", text: order.status_label })));
-    card.appendChild(el("div", { class: "meta", text: [
-      t("minutes", { minutes: minutesSince(order.created, order.minutes) }), order.when, order.guest
+    card.appendChild(el("div", { class: "sub", text: [
+      "#" + order.id, t("minutes", { minutes: minutesSince(order.created, order.minutes) }), order.when, order.guest
     ].filter(Boolean).join(" · ") }));
-    var list = el("ul");
-    order.items.forEach(function (item) { list.appendChild(el("li", { text: item.name + " × " + item.quantity })); });
+    var list = el("div", { class: "items" });
+    order.items.forEach(function (item) {
+      list.appendChild(el("div", null, el("span", { class: "q", text: item.quantity + " ×" }), el("span", { text: item.name })));
+    });
     card.appendChild(list);
-    function line(label, value, link) {
+    function line(label, value, link, kind) {
       if (!value) return;
-      card.appendChild(el("div", { class: "note" }, label + ": ",
+      card.appendChild(el("div", { class: "note" + (kind ? " " + kind : "") }, label ? label + ": " : "",
         link ? el("a", { href: link, target: "_blank", rel: "noopener", text: value }) : value));
     }
-    line(T.phone, order.phone);
+    line(T.comment, order.comment, null, "comment");
+    line(T.phone, order.phone, order.phone ? "tel:" + order.phone : null);
     line(T.address, order.address);
-    if (order.map) card.appendChild(el("div", { class: "note" },
-      el("a", { href: order.map, target: "_blank", rel: "noopener", text: T.map })));
+    if (order.map) line("", T.map, order.map);
     if (order.carrier) line(order.carrier, order.recipient);
     line(T.shipping_cost, order.shipping_cost);
     line(T.tracking, order.tracking, order.tracking_link);
-    line(T.comment, order.comment);
     line(T.assignee, order.assignee);
     if (order.received) card.appendChild(el("div", { class: "note", text: T.received }));
-    card.appendChild(el("div", { class: "row" },
-      el("b", { text: T.total + ": " + money(order.total) }),
-      el("span", { class: "meta", text: order.payment })));
-    if (order.actions.length || order.can_refund) {
-      var acts = el("div", { class: "acts" });
-      if (order.can_refund) acts.appendChild(el("button", { type: "button", class: "act", text: T.refund,
-                                                            onclick: function () { openRefund(order); } }));
-      order.actions.forEach(function (action) {
-        acts.appendChild(el("button", {
-          type: "button", class: "act" + (action.style ? " " + action.style : ""),
-          text: action.label, disabled: busy, onclick: function () { act(order, action); }
-        }));
-      });
-      card.appendChild(acts);
-    }
+    card.appendChild(el("div", { class: "order-total" },
+      el("span", { class: "meta", text: order.payment }),
+      el("b", { text: money(order.total) })));
+    var buttons = order.actions.map(function (action) {
+      return { label: action.label, kind: action.style || "", disabled: busy, onclick: function () { act(order, action); } };
+    });
+    if (order.can_refund) buttons.push({ label: T.refund, kind: "secondary", onclick: function () { openRefund(order); } });
+    if (buttons.length) card.appendChild(actionsBox(buttons));
     return card;
   }
 
@@ -468,7 +490,7 @@
       }
     });
     Object.keys(names).forEach(function (code) { if (names[code]) groups.push([code, names[code]]); });
-    var box = el("div", { class: "filters", role: "group" });
+    var box = el("div", { class: "filters sub", role: "group" });
     groups.forEach(function (group) {
       var count = data.orders.filter(function (order) { return matches(order, group[0]); }).length;
       var newCount = data.orders.filter(function (order) {
@@ -480,7 +502,7 @@
       }, group[1] + " " + count, newCount && group[0] !== "new" ? el("span", { class: "count", text: String(newCount) }) : null));
     });
     box.appendChild(el("button", {
-      type: "button", class: "chip", "aria-pressed": String(sound), text: T.sound_on,
+      type: "button", class: "chip push", "aria-pressed": String(sound), text: T.sound_on,
       onclick: function () {
         sound = !sound;
         if (sound && !audio) {
@@ -541,29 +563,39 @@
     render();
   }
 
+  // The tabs read as tabs (design pass, 2026-11-19): a line under the open
+  // one, how many in grey, what waits for someone in red.
   function tabsBar() {
     var newOrders = data.orders.filter(function (order) { return order.status === "new"; }).length;
-    // [tab, title, red count]: new orders, guests asking for the bill.
-    var names = [["orders", T.orders + " " + data.orders.length, newOrders]];
-    if (data.rights.billing) names.push(["bills", T.bills, data.bill_requests.length]);
+    // [tab, title, how many, red count]: new orders, guests asking for the bill.
+    var names = [["orders", T.orders_tab, data.orders.length, newOrders]];
+    if (data.rights.billing) names.push(["bills", T.bills, 0, data.bill_requests.length]);
     if (data.rights.tables || data.rights.table_orders || data.rights.reservations) {
       var needing = {};
       (data.table_alerts || []).forEach(function (alert) { needing[alert.table] = true; });
-      names.push(["tables", T.tables, Object.keys(needing).length]);
+      names.push(["tables", T.tables, 0, Object.keys(needing).length]);
     }
     if (data.rights.sale) names.push(["sale", T.sale]);
     if (data.rights.report) names.push(["report", T.report]);
     if (names.length < 2) return null;
-    var bar = el("div", { class: "filters", role: "tablist", "data-part": "tabs" });
+    var bar = el("div", { class: "tabs-main", role: "tablist", "data-part": "tabs" });
     names.forEach(function (item) {
       bar.appendChild(el("button", {
-        type: "button", class: "chip" + (item[2] && freshTabs[item[0]] ? " fresh" : ""), role: "tab",
+        type: "button", class: "tab-main" + (item[3] && freshTabs[item[0]] ? " fresh" : ""), role: "tab",
         "aria-pressed": String(tab === item[0] || (item[0] === "tables" && tab === "table_order")),
         onclick: function () { if (item[0] !== "table_order") tableOrder = null; switchTab(item[0]); }
-      }, item[1], item[2] ? el("span", { class: "count", text: String(item[2]) }) : null));
+      }, item[1], item[2] ? el("span", { class: "n", text: String(item[2]) }) : null,
+         item[3] ? el("span", { class: "count", text: String(item[3]) }) : null));
     });
     freshTabs = {};
     return bar;
+  }
+
+  // On a phone the tabs scroll sideways: the open one stays in sight.
+  function keepTabInView() {
+    var bar = root.querySelector(".tabs-main");
+    var open = bar && bar.querySelector('[aria-pressed="true"]');
+    if (open && open.offsetLeft + open.offsetWidth > bar.clientWidth) bar.scrollLeft = open.offsetLeft - 8;
   }
 
   function moneyLine(label, value, strong) {
@@ -571,44 +603,44 @@
               el(strong ? "b" : "span", { text: money(value) }));
   }
 
+  // Bills (design pass, 2026-11-19): who asks for the bill first, then the
+  // open bills by guest with what is left to pay; a tap opens the bill.
   function renderBills(page) {
     var info = tabData.bills;
     if (!info) { page.appendChild(el("div", { class: "center" }, el("div", { class: "spinner" }))); return; }
     var board = el("div", { class: "board" });
-    // Orders at tables nobody asked a bill for yet: a card over the whole row
-    // (owner 2026-11-11: the small line hung beside the cards).
+    // Orders at tables nobody asked a bill for yet: one line over the whole
+    // row (owner 2026-11-11: the small line hung beside the cards).
     if (info.unbilled) {
-      var hint = el("article", { class: "order wide-card" },
-        el("div", { class: "top" }, el("span", { class: "place", text: "🍽 " + t("unbilled", { count: info.unbilled }) })),
-        el("div", { class: "meta", text: T.unbilled_hint }));
-      if (data.rights.tables) {
-        hint.appendChild(el("div", { class: "acts" }, el("button", { type: "button", class: "act", text: T.to_tables,
-                                                               onclick: function () { switchTab("tables"); } })));
-      }
-      board.appendChild(hint);
+      board.appendChild(el("div", { class: "banner" },
+        el("div", { class: "grow" }, el("b", { text: "🍽 " + t("unbilled", { count: info.unbilled }) }),
+           el("div", { class: "sub", text: T.unbilled_hint })),
+        data.rights.tables ? el("button", { type: "button", class: "act small", text: T.to_tables,
+                                            onclick: function () { switchTab("tables"); } }) : null));
     }
+    if (info.requests.length) board.appendChild(el("div", { class: "board-title", text: T.bill_requests }));
     info.requests.forEach(function (item) {
       var card = el("article", { class: "order new" },
-        el("div", { class: "top" }, el("span", { class: "place", text: "🧾 " + t("table", { number: item.table }) }),
+        el("div", { class: "order-head" }, el("span", { class: "title", text: "🧾 " + t("table", { number: item.table }) }),
            el("span", { class: "status", text: item.status_label })),
-        el("div", { class: "meta", text: item.type + " · " + item.guest }));
-      if (item.note) card.appendChild(el("div", { class: "note", text: item.note }));
-      var acts = el("div", { class: "acts" });
-      if (item.bill) acts.appendChild(el("button", { type: "button", class: "act primary", text: T.open_bill,
-                                                    onclick: function () { openBill(item.bill); } }));
-      if (item.can_process) acts.appendChild(el("button", { type: "button", class: "act", text: T.process,
-                                                           onclick: function () { requestAction(item, "process"); } }));
-      acts.appendChild(el("button", { type: "button", class: "act danger", text: T.cancel_request,
-                                     onclick: function () { requestAction(item, "cancel"); } }));
-      card.appendChild(acts);
+        el("div", { class: "sub", text: item.type + " · " + item.guest }));
+      if (item.note) card.appendChild(el("div", { class: "note comment", text: item.note }));
+      var buttons = [];
+      if (item.bill) buttons.push({ label: T.open_bill, kind: "primary", onclick: function () { openBill(item.bill); } });
+      if (item.can_process) buttons.push({ label: T.process, onclick: function () { requestAction(item, "process"); } });
+      buttons.push({ label: T.cancel_request, kind: "danger", onclick: function () { requestAction(item, "cancel"); } });
+      card.appendChild(actionsBox(buttons));
       board.appendChild(card);
     });
+    if (info.bills.length) board.appendChild(el("div", { class: "board-title", text: T.open_bills }));
     info.bills.forEach(function (bill) {
-      board.appendChild(el("article", { class: "order", style: "cursor:pointer", onclick: function () { openBill(bill.id); } },
-        el("div", { class: "top" }, el("span", null, el("span", { class: "num", text: "#" + bill.id }), " ",
-                                       el("span", { class: "place", text: bill.place })),
+      board.appendChild(el("article", { class: "order link", role: "button", tabindex: "0", onclick: function () { openBill(bill.id); } },
+        el("div", { class: "order-head" }, el("span", { class: "title", text: bill.place }),
            el("span", { class: "status", text: bill.status_label })),
-        moneyLine(T.total, bill.total), moneyLine(T.remaining, bill.remaining, true)));
+        el("div", { class: "sub", text: bill.guest + " · #" + bill.id }),
+        el("div", { class: "order-total" },
+          el("span", { class: "meta", text: Number(bill.paid) ? T.paid + " " + money(bill.paid) + " / " + money(bill.total) : T.remaining }),
+          el("b", { text: money(bill.remaining) }))));
     });
     if (!info.requests.length && !info.bills.length) board.appendChild(el("div", { class: "empty", text: T.no_bills }));
     page.appendChild(board);
@@ -650,33 +682,25 @@
             el("span", { class: "meta", text: bill.status_label + " · #" + bill.id }),
             el("b", { text: money(bill.remaining) })));
         });
-        var acts = el("div", { class: "acts" });
         // One main action (design pass, 2026-11-19): «Рассчитать» for who
         // takes money, «＋ Заказ» for a waiter; the quick bills stay beside.
-        if (visit.can_settle) {
-          acts.appendChild(el("button", { type: "button", class: "act primary", text: T.settle,
-                                         onclick: function () { openSettlement(table, visit); } }));
-        }
-        if (data.rights.table_orders) {
-          acts.appendChild(el("button", { type: "button", class: "act" + (visit.can_settle ? "" : " primary"), text: T.add_order,
-                                         onclick: function () { startTableOrder(table, visit); } }));
-        }
+        var buttons = [];
+        if (visit.can_settle) buttons.push({ label: T.settle, kind: "primary", onclick: function () { openSettlement(table, visit); } });
+        if (data.rights.table_orders) buttons.push({ label: T.add_order, onclick: function () { startTableOrder(table, visit); } });
         if (visit.can_bill) {
           // "A bill to each" only when two or more guests ordered: otherwise
           // it is the same single bill.
-          acts.appendChild(el("button", { type: "button", class: "act",
-                                         text: visit.can_split ? T.shared_bill : T.issue_bill,
-                                         onclick: function () { visitAction(visit, "shared"); } }));
-          if (visit.can_split) {
-            acts.appendChild(el("button", { type: "button", class: "act", text: T.personal_bills,
-                                           onclick: function () { visitAction(visit, "personal"); } }));
-          }
+          buttons.push({ label: visit.can_split ? T.shared_bill : T.issue_bill, kind: "secondary",
+                         onclick: function () { visitAction(visit, "shared"); } });
+          if (visit.can_split) buttons.push({ label: T.personal_bills, kind: "secondary",
+                                              onclick: function () { visitAction(visit, "personal"); } });
         }
         if (visit.can_close !== false) {
-          acts.appendChild(el("button", { type: "button", class: "act danger", text: T.close_visit,
-                                         onclick: function () { sheet(T.close_visit_confirm, function () { visitAction(visit, "close"); }); } }));
+          buttons.push({ label: T.close_visit, kind: "danger",
+                         onclick: function () { sheet(T.close_visit_confirm, function () { visitAction(visit, "close"); }); } });
         }
-        if (acts.childNodes.length) card.appendChild(acts);
+        var acts = buttons.length ? actionsBox(buttons) : null;
+        if (acts) card.appendChild(acts);
         return card;
   }
 
@@ -944,13 +968,17 @@
 
   function planTile(info, hall, entry) {
     var booking = entry.reservation;
-    var since = entry.state === "free" ? T.plan_free
-      : entry.state === "reserved" || entry.state === "late" ? booking.time + " · " + booking.name
-      : [entry.since, entry.guests ? t("guests", { count: entry.guests }) : ""].filter(Boolean).join(" · ");
+    // The number, then two short lines (design pass, 2026-11-19): since when
+    // and how many, or the booking's time and name.
+    var lines = entry.state === "free" ? [T.plan_free]
+      : entry.state === "reserved" || entry.state === "late" ? [booking.time, booking.name]
+      : [entry.since, entry.guests ? t("guests", { count: entry.guests }) : ""];
     // State classes are prefixed: «.call» is the calls board's own style.
     var tile = el("button", { type: "button", class: "ptable st-" + entry.state + (entry.shape === "round" ? " round" : ""),
                               onclick: function () { openTable(info, entry); } },
-      el("span", null, el("b", { text: String(entry.number) }), el("small", { text: since })));
+      el("span", null, el("b", { text: String(entry.number) }),
+         lines.filter(Boolean).length ? el("small", { text: lines.filter(Boolean)[0] }) : null,
+         lines.filter(Boolean).length > 1 ? el("small", { text: lines.filter(Boolean)[1] }) : null));
     // Guests sit there and a booking comes soon: its time in the corner.
     if (booking && entry.state !== "reserved" && entry.state !== "late") {
       tile.setAttribute("data-booking", "📅 " + booking.time);
@@ -971,7 +999,7 @@
       planHall = plan.halls.length ? plan.halls[0].id : "";
     }
     if (plan.halls.length > 1 || data.rights.reservations) {
-      var chips = el("div", { class: "filters", role: "tablist" });
+      var chips = el("div", { class: "filters sub", role: "tablist" });
       if (plan.halls.length > 1) {
         plan.halls.forEach(function (hall) {
           var busyHere = hall.tables.filter(function (item) {
@@ -1069,30 +1097,28 @@
     return all.sort(function (a, b) { return a.number - b.number; });
   }
 
-  // One booking: when, where, who, and what can be done with it now.
+  // One booking: when, where, who, and what can be done with it now; one
+  // main button — «Пришли» (design pass, 2026-11-19).
   function bookingCard(booking, table) {
     var card = el("article", { class: "order booking b-" + booking.status + (booking.late ? " new" : "") },
-      el("div", { class: "top" }, el("span", { class: "num", text: booking.time + "–" + booking.until }),
+      el("div", { class: "order-head" }, el("span", { class: "title time", text: booking.time + "–" + booking.until }),
          el("span", { class: "status", text: booking.late ? T.plan_late : booking.status_label })),
       el("div", { class: "place", text: t("table", { number: booking.table }) + " · " + t("guests", { count: booking.guests }) }),
       el("div", null, el("b", { text: booking.name }), " · ", el("a", { href: "tel:" + booking.phone, text: booking.phone }),
-         booking.customer_code ? " · 👤 " + booking.customer_code : ""));
-    if (booking.comment) card.appendChild(el("div", { class: "note", text: booking.comment }));
+         booking.customer_code ? el("span", { class: "meta", text: " · 👤 " + booking.customer_code }) : null));
+    if (booking.comment) card.appendChild(el("div", { class: "note comment", text: booking.comment }));
     if (booking.status !== "booked") return card;
-    var acts = el("div", { class: "acts" });
-    acts.appendChild(el("button", { type: "button", class: "act primary", text: T.seat,
-                                   onclick: function () { seatBooking(booking, table); } }));
+    var buttons = [{ label: T.seat, kind: "primary", onclick: function () { seatBooking(booking, table); } }];
     if (booking.started) {
-      acts.appendChild(el("button", { type: "button", class: "act", text: T.no_show, onclick: function () {
+      buttons.push({ label: T.no_show, onclick: function () {
         sheet(t("no_show_q", { name: booking.name }), function () { bookingAction(booking, "no_show"); });
-      } }));
+      } });
     }
-    acts.appendChild(el("button", { type: "button", class: "act", text: T.edit_booking,
-                                   onclick: function () { bookingForm(booking, {}); } }));
-    acts.appendChild(el("button", { type: "button", class: "act danger", text: T.cancel_booking, onclick: function () {
+    buttons.push({ label: T.edit_booking, onclick: function () { bookingForm(booking, {}); } });
+    buttons.push({ label: T.cancel_booking, kind: "danger", onclick: function () {
       sheet(t("cancel_booking_q", { name: booking.name, time: booking.time }), function () { bookingAction(booking, "cancel"); });
-    } }));
-    card.appendChild(acts);
+    } });
+    card.appendChild(actionsBox(buttons));
     return card;
   }
 
@@ -1217,9 +1243,11 @@
     } });
     back.appendChild(el("div", { class: "sheet", role: "dialog", style: "max-height:90vh;overflow:auto" },
       el("p", null, el("b", { text: booking ? T.edit_booking : T.new_booking })),
-      field(T.f_table, table), field(T.f_date, date), field(T.f_time, time), field(T.f_minutes, minutes),
-      field(T.f_guests, guests), field(T.booking_code_hint, code), who, field(T.f_name, name),
-      field(T.phone, phone), field(T.comment, comment),
+      el("div", { class: "form-grid" }, field(T.f_table, table), field(T.f_guests, guests),
+         field(T.f_date, date), field(T.f_time, time), field(T.f_minutes, minutes)),
+      field(T.booking_code_hint, code), who,
+      el("div", { class: "form-grid" }, field(T.f_name, name), field(T.phone, phone)),
+      field(T.comment, comment),
       problem,
       el("div", { class: "acts" },
         el("button", { type: "button", class: "act", text: T.back, onclick: function () { back.remove(); } }), save)));
@@ -1229,7 +1257,7 @@
   }
 
   function renderBookings(page) {
-    var chips = el("div", { class: "filters", role: "tablist" },
+    var chips = el("div", { class: "filters sub", role: "tablist" },
       el("button", { type: "button", class: "chip", "aria-pressed": "false", text: T.plan_view,
                      onclick: function () { setTablesMode("plan"); } }),
       bookingsChip(true));
@@ -1238,12 +1266,11 @@
     if (!info) { page.appendChild(el("div", { class: "center" }, el("div", { class: "spinner" }))); return; }
     var go = function (day) { bookingDay = day; tabData.bookings = null; setTablesMode("bookings"); };
     page.appendChild(el("div", { class: "booking-day" },
-      el("button", { type: "button", class: "act", text: "‹", "aria-label": "-1",
-                     onclick: function () { go(shiftDay(info.date, -1)); } }),
-      el("b", { text: dayLabel(info.date, info.today) }),
-      el("button", { type: "button", class: "act", text: "›", "aria-label": "+1",
-                     onclick: function () { go(shiftDay(info.date, 1)); } }),
-      info.date !== info.today ? el("button", { type: "button", class: "act", text: T.today,
+      el("div", { class: "day-nav" },
+        el("button", { type: "button", text: "‹", "aria-label": "-1", onclick: function () { go(shiftDay(info.date, -1)); } }),
+        el("b", { text: dayLabel(info.date, info.today) }),
+        el("button", { type: "button", text: "›", "aria-label": "+1", onclick: function () { go(shiftDay(info.date, 1)); } })),
+      info.date !== info.today ? el("button", { type: "button", class: "act small", text: T.today,
                                                 onclick: function () { go(info.today); } }) : null,
       el("button", { type: "button", class: "act primary", text: T.book,
                      onclick: function () { bookingForm(null, { date: info.date }); } })));
@@ -1283,73 +1310,91 @@
     });
   }
 
-  function showBill(bill) {
-    var old = document.querySelector(".sheet-back.bill");
+  // A screen over the page (design pass, 2026-11-19): a head with the title
+  // and «Назад», a body, a bar with the total and the main buttons.
+  function openScreen(kind, title, onClose) {
+    var old = document.querySelector(".screen." + kind);
     if (old) old.remove();
-    var back = el("div", { class: "sheet-back bill", onclick: function (event) {
-      if (event.target === back) { back.remove(); openBillId = ""; }
-    } });
-    var lines = el("ul");
+    var screen = el("div", { class: "screen " + kind, role: "dialog" });
+    var close = function () { screen.remove(); if (!document.querySelector(".screen")) document.body.classList.remove("covered"); if (onClose) onClose(); };
+    var head = el("div", { class: "screen-head" },
+      el("button", { type: "button", class: "act small", text: "← " + T.back, onclick: close }),
+      el("h2", { text: title }));
+    var body = el("div", { class: "screen-body" });
+    var bar = el("div", { class: "screen-bar" });
+    screen.appendChild(head); screen.appendChild(body); screen.appendChild(bar);
+    document.body.appendChild(screen);
+    document.body.classList.add("covered");
+    return { screen: screen, head: head, body: body, bar: bar, close: close };
+  }
+
+  // The bill (design pass, 2026-11-19): its lines with ✕ where they may be
+  // taken off, the payment beside — bonuses, equal parts — and «К оплате»
+  // with cash and card in the bar.
+  function showBill(bill) {
+    var view = openScreen("bill-screen", "🧾 " + bill.place, function () { openBillId = ""; });
+    view.head.appendChild(el("span", { class: "status", text: bill.status_label }));
+    var lines = el("div", { class: "col" },
+      el("div", { class: "col-head" }, el("span", { class: "name", text: bill.guest }), el("span", { class: "sum", text: money(bill.total) })),
+      el("div", { class: "sub", text: bill.kind + " · #" + bill.id }));
     bill.lines.forEach(function (line) {
-      lines.appendChild(el("li", { text: line.name + " × " + line.quantity + " — " + money(line.total) }));
+      lines.appendChild(el("div", { class: "bill-row" },
+        el("span", { class: "grow", text: line.name + " × " + line.quantity }),
+        el("b", { text: money(line.total) }),
+        bill.can_edit ? el("button", { type: "button", class: "x", text: "✕", title: t("remove_line_q", { name: line.name }),
+          "aria-label": t("remove_line_q", { name: line.name }),
+          onclick: function () { billChange(bill, { action: "remove_line", line: line.id }, t("remove_line_q", { name: line.name })); } }) : null));
     });
-    var box = el("div", { class: "sheet", role: "dialog", style: "max-height:85vh;overflow:auto" },
-      el("div", { class: "top", style: "display:flex;justify-content:space-between" },
-        el("b", { text: "🧾 #" + bill.id + " · " + bill.place }), el("span", { class: "status", text: bill.status_label })),
-      el("div", { class: "meta", text: bill.kind + " · " + bill.guest }),
-      lines,
-      bill.removed ? el("div", { class: "note", text: t("removed", { count: bill.removed }) }) : null,
-      moneyLine(T.total, bill.total),
-      Number(bill.paid) ? moneyLine(T.paid, bill.paid) : null,
-      Number(bill.bonus_spent) ? moneyLine(T.bonuses || "Бонуси", bill.bonus_spent) : null,
-      moneyLine(T.remaining, bill.remaining, true),
-      bill.bonus_offer ? el("div", { class: "note", text: t("bonus_offer", { balance: bill.bonus_balance, amount: bill.bonus_offer }) }) : null);
-    if (bill.can_edit) {
-      var edit = el("div", { class: "acts" });
-      bill.lines.forEach(function (line) {
-        edit.appendChild(el("button", { type: "button", class: "act danger", text: "✕ " + line.name + " × " + line.quantity,
-          onclick: function () { billChange(bill, { action: "remove_line", line: line.id }, t("remove_line_q", { name: line.name })); } }));
-      });
+    if (bill.removed) lines.appendChild(el("div", { class: "sub", text: t("removed", { count: bill.removed }) }));
+    if (bill.can_edit && bill.orders.length) {
+      var cancel = el("div", { class: "chips" });
       bill.orders.forEach(function (publicId) {
-        edit.appendChild(el("button", { type: "button", class: "act danger", text: t("cancel_order", { id: publicId }),
+        cancel.appendChild(el("button", { type: "button", class: "act quiet", text: t("cancel_order", { id: publicId }),
           onclick: function () { billChange(bill, { action: "cancel_order", order: publicId }, t("cancel_order", { id: publicId }) + "?"); } }));
       });
-      box.appendChild(el("div", { class: "note", style: "margin-top:8px", text: T.change_bill }));
-      box.appendChild(edit);
+      lines.appendChild(cancel);
     }
-    // Paid in equal parts (PQ-009): each part by cash or card.
-    if (bill.split.length) {
-      box.appendChild(el("div", { class: "note", style: "margin-top:8px", text: t("split_title", { parts: bill.split_parts }) }));
-      bill.split.forEach(function (part) {
-        var row = el("div", { class: "acts", style: "align-items:center" },
-          el("span", { style: "flex:1", text: t("split_part", { number: part.number }) + " — " + money(part.amount) }));
-        if (part.paid) row.appendChild(el("span", { class: "status", text: "✓ " + part.method }));
-        else if (Number(part.amount) > 0) {
-          row.appendChild(el("button", { type: "button", class: "act", text: T.sale_cash,
-                                         onclick: function () { payPart(bill, part, "cash"); } }));
-          row.appendChild(el("button", { type: "button", class: "act", text: T.sale_card,
-                                         onclick: function () { payPart(bill, part, "terminal"); } }));
-        }
-        box.appendChild(row);
-      });
-    }
-    var acts = el("div", { class: "acts" });
+    var pay = el("div", { class: "col" }, el("div", { class: "col-head" }, el("span", { class: "name", text: T.payment })));
+    pay.appendChild(moneyLine(T.total, bill.total));
+    if (Number(bill.paid)) pay.appendChild(moneyLine(T.paid, bill.paid));
+    if (Number(bill.bonus_spent)) pay.appendChild(moneyLine(T.bonuses, bill.bonus_spent));
+    pay.appendChild(moneyLine(T.remaining, bill.remaining, true));
+    var main = [];
     bill.actions.forEach(function (action) {
+      if (action.code === "pay_bonus") {
+        pay.appendChild(el("div", { class: "note", text: t("bonus_offer", { balance: bill.bonus_balance, amount: bill.bonus_offer }) }));
+        pay.appendChild(el("button", { type: "button", class: "act", text: action.label, onclick: function () { billAction(bill, action); } }));
+        return;
+      }
       // A split bill is paid part by part, not all at once.
       if (bill.split.length && (action.code === "pay_cash" || action.code === "pay_terminal")) return;
-      acts.appendChild(el("button", { type: "button", class: "act" + (action.style ? " " + action.style : ""),
-                                     text: action.label, onclick: function () { billAction(bill, action); } }));
+      main.push(el("button", { type: "button", class: "act" + (action.style ? " " + action.style : ""),
+                               text: action.label, onclick: function () { billAction(bill, action); } }));
     });
-    if (bill.can_split) acts.appendChild(el("button", { type: "button", class: "act", text: T.split_equally,
-                                                       onclick: function () { splitBill(bill); } }));
-    if (bill.can_void) acts.appendChild(el("button", { type: "button", class: "act danger", text: T.void_bill,
+    // Paid in equal parts (PQ-009): each part by cash or card.
+    if (bill.split.length) {
+      pay.appendChild(el("div", { class: "sub", text: t("split_title", { parts: bill.split_parts }) }));
+      bill.split.forEach(function (part) {
+        var row = el("div", { class: "part" },
+          el("span", { class: "grow", text: t("split_part", { number: part.number }) }),
+          el("b", { text: money(part.amount) }));
+        if (part.paid) row.appendChild(el("span", { class: "tag", text: "✓ " + part.method }));
+        else if (Number(part.amount) > 0) {
+          row.appendChild(el("button", { type: "button", class: "act small", text: T.sale_cash,
+                                         onclick: function () { payPart(bill, part, "cash"); } }));
+          row.appendChild(el("button", { type: "button", class: "act small", text: T.sale_card,
+                                         onclick: function () { payPart(bill, part, "terminal"); } }));
+        }
+        pay.appendChild(row);
+      });
+    }
+    if (bill.can_split) pay.appendChild(el("button", { type: "button", class: "act", text: T.split_equally,
+                                                      onclick: function () { splitBill(bill); } }));
+    if (bill.can_void) pay.appendChild(el("button", { type: "button", class: "act quiet", text: T.void_bill,
       onclick: function () { billChange(bill, { action: "void" }, T.void_bill + " #" + bill.id + "?"); } }));
-    acts.appendChild(el("button", { type: "button", class: "act", text: T.back,
-                                   onclick: function () { back.remove(); openBillId = ""; } }));
-    box.appendChild(acts);
-
-    back.appendChild(box);
-    document.body.appendChild(back);
+    view.body.appendChild(el("div", { class: "columns" }, lines, pay));
+    view.bar.appendChild(el("div", { class: "total" }, T.remaining, el("b", { text: money(bill.remaining) })));
+    main.forEach(function (button) { view.bar.appendChild(button); });
   }
 
   function billChange(bill, change, title) {
@@ -1502,6 +1547,7 @@
     if (line.quantity <= 0) C().lines = C().lines.filter(function (other) { return other !== line; });
     haptic("success");
     salePreview();
+    render();  // the count on the tile at once; the receipt when the server answered
   }
 
   // --- a variant and add-ons for the sale (as on the guest's page) -------------
@@ -1590,19 +1636,73 @@
     page.appendChild(box);
   }
 
+  // «Продажа» and an order to a table (design pass, 2026-11-19): the menu as
+  // tiles — a tap adds one, «−» takes one off — and the receipt beside it
+  // (below on a phone, with a bar that leads to it): who, the lines, the
+  // total and the main button.
   function renderSale(page) {
     var forTable = tab === "table_order" && tableOrder;
     var info = forTable ? tabData.table_order : tabData.sale;
     if (!info) { page.appendChild(el("div", { class: "center" }, el("div", { class: "spinner" }))); return; }
     if (forTable) {
-      page.appendChild(el("div", { class: "section order-for" },
-        el("button", { type: "button", class: "act", text: "← " + T.tables, onclick: leaveTableOrder }),
+      page.appendChild(el("div", { class: "order-for" },
+        el("button", { type: "button", class: "act small", text: "← " + T.tables, onclick: leaveTableOrder }),
         el("b", { text: t("order_for_table", { number: tableOrder.table.number })
                          + (tableOrder.since ? " · " + t("visit", { since: tableOrder.since }) : "") })));
     }
-    var section = el("div", { class: "section" });
+    var layout = el("div", { class: "sale-layout" });
+    var menu = el("div", { class: "sale-menu" });
+    if (!C().category && info.categories.length) C().category = info.categories[0].id;
+    if (info.categories.length > 1) {
+      var chips = el("div", { class: "filters sub" });
+      info.categories.forEach(function (category) {
+        chips.appendChild(el("button", { type: "button", class: "chip", text: category.name,
+          "aria-pressed": String(category.id === C().category),
+          onclick: function () { C().category = category.id; render(); } }));
+      });
+      menu.appendChild(chips);
+    }
+    if (C().picking) renderPicker(menu);
+    var grid = el("div", { class: "menu-grid" });
+    info.categories.filter(function (category) { return category.id === C().category; }).forEach(function (category) {
+      category.items.forEach(function (item) {
+        var quantity = itemCount(item.id);
+        var choice = item.choice && item.choice !== "none";
+        var price = item.price_from ? t("price_from", { price: money(item.price) }) : money(item.price);
+        grid.appendChild(el("div", { class: "item-tile" + (quantity ? " on" : ""), role: "button", tabindex: "0",
+          onclick: function () {
+            if (choice) { C().picking = { item: item, pick: startingPick(item) }; render(); window.scrollTo(0, 0); }
+            else saleChange(item.id, null, [], 1);
+          } },
+          el("span", { class: "name", text: item.name }),
+          el("span", { class: "meta", text: price + ("left" in item ? " · " + t("left", { count: item.left }) : "") }),
+          quantity ? el("span", { class: "qty", text: String(quantity) }) : null,
+          // An item with a variant or add-ons is taken off in the receipt: its lines differ.
+          quantity && !choice ? el("button", { type: "button", class: "minus", text: "−", "aria-label": "−",
+            onclick: function (event) { event.stopPropagation(); saleChange(item.id, null, [], -1); } }) : null));
+      });
+    });
+    menu.appendChild(grid);
+    layout.appendChild(menu);
+    layout.appendChild(saleCart(forTable));
+    page.appendChild(layout);
+    var preview = C().preview;
+    if (preview && preview.items.length && C().lines.length) {
+      var count = C().lines.reduce(function (sum, line) { return sum + line.quantity; }, 0);
+      page.appendChild(el("div", { class: "cart-bar" },
+        el("div", { class: "total" }, t("sale_lines", { count: count }), el("b", { text: money(preview.to_pay) })),
+        el("button", { type: "button", class: "act primary", text: T.to_cart, onclick: function () {
+          var cart = document.getElementById("cart");
+          if (cart) cart.scrollIntoView({ behavior: "smooth", block: "start" });
+        } })));
+    }
+  }
+
+  function saleCart(forTable) {
+    var cart = el("aside", { class: "cart", id: "cart" });
+    if (!forTable) cart.appendChild(el("h3", { text: T.receipt }));
     if (forTable && tableOrder.guests.length) {
-      var whom = el("div", { class: "filters", style: "padding:0 0 8px" });
+      var whom = el("div", { class: "chips" });
       tableOrder.guests.concat([{ id: "new", label: T.new_guest }]).forEach(function (guest) {
         whom.appendChild(el("button", { type: "button", class: "chip", text: (guest.bot ? "👤 " : "") + guest.label,
           "aria-pressed": String(tableOrder.who === guest.id),
@@ -1613,144 +1713,119 @@
             render();
           } }));
       });
-      section.appendChild(el("div", { class: "note", text: T.order_for }));
-      section.appendChild(whom);
+      cart.appendChild(el("div", { class: "sub", text: T.order_for }));
+      cart.appendChild(whom);
     }
-    var code = el("input", { type: "text", autocapitalize: "characters", value: C().code, placeholder: T.customer_code,
-      style: "width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--separator);background:var(--bg)",
-      onchange: function (event) { C().code = event.target.value.trim(); salePreview(); } });
     // The code names a new guest; a guest already at the table is chosen above.
     if (!forTable || tableOrder.who === "new") {
-      section.appendChild(el("label", { class: "field" }, el("span", { text: forTable ? T.order_code_hint : T.customer_code_hint }), code));
+      var code = el("input", { type: "text", autocapitalize: "characters", value: C().code, placeholder: T.customer_code,
+        onchange: function (event) { C().code = event.target.value.trim(); salePreview(); } });
+      cart.appendChild(el("label", { class: "field" }, el("span", { text: forTable ? T.order_code_hint : T.customer_code_hint }), code));
     }
-    if (C().preview && C().preview.guest) section.appendChild(el("div", { class: "note", text: "👤 " + C().preview.guest }));
-    page.appendChild(section);
-    if (!C().category && info.categories.length) C().category = info.categories[0].id;
-    var chips = el("div", { class: "filters" });
-    info.categories.forEach(function (category) {
-      chips.appendChild(el("button", { type: "button", class: "chip", text: category.name,
-        "aria-pressed": String(category.id === C().category),
-        onclick: function () { C().category = category.id; render(); } }));
-    });
-    page.appendChild(chips);
-    if (C().picking) renderPicker(page);
-    var grid = el("div", { class: "board" });
-    info.categories.filter(function (category) { return category.id === C().category; }).forEach(function (category) {
-      category.items.forEach(function (item) {
-        var quantity = itemCount(item.id);
-        var price = item.price_from ? t("price_from", { price: money(item.price) }) : money(item.price);
-        var control = item.choice && item.choice !== "none"
-          ? el("button", { type: "button", class: "add", text: "+", onclick: function () {
-              C().picking = { item: item, pick: startingPick(item) }; render(); window.scrollTo(0, 0);
-            } })
-          : el("span", { class: "stepper" },
-              el("button", { type: "button", text: "−", onclick: function () { saleChange(item.id, null, [], -1); } }),
-              el("span", { text: String(quantity) }),
-              el("button", { type: "button", text: "+", onclick: function () { saleChange(item.id, null, [], 1); } }));
-        grid.appendChild(el("div", { class: "call", style: "border-left-color:" + (quantity ? "var(--accent)" : "transparent") },
-          el("div", null, el("div", { class: "what", text: item.name }),
-             el("div", { class: "meta", text: price + ("left" in item ? " · " + t("left", { count: item.left }) : "")
-                                              + (quantity && item.choice !== "none" ? " · ×" + quantity : "") })),
-          control));
-      });
-    });
-    page.appendChild(grid);
     var preview = C().preview;
-    if (preview && preview.items.length) {
-      var summary = el("div", { class: "section" });
-      preview.items.forEach(function (line, index) {
-        var own = preview.items.length === C().lines.length ? C().lines[index] : null;
-        summary.appendChild(el("div", { class: "row" }, el("span", { text: line.name + " × " + line.quantity }),
-          el("span", null,
-            own ? el("span", { class: "stepper" },
-              el("button", { type: "button", text: "−", onclick: function () { saleChange(own.item, own.variant, own.options, -1); } }),
-              el("button", { type: "button", text: "+", onclick: function () { saleChange(own.item, own.variant, own.options, 1); } })) : null,
-            " " + money(line.total))));
-      });
-      if (Number(preview.redeemable) > 0) {
-        var toggle = el("input", { type: "checkbox", onchange: function (event) { C().redeem = event.target.checked; salePreview(); } });
-        toggle.checked = C().redeem;
-        summary.appendChild(el("label", { class: "switch" },
-          el("span", { text: t("sale_redeem", { amount: preview.redeemable }) }), toggle));
-      }
-      summary.appendChild(el("div", { class: "row" }, el("b", { text: T.to_pay }), el("b", { text: money(preview.to_pay) })));
-      if (Number(preview.bonus_awarded) > 0) summary.appendChild(el("div", { class: "note", text: t("sale_bonus", { bonus: preview.bonus_awarded }) }));
-      var comment = el("input", { type: "text", placeholder: T.comment, value: C().comment,
-        style: "width:100%;padding:10px 12px;margin-top:8px;border-radius:10px;border:1px solid var(--separator);background:var(--bg)",
-        onchange: function (event) { C().comment = event.target.value; C().key = ""; } });
-      summary.appendChild(comment);
-      // A sale at the counter is paid at once (PQ-054): «Наличные» or
-      // «Карта»; when bonuses pay it all, one «Провести».
-      function confirmSale(payment) {
+    if (preview && preview.guest) cart.appendChild(el("div", { class: "note found", text: "👤 " + preview.guest }));
+    if (!preview || !preview.items.length || !C().lines.length) {
+      cart.appendChild(el("div", { class: "cart-empty", text: T.tap_to_add }));
+      return cart;
+    }
+    var lines = el("div", { class: "cart-lines" });
+    preview.items.forEach(function (line, index) {
+      var own = preview.items.length === C().lines.length ? C().lines[index] : null;
+      lines.appendChild(el("div", { class: "cart-line" },
+        el("span", { class: "grow", text: line.name + " × " + line.quantity }),
+        own ? el("span", { class: "stepper" },
+          el("button", { type: "button", text: "−", onclick: function () { saleChange(own.item, own.variant, own.options, -1); } }),
+          el("button", { type: "button", text: "+", onclick: function () { saleChange(own.item, own.variant, own.options, 1); } })) : null,
+        el("b", { text: money(line.total) })));
+    });
+    cart.appendChild(lines);
+    if (Number(preview.redeemable) > 0) {
+      var toggle = el("input", { type: "checkbox", onchange: function (event) { C().redeem = event.target.checked; salePreview(); } });
+      toggle.checked = C().redeem;
+      cart.appendChild(el("label", { class: "switch" },
+        el("span", { text: t("sale_redeem", { amount: preview.redeemable }) }), toggle));
+    }
+    cart.appendChild(el("div", { class: "cart-total" }, el("span", { text: T.to_pay }), el("b", { text: money(preview.to_pay) })));
+    if (Number(preview.bonus_awarded) > 0) cart.appendChild(el("div", { class: "note", text: t("sale_bonus", { bonus: preview.bonus_awarded }) }));
+    cart.appendChild(el("input", { type: "text", placeholder: T.comment, value: C().comment,
+      onchange: function (event) { C().comment = event.target.value; C().key = ""; } }));
+    // A sale at the counter is paid at once (PQ-054): «Наличные» or
+    // «Карта»; when bonuses pay it all, one «Провести».
+    function confirmSale(payment) {
+      if (busy) return;
+      busy = true;
+      api("sale_confirm", { customer_code: C().code, items: saleItems(), redeem: C().redeem, comment: C().comment,
+                            key: saleKey(), payment: payment, to_pay: preview.to_pay })
+        .then(function (result) {
+          if (result.ok) sale = newSale(sale.category);
+          after(result);
+        });
+    }
+    var buttons = [];
+    if (forTable) {
+      buttons.push({ label: T.send_order, kind: "primary", disabled: busy, onclick: function () {
         if (busy) return;
         busy = true;
-        api("sale_confirm", { customer_code: C().code, items: saleItems(), redeem: C().redeem, comment: C().comment,
-                              key: saleKey(), payment: payment, to_pay: preview.to_pay })
+        var chosen = tableOrder.who !== "new";
+        api("table_order", { table: tableOrder.table.id, visit: tableOrder.visit,
+                             guest: chosen ? tableOrder.who : "", new_guest: !chosen && !!tableOrder.visit,
+                             customer_code: chosen ? "" : tableOrder.code,
+                             items: saleItems(), comment: tableOrder.comment, key: saleKey() })
           .then(function (result) {
-            if (result.ok) sale = newSale(sale.category);
-            after(result);
+            if (result.ok) { tableOrder = null; tabData.tables = null; tab = "tables"; }
+            after(result, function () { return load(true); });
           });
-      }
-      var acts = el("div", { class: "acts" },
-        el("button", { type: "button", class: "act", text: T.clear, onclick: function () {
-          if (forTable) { tableOrder.lines = []; tableOrder.preview = null; tableOrder.key = ""; }
-          else sale = newSale(sale.category);
-          render();
-        } }));
-      if (forTable) {
-        acts.appendChild(el("button", { type: "button", class: "act primary order-send", text: T.send_order, disabled: busy, onclick: function () {
-          if (busy) return;
-          busy = true;
-          var chosen = tableOrder.who !== "new";
-          api("table_order", { table: tableOrder.table.id, visit: tableOrder.visit,
-                               guest: chosen ? tableOrder.who : "", new_guest: !chosen && !!tableOrder.visit,
-                               customer_code: chosen ? "" : tableOrder.code,
-                               items: saleItems(), comment: tableOrder.comment, key: saleKey() })
-            .then(function (result) {
-              if (result.ok) { tableOrder = null; tabData.tables = null; tab = "tables"; }
-              after(result, function () { return load(true); });
-            });
-        } }));
-      } else if (Number(preview.to_pay) > 0) {
-        acts.appendChild(el("button", { type: "button", class: "act primary", text: T.sale_cash, disabled: busy,
-                                        onclick: function () { confirmSale("cash"); } }));
-        acts.appendChild(el("button", { type: "button", class: "act primary", text: T.sale_card, disabled: busy,
-                                        onclick: function () { confirmSale("terminal"); } }));
-      } else {
-        acts.appendChild(el("button", { type: "button", class: "act primary", text: T.sale_confirm, disabled: busy,
-                                        onclick: function () { confirmSale(""); } }));
-      }
-      summary.appendChild(acts);
-      page.appendChild(summary);
+      } });
+    } else if (Number(preview.to_pay) > 0) {
+      buttons.push({ label: T.sale_cash, kind: "primary", disabled: busy, onclick: function () { confirmSale("cash"); } });
+      buttons.push({ label: T.sale_card, kind: "primary", disabled: busy, onclick: function () { confirmSale("terminal"); } });
+    } else {
+      buttons.push({ label: T.sale_confirm, kind: "primary", disabled: busy, onclick: function () { confirmSale(""); } });
     }
+    buttons.push({ label: T.clear, kind: "danger", onclick: function () {
+      if (forTable) { tableOrder.lines = []; tableOrder.preview = null; tableOrder.key = ""; }
+      else sale = newSale(sale.category);
+      render();
+    } });
+    cart.appendChild(actionsBox(buttons));
+    return cart;
   }
 
   // --- the day report ---------------------------------------------------------------
 
+  // The day report (design pass, 2026-11-19): revenue, purchases and the
+  // average checks as large tiles; the rest in cards below.
   function renderReport(page) {
     var info = tabData.report;
     if (!info) { page.appendChild(el("div", { class: "center" }, el("div", { class: "spinner" }))); return; }
+    var signed = function (value) { return value.charAt(0) === "-" ? "−" + money(value.slice(1)) : money(value); };
+    var moneyRows = info.money.map(function (row) { return Object.assign({ money: true }, row); });
+    var rows = moneyRows.concat(info.counts);
+    var shown = function (row) { return row.money ? signed(String(row.value)) : String(row.value); };
+    page.appendChild(el("div", { class: "report-head" }, el("h2", { text: T.report }), el("span", { class: "meta", text: info.date })));
+    var tiles = el("div", { class: "tiles" });
+    rows.filter(function (row) { return row.tile; }).forEach(function (row, index) {
+      tiles.appendChild(el("div", { class: "tile" + (index === 0 ? " main" : "") },
+        el("span", { text: row.label }), el("b", { text: shown(row) })));
+    });
+    page.appendChild(tiles);
     var board = el("div", { class: "board" });
-    function block(title, rows) {
-      var card = el("article", { class: "order" }, el("div", { class: "place", text: title }));
-      rows.forEach(function (row) { card.appendChild(row); });
+    function block(title, items) {
+      if (!items.length) return;
+      var card = el("article", { class: "order" }, el("div", { class: "card-title", text: title }));
+      items.forEach(function (item) { card.appendChild(item); });
       board.appendChild(card);
     }
-    block(T.report + " · " + info.date, info.money.map(function (row) {
-      return el("div", { class: "row" }, el(row.strong ? "b" : "span", { text: row.label }),
-                el(row.strong ? "b" : "span", { text: row.value.charAt(0) === "-" ? "−" + money(row.value.slice(1)) : money(row.value) }));
-    }).concat(info.counts.map(function (row) {
-      return el("div", { class: "row" }, el("span", { text: row.label }), el("span", { text: String(row.value) }));
-    })));
-    if (info.channels.length) block(T.by_channel, info.channels.map(function (row) {
-      return el("div", { class: "row" }, el("span", { text: row.label + " · " + row.orders }), el("span", { text: money(row.revenue) }));
+    function row(label, value, extra) {
+      return el("div", { class: "row" }, el("span", null, label, extra ? el("span", { class: "meta", text: " · " + extra }) : null),
+                el("span", { text: value }));
+    }
+    block(T.report_details, rows.filter(function (item) { return !item.tile; }).map(function (item) {
+      return row(item.label, shown(item));
     }));
-    if (info.methods.length) block(T.by_method, info.methods.map(function (row) {
-      return el("div", { class: "row" }, el("span", { text: row.label + " (" + row.count + ")" }), el("span", { text: money(row.amount) }));
-    }));
-    if (info.staff.length) block(T.by_staff, info.staff.map(function (row) {
-      return el("div", { class: "row" }, el("span", { text: row.label }), el("span", { text: money(row.amount) }));
-    }));
+    block(T.by_channel, info.channels.map(function (item) { return row(item.label, money(item.revenue), item.orders); }));
+    block(T.by_method, info.methods.map(function (item) { return row(item.label, money(item.amount), item.count); }));
+    block(T.by_staff, info.staff.map(function (item) { return row(item.label, money(item.amount)); }));
     page.appendChild(board);
   }
 
@@ -1773,7 +1848,7 @@
   function refreshChrome() {
     var oldBar = root.querySelector('[data-part="tabs"]');
     var bar = tabsBar();
-    if (oldBar && bar) oldBar.replaceWith(bar);
+    if (oldBar && bar) { oldBar.replaceWith(bar); keepTabInView(); }
     var anchor = bar && bar.isConnected ? bar : root.querySelector(".staff-head");
     var oldCalls = root.querySelector('[data-part="calls"]');
     var calls = callsBoard();
@@ -1799,10 +1874,10 @@
       });
       head.appendChild(select);
     }
-    var tools = el("div", { style: "display:flex;gap:6px" });
-    if (data.rights.invite) tools.appendChild(el("button", { type: "button", class: "chip", text: "👥",
+    var tools = el("div", { class: "tools" });
+    if (data.rights.invite) tools.appendChild(el("button", { type: "button", class: "icon-btn", text: "👥",
                                                              "aria-label": T.invite, title: T.invite, onclick: invite }));
-    tools.appendChild(el("button", { type: "button", class: "chip", text: "🔎", "aria-label": T.find_order,
+    tools.appendChild(el("button", { type: "button", class: "icon-btn", text: "🔎", "aria-label": T.find_order,
                                      title: T.find_order, onclick: findOrder }));
     head.appendChild(tools);
     page.appendChild(head);
@@ -1832,6 +1907,7 @@
     }
     var scroll = window.scrollY;
     show(page);
+    keepTabInView();
     window.scrollTo(0, scroll);
     fresh = {};
   }
