@@ -513,11 +513,15 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
             if order.table_session_id and order.table_session.visit_id == visit.id
         ]
         own_sessions = visit_sessions.get(visit.id, [])
+        people = visit_guests(visit, own_sessions)
+        own_bills = [bill for bill in bills if bill.visit_id == visit.id]
+        label_of = {guest.guest.id: guest.label for guest in people}
         table["visits"].append({
             "id": visit.id.hex,
             "since": timezone.localtime(visit.started_at).strftime("%H:%M"),
             # The people of the company (PQ-009, step 2): an order for one of
-            # them, how much is not billed yet; «Гостей за столом».
+            # them, how much is not billed yet and how much their own bill
+            # still waits for (design pass, 2026-11-19); «Гостей за столом».
             "guests": [
                 {
                     "id": guest.session_id.hex, "label": guest.label, "bot": guest.has_bot,
@@ -525,14 +529,23 @@ def tables_view(request, staff: StaffRequest, body: dict) -> dict:
                     "unbilled": _money(sum(
                         (order.total_amount for order in visit_orders
                          if order.guest_id == guest.guest.id), Decimal("0.00"))),
+                    "to_pay": _money(sum(
+                        (bill.total_amount - bill.paid_amount for bill in own_bills
+                         if bill.primary_guest_id == guest.guest.id), Decimal("0.00"))),
                 }
-                for guest in visit_guests(visit, own_sessions)
+                for guest in people
             ],
             "headcount": visit_headcount(visit, own_sessions),
             "can_count": can_count,
             "unbilled": len(visit_orders),
             "unbilled_total": _money(sum(order.total_amount for order in visit_orders)),
-            "bills": [_bill_json(bill) for bill in bills if bill.visit_id == visit.id],
+            # Whose bill it is, by the guest's name in the company or
+            # «Общее» — not by its number.
+            "bills": [
+                {**_bill_json(bill),
+                 "who": label_of.get(bill.primary_guest_id) or str(_("Общее"))}
+                for bill in own_bills
+            ],
             "can_bill": can_bill and bool(visit_orders),
             # "A bill to each" splits by guest: with one guest's orders it is
             # the same single bill, so only one button is shown.

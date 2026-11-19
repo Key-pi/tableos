@@ -1,9 +1,12 @@
 /* Staff screen of the Mini App (PQ-048, stage 2); on top of guest.css.
    Built for a phone and a tablet at the bar: on a wide screen the orders
    stand in columns. */
+/* Secondary text a step stronger than Telegram's hint: on a dark theme the
+   hint all but melts into the cards (design pass, 2026-11-19). */
+:root { --muted: color-mix(in srgb, var(--text) 66%, transparent); }
 .staff-head { background: var(--section); padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .staff-head h1 { margin: 0; font-size: 18px; }
-.staff-head .who { color: var(--hint); font-size: 13px; }
+.staff-head .who { color: var(--muted); font-size: 13px; }
 .filters { display: flex; gap: 8px; overflow-x: auto; padding: 10px 16px; background: var(--section); border-bottom: 1px solid var(--separator); scrollbar-width: none; }
 .filters::-webkit-scrollbar { display: none; }
 .count { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: var(--danger); color: #fff; font-size: 12px; line-height: 18px; text-align: center; }
@@ -18,26 +21,37 @@
 .order.fresh { animation: flash 1.6s ease-out 2; }
 @keyframes flash { 50% { background: color-mix(in srgb, var(--accent) 18%, var(--section)); } }
 .order .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.order .num { font-weight: 700; font-size: 16px; }
+.order .num { font-weight: 700; font-size: 17px; }
 .order .place { font-weight: 600; }
-.order .meta { color: var(--hint); font-size: 13px; }
+.order .meta { color: var(--muted); font-size: 14px; }
 .order .status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg2); white-space: nowrap; }
 .order.new .status { background: var(--danger); color: #fff; }
 .order ul { margin: 2px 0; padding-left: 18px; }
 .order li { margin: 1px 0; }
-.row { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; padding: 2px 0; }
-/* A guest of the company who moved to another table (PQ-009, step 2). */
-.row.gone { color: var(--hint); }
+.row { display: flex; justify-content: space-between; gap: 8px; font-size: 15px; padding: 2px 0; font-variant-numeric: tabular-nums; }
+/* A guest of the company: what is not billed yet and what their bill waits
+   for; one who moved to another table — greyed (PQ-009, step 2). */
+.row.guest { align-items: center; padding: 8px 0; border-top: 1px solid var(--separator); }
+.row.gone { color: var(--muted); }
+.owes { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.tag { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--bg2); color: var(--muted); white-space: nowrap; }
+.tag.due { background: color-mix(in srgb, var(--warning) 22%, transparent); color: var(--text); font-weight: 600; }
 .row b { white-space: nowrap; }
 .row .meta { text-align: right; }
 .sheet .status { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg2); }
-.order .note { color: var(--hint); font-size: 13px; overflow-wrap: anywhere; }
+.order .note { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .order a { color: var(--link); }
 .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .act { border: 0; border-radius: 10px; padding: 9px 12px; font-weight: 600; background: var(--bg2); color: var(--text); flex: 1 1 auto; min-width: 110px; }
 .act.primary { background: var(--accent); color: var(--accent-text); }
 .act.danger { background: none; color: var(--danger); border: 1px solid var(--separator); }
 .act[disabled] { opacity: 0.5; }
+.act.small { flex: none; min-width: 0; padding: 6px 12px; font-size: 13px; }
+.act.ghost { background: none; color: var(--link); }
+/* A bill of the company: whose it is first, the amount on the right. */
+.act.bill-line { display: flex; align-items: center; gap: 10px; text-align: left; }
+.bill-line .who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.bill-line .meta { color: var(--muted); font-size: 13px; font-weight: 400; }
 
 .call { background: var(--section); border-radius: var(--radius); padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; border-left: 4px solid var(--danger); }
 .call .what { font-weight: 600; }
@@ -50,21 +64,21 @@
 
 /* The floor plan on the «Столы» tab (PQ-052). */
 .plan-wrap { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
-.plan-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--hint); font-size: 13px; }
+.plan-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--muted); font-size: 13px; }
 .plan-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .plan-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; border: 2px solid var(--separator); background: var(--section); }
 .plan { position: relative; width: 100%; background: var(--bg2); border-radius: var(--radius); }
 .ptable { position: absolute; padding: 3px; border: 0; background: transparent; display: flex; font: inherit; color: var(--text); }
 .ptable > span { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; border: 2px solid var(--separator); background: var(--section); line-height: 1.15; overflow: hidden; }
 .ptable.round > span { border-radius: 50%; }
-.ptable b { font-size: 18px; }
-.ptable small { font-size: 11px; opacity: .85; }
+.ptable b { font-size: 20px; }
+.ptable small { font-size: 12px; font-weight: 600; }
 .ptable.st-busy > span, .plan-legend i.st-busy { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 .ptable.st-bill > span, .plan-legend i.st-bill { background: #f59e0b; border-color: #d97706; color: #fff; }
 .ptable.st-call > span, .plan-legend i.st-call { background: var(--danger); border-color: var(--danger); color: #fff; }
 .ptable.st-call > span { animation: plan-pulse 1.2s ease-in-out infinite; }
 @keyframes plan-pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--danger) 35%, transparent); } }
-.plan-rest-title { color: var(--hint); font-size: 13px; }
+.plan-rest-title { color: var(--muted); font-size: 13px; }
 .plan-rest { display: flex; flex-wrap: wrap; gap: 8px; }
 .plan-rest .ptable { position: static; width: 84px; height: 64px; }
 
@@ -91,3 +105,43 @@
 .form-error { color: var(--danger); font-size: 14px; padding: 6px 0 0; }
 .plan-rest .ptable[data-booking] { position: relative; }
 .toast { z-index: 50; }  /* over the sheets: a refusal is seen */
+
+/* «Рассчитать» — a screen of its own (PQ-009, step 3; design pass
+   2026-11-19): a column for each guest and «Общее», lines already paid for
+   folded below, the total and «Готово» in the bar. */
+body.covered { overflow: hidden; }
+.screen { position: fixed; inset: 0; z-index: 35; background: var(--bg2); display: flex; flex-direction: column; }
+.screen-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: var(--section); border-bottom: 1px solid var(--separator); }
+.screen-head h2 { margin: 0; font-size: 18px; flex: 1; min-width: 0; }
+.steps { display: flex; gap: 6px; }
+.steps span { font-size: 13px; padding: 4px 10px; border-radius: 999px; background: var(--bg2); color: var(--muted); white-space: nowrap; }
+.steps span.on { background: var(--accent); color: var(--accent-text); }
+.screen-body { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.screen-hint { color: var(--muted); font-size: 14px; }
+.columns { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; align-items: start; }
+.col { background: var(--section); border-radius: var(--radius); padding: 12px; border: 2px solid transparent; display: flex; flex-direction: column; gap: 6px; }
+.col.target { border: 2px dashed color-mix(in srgb, var(--accent) 70%, transparent); cursor: pointer; }
+.col.done { opacity: 0.7; }
+.col-head { display: flex; align-items: baseline; gap: 8px; }
+.col-head .name { font-weight: 600; font-size: 16px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.col-head .sum { font-size: 21px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.col .sub { font-size: 13px; color: var(--muted); }
+.col .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.col .acts .act { padding: 12px; font-size: 16px; }
+.line { display: flex; justify-content: space-between; gap: 8px; padding: 10px; border-radius: 10px; font-size: 15px; cursor: pointer; background: var(--bg2); user-select: none; }
+.line span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.line.picked { background: var(--accent); color: var(--accent-text); }
+.drop { border: 1.5px dashed var(--separator); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); font-size: 14px; }
+.col.target .drop { border-color: var(--accent); color: var(--text); }
+.paid-fold { background: var(--section); border-radius: var(--radius); padding: 4px 12px; }
+.paid-head { width: 100%; display: flex; justify-content: space-between; gap: 8px; padding: 10px 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
+.paid-fold .row { color: var(--muted); }
+.screen-bar { display: flex; align-items: center; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--section); border-top: 1px solid var(--separator); }
+.screen-bar .total { flex: 1; color: var(--muted); font-size: 13px; }
+.screen-bar .total b { display: block; color: var(--text); font-size: 21px; font-variant-numeric: tabular-nums; }
+.screen-bar .act { flex: none; min-width: 120px; padding: 12px 16px; }
+@media (max-width: 520px) {
+  .steps { display: none; }
+  .screen-bar .act { min-width: 0; padding: 12px; }
+  .screen-bar .total b { font-size: 18px; white-space: nowrap; }
+}

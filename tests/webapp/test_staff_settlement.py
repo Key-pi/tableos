@@ -89,3 +89,19 @@ class SettlementScreenTests(StaffFixture):
         self.assertEqual(self.staff_call("settlement_pay", {
             "visit": self.visit, "guest": "0" * 32, "method": "bonuses",
         })[0], 400)
+
+    def test_the_table_card_says_whose_bill_and_who_owes(self):
+        """Design pass 2026-11-19: a bill is shown by its guest's name or
+        «Общее», each guest with what their own bill still waits for."""
+
+        settlement = self.settlement()[1]
+        first, second = settlement["guests"]
+        latte, hookah = settlement["lines"]
+        self.staff_call("settlement_save", {
+            "visit": self.visit, "places": {latte["id"]: first["id"], hookah["id"]: "shared"},
+            "sharers": [first["id"], second["id"]],
+        })
+        visit = self.staff_call("tables")[1]["tables"][0]["visits"][0]
+        self.assertEqual(sorted(bill["who"] for bill in visit["bills"]),
+                         sorted([first["label"], "Спільне"]))
+        self.assertEqual([guest["to_pay"] for guest in visit["guests"]], ["80.00", "0.00"])

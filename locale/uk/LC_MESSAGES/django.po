@@ -2016,7 +2016,7 @@ msgstr "Цього гостя немає в компанії — оновіть 
 msgid "«Общее» делят хотя бы два гостя."
 msgstr "«Спільне» ділять щонайменше двоє гостей."
 
-#: apps/billing/visit_settlement.py webapp/staff_views.py
+#: apps/billing/visit_settlement.py webapp/staff_billing.py webapp/staff_views.py
 msgid "Общее"
 msgstr "Спільне"
 
@@ -9301,10 +9301,6 @@ msgid "Стол {number} · расчёт"
 msgstr "Стіл {number} · розрахунок"
 
 #: webapp/staff_views.py
-msgid "Нажмите позицию — выберите, кто за неё платит."
-msgstr "Натисніть позицію — оберіть, хто за неї платить."
-
-#: webapp/staff_views.py
 msgid "Делят поровну — отметьте, кто"
 msgstr "Ділять порівну — позначте, хто"
 
@@ -9313,20 +9309,64 @@ msgid "по {amount}"
 msgstr "по {amount}"
 
 #: webapp/staff_views.py
-msgid "Всё — к…"
-msgstr "Усе — до…"
-
-#: webapp/staff_views.py
-msgid "Кто платит за «{name}»?"
-msgstr "Хто платить за «{name}»?"
-
-#: webapp/staff_views.py
-msgid "Стол {number} · оплата"
-msgstr "Стіл {number} · оплата"
-
-#: webapp/staff_views.py
 msgid "✓ рассчитан"
 msgstr "✓ розрахований"
+
+#: webapp/staff_views.py
+msgid "Отметьте позиции, затем нажмите колонку того, кто за них платит."
+msgstr "Позначте позиції, потім натисніть колонку того, хто за них платить."
+
+#: webapp/staff_views.py
+msgid "Отмечено: {count}. Нажмите колонку того, кто за них платит."
+msgstr "Позначено: {count}. Натисніть колонку того, хто за них платить."
+
+#: webapp/staff_views.py
+msgid "Отметить все"
+msgstr "Позначити всі"
+
+#: webapp/staff_views.py
+msgid "Снять отметки"
+msgstr "Зняти позначки"
+
+#: webapp/staff_views.py
+msgid "Перенести сюда"
+msgstr "Перенести сюди"
+
+#: webapp/staff_views.py
+msgid "Уже оплачено · {count} поз."
+msgstr "Уже оплачено · {count} поз."
+
+#: webapp/staff_views.py
+msgid "К оплате за столом"
+msgstr "До сплати за столом"
+
+#: webapp/staff_views.py
+msgid "1 · Разложить"
+msgstr "1 · Розкласти"
+
+#: webapp/staff_views.py
+msgid "2 · Оплатить"
+msgstr "2 · Оплатити"
+
+#: webapp/staff_views.py
+msgid "с ботом"
+msgstr "з ботом"
+
+#: webapp/staff_views.py
+msgid "без бота"
+msgstr "без бота"
+
+#: webapp/staff_views.py
+msgid "с долей общего {amount}"
+msgstr "з часткою спільного {amount}"
+
+#: webapp/staff_views.py
+msgid "без счёта {amount}"
+msgstr "без рахунку {amount}"
+
+#: webapp/staff_views.py
+msgid "к оплате {amount}"
+msgstr "до сплати {amount}"
 
 #: webapp/staff_views.py
 msgid "Разложить заново"
@@ -9335,10 +9375,6 @@ msgstr "Розкласти заново"
 #: webapp/staff_views.py
 msgid "Есть позиции без счёта — разложите их."
 msgstr "Є позиції без рахунку — розкладіть їх."
-
-#: webapp/staff_views.py
-msgid "оплачено"
-msgstr "оплачено"
 
 #: webapp/staff_views.py
 msgid "Без счёта: {count} на {total} грн"
