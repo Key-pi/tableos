@@ -30,7 +30,10 @@ Admin не равен правам сотрудника (`AGENTS.md`).
   (иначе заведение их не видит).
 - Новую настройку бота — в `BOT_SETTINGS_GROUPS` (`apps/partners/admin.py`).
 - Все страницы — `BoteraModelAdmin` / `ScopedAdminMixin`, inline — из
-  `unfold.admin`, у полей форм — виджеты Unfold. Шаблон меню — копия Unfold в
+  `unfold.admin`, у полей форм — виджеты Unfold. Поле пароля пользователя —
+  `apps/users/forms.py:PasswordWithButtonWidget` (копия Unfold теряет кнопку
+  «Задать пароль» на Django 5.2); шаблон виджета — в `templates/` приложения:
+  виджеты не видят общую папку `templates/`. Шаблон меню — копия Unfold в
   `templates/unfold/helpers/` (при обновлении Unfold сверить).
 - Счёт заведение не удаляет (`allow_partner_delete`): счёт аннулируется с
   причиной, оплаченный — возвратом. Своей формы продажи в Admin нет — продают

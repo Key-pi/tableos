@@ -175,3 +175,24 @@ class OneLinkTwiceAtOnceTests(TransactionTestCase):
         for thread in threads:
             thread.join()
         self.assertEqual(sorted(results, key=str), sorted([owner.user_id, None], key=str))
+
+
+@override_settings(PLATFORM_BOT_TOKEN="", PLATFORM_OWNER_TELEGRAM_ID=None)
+class PasswordStillPossibleTests(TestCase):
+    """The owner reported (2026-11-19): no way to set a password. Django 5.2
+    puts «Задать пароль» into the password widget; Unfold's copy of the
+    widget dropped it."""
+
+    def test_the_owner_sets_a_password_from_their_page(self):
+        partner, owner = business()
+        user = owner.user
+        self.client.force_login(user)
+        page = self.client.get(reverse("admin:users_user_change", args=[user.id]))
+        password_page = reverse("admin:auth_user_password_change", args=[user.id])
+        self.assertContains(page, 'href="../password/"')
+        self.assertEqual(self.client.get(password_page).status_code, 200)
+        self.client.post(password_page, {"password1": "Kava-2026-secret",
+                                         "password2": "Kava-2026-secret",
+                                         "usable_password": "true"})
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("Kava-2026-secret"))

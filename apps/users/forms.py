@@ -31,6 +31,13 @@ class AdminUserCreationForm(UserCreationForm):
             )
 
 
+class PasswordWithButtonWidget(UnfoldReadOnlyPasswordHashWidget):
+    """Unfold's look with Django 5.2's «Задать пароль» / «Сбросить пароль»
+    button, which Unfold's copy of the widget dropped (owner 2026-11-19)."""
+
+    template_name = "users/widgets/password_hash.html"
+
+
 class AdminUserChangeForm(UserChangeForm):
     password = UserChangeForm.base_fields["password"]
 
@@ -53,4 +60,4 @@ class AdminUserChangeForm(UserChangeForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if "password" in self.fields:
-            self.fields["password"].widget = UnfoldReadOnlyPasswordHashWidget()
+            self.fields["password"].widget = PasswordWithButtonWidget()
