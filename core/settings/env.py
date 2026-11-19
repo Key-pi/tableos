@@ -54,6 +54,12 @@ class AppSettings(BaseSettings):
     # Public HTTPS address of this site for the Telegram Mini App (PQ-048),
     # e.g. https://shop.example.com; empty — the bot shows no Mini App button.
     webapp_base_url: str = Field(default="", validation_alias="WEBAPP_BASE_URL")
+    # The platform bot (PQ-045): tells the platform owner about a new
+    # business; empty — nobody is told. Until the Botera Hub exists.
+    platform_bot_token: str = Field(default="", validation_alias="PLATFORM_BOT_TOKEN")
+    platform_owner_telegram_id: str = Field(
+        default="", validation_alias="PLATFORM_OWNER_TELEGRAM_ID",
+    )
 
     @field_validator("timezone", mode="before")
     @classmethod

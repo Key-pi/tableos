@@ -95,6 +95,11 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 # Telegram Mini App (PQ-048): public HTTPS address of the site.
 WEBAPP_BASE_URL = app_settings.webapp_base_url.rstrip("/")
+PLATFORM_BOT_TOKEN = app_settings.platform_bot_token.strip()
+PLATFORM_OWNER_TELEGRAM_ID = (
+    int(app_settings.platform_owner_telegram_id)
+    if app_settings.platform_owner_telegram_id.strip().isdigit() else None
+)
 # Photos of menu items uploaded in Admin (PQ-048).
 MENU_PHOTO_MAX_BYTES = 5 * 1024 * 1024
 

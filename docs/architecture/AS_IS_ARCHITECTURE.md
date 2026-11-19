@@ -36,7 +36,7 @@ flowchart LR
 | Процесс | Точка входа | Ответственность | Модуль настроек по умолчанию |
 |---|---|---|---|
 | Django web/Admin | `core/wsgi.py`, `core/asgi.py`, `core/urls.py` | демо-страница, `/admin/` (с `/admin/language/` и `/admin/point/<точка>/`), `/health/`, Mini App и экран кухни `/app/` (`webapp/urls.py`), запасная раздача `/media/` | `core.settings.production` |
-| Management-команды, `runserver` | `manage.py` | миграции, наполнение демо-данными, `runbot`, `ensure_admin` | `core.settings.local` |
+| Management-команды, `runserver` | `manage.py` | миграции, наполнение демо-данными, `runbot`, `ensure_admin`, `create_business` | `core.settings.local` |
 | Telegram-бот | `manage.py runbot` → `bot/supervisor.py:BotSupervisor` | сервис ботов: polling всех исправных активных `BotInstance`, список перечитывается раз в минуту; в одном процессе или с `--processes N` в N процессах, каждый бот ровно в одном (`bot/services/runtime.py:configs_for_shard`). `bot/main.py:run_polling` — только эмулятор и нагрузочный тест | `core.settings.local` (через `manage.py`) |
 | Воркер Celery | `celery -A core.celery worker` → `core/celery.py` | уведомления персонала и гостей, сообщения о возврате, рассылки, метрики, снимок нагрузки | `core.settings.local` |
 | Celery beat | `celery -A core.celery beat` | из `CELERY_BEAT_SCHEDULE`: `process-scheduled-broadcast-campaigns` (1 мин), `record-system-snapshot` (1 мин), `recover-stalled-broadcast-campaigns` (5 мин), `cancel-expired-transfer-orders` (5 мин), `expire-idle-table-sessions` (5 мин), `refresh-daily-partner-metrics` (15 мин), `forget-old-network-message-points` (1 день) | `core.settings.local` |
@@ -625,6 +625,36 @@ apps.notifications.tasks` — цикл, разорванный только им
 источников показывает переходы и новых гостей за выбранный период; журнал
 переходов — только для чтения.
 
+### Подключение бизнеса одной командой (PQ-045)
+
+`python manage.py create_business --name … --owner-telegram-id …
+[--bot-token …] [--owner-name …] [--phone …] [--timezone …]`
+(`apps/partners/management/commands/create_business.py`; без `--bot-token`
+токен спрашивается скрыто, чтобы не остался в истории оболочки). Сценарий —
+`apps/partners/onboarding.py:create_business`:
+
+1. До транзакции: название, формат токена, Telegram ID, часовой пояс;
+   затем `getMe` у Telegram (`fetch_bot_username`) — сеть вне транзакции.
+   Бот с тем же именем уже подключён — отказ с названием заведения.
+2. Одна транзакция: `Partner` сразу «Работает» (код — из названия, для
+   кириллицы — из имени бота, занятый получает `-2`, `-3`…),
+   `PartnerBotSettings` (все модули выключены, PQ-053), `BotInstance`
+   (polling, токен шифруется), `TelegramAccount` владельца (уже есть — тот
+   же), свой `User` владельца `tg<id>-<код точки>` без пароля,
+   `EmployeeProfile` и `AdminAccessProfile` владельца (набор прав
+   «Владелец», вход в Admin). Владелец другого бизнеса получает отдельный
+   вход, как приглашённый сотрудник. Гонка двух команд за один бот —
+   уникальное имя бота, `IntegrityError` → отказ, ничего не остаётся.
+3. После коммита — `notifications.send_new_business_notice`: владельцу
+   платформы через бот платформы (`PLATFORM_BOT_TOKEN`,
+   `PLATFORM_OWNER_TELEGRAM_ID`; пусто — никому) «Новый бизнес»: название,
+   бот, владелец и его Telegram ID, ссылка на заведение в Admin, на языке
+   платформы (`send_new_business_notice_now`).
+
+Бот подхватывает супервизор в течение минуты (PQ-042). API для будущего
+Hub — вместе с Hub (владелец, 2026-11-19); он вызовет тот же
+`create_business`.
+
 ### Приглашения сотрудников (PQ-046)
 
 Сотрудника добавляет владелец или менеджер, без суперпользователя.
@@ -995,7 +1025,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1333 теста после нового вида экрана персонала, зелёные на SQLite и на PostgreSQL 16.
+- 1346 тестов после создания бизнеса одной командой (PQ-045, шаг 1), зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -1038,12 +1068,12 @@ Admin показывает поля жизненного цикла, произ�
   Полные прогоны перед коммитом по-прежнему обязательны — CI их не заменяет,
   а страхует.
 
-## Цифры кодовой базы на 2026-11-18
+## Цифры кодовой базы на 2026-11-19
 
-524 отслеживаемых Python-файла (около 84 600 строк), 132 пронумерованные
-миграции, 142 тестовых модуля. Крупнейшие нетестовые модули:
+527 отслеживаемых Python-файлов (около 85 200 строк), 132 пронумерованные
+миграции, 143 тестовых модуля. Крупнейшие нетестовые модули:
 `bot/handlers/staff.py` (3887 строк), `apps/billing/services.py` (1636),
-`apps/orders/services.py` (1536), `apps/notifications/services.py` (1529),
+`apps/notifications/services.py` (1580), `apps/orders/services.py` (1536),
 `apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1050),
 `apps/partners/management/commands/seed_baseline_demo.py` (1006). Инвентарь
 на момент аудита 2026-07-27 сохранён в

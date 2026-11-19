@@ -3517,6 +3517,22 @@ msgid "Гостей: {guests}."
 msgstr "Guests: {guests}."
 
 #: apps/notifications/services.py
+msgid "<b>Новый бизнес</b>"
+msgstr "<b>New business</b>"
+
+#: apps/notifications/services.py
+msgid "Бот: @{bot}"
+msgstr "Bot: @{bot}"
+
+#: apps/notifications/services.py
+msgid "Владелец: {name}, Telegram ID {telegram_id}"
+msgstr "Owner: {name}, Telegram ID {telegram_id}"
+
+#: apps/notifications/services.py
+msgid "Admin: {link}"
+msgstr "Admin: {link}"
+
+#: apps/notifications/services.py
 msgid "Позвать персонал можно только после сканирования QR-кода стола."
 msgstr "You can call staff only after scanning the table's QR code."
 
@@ -5255,6 +5271,42 @@ msgstr "guest's shared balance in a network"
 #: apps/partners/models.py
 msgid "Общие балансы гостей в сетях"
 msgstr "Guests' shared balances in networks"
+
+#: apps/partners/onboarding.py
+msgid "Telegram не принял токен бота (HTTP {code}): проверьте его в @BotFather."
+msgstr "Telegram rejected the bot token (HTTP {code}): check it in @BotFather."
+
+#: apps/partners/onboarding.py
+msgid "Не удалось связаться с Telegram, чтобы проверить токен бота. Попробуйте ещё раз."
+msgstr "Could not reach Telegram to check the bot token. Please try again."
+
+#: apps/partners/onboarding.py
+msgid "Telegram не принял токен бота: проверьте его в @BotFather."
+msgstr "Telegram rejected the bot token: check it in @BotFather."
+
+#: apps/partners/onboarding.py
+msgid "Укажите название бизнеса (до 255 знаков)."
+msgstr "Enter the business name (up to 255 characters)."
+
+#: apps/partners/onboarding.py
+msgid "Это не похоже на токен бота из @BotFather."
+msgstr "This does not look like a bot token from @BotFather."
+
+#: apps/partners/onboarding.py
+msgid "Telegram ID владельца — положительное число."
+msgstr "The owner’s Telegram ID is a positive number."
+
+#: apps/partners/onboarding.py
+msgid "Неизвестный часовой пояс: {name}."
+msgstr "Unknown time zone: {name}."
+
+#: apps/partners/onboarding.py
+msgid "Бот @{bot} уже подключён к «{venue}»."
+msgstr "Bot @{bot} is already connected to “{venue}”."
+
+#: apps/partners/onboarding.py
+msgid "Бот @{bot} уже подключён."
+msgstr "Bot @{bot} is already connected."
 
 #: apps/partners/opening_hours.py
 msgid "Пн"

@@ -16,6 +16,7 @@ from aiogram.exceptions import (
 )
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from asgiref.sync import async_to_sync, sync_to_async
+from django.conf import settings as django_settings
 from django.db import transaction
 from django.db.models import Count, Max, Q
 from django.utils import timezone
@@ -44,7 +45,7 @@ from apps.partners.networks import (
 )
 from apps.tables.services import get_active_table_session
 from apps.users.models import GuestProfile, TelegramAccount
-from core.i18n import _
+from core.i18n import _, default_language, texts
 from core.settings.env import app_settings
 
 DELIVER_STAFF_NOTIFICATION_TASK = "notifications.deliver_staff_notification"
@@ -52,6 +53,7 @@ SEND_GUEST_ORDER_STATUS_UPDATE_TASK = "notifications.send_guest_order_status_upd
 SEND_BROADCAST_CAMPAIGN_TASK = "notifications.send_broadcast_campaign"
 SEND_GUEST_REFUND_NOTICE_TASK = "notifications.send_guest_refund_notice"
 SEND_RESERVATION_NOTICE_TASK = "notifications.send_reservation_notice"
+SEND_NEW_BUSINESS_NOTICE_TASK = "notifications.send_new_business_notice"
 PROCESS_SCHEDULED_BROADCAST_CAMPAIGNS_TASK = "notifications.process_scheduled_broadcast_campaigns"
 RECOVER_STALLED_BROADCASTS_TASK = "notifications.recover_stalled_broadcast_campaigns"
 # A claimed broadcast message whose result is not recorded within this time is
@@ -713,6 +715,55 @@ def send_reservation_notice_now(reservation_id: str, kind: str) -> bool:
     if should_mark_blocked:
         guest.telegram_account.is_blocked = True
         guest.telegram_account.save(update_fields=["is_blocked", "updated_at"])
+    if not is_sent and _is_retryable_result(results[0]):
+        raise RetryableDeliveryError(error_message or "Transient Telegram delivery failure.")
+    return is_sent
+
+
+def tell_platform_about_new_business(partner_id) -> None:
+    """After the commit (PQ-045): the platform owner learns of a new business
+    through the platform bot; without its token or chat — nobody is told."""
+
+    from apps.notifications.tasks import send_new_business_notice_task
+
+    transaction.on_commit(lambda: send_new_business_notice_task.delay(str(partner_id)))
+
+
+def render_new_business_notice(partner, bot, owner) -> str:
+    from apps.partners.onboarding import admin_link
+
+    account = owner.telegram_account if owner else None
+    lines = [_("<b>Новый бизнес</b>"), _escape_html(partner.name)]
+    if bot is not None:
+        lines.append(_("Бот: @{bot}", bot=_escape_html(bot.username)))
+    if owner is not None:
+        lines.append(_("Владелец: {name}, Telegram ID {telegram_id}",
+                       name=_escape_html(owner.user.get_full_name() or owner.user.username),
+                       telegram_id=account.telegram_id if account else "—"))
+    lines.append(_("Admin: {link}", link=_escape_html(admin_link(partner))))
+    return "\n".join(lines)
+
+
+def send_new_business_notice_now(partner_id: str) -> bool:
+    token = django_settings.PLATFORM_BOT_TOKEN
+    chat_id = django_settings.PLATFORM_OWNER_TELEGRAM_ID
+    if not token or not chat_id:
+        return False
+    partner = Partner.objects.filter(id=partner_id).first()
+    if partner is None:
+        return False
+    bot = BotInstance.objects.filter(partner=partner).order_by("created_at").first()
+    owner = (
+        EmployeeProfile.objects.select_related("user", "telegram_account")
+        .filter(partner=partner, user__role="owner")
+        .order_by("created_at")
+        .first()
+    )
+    # The platform owner is no one's employee: the platform's language.
+    with texts(default_language()):
+        text = render_new_business_notice(partner, bot, owner)
+    results = async_to_sync(_send_telegram_messages)(token, [(chat_id, text)])
+    _chat_id, is_sent, error_message, _blocked = _unpack_delivery_result(results[0])
     if not is_sent and _is_retryable_result(results[0]):
         raise RetryableDeliveryError(error_message or "Transient Telegram delivery failure.")
     return is_sent

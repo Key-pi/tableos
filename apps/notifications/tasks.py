@@ -9,6 +9,7 @@ from apps.notifications.services import (
     SEND_BROADCAST_CAMPAIGN_TASK,
     SEND_GUEST_ORDER_STATUS_UPDATE_TASK,
     SEND_GUEST_REFUND_NOTICE_TASK,
+    SEND_NEW_BUSINESS_NOTICE_TASK,
     SEND_RESERVATION_NOTICE_TASK,
     announce_guest_call_taken_now,
     deliver_staff_notification_now,
@@ -17,6 +18,7 @@ from apps.notifications.services import (
     send_broadcast_campaign_now,
     send_guest_order_status_update_now,
     send_guest_refund_notice_now,
+    send_new_business_notice_now,
     send_reservation_notice_now,
 )
 
@@ -128,6 +130,22 @@ def send_guest_refund_notice_task(self, refund_id: str) -> None:
 )
 def send_reservation_notice_task(self, reservation_id: str, kind: str) -> None:
     send_reservation_notice_now(reservation_id, kind)
+
+
+@shared_task(
+    bind=True,
+    name=SEND_NEW_BUSINESS_NOTICE_TASK,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 5},
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def send_new_business_notice_task(self, partner_id: str) -> None:
+    """PQ-045: the platform owner learns of a new business (platform bot)."""
+
+    send_new_business_notice_now(partner_id)
 
 
 @shared_task(

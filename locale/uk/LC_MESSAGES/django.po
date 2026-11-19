@@ -3517,6 +3517,22 @@ msgid "Гостей: {guests}."
 msgstr "Гостей: {guests}."
 
 #: apps/notifications/services.py
+msgid "<b>Новый бизнес</b>"
+msgstr "<b>Новий бізнес</b>"
+
+#: apps/notifications/services.py
+msgid "Бот: @{bot}"
+msgstr "Бот: @{bot}"
+
+#: apps/notifications/services.py
+msgid "Владелец: {name}, Telegram ID {telegram_id}"
+msgstr "Власник: {name}, Telegram ID {telegram_id}"
+
+#: apps/notifications/services.py
+msgid "Admin: {link}"
+msgstr "Admin: {link}"
+
+#: apps/notifications/services.py
 msgid "Позвать персонал можно только после сканирования QR-кода стола."
 msgstr "Покликати персонал можна лише після сканування QR-коду столу."
 
@@ -5255,6 +5271,42 @@ msgstr "спільний баланс гостя в мережі"
 #: apps/partners/models.py
 msgid "Общие балансы гостей в сетях"
 msgstr "Спільні баланси гостей у мережах"
+
+#: apps/partners/onboarding.py
+msgid "Telegram не принял токен бота (HTTP {code}): проверьте его в @BotFather."
+msgstr "Telegram не прийняв токен бота (HTTP {code}): перевірте його в @BotFather."
+
+#: apps/partners/onboarding.py
+msgid "Не удалось связаться с Telegram, чтобы проверить токен бота. Попробуйте ещё раз."
+msgstr "Не вдалося зв’язатися з Telegram, щоб перевірити токен бота. Спробуйте ще раз."
+
+#: apps/partners/onboarding.py
+msgid "Telegram не принял токен бота: проверьте его в @BotFather."
+msgstr "Telegram не прийняв токен бота: перевірте його в @BotFather."
+
+#: apps/partners/onboarding.py
+msgid "Укажите название бизнеса (до 255 знаков)."
+msgstr "Вкажіть назву бізнесу (до 255 знаків)."
+
+#: apps/partners/onboarding.py
+msgid "Это не похоже на токен бота из @BotFather."
+msgstr "Це не схоже на токен бота з @BotFather."
+
+#: apps/partners/onboarding.py
+msgid "Telegram ID владельца — положительное число."
+msgstr "Telegram ID власника — додатне число."
+
+#: apps/partners/onboarding.py
+msgid "Неизвестный часовой пояс: {name}."
+msgstr "Невідомий часовий пояс: {name}."
+
+#: apps/partners/onboarding.py
+msgid "Бот @{bot} уже подключён к «{venue}»."
+msgstr "Бот @{bot} уже підключено до «{venue}»."
+
+#: apps/partners/onboarding.py
+msgid "Бот @{bot} уже подключён."
+msgstr "Бот @{bot} уже підключено."
 
 #: apps/partners/opening_hours.py
 msgid "Пн"
