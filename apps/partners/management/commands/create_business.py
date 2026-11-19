@@ -45,5 +45,8 @@ class Command(BaseCommand):
             f"(Telegram ID {options['owner_telegram_id']}) — пишет боту /start, "
             "рабочий режим у него сразу."
         )
-        self.stdout.write(f"В Admin: {admin_link(partner)}")
+        self.stdout.write(
+            "В Admin владелец входит без пароля: «Рабочий режим» в боте → «🔐 Войти в Admin»."
+        )
+        self.stdout.write(f"Заведение в Admin: {admin_link(partner)}")
         self.stdout.write("Все модули выключены: владелец включает нужные в Admin (PQ-053).")

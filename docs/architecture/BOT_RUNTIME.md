@@ -11,7 +11,7 @@ AA-043). Подробно — раздел «Сервис ботов» ниже.
 внешние middleware `LoadCounterMiddleware` (счётчик нагрузки, PQ-051) и
 `PartnerRuntimeMiddleware` и подключает роутеры в порядке `start → points →
 session → menu → order → remote_checkout → profile → billing → guest_call →
-staff_refunds → staff_invites → staff`. aiogram выбирает первый подходящий
+staff_refunds → staff_invites → staff_admin_login → staff`. aiogram выбирает первый подходящий
 обработчик, поэтому порядок роутеров и текстовые фильтры — это видимое
 поведение.
 
@@ -168,6 +168,13 @@ staff_refunds → staff_invites → staff`. aiogram выбирает первы�
   выдавшему и новому сотруднику собираются на языке получателя
   (`speaking_to_employee` / `speaking_to_guest`); подписи клавиатуры
   нового сотрудника — тоже: `BotContent` строится внутри его языка.
+- Вход в Admin по ссылке (PQ-045, шаг 2, `bot/handlers/staff_admin_login.py`):
+  в «Рабочем режиме» кнопка «🔐 Войти в Admin» (callback `staffadmin`) видна,
+  если `apps/users/admin_login.py:admin_login_user` нашёл вход с доступом к
+  Admin (владелец и те, кому он дал Admin; копия сотрудника сети — его
+  собственный вход). Нажатие заново проверяет право и присылает
+  одноразовую ссылку на 15 минут без предпросмотра; на публичный HTTPS-адрес —
+  кнопкой «🔐 Открыть Admin», иначе (локально) — текстом.
 - Способы оплаты (PQ-033, PAYMENT_OPTIONS.md): выбор гостя —
   `rc:<c>:m:<slot>:<0|1>:<t|r>`, способ едет последним сегментом
   `rc:<c>:p:…:<t|r>` (без него — перевод, для итогов, отправленных раньше);

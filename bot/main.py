@@ -13,6 +13,7 @@ from bot.handlers.profile import router as profile_router
 from bot.handlers.remote_checkout import router as remote_checkout_router
 from bot.handlers.session import router as session_router
 from bot.handlers.staff import router as staff_router
+from bot.handlers.staff_admin_login import router as staff_admin_login_router
 from bot.handlers.staff_invites import router as staff_invites_router
 from bot.handlers.staff_refunds import router as staff_refunds_router
 from bot.handlers.start import router as start_router
@@ -38,6 +39,7 @@ def create_dispatcher() -> Dispatcher:
     dispatcher.include_router(guest_call_router)
     dispatcher.include_router(staff_refunds_router)
     dispatcher.include_router(staff_invites_router)
+    dispatcher.include_router(staff_admin_login_router)
     dispatcher.include_router(staff_router)
     return dispatcher
 

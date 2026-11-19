@@ -1,0 +1,27 @@
+{% extends 'unfold/layouts/unauthenticated.html' %}
+{% load botera_i18n unfold %}
+{% comment %}Into Admin by a one-time link from the bot (PQ-045, step 2):
+apps/users/views.py:admin_enter. GET shows whose link it is; «Войти» (POST)
+spends it, so a link preview does not.{% endcomment %}
+
+{% block title %}{{ title }} | {{ site_title }}{% endblock %}
+
+{% block content %}
+    {% include "unfold/helpers/unauthenticated_title.html" with title=site_title subtitle=title %}
+
+    {% if error %}
+        {% include "unfold/helpers/messages/error.html" with error=error %}
+    {% else %}
+        <p class="mb-2">{% tr "Заведение: {venue}" venue=venue %}</p>
+        <p class="mb-6">{% tr "Вы входите как {person}." person=person %}</p>
+        <form method="post">
+            {% csrf_token %}
+            {% component "unfold/components/button.html" with submit=1 variant="primary" class="w-full" %}
+                {% tr "Войти" %}
+            {% endcomponent %}
+        </form>
+        <p class="mt-6 text-sm text-font-subtle-light dark:text-font-subtle-dark">
+            {% tr "Ссылка одноразовая и действует 15 минут. Не пересылайте её: кто откроет — войдёт под вашим именем." %}
+        </p>
+    {% endif %}
+{% endblock %}

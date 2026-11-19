@@ -115,7 +115,7 @@ whitenoise и кэш в Redis. Сервисы:
 | Область | Хранимые понятия | Где реальная оркестрация | Примечания |
 |---|---|---|---|
 | Партнёры | `Partner`, `Network`, `BotInstance`, `PartnerBotSettings`, `OpeningHours`, `BotText`, `NetworkGuestChoice`, `BotMessagePoint`, `NetworkWallet` | `clean()` моделей (`Partner.clean` отклоняет неизвестные часовые пояса), `BotInstance.set_token`, `partners/opening_hours.py`, `partners/networks.py` (точки сети, точка обновления, бот точки), `partners/languages.py` и `bot_texts.py` (языки, свои тексты), `partners/mini_app.py`, `partners/services.py:record_bot_runtime_states` | `PartnerBotSettings` хранит флаги модулей, их настройки и реквизиты для перевода; подписи кнопок и сообщения — каталог текстов и `BotText` (PQ-040). Часовой пояс по умолчанию `Europe/Kyiv`. Часы работы — интервалы через полночь, свои у самовывоза и доставки (PQ-038). |
-| Пользователи и личность | `User`, глобальный `TelegramAccount`, партнёрский `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission` | `users/services.py:get_or_create_guest_profile`, `find_guest_by_customer_code`, `create_anonymous_guest` | Одна Telegram-личность → один профиль гостя на партнёра; у анонимного гостя визита Telegram нет (PQ-052). Телефон, адрес и получатель гостя хранятся в профиле. Меню и стартовая страница Admin — `users/admin_navigation.py`, `admin_dashboard.py`. |
+| Пользователи и личность | `User`, глобальный `TelegramAccount`, партнёрский `GuestProfile`, `AdminAccessProfile`, `AdminSectionPermission`, `AdminLoginLink` (одноразовая ссылка входа в Admin из бота, PQ-045) | `users/services.py:get_or_create_guest_profile`, `find_guest_by_customer_code`, `create_anonymous_guest` | Одна Telegram-личность → один профиль гостя на партнёра; у анонимного гостя визита Telegram нет (PQ-052). Телефон, адрес и получатель гостя хранятся в профиле. Меню и стартовая страница Admin — `users/admin_navigation.py`, `admin_dashboard.py`. |
 | Столы | `Hall`, `Table`, `TableVisit`, `TableSession`, `Reservation` | `tables/services.py` (активация, визиты, стол с планшета), `tables/floor_plan.py` (схема и статусы), `tables/reservations.py` (бронь) | Активация по QR, визиты стола, закрытие только после расчёта. `timed_out` выставляет beat `tables.expire_idle_table_sessions` (PQ-008); `expires_at` есть, но ничто его не выставляет. Бронь с гостем по коду, сообщения гостю и напоминание (PQ-056). |
 | Меню | `MenuCategory`, `MenuBadge`, `MenuItem`, `MenuItemPhoto`, `MenuItemAttribute`, `MenuItemVariant`, `ModifierGroup`, `Modifier`, `StockMovement` | чтение — `menu/repositories.py`, `menu/catalog.py` (дерево, расписание); выбор и цена — `menu/options.py:resolve_choice`; остатки — `menu/stock.py`; переводы — `menu/translations.py`; фото — `menu/photos.py`; остальное — Admin | Цена должна быть положительной (`menu_item_price_positive`). Отметки каналов: `available_at_table`, `available_for_pickup`, `available_for_delivery`, `available_for_shipping`; `MenuItem.is_sold_in(channel)`. Подробно — [CATALOG.md](CATALOG.md). |
 | Заказы | `Cart`, `CartItem`, `Order`, `OrderItem`, `OrderStatusHistory`, `KitchenScreen`, `OrderStationReady` | `orders/services.py`; удалённые каналы — в `billing/remote_orders.py`; экран кухни и бара — `orders/kitchen.py` | Корзина, создание заказа по каналу (стол / самовывоз / доставка / отправка), заказ на стол с планшета, машина статусов, подтверждение получения гостем. `Order.channel`, `Order.requested_for`, `Order.payment_timing`, `Order.request_key`, `Order.REMOTE_CHANNELS` (старое имя `PREPAID_CHANNELS` — синоним). |
@@ -655,6 +655,23 @@ apps.notifications.tasks` — цикл, разорванный только им
 Hub — вместе с Hub (владелец, 2026-11-19); он вызовет тот же
 `create_business`.
 
+**Вход в Admin по одноразовой ссылке (шаг 2, решено 2026-11-19).** В
+«Рабочем режиме» бота кнопка «🔐 Войти в Admin»
+(`bot/handlers/staff_admin_login.py`) — владельцу и сотрудникам, которым
+владелец дал Admin (`AdminAccessProfile.can_access_admin`); копия
+владельца или менеджера сети входит своим собственным входом
+(`apps/users/admin_login.py:admin_login_user`). `issue_admin_login_link`
+хранит только SHA-256 ссылки (`AdminLoginLink.token_hash`), срок — 15 минут.
+Адрес — `core/site.py:site_address` (`WEBAPP_BASE_URL`, иначе первый
+`DJANGO_CSRF_TRUSTED_ORIGINS`). Страница `admin/enter/<ссылка>/`
+(`apps/users/views.py:admin_enter`) на GET только показывает заведение,
+человека и «Войти» — предпросмотр ссылки её не тратит; POST
+(`redeem_admin_login_link`) под блокировкой строки ссылки проверяет, что
+она не использована и не устарела и что Admin ещё открыт этому человеку
+(`admin_partner_ids`), отмечает `used_at`, входит без пароля и открывает
+точку, из бота которой пришла ссылка. Пароль в Admin по-прежнему можно
+задать.
+
 ### Приглашения сотрудников (PQ-046)
 
 Сотрудника добавляет владелец или менеджер, без суперпользователя.
@@ -1025,7 +1042,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1346 тестов после создания бизнеса одной командой (PQ-045, шаг 1), зелёные на SQLite и на PostgreSQL 16.
+- 1361 тест после входа в Admin по ссылке из бота (PQ-045, шаг 2), зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -1070,9 +1087,9 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Цифры кодовой базы на 2026-11-19
 
-527 отслеживаемых Python-файлов (около 85 200 строк), 132 пронумерованные
-миграции, 143 тестовых модуля. Крупнейшие нетестовые модули:
-`bot/handlers/staff.py` (3887 строк), `apps/billing/services.py` (1636),
+533 отслеживаемых Python-файла (около 85 800 строк), 133 пронумерованные
+миграции, 145 тестовых модулей. Крупнейшие нетестовые модули:
+`bot/handlers/staff.py` (3897 строк), `apps/billing/services.py` (1636),
 `apps/notifications/services.py` (1580), `apps/orders/services.py` (1536),
 `apps/billing/remote_orders.py` (1179), `bot/keyboards/staff.py` (1050),
 `apps/partners/management/commands/seed_baseline_demo.py` (1006). Инвентарь

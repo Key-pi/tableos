@@ -385,6 +385,7 @@ def build_staff_home_keyboard(
     can_view_orders: bool = True,
     can_view_tables: bool = False,
     can_invite: bool = False,
+    can_enter_admin: bool = False,
 ) -> InlineKeyboardMarkup:
     first_row = []
     if can_view_orders:
@@ -440,6 +441,11 @@ def build_staff_home_keyboard(
         # Staff invite links (PQ-046): bot/handlers/staff_invites.py.
         inline_keyboard.append(
             [InlineKeyboardButton(text=_("👥 Пригласить сотрудника"), callback_data="staffinv")]
+        )
+    if can_enter_admin:
+        # A one-time link into Admin (PQ-045): bot/handlers/staff_admin_login.py.
+        inline_keyboard.append(
+            [InlineKeyboardButton(text=_("🔐 Войти в Admin"), callback_data="staffadmin")]
         )
     return InlineKeyboardMarkup(inline_keyboard=inline_keyboard)
 

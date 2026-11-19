@@ -7,7 +7,7 @@ from apps.orders.models import Order
 from apps.partners.admin_network import switch_admin_point
 from apps.partners.models import BotInstance, Partner
 from apps.tables.models import Table
-from apps.users.views import set_admin_language
+from apps.users.views import admin_enter, set_admin_language
 from core.i18n import _
 from core.media import serve_media
 from core.security.login_throttle import throttle_login
@@ -102,6 +102,8 @@ urlpatterns = [
     path("admin/language/", set_admin_language, name="admin-language"),
     # PQ-047: the venue switch of a network's Admin user.
     path("admin/point/<str:partner_hex>/", switch_admin_point, name="admin-point"),
+    # PQ-045: into Admin by a one-time link from «🔐 Войти в Admin» in the bot.
+    path("admin/enter/<str:token>/", admin_enter, name="admin-enter"),
     path("admin/", admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
     # PQ-048: the Telegram Mini App.

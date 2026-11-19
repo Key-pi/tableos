@@ -1637,7 +1637,7 @@ def _staff_home_text(partner, employee) -> str:
 STAFF_SCREEN_BUTTON = N_("📱 Рабочий экран")
 
 
-def _staff_home_keyboard(employee, screen_link: str = ""):
+def _staff_home_keyboard(employee, screen_link: str = "", *, admin: bool = False):
     markup = build_staff_home_keyboard(
         can_quick_sale=_can_use_quick_sale(employee),
         can_view_day_report=_can_view_day_report(employee),
@@ -1645,6 +1645,7 @@ def _staff_home_keyboard(employee, screen_link: str = ""):
         can_view_orders=_can_view_open_orders(employee),
         can_view_tables=_can_view_tables(employee),
         can_invite=_can_invite(employee),
+        can_enter_admin=admin,
     )
     if screen_link and _can_view_open_orders(employee):
         # PQ-048: orders and calls on one screen that refreshes itself.
@@ -1663,6 +1664,13 @@ async def _staff_screen_link(bot: Bot, partner) -> str:
     return await sync_to_async(staff_screen_link_for)(bot.token, partner.id)
 
 
+async def _may_enter_admin(employee) -> bool:
+    # The button only; apps/users/admin_login.py checks again (PQ-045).
+    from apps.users.admin_login import admin_login_user
+
+    return await sync_to_async(admin_login_user)(employee) is not None
+
+
 @router.message(Command("staff"))
 @router.message(PartnerButtonFilter("button_staff_label"))
 async def staff_help_handler(message: Message, bot: Bot) -> None:
@@ -1674,7 +1682,8 @@ async def staff_help_handler(message: Message, bot: Bot) -> None:
 
     await message.answer(
         _staff_home_text(partner, employee),
-        reply_markup=_staff_home_keyboard(employee, await _staff_screen_link(bot, partner)),
+        reply_markup=_staff_home_keyboard(employee, await _staff_screen_link(bot, partner),
+                                          admin=await _may_enter_admin(employee)),
     )
 
 
@@ -1688,7 +1697,8 @@ async def staff_home_callback_handler(callback: CallbackQuery, bot: Bot) -> None
     await _safe_edit_message_text(
         callback.message,
         _staff_home_text(partner, employee),
-        reply_markup=_staff_home_keyboard(employee, await _staff_screen_link(bot, partner)),
+        reply_markup=_staff_home_keyboard(employee, await _staff_screen_link(bot, partner),
+                                          admin=await _may_enter_admin(employee)),
     )
     await callback.answer()
 

@@ -19,7 +19,6 @@ import urllib.request
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.urls import reverse
 from django.utils.text import slugify
@@ -29,6 +28,7 @@ from apps.partners.models import BotInstance, Partner, PartnerBotSettings
 from apps.users.constants import AdminAccessPreset
 from apps.users.models import AdminAccessProfile, TelegramAccount, User
 from core.i18n import gettext as _
+from core.site import site_address
 
 
 class BusinessError(Exception):
@@ -65,10 +65,9 @@ def fetch_bot_username(token: str) -> str:
 
 
 def admin_link(partner: Partner) -> str:
-    """The venue's page in Admin; absolute when the site's address is known."""
+    """The venue's page in Admin, at the site's public address."""
 
-    path = reverse("admin:partners_partner_change", args=[partner.id])
-    return f"{settings.WEBAPP_BASE_URL}{path}" if settings.WEBAPP_BASE_URL else path
+    return f"{site_address()}{reverse('admin:partners_partner_change', args=[partner.id])}"
 
 
 def _connected_bot(username: str) -> BotInstance | None:

@@ -35,6 +35,8 @@ paths:
   только после блокировки счетов.
 - Вызов персонала «Иду»: только `GuestCall` (`take_guest_call`).
 - Приглашение сотрудника: `StaffInvite → EmployeeProfile`.
+- Вход в Admin по одноразовой ссылке (PQ-045): только `AdminLoginLink`
+  (`apps/users/admin_login.py:redeem_admin_login_link`).
 - Экран кухни и бара «Готово»: только `Order` (до чтения `OrderStationReady`).
 - Бонусы при общем балансе сети: `GuestProfile` (точки) → `NetworkWallet`.
 - Схема зала: `Hall` (`no_key=True`) → `Table` (`floor_plan.save_hall_layout`).

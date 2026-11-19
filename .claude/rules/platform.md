@@ -31,7 +31,8 @@ paths:
   до транзакции; владельцу платформы — `notifications.send_new_business_notice`
   через `PLATFORM_BOT_TOKEN` / `PLATFORM_OWNER_TELEGRAM_ID`. Вход в Admin —
   кнопкой «🔐 Войти в Admin» в боте, ссылка на 15 минут, владельцу и тем,
-  кому он дал Admin (решено 2026-11-19, шаг 2). Список «что ещё настроить» —
+  кому он дал Admin (решено 2026-11-19, `apps/users/admin_login.py`): хранить
+  только хеш, GET не тратит ссылку, право — заново при входе. Список «что ещё настроить» —
   `apps/analytics/dashboard.py:setup_steps`.
 - Демо-данные: `seed_baseline_demo`, заведения —
   `apps/partners/management/demo_data.py`; токены и Telegram ID — только из

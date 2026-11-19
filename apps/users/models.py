@@ -319,3 +319,33 @@ class AdminSectionPermission(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.profile.user.username} / {self.section}"
+
+
+class AdminLoginLink(TimeStampedModel):
+    """A one-time link into Admin from the bot (PQ-045, step 2): «🔐 Войти в
+    Admin» in work mode; only the hash of the link is kept, it lives 15
+    minutes and works once (``apps/users/admin_login.py``)."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="admin_login_links",
+        verbose_name=_lazy("Пользователь"),
+    )
+    partner = models.ForeignKey(
+        "partners.Partner",
+        on_delete=models.CASCADE,
+        related_name="admin_login_links",
+        verbose_name=_lazy("Заведение"),
+    )
+    token_hash = models.CharField(max_length=64, unique=True, verbose_name=_lazy("Хеш ссылки"))
+    expires_at = models.DateTimeField(verbose_name=_lazy("Действует до"))
+    used_at = models.DateTimeField(null=True, blank=True, verbose_name=_lazy("Использована"))
+
+    class Meta:
+        verbose_name = _lazy("ссылка входа в Admin")
+        verbose_name_plural = _lazy("Ссылки входа в Admin")
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.user.username} / {self.expires_at:%Y-%m-%d %H:%M}"

@@ -2416,7 +2416,7 @@ msgstr "Код"
 msgid "Выдал"
 msgstr "Видав"
 
-#: apps/employees/models.py
+#: apps/employees/models.py apps/users/models.py
 msgid "Действует до"
 msgstr "Діє до"
 
@@ -6240,6 +6240,22 @@ msgstr "Заповніть адресу й телефон"
 msgid "Гости видят их в профиле заведения и при самовывозе."
 msgstr "Гості бачать їх у профілі закладу та під час самовивозу."
 
+#: apps/users/admin_login.py
+msgid "Вход в Admin — из бота своего заведения."
+msgstr "Вхід в Admin — з бота свого закладу."
+
+#: apps/users/admin_login.py
+msgid "Вход в Admin вам не открыт: его даёт владелец."
+msgstr "Вхід в Admin вам не відкрито: його надає власник."
+
+#: apps/users/admin_login.py apps/users/views.py
+msgid "Ссылка уже использована или устарела. Нажмите «🔐 Войти в Admin» в боте ещё раз."
+msgstr "Посилання вже використане або застаріло. Натисніть «🔐 Увійти в Admin» у боті ще раз."
+
+#: apps/users/admin_login.py
+msgid "Вход в Admin вам больше не открыт."
+msgstr "Вхід в Admin вам більше не відкрито."
+
 #: apps/users/admin_navigation.py
 msgid "Заказы и счета"
 msgstr "Замовлення і рахунки"
@@ -6412,7 +6428,7 @@ msgstr "Інші точки мережі"
 msgid "Другие точки той же сети, где у пользователя те же права. Владельцу сети не нужно: он видит все точки."
 msgstr "Інші точки тієї ж мережі, де в користувача ті самі права. Власнику мережі не потрібно: він бачить усі точки."
 
-#: apps/users/models.py
+#: apps/users/models.py apps/users/views.py
 msgid "Вход в Admin"
 msgstr "Вхід в Admin"
 
@@ -6451,6 +6467,22 @@ msgstr "права на розділ"
 #: apps/users/models.py
 msgid "Права на разделы"
 msgstr "Права на розділи"
+
+#: apps/users/models.py
+msgid "Хеш ссылки"
+msgstr "Хеш посилання"
+
+#: apps/users/models.py
+msgid "Использована"
+msgstr "Використано"
+
+#: apps/users/models.py
+msgid "ссылка входа в Admin"
+msgstr "посилання входу в Admin"
+
+#: apps/users/models.py
+msgid "Ссылки входа в Admin"
+msgstr "Посилання входу в Admin"
 
 #: apps/users/services.py
 msgid "Этот язык заведение не включило."
@@ -8390,6 +8422,34 @@ msgstr "Напишіть коментар до зміни рахунку одн�
 msgid "Комментарий сохранён в истории счёта."
 msgstr "Коментар збережено в історії рахунку."
 
+#: bot/handlers/staff_admin_login.py templates/admin/enter_link.html
+msgid "Ссылка одноразовая и действует 15 минут. Не пересылайте её: кто откроет — войдёт под вашим именем."
+msgstr "Посилання одноразове і діє 15 хвилин. Не пересилайте його: хто відкриє — увійде під вашим ім’ям."
+
+#: bot/handlers/staff_admin_login.py
+msgid ""
+"<b>Вход в Admin</b>\n"
+"{note}"
+msgstr ""
+"<b>Вхід в Admin</b>\n"
+"{note}"
+
+#: bot/handlers/staff_admin_login.py
+msgid "🔐 Открыть Admin"
+msgstr "🔐 Відкрити Admin"
+
+#: bot/handlers/staff_admin_login.py
+msgid ""
+"<b>Вход в Admin</b>\n"
+"{link}\n"
+"\n"
+"{note}"
+msgstr ""
+"<b>Вхід в Admin</b>\n"
+"{link}\n"
+"\n"
+"{note}"
+
 #: bot/handlers/staff_invites.py webapp/staff_sales.py
 msgid "Приглашать сотрудников может владелец или менеджер."
 msgstr "Запрошувати працівників може власник або менеджер."
@@ -8737,6 +8797,10 @@ msgid "👥 Пригласить сотрудника"
 msgstr "👥 Запросити працівника"
 
 #: bot/keyboards/staff.py
+msgid "🔐 Войти в Admin"
+msgstr "🔐 Увійти в Admin"
+
+#: bot/keyboards/staff.py
 msgid "Обновить сводку"
 msgstr "Оновити зведення"
 
@@ -8979,6 +9043,18 @@ msgstr "Демо-дані (логіни, посилання на столи):"
 #: templates/admin/botera/object_actions.html
 msgid "Что сделать"
 msgstr "Що зробити"
+
+#: templates/admin/enter_link.html
+msgid "Заведение: {venue}"
+msgstr "Заклад: {venue}"
+
+#: templates/admin/enter_link.html
+msgid "Вы входите как {person}."
+msgstr "Ви входите як {person}."
+
+#: templates/admin/enter_link.html
+msgid "Войти"
+msgstr "Увійти"
 
 #: templates/admin/index.html
 msgid "Требует внимания"
