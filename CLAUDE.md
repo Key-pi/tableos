@@ -195,6 +195,7 @@ docker compose logs init        # логины и ссылки на столы �
 | Mini App, экран кухни и бара | `docs/architecture/MINI_APP.md` |
 | Каталог | `docs/architecture/CATALOG.md` |
 | Схема зала, заказ на стол, бронь | `docs/architecture/FLOOR_PLAN.md` |
+| Подключение к Poster | ADR-0010, `docs/architecture/POSTER.md` |
 | Находки аудита, что сделано по веткам | `docs/audits/ARCHITECTURE_AUDIT.md`, `REFACTOR_ROADMAP.md` |
 | Тесты и журнал прогонов | `docs/engineering/TESTING.md` |
 | Нагрузка: сколько партнёров держит сервер | `docs/engineering/LOAD_TESTING.md`, `infrastructure/loadtest/` |
