@@ -70,6 +70,7 @@ from apps.billing.table_bills import (
     create_shared_bill_for_table,
     mark_billing_request_processed,
 )
+from apps.billing.visit_settlement import visit_settlement
 from apps.bonuses.services import (
     BonusServiceError,
     bonus_balance,
@@ -115,7 +116,9 @@ from apps.tables.services import (
     can_close_table_session,
     close_table_session_if_settled,
     close_table_visit,
+    visit_headcount,
 )
+from apps.users.models import GuestProfile
 from bot.filters.content import PartnerButtonFilter
 from bot.keyboards.options import (
     build_choice_keyboard,
@@ -149,6 +152,7 @@ from bot.keyboards.staff import (
     build_staff_table_actions_keyboard,
     build_staff_tables_overview_keyboard,
     build_staff_transfer_reject_confirm_keyboard,
+    build_staff_visit_guest_rows,
     page_slice,
 )
 from bot.services.content import BotContent
@@ -886,6 +890,29 @@ def _build_unbilled_order_shortcuts(orders: list[Order]) -> list[tuple[str, str,
     return shortcuts
 
 
+def _render_company(summary) -> list[str]:
+    """One visit's company (PQ-009 in the bot, step 2): how many sit, each
+    guest — with the bot and without («Гость 1») — and what they have to pay
+    or is not billed yet, as on the Mini App's table card."""
+
+    lines = ["", _("<b>{title}</b>", title=summary["title"]),
+             _("Гостей за столом: {count}", count=summary["headcount"])]
+    for guest in summary["settlement"].guests:
+        money = []
+        if guest.to_pay > 0:
+            money.append(_("к оплате {amount} грн", amount=guest.to_pay))
+        if guest.unbilled > 0:
+            money.append(_("без счёта {amount} грн", amount=guest.unbilled))
+        name = escape_html(guest.label) + (" 👤" if guest.has_bot else "")
+        if not guest.active:
+            name = _("{name} (ушёл)", name=name)
+        lines.append(_("• {name} — {money}", name=name, money=", ".join(money)) if money
+                     else _("• {name}", name=name))
+    if summary["open_bills"]:
+        lines.append(_("Открытых счетов: {count}", count=summary["open_bills"]))
+    return lines
+
+
 def _render_table_card(
     *,
     table: Table,
@@ -895,6 +922,14 @@ def _render_table_card(
     open_bills,
     visits=None,
 ) -> str:
+    if visits:
+        # The company of each visit, the new way (PQ-009 in the bot, step 2).
+        lines = [_("<b>Стол #{number}</b>", number=table.number)]
+        if len(visits) > 1:
+            lines.append(_("⚠ За столом несколько визитов — рассчитайте и закройте предыдущий."))
+        for summary in visits:
+            lines.extend(_render_company(summary))
+        return "\n".join(lines)
     lines = [
         _("<b>Стол #{number}</b>", number=table.number),
         _("Активных гостей: {count}", count=len(active_sessions)),
@@ -914,22 +949,6 @@ def _render_table_card(
                 )
             )
         lines.extend(["", _("Гости:")] + guest_lines)
-    if visits:
-        lines.append("")
-        if len(visits) > 1:
-            lines.append(_("⚠ За столом несколько визитов — рассчитайте и закройте предыдущий."))
-        lines.append(_("Визиты:"))
-        for summary in visits:
-            lines.append(
-                _(
-                    "• {title}: гостей {guests}, без счёта {unbilled}, открытых счетов "
-                    "{open_bills}",
-                    title=summary['title'],
-                    guests=summary['guests'],
-                    unbilled=summary['unbilled'],
-                    open_bills=summary['open_bills'],
-                )
-            )
     return "\n".join(lines)
 
 
@@ -944,13 +963,15 @@ def _render_tables_overview(active_sessions, unbilled_orders) -> str:
     )
 
 
-def _build_session_close_actions(active_sessions) -> list[tuple[str, str]]:
+def _build_session_close_actions(active_sessions, labels=None) -> list[tuple[str, str]]:
     actions: list[tuple[str, str]] = []
     for session in active_sessions[:6]:
         can_close, _reason = can_close_table_session(session)
-        label = _("Гость ушёл: {guest}", guest=_guest_label(session.guest))
+        # «Гость 1», «Гость 2» of the company rather than one word for all.
+        who = (labels or {}).get(session.guest_id) or _guest_label(session.guest)
+        label = _("Гость ушёл: {guest}", guest=who)
         if not can_close:
-            label = _("Гость ушёл? {guest} — не рассчитан", guest=_guest_label(session.guest))
+            label = _("Гость ушёл? {guest} — не рассчитан", guest=who)
         actions.append((str(session.id), label))
     return actions
 
@@ -1505,7 +1526,11 @@ def _load_tables_feed_data(partner_id):
     )
 
 
-def _build_table_ops_view(*, partner_id, table_id):
+def _build_table_ops_view(*, partner_id, table_id, employee=None, screen_link=""):
+    """The table card. With ``employee`` and the staff screen's ``screen_link``
+    each visit gets its company's rows (PQ-009 in the bot, step 2): ➖ 👥 ➕,
+    a guest's money in one tap, «🧾 Рассчитать в Mini App»."""
+
     table = Table.objects.select_related("partner").get(partner_id=partner_id, id=table_id)
     active_sessions = list(
         BillingOperationsRepository.active_sessions_for_partner(partner_id).filter(table_id=table_id)
@@ -1523,6 +1548,7 @@ def _build_table_ops_view(*, partner_id, table_id):
         active_sessions=active_sessions,
         unbilled_orders=unbilled_orders,
         open_bills=open_bills,
+        zone=ZoneInfo(table.partner.timezone),
     )
     legacy_unbilled = [
         order
@@ -1537,6 +1563,21 @@ def _build_table_ops_view(*, partner_id, table_id):
         open_bills=open_bills,
         visits=visits,
     )
+    takes_money = employee is not None and _can_manage_billing(employee)
+    labels = {}
+    visit_rows = {}
+    for summary in visits:
+        guests = summary["settlement"].guests
+        labels.update({guest.guest_id: guest.label for guest in guests})
+        here = sum(1 for guest in guests if guest.active)
+        visit_rows[summary["id"]] = build_staff_visit_guest_rows(
+            visit_hex=summary["hex"], table_id=str(table.id),
+            headcount=summary["headcount"], fewest=max(1, here),
+            pays=[(summary["codes"][guest.guest_id], guest.label, guest.to_pay)
+                  for guest in guests if takes_money and guest.to_pay > 0],
+            settle_url=(f"{screen_link}?settle={summary['hex']}"
+                        if screen_link and takes_money and summary["settlement"].lines else ""),
+        )
     keyboard = build_staff_table_actions_keyboard(
         table_id=str(table.id),
         # Table-level buttons bill orders without a visit (created before visits).
@@ -1546,29 +1587,42 @@ def _build_table_ops_view(*, partner_id, table_id):
         can_create_personal_bills=(
             not visits and len({order.guest_id for order in legacy_unbilled}) > 1
         ),
-        session_actions=_build_session_close_actions(active_sessions),
+        session_actions=_build_session_close_actions(active_sessions, labels),
         visit_actions=[
             (summary["id"], summary["title"], summary["unbilled"] > 0,
              summary["unbilled_guests"] > 1)
             for summary in visits
         ],
+        visit_rows=visit_rows,
     )
     return text, keyboard
 
 
-def _table_visit_summaries(*, partner_id, table_id, active_sessions, unbilled_orders, open_bills):
+def _table_visit_summaries(*, partner_id, table_id, active_sessions, unbilled_orders, open_bills,
+                           zone=None):
     summaries = []
     visits = TableVisit.objects.filter(
         partner_id=partner_id,
         table_id=table_id,
         status=TableVisit.Status.ACTIVE,
     ).order_by("started_at")
+    visits = list(visits)
     for index, visit in enumerate(visits, start=1):
-        started = timezone.localtime(visit.started_at).strftime("%H:%M")
+        # In the venue's time zone, as the guests' times were.
+        started = timezone.localtime(visit.started_at, zone).strftime("%H:%M")
+        settlement = visit_settlement(partner_id=partner_id, visit_id=visit.id)
         summaries.append(
             {
                 "id": str(visit.id),
-                "title": _("Визит {index} (с {started})", index=index, started=started),
+                "hex": visit.id.hex,
+                "title": (_("Визит {index} (с {started})", index=index, started=started)
+                          if len(visits) > 1 else _("Визит с {started}", started=started)),
+                # PQ-009 in the bot, step 2: the company as the settlement sees it.
+                "settlement": settlement,
+                "headcount": visit_headcount(visit),
+                "codes": dict(GuestProfile.objects.filter(
+                    id__in=[guest.guest_id for guest in settlement.guests]
+                ).values_list("id", "customer_code")),
                 "guests": sum(1 for session in active_sessions if session.visit_id == visit.id),
                 "unbilled": sum(
                     1
@@ -1686,6 +1740,15 @@ def _staff_home_keyboard(employee, screen_link: str = "", *, admin: bool = False
 
 async def _staff_screen_link(bot: Bot, partner) -> str:
     return await sync_to_async(staff_screen_link_for)(bot.token, partner.id)
+
+
+async def _table_view(bot: Bot, partner, employee, table_id):
+    """The table card with the company's rows (PQ-009 in the bot, step 2)."""
+
+    return await sync_to_async(_build_table_ops_view)(
+        partner_id=partner.id, table_id=table_id, employee=employee,
+        screen_link=await _staff_screen_link(bot, partner),
+    )
 
 
 async def _may_enter_admin(employee) -> bool:
@@ -1855,10 +1918,7 @@ async def staff_table_open_callback_handler(callback: CallbackQuery, bot: Bot) -
                 )
             )
         _unused, table_id = (callback.data or "").split(":", 1)
-        text, keyboard = await sync_to_async(_build_table_ops_view)(
-            partner_id=partner.id,
-            table_id=table_id,
-        )
+        text, keyboard = await _table_view(bot, partner, employee, table_id)
     except Table.DoesNotExist:
         await callback.answer(_("Стол не найден."), show_alert=True)
         return
@@ -1889,10 +1949,7 @@ async def staff_session_close_callback_handler(callback: CallbackQuery, bot: Bot
         )()
         table_id = session.table_id
         await sync_to_async(close_table_session_if_settled)(session)
-        text, keyboard = await sync_to_async(_build_table_ops_view)(
-            partner_id=partner.id,
-            table_id=table_id,
-        )
+        text, keyboard = await _table_view(bot, partner, employee, table_id)
     except TableSessionError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
@@ -1920,10 +1977,7 @@ async def staff_table_shared_bill_callback_handler(callback: CallbackQuery, bot:
             partner_id=partner.id,
             table_id=table_id,
         )
-        text, keyboard = await sync_to_async(_build_table_ops_view)(
-            partner_id=partner.id,
-            table_id=table_id,
-        )
+        text, keyboard = await _table_view(bot, partner, employee, table_id)
     except BillingServiceError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
@@ -1948,10 +2002,7 @@ async def staff_table_personal_bills_callback_handler(callback: CallbackQuery, b
             partner_id=partner.id,
             table_id=table_id,
         )
-        text, keyboard = await sync_to_async(_build_table_ops_view)(
-            partner_id=partner.id,
-            table_id=table_id,
-        )
+        text, keyboard = await _table_view(bot, partner, employee, table_id)
     except BillingServiceError as exc:
         await callback.answer(str(exc), show_alert=True)
         return
@@ -1995,10 +2046,7 @@ async def staff_visit_bill_callback_handler(callback: CallbackQuery, bot: Bot) -
             table_id=visit.table_id,
             visit_id=visit.id,
         )
-        text, keyboard = await sync_to_async(_build_table_ops_view)(
-            partner_id=partner.id,
-            table_id=visit.table_id,
-        )
+        text, keyboard = await _table_view(bot, partner, employee, visit.table_id)
     except TableVisit.DoesNotExist:
         await callback.answer(_("Визит не найден."), show_alert=True)
         return
@@ -2024,10 +2072,7 @@ async def staff_visit_close_callback_handler(callback: CallbackQuery, bot: Bot) 
         _unused, raw_visit_id = (callback.data or "").split(":", 1)
         visit = await sync_to_async(_load_staff_visit)(partner_id=partner.id, raw_id=raw_visit_id)
         await sync_to_async(close_table_visit)(visit, actor=employee.user)
-        text, keyboard = await sync_to_async(_build_table_ops_view)(
-            partner_id=partner.id,
-            table_id=visit.table_id,
-        )
+        text, keyboard = await _table_view(bot, partner, employee, visit.table_id)
     except TableVisit.DoesNotExist:
         await callback.answer(_("Визит не найден."), show_alert=True)
         return

@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
 # Status buttons: one copy for the bot, the Mini App and Admin.
 from apps.billing.staff_actions import (  # noqa: F401
@@ -953,6 +953,48 @@ def build_staff_adjustment_done_keyboard(
     )
 
 
+def _short(label: str, most: int = 12) -> str:
+    return label if len(label) <= most else label[: most - 1] + "…"
+
+
+def build_staff_visit_guest_rows(
+    *, visit_hex: str, table_id: str, headcount: int, fewest: int,
+    pays: list, settle_url: str = "",
+) -> list[list[InlineKeyboardButton]]:
+    """A visit's company in the bot (PQ-009 in the bot, step 2): ➖ 👥 ➕
+    («Гостей за столом», never below the people at the table); a guest's
+    money by cash or terminal — ``pays`` are (customer code, label, amount),
+    the amount shown rides in the callback; «🧾 Рассчитать в Mini App»."""
+
+    count_row = []
+    if headcount - 1 >= fewest:
+        count_row.append(InlineKeyboardButton(
+            text="➖", callback_data=f"stafftvcount:{visit_hex}:{headcount - 1}"))
+    count_row.append(InlineKeyboardButton(
+        text=_("👥 {count}", count=headcount), callback_data=f"stafftableopen:{table_id}"))
+    if headcount < 99:
+        count_row.append(InlineKeyboardButton(
+            text="➕", callback_data=f"stafftvcount:{visit_hex}:{headcount + 1}"))
+    rows = [count_row]
+    for code, label, amount in pays:
+        cents = int((amount * 100).to_integral_value())
+        rows.append([
+            InlineKeyboardButton(
+                text=_("💵 {guest} · {amount} грн", guest=_short(label), amount=amount),
+                callback_data=f"stafftvpay:{visit_hex}:{code}:c:{cents}",
+            ),
+            InlineKeyboardButton(
+                text=_("💳 {guest} · {amount} грн", guest=_short(label), amount=amount),
+                callback_data=f"stafftvpay:{visit_hex}:{code}:t:{cents}",
+            ),
+        ])
+    if settle_url:
+        # Moving lines between guests stays in the Mini App (owner 2026-11-20).
+        rows.append([InlineKeyboardButton(text=_("🧾 Рассчитать в Mini App"),
+                                          web_app=WebAppInfo(url=settle_url))])
+    return rows
+
+
 def build_staff_table_actions_keyboard(
     *,
     table_id: str,
@@ -960,6 +1002,7 @@ def build_staff_table_actions_keyboard(
     can_create_personal_bills: bool,
     session_actions: list[tuple[str, str]] | None = None,
     visit_actions: list[tuple[str, str, bool, bool]] | None = None,
+    visit_rows: dict | None = None,
 ) -> InlineKeyboardMarkup:
     """Table card actions; ``visit_actions`` are (visit id, title, has unbilled
     orders, two or more guests ordered). "By guests" with one guest's orders
@@ -968,6 +1011,8 @@ def build_staff_table_actions_keyboard(
     keyboard: list[list[InlineKeyboardButton]] = []
     for visit_id, title, can_bill, can_split in visit_actions or []:
         visit_hex = str(visit_id).replace("-", "")
+        # The company's rows first (PQ-009 in the bot, step 2).
+        keyboard.extend((visit_rows or {}).get(visit_id, []))
         row = []
         if can_bill and can_split:
             row.extend(

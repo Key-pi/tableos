@@ -271,14 +271,20 @@ class BillingAndTablesTests(StaffFlowFixture):
         self.assertNotIn("можно списать", text)
         self.assertNotIn("К оплате", text)
 
-    def test_table_card_shows_the_guest_time_in_the_venue_timezone(self):
+    def test_table_card_shows_the_visit_time_in_the_venue_timezone(self):
+        # The card shows the company since the visit began (PQ-009 in the
+        # bot, step 2) — in the venue's time zone.
+        from zoneinfo import ZoneInfo
+
         table, _orders = self._table_orders(1)
         session = table.sessions.get()
         started = timezone.now().replace(hour=1, minute=17, second=0, microsecond=0)
-        type(session).objects.filter(id=session.id).update(started_at=started)
+        type(session.visit).objects.filter(id=session.visit_id).update(started_at=started)
+        self.partner.timezone = "Asia/Tokyo"
+        self.partner.save(update_fields=["timezone"])
         text, _keyboard = staff._build_table_ops_view(partner_id=self.partner.id, table_id=table.id)
-        local = timezone.localtime(started, timezone.get_default_timezone())
-        self.assertIn(f"с {local:%H:%M}", text)
+        local = timezone.localtime(started, ZoneInfo("Asia/Tokyo"))
+        self.assertIn(f"Визит с {local:%H:%M}", text)
         self.assertIn("Оля @olya", text)
 
 

@@ -234,6 +234,7 @@
       // The sale and the report keep what is typed: only the tabs (red counts)
       // and the waiter calls are redrawn there (owner 2026-11-10).
       if (tab === "sale" || tab === "report" || tab === "table_order") { refreshChrome(); return; }
+      if (!previous && settleVisit && data.rights.tables) { switchTab("tables"); return; }
       if (!busy) render();
     });
   }
@@ -537,6 +538,20 @@
   var tableOrder = null;
   function C() { return tab === "table_order" && tableOrder ? tableOrder : sale; }
   var openBillId = "";
+  // «🧾 Рассчитать в Mini App» from the bot's table card opens this visit's
+  // settlement (PQ-009 in the bot, step 2): ``?settle=<visit>``, once.
+  var settleVisit = "";
+  try { settleVisit = new URLSearchParams(window.location.search).get("settle") || ""; } catch (ignored) { /* old webview */ }
+
+  function openSettleVisit() {
+    var wanted = settleVisit;
+    settleVisit = "";
+    ((tabData.tables || {}).tables || []).forEach(function (table) {
+      table.visits.forEach(function (visit) {
+        if (visit.id === wanted && visit.can_settle) openSettlement(table, visit);
+      });
+    });
+  }
 
   function loadTab() {
     var name = tab;  // the answer belongs to this tab, even if another is open by then
@@ -548,6 +563,7 @@
       if (!result.ok) { toast(result.data.error || T.error); if (tab === name) tab = "orders"; return; }
       tabData[name] = result.data;
       if (name === "tables") refreshOpenTable();
+      if (name === "tables" && settleVisit) openSettleVisit();
     });
   }
 

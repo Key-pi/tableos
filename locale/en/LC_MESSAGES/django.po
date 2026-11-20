@@ -2008,7 +2008,7 @@ msgstr "This line is not from this table — refresh the screen."
 msgid "Разложите все позиции по гостям или в «Общее»."
 msgstr "Place every line with a guest or in «Shared»."
 
-#: apps/billing/visit_settlement.py
+#: apps/billing/visit_settlement.py bot/handlers/staff_table_guests.py
 msgid "Этого гостя нет в компании — обновите экран."
 msgstr "This guest is not in the company — refresh the screen."
 
@@ -7705,8 +7705,44 @@ msgid "К оплате #{public_id} • {order_short_context} • {short_status}
 msgstr "To pay #{public_id} • {order_short_context} • {short_status} • {total_amount} UAH"
 
 #: bot/handlers/staff.py
+msgid "<b>{title}</b>"
+msgstr "<b>{title}</b>"
+
+#: bot/handlers/staff.py bot/handlers/staff_table_guests.py
+msgid "Гостей за столом: {count}"
+msgstr "Guests at the table: {count}"
+
+#: bot/handlers/staff.py
+msgid "к оплате {amount} грн"
+msgstr "to pay {amount} UAH"
+
+#: bot/handlers/staff.py
+msgid "без счёта {amount} грн"
+msgstr "not billed {amount} UAH"
+
+#: bot/handlers/staff.py
+msgid "{name} (ушёл)"
+msgstr "{name} (left)"
+
+#: bot/handlers/staff.py
+msgid "• {name} — {money}"
+msgstr "• {name} — {money}"
+
+#: bot/handlers/staff.py
+msgid "• {name}"
+msgstr "• {name}"
+
+#: bot/handlers/staff.py
+msgid "Открытых счетов: {count}"
+msgstr "Open bills: {count}"
+
+#: bot/handlers/staff.py
 msgid "<b>Стол #{number}</b>"
 msgstr "<b>Table #{number}</b>"
+
+#: bot/handlers/staff.py
+msgid "⚠ За столом несколько визитов — рассчитайте и закройте предыдущий."
+msgstr "⚠ The table has several visits: settle and close the previous one."
 
 #: bot/handlers/staff.py
 msgid "Активных гостей: {count}"
@@ -7721,28 +7757,12 @@ msgid "Заказов без счёта: {count}"
 msgstr "Orders without a bill: {count}"
 
 #: bot/handlers/staff.py
-msgid "Открытых счетов: {count}"
-msgstr "Open bills: {count}"
-
-#: bot/handlers/staff.py
 msgid "• {guest} — с {started:%H:%M}"
 msgstr "• {guest} — since {started:%H:%M}"
 
 #: bot/handlers/staff.py
 msgid "Гости:"
 msgstr "Guests:"
-
-#: bot/handlers/staff.py
-msgid "⚠ За столом несколько визитов — рассчитайте и закройте предыдущий."
-msgstr "⚠ The table has several visits: settle and close the previous one."
-
-#: bot/handlers/staff.py
-msgid "Визиты:"
-msgstr "Visits:"
-
-#: bot/handlers/staff.py
-msgid "• {title}: гостей {guests}, без счёта {unbilled}, открытых счетов {open_bills}"
-msgstr "• {title}: guests {guests}, without a bill {unbilled}, open bills {open_bills}"
 
 #: bot/handlers/staff.py
 msgid "<b>Столы</b> · занято: {count}, гостей: {count2}"
@@ -7965,6 +7985,10 @@ msgid "Визит {index} (с {started})"
 msgstr "Visit {index} (since {started})"
 
 #: bot/handlers/staff.py
+msgid "Визит с {started}"
+msgstr "Visit since {started}"
+
+#: bot/handlers/staff.py
 msgid ""
 "<b>Рабочий режим</b> · {partner_name}\n"
 "{employee_name}, выберите раздел."
@@ -7980,11 +8004,11 @@ msgstr "📱 Work screen"
 msgid "Список обновлён"
 msgstr "List updated"
 
-#: bot/handlers/staff.py bot/handlers/staff_bill_split.py webapp/staff_billing.py
+#: bot/handlers/staff.py bot/handlers/staff_bill_split.py bot/handlers/staff_table_guests.py webapp/staff_billing.py
 msgid "Работа со счетами доступна только владельцу, менеджеру или кассиру."
 msgstr "Bills are available only to the owner, a manager or a cashier."
 
-#: bot/handlers/staff.py webapp/staff_billing.py
+#: bot/handlers/staff.py bot/handlers/staff_table_guests.py webapp/staff_billing.py
 msgid "Работа со столами доступна только владельцу, менеджеру или кассиру при включённом модуле столов."
 msgstr "Tables are available only to the owner, a manager or a cashier with the tables module on."
 
@@ -8020,7 +8044,7 @@ msgstr "Personal bills prepared"
 msgid "Этот визит уже закрыт."
 msgstr "This visit is already closed."
 
-#: bot/handlers/staff.py webapp/staff_billing.py
+#: bot/handlers/staff.py bot/handlers/staff_table_guests.py webapp/staff_billing.py
 msgid "Визит не найден."
 msgstr "Visit not found."
 
@@ -8660,6 +8684,10 @@ msgstr "Hand the money to the guest; they got a message with the amount."
 msgid "Возврат оформлен."
 msgstr "Refund recorded."
 
+#: bot/handlers/staff_table_guests.py
+msgid "Оплачено: {amount} грн"
+msgstr "Paid: {amount} UAH"
+
 #: bot/handlers/start.py
 msgid "Ваш код для бонусов: <code>{customer_code}</code> — назовите его на кассе."
 msgstr "Your bonus code: <code>{customer_code}</code> — tell it at the till."
@@ -8931,6 +8959,22 @@ msgstr "Add comment"
 #: bot/keyboards/staff.py webapp/staff_views.py
 msgid "Открыть счёт"
 msgstr "Open bill"
+
+#: bot/keyboards/staff.py
+msgid "👥 {count}"
+msgstr "👥 {count}"
+
+#: bot/keyboards/staff.py
+msgid "💵 {guest} · {amount} грн"
+msgstr "💵 {guest} · {amount} UAH"
+
+#: bot/keyboards/staff.py
+msgid "💳 {guest} · {amount} грн"
+msgstr "💳 {guest} · {amount} UAH"
+
+#: bot/keyboards/staff.py
+msgid "🧾 Рассчитать в Mini App"
+msgstr "🧾 Settle in the Mini App"
 
 #: bot/keyboards/staff.py
 msgid "{title}: общий счёт"

@@ -17,6 +17,7 @@ from bot.handlers.staff_admin_login import router as staff_admin_login_router
 from bot.handlers.staff_bill_split import router as staff_bill_split_router
 from bot.handlers.staff_invites import router as staff_invites_router
 from bot.handlers.staff_refunds import router as staff_refunds_router
+from bot.handlers.staff_table_guests import router as staff_table_guests_router
 from bot.handlers.start import router as start_router
 from bot.middlewares.load_counter import LoadCounterMiddleware
 from bot.middlewares.message_points import MessagePointMiddleware
@@ -42,6 +43,7 @@ def create_dispatcher() -> Dispatcher:
     dispatcher.include_router(staff_invites_router)
     dispatcher.include_router(staff_admin_login_router)
     dispatcher.include_router(staff_bill_split_router)
+    dispatcher.include_router(staff_table_guests_router)
     dispatcher.include_router(staff_router)
     return dispatcher
 
