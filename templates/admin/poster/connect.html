@@ -1,0 +1,28 @@
+{% load botera_i18n %}
+{% comment %}
+«Подключить Poster» (PQ-058, step 2): a POST with the CSRF token to the
+connection page's own Admin view (apps/integrations/poster/admin.py:connect_view).
+Shown to whoever may connect: the owner of the venue or of its network.
+{% endcomment %}
+{% if poster_connect_url or poster_not_configured %}
+<style>
+    .pc { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 24px; padding: 16px; background: #fff; border: 1px solid var(--color-base-200); border-radius: 8px; }
+    .dark .pc { background: var(--color-base-900); border-color: var(--color-base-800); }
+    .pc form { margin: 0; }
+    .pc-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px; border-radius: 6px; font-weight: 500; border: 1px solid var(--color-primary-600); background: var(--color-primary-600); color: #fff; cursor: pointer; white-space: nowrap; }
+    .pc-btn:hover { background: var(--color-primary-700); }
+    .pc-hint { margin: 0; color: var(--color-font-default-light); }
+    .dark .pc-hint { color: var(--color-font-default-dark); }
+</style>
+<div class="pc">
+    {% if poster_connect_url %}
+        <form method="post" action="{{ poster_connect_url }}">
+            {% csrf_token %}
+            <button type="submit" class="pc-btn"><span class="material-symbols-outlined">point_of_sale</span>{{ poster_connect_label }}</button>
+        </form>
+        <p class="pc-hint">{% tr "Откроется вход в Poster: войдите в аккаунт заведения и разрешите доступ для Botera." %}</p>
+    {% else %}
+        <p class="pc-hint">{% tr "Подключение к Poster на платформе ещё не настроено." %}</p>
+    {% endif %}
+</div>
+{% endif %}

@@ -60,16 +60,18 @@ class PosterAdminTests(TestCase):
         request.session = {}
         return request
 
-    def test_the_owner_sees_only_their_connection_and_cannot_change_it(self):
+    def test_the_owner_sees_only_their_connection_and_edits_none_of_its_fields(self):
         request = self._request(self.owner)
         page = PosterConnectionAdmin(PosterConnection, admin.site)
 
         self.assertEqual(list(page.get_queryset(request)), [self.connections[0]])
         self.assertTrue(page.has_view_permission(request, self.connections[0]))
         self.assertFalse(page.has_view_permission(request, self.connections[1]))
+        self.assertFalse(page.has_change_permission(request, self.connections[1]))
         self.assertFalse(page.has_add_permission(request))
-        self.assertFalse(page.has_change_permission(request, self.connections[0]))
         self.assertFalse(page.has_delete_permission(request, self.connections[0]))
+        # The page carries buttons (step 2), but its form changes nothing.
+        self.assertEqual(dict(page.get_form(request, self.connections[0])().fields), {})
 
     def test_nobody_sees_the_token(self):
         page = PosterConnectionAdmin(PosterConnection, admin.site)
@@ -122,21 +124,13 @@ class PosterAdminTests(TestCase):
                 self.assertFalse(page.has_change_permission(platform_request, model.objects.get()))
                 self.assertFalse(page.has_delete_permission(platform_request, model.objects.get()))
 
-    def test_the_settings_menu_shows_poster_only_to_a_connected_venue(self):
-        def poster_links(request):
-            return [
-                item["link"] for group in sidebar(request) for item in group["items"]
-                if "/poster/posterconnection/" in item["link"]
-            ]
-
+    def test_the_settings_menu_opens_the_venues_connection(self):
         request = self._request(self.owner)
         request.path = "/admin/"
-        self.assertEqual(
-            poster_links(request),
-            [f"/admin/poster/posterconnection/{self.connections[0].pk}/change/"],
-        )
+        links = [
+            item["link"] for group in sidebar(request) for item in group["items"]
+            if "/poster/posterconnection/" in item["link"]
+        ]
 
-        self.connections[0].delete()
-        request = self._request(self.owner)
-        request.path = "/admin/"
-        self.assertEqual(poster_links(request), [])
+        expected = f"/admin/poster/posterconnection/{self.connections[0].pk}/change/"
+        self.assertEqual(links, [expected])

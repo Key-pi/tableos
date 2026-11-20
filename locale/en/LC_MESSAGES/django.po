@@ -2444,6 +2444,38 @@ msgstr "staff invite"
 msgid "Приглашения сотрудников"
 msgstr "Staff invites"
 
+#: apps/integrations/poster/admin.py
+msgid "Подключить Poster можно из Admin заведения."
+msgstr "Poster is connected from a venue's Admin."
+
+#: apps/integrations/poster/admin.py
+msgid "Подключить заново"
+msgstr "Connect again"
+
+#: apps/integrations/poster/admin.py
+msgid "Подключить Poster"
+msgstr "Connect Poster"
+
+#: apps/integrations/poster/admin.py
+msgid "Это точка «{spot}»"
+msgstr "This is the «{spot}» spot"
+
+#: apps/integrations/poster/admin.py
+msgid "Отключить Poster"
+msgstr "Disconnect Poster"
+
+#: apps/integrations/poster/admin.py
+msgid "Заказы перестанут уходить в Poster, меню в Botera останется. Отключить?"
+msgstr "Orders will stop going to Poster; the menu stays in Botera. Disconnect?"
+
+#: apps/integrations/poster/admin.py
+msgid "Poster отключён."
+msgstr "Poster disconnected."
+
+#: apps/integrations/poster/admin.py
+msgid "Заведение работает с точкой Poster «{spot}»."
+msgstr "The venue works with the Poster spot «{spot}»."
+
 #: apps/integrations/poster/apps.py
 msgid "Интеграция с Poster"
 msgstr "Poster integration"
@@ -2483,6 +2515,10 @@ msgstr "Token valid until"
 #: apps/integrations/poster/models.py
 msgid "Тариф Poster"
 msgstr "Poster plan"
+
+#: apps/integrations/poster/models.py
+msgid "Точки аккаунта"
+msgstr "Account spots"
 
 #: apps/integrations/poster/models.py
 msgid "Подключил"
@@ -2647,6 +2683,70 @@ msgstr "Poster webhook"
 #: apps/integrations/poster/models.py
 msgid "Вебхуки Poster"
 msgstr "Poster webhooks"
+
+#: apps/integrations/poster/services.py
+msgid "Подключать и отключать Poster может владелец заведения."
+msgstr "Only the venue's owner connects and disconnects Poster."
+
+#: apps/integrations/poster/services.py templates/admin/poster/connect.html
+msgid "Подключение к Poster на платформе ещё не настроено."
+msgstr "Connecting Poster is not set up on the platform yet."
+
+#: apps/integrations/poster/services.py
+msgid "Подключение не было начато в Admin или уже завершено. Начните заново: «Настройки» → «Poster» → «Подключить Poster»."
+msgstr "Connecting was not started in Admin or is already finished. Start again: «Settings» → «Poster» → «Connect Poster»."
+
+#: apps/integrations/poster/services.py
+msgid "Вход в Poster длился слишком долго. Начните подключение заново."
+msgstr "Signing in to Poster took too long. Start connecting again."
+
+#: apps/integrations/poster/services.py
+msgid "Подключение начал другой человек. Начните его заново."
+msgstr "Someone else started connecting. Start again."
+
+#: apps/integrations/poster/services.py
+msgid "Точка «{spot}» уже подключена к другому заведению Botera."
+msgstr "The «{spot}» spot is already connected to another Botera venue."
+
+#: apps/integrations/poster/services.py
+msgid "Эта точка Poster уже подключена к другому заведению Botera — или подключение уже идёт. Обновите страницу."
+msgstr "This Poster spot is already connected to another Botera venue, or connecting is in progress. Refresh the page."
+
+#: apps/integrations/poster/services.py
+msgid "Poster вернул непонятный аккаунт. Начните подключение заново."
+msgstr "Poster returned an unexpected account. Start connecting again."
+
+#: apps/integrations/poster/services.py
+msgid "Poster не передал код входа. Начните подключение заново."
+msgstr "Poster sent no sign-in code. Start connecting again."
+
+#: apps/integrations/poster/services.py
+msgid "Poster не подтвердил вход: {reason}"
+msgstr "Poster did not confirm the sign-in: {reason}"
+
+#: apps/integrations/poster/services.py
+msgid "В аккаунте Poster нет ни одной точки."
+msgstr "The Poster account has no spots."
+
+#: apps/integrations/poster/services.py
+msgid "Такой точки нет в аккаунте Poster."
+msgstr "There is no such spot in the Poster account."
+
+#: apps/integrations/poster/services.py
+msgid "Poster отключён. Подключите его заново."
+msgstr "Poster is disconnected. Connect it again."
+
+#: apps/integrations/poster/views.py
+msgid "Вход в Poster отменён — Poster не подключён."
+msgstr "Signing in to Poster was cancelled; Poster is not connected."
+
+#: apps/integrations/poster/views.py
+msgid "Poster подключён."
+msgstr "Poster connected."
+
+#: apps/integrations/poster/views.py
+msgid "Poster подключён. Выберите, какая точка — это заведение."
+msgstr "Poster connected. Choose which spot this venue is."
 
 #: apps/menu/admin.py
 msgid "Гость видит перевод на своём языке; пусто — текст на основном языке. Языки — включённые для гостей в настройках бота, кроме основного. Персонал, экраны кухни и счета — на основном языке."
@@ -9367,6 +9467,10 @@ msgstr "Refunds: −{amount}."
 #: templates/admin/index.html
 msgid "Быстрые действия"
 msgstr "Quick actions"
+
+#: templates/admin/poster/connect.html
+msgid "Откроется вход в Poster: войдите в аккаунт заведения и разрешите доступ для Botera."
+msgstr "Poster's sign-in opens: sign in to the venue's account and allow access for Botera."
 
 #: templates/unfold/helpers/app_list.html
 msgid "Добавить: {name}"

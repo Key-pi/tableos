@@ -2444,6 +2444,38 @@ msgstr "запрошення працівника"
 msgid "Приглашения сотрудников"
 msgstr "Запрошення працівників"
 
+#: apps/integrations/poster/admin.py
+msgid "Подключить Poster можно из Admin заведения."
+msgstr "Підключити Poster можна з Admin закладу."
+
+#: apps/integrations/poster/admin.py
+msgid "Подключить заново"
+msgstr "Підключити знову"
+
+#: apps/integrations/poster/admin.py
+msgid "Подключить Poster"
+msgstr "Підключити Poster"
+
+#: apps/integrations/poster/admin.py
+msgid "Это точка «{spot}»"
+msgstr "Це точка «{spot}»"
+
+#: apps/integrations/poster/admin.py
+msgid "Отключить Poster"
+msgstr "Відключити Poster"
+
+#: apps/integrations/poster/admin.py
+msgid "Заказы перестанут уходить в Poster, меню в Botera останется. Отключить?"
+msgstr "Замовлення перестануть надходити в Poster, меню в Botera залишиться. Відключити?"
+
+#: apps/integrations/poster/admin.py
+msgid "Poster отключён."
+msgstr "Poster відключено."
+
+#: apps/integrations/poster/admin.py
+msgid "Заведение работает с точкой Poster «{spot}»."
+msgstr "Заклад працює з точкою Poster «{spot}»."
+
 #: apps/integrations/poster/apps.py
 msgid "Интеграция с Poster"
 msgstr "Інтеграція з Poster"
@@ -2454,7 +2486,7 @@ msgstr "Логін Poster: латинські літери, цифри та де
 
 #: apps/integrations/poster/models.py
 msgid "Ждёт выбора точки"
-msgstr "Чекає на вибір закладу"
+msgstr "Чекає на вибір точки"
 
 #: apps/integrations/poster/models.py
 msgid "Отключено"
@@ -2470,7 +2502,7 @@ msgstr "Номер акаунта Poster"
 
 #: apps/integrations/poster/models.py
 msgid "Точка Poster"
-msgstr "Заклад у Poster"
+msgstr "Точка Poster"
 
 #: apps/integrations/poster/models.py apps/partners/models.py
 msgid "Токен (зашифрован)"
@@ -2483,6 +2515,10 @@ msgstr "Токен дійсний до"
 #: apps/integrations/poster/models.py
 msgid "Тариф Poster"
 msgstr "Тариф Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Точки аккаунта"
+msgstr "Точки акаунта"
 
 #: apps/integrations/poster/models.py
 msgid "Подключил"
@@ -2647,6 +2683,70 @@ msgstr "вебхук Poster"
 #: apps/integrations/poster/models.py
 msgid "Вебхуки Poster"
 msgstr "Вебхуки Poster"
+
+#: apps/integrations/poster/services.py
+msgid "Подключать и отключать Poster может владелец заведения."
+msgstr "Підключати й відключати Poster може власник закладу."
+
+#: apps/integrations/poster/services.py templates/admin/poster/connect.html
+msgid "Подключение к Poster на платформе ещё не настроено."
+msgstr "Підключення до Poster на платформі ще не налаштоване."
+
+#: apps/integrations/poster/services.py
+msgid "Подключение не было начато в Admin или уже завершено. Начните заново: «Настройки» → «Poster» → «Подключить Poster»."
+msgstr "Підключення не було розпочато в Admin або вже завершене. Почніть знову: «Налаштування» → «Poster» → «Підключити Poster»."
+
+#: apps/integrations/poster/services.py
+msgid "Вход в Poster длился слишком долго. Начните подключение заново."
+msgstr "Вхід у Poster тривав надто довго. Почніть підключення знову."
+
+#: apps/integrations/poster/services.py
+msgid "Подключение начал другой человек. Начните его заново."
+msgstr "Підключення розпочала інша людина. Почніть його знову."
+
+#: apps/integrations/poster/services.py
+msgid "Точка «{spot}» уже подключена к другому заведению Botera."
+msgstr "Точка «{spot}» уже підключена до іншого закладу Botera."
+
+#: apps/integrations/poster/services.py
+msgid "Эта точка Poster уже подключена к другому заведению Botera — или подключение уже идёт. Обновите страницу."
+msgstr "Ця точка Poster уже підключена до іншого закладу Botera — або підключення вже триває. Оновіть сторінку."
+
+#: apps/integrations/poster/services.py
+msgid "Poster вернул непонятный аккаунт. Начните подключение заново."
+msgstr "Poster повернув незрозумілий акаунт. Почніть підключення знову."
+
+#: apps/integrations/poster/services.py
+msgid "Poster не передал код входа. Начните подключение заново."
+msgstr "Poster не передав код входу. Почніть підключення знову."
+
+#: apps/integrations/poster/services.py
+msgid "Poster не подтвердил вход: {reason}"
+msgstr "Poster не підтвердив вхід: {reason}"
+
+#: apps/integrations/poster/services.py
+msgid "В аккаунте Poster нет ни одной точки."
+msgstr "В акаунті Poster немає жодної точки."
+
+#: apps/integrations/poster/services.py
+msgid "Такой точки нет в аккаунте Poster."
+msgstr "Такої точки немає в акаунті Poster."
+
+#: apps/integrations/poster/services.py
+msgid "Poster отключён. Подключите его заново."
+msgstr "Poster відключено. Підключіть його знову."
+
+#: apps/integrations/poster/views.py
+msgid "Вход в Poster отменён — Poster не подключён."
+msgstr "Вхід у Poster скасовано — Poster не підключено."
+
+#: apps/integrations/poster/views.py
+msgid "Poster подключён."
+msgstr "Poster підключено."
+
+#: apps/integrations/poster/views.py
+msgid "Poster подключён. Выберите, какая точка — это заведение."
+msgstr "Poster підключено. Оберіть, яка точка — це заклад."
 
 #: apps/menu/admin.py
 msgid "Гость видит перевод на своём языке; пусто — текст на основном языке. Языки — включённые для гостей в настройках бота, кроме основного. Персонал, экраны кухни и счета — на основном языке."
@@ -9367,6 +9467,10 @@ msgstr "Повернення: −{amount}."
 #: templates/admin/index.html
 msgid "Быстрые действия"
 msgstr "Швидкі дії"
+
+#: templates/admin/poster/connect.html
+msgid "Откроется вход в Poster: войдите в аккаунт заведения и разрешите доступ для Botera."
+msgstr "Відкриється вхід у Poster: увійдіть в акаунт закладу та дозвольте доступ для Botera."
 
 #: templates/unfold/helpers/app_list.html
 msgid "Добавить: {name}"

@@ -46,6 +46,11 @@ paths:
   (PQ-056): `GuestProfile → Table (no_key) → Reservation` — гостя первым, как
   активация по QR. Напоминание о брони — захват `reminded_at` условным
   `UPDATE`, без блокировки.
+- Подключение к Poster (PQ-058): только строка `PosterConnection` заведения
+  (`apps/integrations/poster/services.py`); запросы к Poster — до транзакции.
+  Одна точка Poster — одно заведение: проверка до сохранения и частичный
+  уникальный индекс `poster_connection_active_spot_unique` на гонку двух
+  заведений (их строки разные, блокировка не спасает).
 - Остатки: строки `MenuItem`/`MenuItemVariant` — последними в транзакции,
   сначала позиции, затем варианты, каждые по id, `no_key=True`
   (`apps/menu/stock.py:_lock`).

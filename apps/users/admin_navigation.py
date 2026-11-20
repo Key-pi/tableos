@@ -100,9 +100,8 @@ GROUPS = (
         Page("partners.botinstance", "smart_toy"),
         # The network's owner names it and picks its bot (PQ-047).
         Page("partners.network", "hub", title=_lazy("Сеть"), single=True, needs_record=True),
-        # The venue's link to its Poster register (PQ-058); shown once connected.
-        Page("poster.posterconnection", "point_of_sale", title=_lazy("Poster"), single=True,
-             needs_record=True),
+        # The venue's link to its Poster register (PQ-058): connect here.
+        Page("poster.posterconnection", "point_of_sale", title=_lazy("Poster"), single=True),
     )),
 )
 

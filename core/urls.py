@@ -108,6 +108,8 @@ urlpatterns = [
     path("health/", healthcheck, name="healthcheck"),
     # PQ-048: the Telegram Mini App.
     path("app/", include("webapp.urls")),
+    # Poster's return after a venue owner's login (PQ-058).
+    path("integrations/poster/", include("apps.integrations.poster.urls")),
     # PQ-048: photos of menu items uploaded in Admin.
     path("media/<path:path>", serve_media, name="media"),
 ]

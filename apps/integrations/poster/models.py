@@ -52,6 +52,10 @@ class PosterConnection(PartnerBoundModel):
         null=True, blank=True, verbose_name=_lazy("Токен действует до"),
     )
     tariff = models.JSONField(default=dict, blank=True, verbose_name=_lazy("Тариф Poster"))
+    # Spots of the account at the last login: [{"spot_id", "name", "address"}].
+    available_spots = models.JSONField(
+        default=list, blank=True, verbose_name=_lazy("Точки аккаунта"),
+    )
     connected_by = models.ForeignKey(
         "users.User", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="+", verbose_name=_lazy("Подключил"),
