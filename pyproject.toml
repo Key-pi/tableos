@@ -16,6 +16,8 @@ dependencies = [
   "django-unfold>=0.39.0",
   # Production web server and static files for Admin (AA-038, DEPLOYMENT.md).
   "gunicorn>=23.0",
+  # HTTP client for the Poster API (ADR-0010, owner 2026-11-20).
+  "httpx>=0.27,<1.0",
   # Photos of menu items uploaded in Admin (ImageField, PQ-048).
   "Pillow>=11.0",
   "psycopg[binary]>=3.2.0",

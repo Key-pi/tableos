@@ -60,6 +60,13 @@ class AppSettings(BaseSettings):
     platform_owner_telegram_id: str = Field(
         default="", validation_alias="PLATFORM_OWNER_TELEGRAM_ID",
     )
+    # The Botera application in Poster's developer account (ADR-0010, PQ-058);
+    # empty — venues cannot connect Poster.
+    poster_application_id: str = Field(default="", validation_alias="POSTER_APPLICATION_ID")
+    poster_application_secret: str = Field(
+        default="", validation_alias="POSTER_APPLICATION_SECRET",
+    )
+    poster_redirect_uri: str = Field(default="", validation_alias="POSTER_REDIRECT_URI")
 
     @field_validator("timezone", mode="before")
     @classmethod

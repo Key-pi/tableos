@@ -100,6 +100,9 @@ GROUPS = (
         Page("partners.botinstance", "smart_toy"),
         # The network's owner names it and picks its bot (PQ-047).
         Page("partners.network", "hub", title=_lazy("Сеть"), single=True, needs_record=True),
+        # The venue's link to its Poster register (PQ-058); shown once connected.
+        Page("poster.posterconnection", "point_of_sale", title=_lazy("Poster"), single=True,
+             needs_record=True),
     )),
 )
 
@@ -121,6 +124,9 @@ PLATFORM_GROUP = (_lazy("Платформа"), (
     Page("notifications.broadcastdelivery", "outgoing_mail"),
     Page("notifications.staffnotification", "notifications"),
     Page("notifications.notificationpreference", "tune"),
+    Page("poster.posterorderpush", "outbox"),
+    Page("poster.posterref", "sync_alt"),
+    Page("poster.posterwebhookevent", "webhook"),
 ))
 
 # Related pages as tabs over their lists (the service ones open only here).
@@ -137,6 +143,8 @@ TABS = (
     ("employees.employeeprofile", "employees.staffinvite", "notifications.staffnotification"),
     ("users.user", "users.adminaccessprofile"),
     ("analytics.partnerdailymetric", "analytics.sourcevisit", "analytics.trafficsource"),
+    ("poster.posterconnection", "poster.posterorderpush", "poster.posterref",
+     "poster.posterwebhookevent"),
 )
 
 TAB_TITLES = {
@@ -149,6 +157,9 @@ TAB_TITLES = {
     "notifications.staffnotification": _lazy("Уведомления персонала"),
     "notifications.notificationpreference": _lazy("Сообщения гостям"),
     "users.user": _lazy("Входы в Admin"),
+    "poster.posterorderpush": _lazy("Заказы в Poster"),
+    "poster.posterref": _lazy("Соответствия"),
+    "poster.posterwebhookevent": _lazy("Вебхуки"),
 }
 
 MODULE_OF = {

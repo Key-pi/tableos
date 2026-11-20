@@ -16,4 +16,10 @@ LOGGING = {
         "handlers": ["console"],
         "level": "INFO",
     },
+    "loggers": {
+        # httpx logs every request's full URL at INFO, and the Poster token
+        # travels in the query string (PQ-058): only warnings and errors.
+        "httpx": {"level": "WARNING"},
+        "httpcore": {"level": "WARNING"},
+    },
 }

@@ -109,7 +109,8 @@ whitenoise и кэш в Redis. Сервисы:
 Установленные приложения по порядку: `unfold`, Django contrib, `bot`,
 `webapp` (адаптер Mini App, без моделей), затем `partners`, `users`, `tables`,
 `menu`, `orders`, `billing`, `bonuses`, `employees`, `notifications`,
-`analytics`. В `core` — общие базовые классы,
+`analytics`, `poster` (`apps/integrations/poster`, подключение к кассе Poster,
+PQ-058). В `core` — общие базовые классы,
 ограничение Admin по партнёру, Celery, шифрование, логирование и настройки.
 
 | Область | Хранимые понятия | Где реальная оркестрация | Примечания |
@@ -124,6 +125,7 @@ whitenoise и кэш в Redis. Сервисы:
 | Сотрудники | `EmployeeProfile`, `StaffInvite` | `employees/selectors.py:get_staff_employee_by_telegram`, `employees/invites.py` (приглашения), `employees/network_staff.py` (копии персонала сети) | Профиль создаёт Admin или подтверждённое приглашение (PQ-046). |
 | Уведомления | `NotificationPreference`, `GuestCall`, `StaffNotification`, `BroadcastCampaign`, `BroadcastDelivery` | `notifications/services.py`, `tasks.py`, `telegram_transport.py` | Вся отправка в Telegram из воркера — здесь. |
 | Аналитика | `PartnerDailyMetric`, `TrafficSource`, `SourceVisit`, `SystemSnapshot` | `analytics/services.py`, `analytics/sources.py`, `analytics/selectors.py` (отчёт сети), `analytics/dashboard.py` (стартовая страница), `analytics/system_load.py` (нагрузка) | Отчёт за день для персонала по запросу (с разбивкой по каналам заказа); снимок метрик раз в 15 минут; источники переходов (PQ-031); снимок нагрузки раз в минуту (PQ-051). |
+| Poster (PQ-058, шаг 1 из [POSTER.md](POSTER.md)) | `PosterConnection`, `PosterRef`, `PosterOrderPush`, `PosterWebhookEvent` | пока только записи и `integrations/poster/client.py` (запросы к API Poster через `httpx`, обмен кода OAuth на токен); подключение, меню, передача заказов и вебхуки — шаги 2–6 | Адаптер к кассе заведения, для заказа и оплаты не обязателен (ADR-0010). Токен — шифром, как у ботов (`PosterConnection.set_access_token`), ни на одной странице Admin. Логин Poster из ответа OAuth проверяется до запроса: на этот адрес уходит секрет приложения. Ключ входящего вебхука — хеш полей события вместе с `data` (Poster шлёт несколько событий одного объекта в одну секунду). `httpx` пишет адрес запроса с токеном в журнал на INFO — его журнал поднят до WARNING (`core/logging/config.py`). |
 | Mini App | — (адаптер, как бот) | `webapp/views.py` (гость), `webapp/staff_*.py` (рабочий экран), `webapp/kitchen_views.py` (экран кухни) | Вызывает те же сервисы, что бот; подробно — [MINI_APP.md](MINI_APP.md). |
 
 ### Модули заведения
@@ -183,6 +185,7 @@ partners      -> analytics, bonuses, employees, menu, notifications, orders, tab
 menu          -> orders, partners, users
 employees     -> partners, users
 users         -> analytics, orders, partners (только меню и стартовая страница Admin)
+poster        -> users (разделы прав Admin)
 core          -> partners, users (core/admin_mixins.py); orders, partners, tables (core/urls.py)
 ```
 
@@ -872,6 +875,12 @@ PQ-050): все страницы — `core/admin_mixins.py:BoteraModelAdmin` (е
 показывается. Суперпользователь видит ещё группу «Платформа» (служебные
 таблицы, Telegram-аккаунты, группы) и «Все приложения».
 
+Poster (PQ-058, шаг 1): «Настройки» → «Poster» — только у подключённого
+заведения (`needs_record`), карточка подключения без токена, рядом вкладка
+«Заказы в Poster» (передача заказов). Всё только для чтения — пишут сервисы
+интеграции (шаги 2–6). Соответствия объектов и входящие вебхуки видит только
+платформа.
+
 Стартовая страница заведения («Сегодня», шаг 2, PQ-050) —
 `apps/users/admin_dashboard.py:dashboard` (`UNFOLD["DASHBOARD_CALLBACK"]`),
 рисует `templates/admin/index.html`; счёт — только чтение,
@@ -1044,7 +1053,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1375 тестов после компании стола и оплаты за гостя в боте (PQ-009 в боте, шаг 2), зелёные на SQLite и на PostgreSQL 16.
+- 1416 тестов после основы подключения к Poster (PQ-058, шаг 1), зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа

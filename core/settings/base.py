@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "apps.employees.apps.EmployeesConfig",
     "apps.notifications.apps.NotificationsConfig",
     "apps.analytics.apps.AnalyticsConfig",
+    "apps.integrations.poster.apps.PosterConfig",
 ]
 
 MIDDLEWARE = [
@@ -102,6 +103,10 @@ PLATFORM_OWNER_TELEGRAM_ID = (
 )
 # Photos of menu items uploaded in Admin (PQ-048).
 MENU_PHOTO_MAX_BYTES = 5 * 1024 * 1024
+# The Botera application in Poster (ADR-0010, PQ-058): only from the environment.
+POSTER_APPLICATION_ID = app_settings.poster_application_id.strip()
+POSTER_APPLICATION_SECRET = app_settings.poster_application_secret.strip()
+POSTER_REDIRECT_URI = app_settings.poster_redirect_uri.strip()
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

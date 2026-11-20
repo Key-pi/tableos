@@ -820,7 +820,7 @@ msgstr "Гість рахунку"
 msgid "Визит"
 msgstr "Візит"
 
-#: apps/billing/models.py apps/employees/models.py apps/notifications/models.py apps/orders/models.py apps/partners/models.py apps/tables/models.py apps/users/admin.py
+#: apps/billing/models.py apps/employees/models.py apps/integrations/poster/models.py apps/notifications/models.py apps/orders/models.py apps/partners/models.py apps/tables/models.py apps/users/admin.py
 msgid "Статус"
 msgstr "Статус"
 
@@ -900,7 +900,7 @@ msgstr "Відкрито"
 msgid "Счёт подготовлен"
 msgstr "Рахунок підготовлено"
 
-#: apps/billing/models.py webapp/staff_views.py
+#: apps/billing/models.py apps/integrations/poster/models.py webapp/staff_views.py
 msgid "Обработан"
 msgstr "Оброблено"
 
@@ -944,7 +944,7 @@ msgstr "частина спільного рахунку"
 msgid "Части общего счёта"
 msgstr "Частини спільного рахунку"
 
-#: apps/billing/models.py apps/bonuses/models.py apps/menu/models.py apps/notifications/models.py apps/orders/models.py
+#: apps/billing/models.py apps/bonuses/models.py apps/integrations/poster/models.py apps/menu/models.py apps/notifications/models.py apps/orders/models.py
 msgid "Заказ"
 msgstr "Замовлення"
 
@@ -960,7 +960,7 @@ msgstr "Замовлення в рахунках"
 msgid "Строка заказа"
 msgstr "Рядок замовлення"
 
-#: apps/billing/models.py apps/menu/models.py apps/orders/models.py
+#: apps/billing/models.py apps/integrations/poster/models.py apps/menu/models.py apps/orders/models.py
 msgid "Позиция"
 msgstr "Позиція"
 
@@ -1008,7 +1008,7 @@ msgstr "Авторизовано"
 msgid "Проведена"
 msgstr "Проведено"
 
-#: apps/billing/models.py apps/notifications/models.py
+#: apps/billing/models.py apps/integrations/poster/models.py apps/notifications/models.py
 msgid "Ошибка"
 msgstr "Помилка"
 
@@ -2120,7 +2120,7 @@ msgstr "Резерв для налаштувань особливої страт
 msgid "Настройки (JSON)"
 msgstr "Налаштування (JSON)"
 
-#: apps/bonuses/models.py apps/orders/models.py apps/partners/models.py apps/tables/models.py
+#: apps/bonuses/models.py apps/integrations/poster/models.py apps/orders/models.py apps/partners/models.py apps/tables/models.py
 msgid "Работает"
 msgstr "Працює"
 
@@ -2444,6 +2444,210 @@ msgstr "запрошення працівника"
 msgid "Приглашения сотрудников"
 msgstr "Запрошення працівників"
 
+#: apps/integrations/poster/apps.py
+msgid "Интеграция с Poster"
+msgstr "Інтеграція з Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Логин Poster: латинские буквы, цифры и дефис."
+msgstr "Логін Poster: латинські літери, цифри та дефіс."
+
+#: apps/integrations/poster/models.py
+msgid "Ждёт выбора точки"
+msgstr "Чекає на вибір закладу"
+
+#: apps/integrations/poster/models.py
+msgid "Отключено"
+msgstr "Вимкнено"
+
+#: apps/integrations/poster/models.py
+msgid "Аккаунт Poster"
+msgstr "Акаунт Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Номер аккаунта Poster"
+msgstr "Номер акаунта Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Точка Poster"
+msgstr "Заклад у Poster"
+
+#: apps/integrations/poster/models.py apps/partners/models.py
+msgid "Токен (зашифрован)"
+msgstr "Токен (зашифровано)"
+
+#: apps/integrations/poster/models.py
+msgid "Токен действует до"
+msgstr "Токен дійсний до"
+
+#: apps/integrations/poster/models.py
+msgid "Тариф Poster"
+msgstr "Тариф Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Подключил"
+msgstr "Підключив"
+
+#: apps/integrations/poster/models.py
+msgid "Меню обновлено"
+msgstr "Меню оновлено"
+
+#: apps/integrations/poster/models.py apps/notifications/models.py
+msgid "Последняя ошибка"
+msgstr "Остання помилка"
+
+#: apps/integrations/poster/models.py
+msgid "Когда была ошибка"
+msgstr "Коли була помилка"
+
+#: apps/integrations/poster/models.py
+msgid "подключение к Poster"
+msgstr "підключення до Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Подключение к Poster"
+msgstr "Підключення до Poster"
+
+#: apps/integrations/poster/models.py apps/menu/models.py
+msgid "Категория"
+msgstr "Категорія"
+
+#: apps/integrations/poster/models.py apps/menu/models.py apps/orders/models.py webapp/staff_views.py webapp/texts.py
+msgid "Вариант"
+msgstr "Варіант"
+
+#: apps/integrations/poster/models.py
+msgid "Группа добавок"
+msgstr "Група добавок"
+
+#: apps/integrations/poster/models.py apps/menu/models.py
+msgid "Добавка"
+msgstr "Добавка"
+
+#: apps/integrations/poster/models.py
+msgid "Что это"
+msgstr "Що це"
+
+#: apps/integrations/poster/models.py
+msgid "ID в Poster"
+msgstr "ID у Poster"
+
+#: apps/integrations/poster/models.py
+msgid "ID в Botera"
+msgstr "ID у Botera"
+
+#: apps/integrations/poster/models.py
+msgid "Удалено в Poster"
+msgstr "Видалено в Poster"
+
+#: apps/integrations/poster/models.py
+msgid "соответствие Poster"
+msgstr "відповідність Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Соответствия Poster"
+msgstr "Відповідності Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Ждёт отправки"
+msgstr "Чекає на відправлення"
+
+#: apps/integrations/poster/models.py apps/notifications/models.py
+msgid "Отправляется"
+msgstr "Надсилається"
+
+#: apps/integrations/poster/models.py
+msgid "В Poster"
+msgstr "У Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Не дошёл"
+msgstr "Не дійшов"
+
+#: apps/integrations/poster/models.py
+msgid "Неизвестно, проверяется"
+msgstr "Невідомо, перевіряється"
+
+#: apps/integrations/poster/models.py
+msgid "Попыток"
+msgstr "Спроб"
+
+#: apps/integrations/poster/models.py
+msgid "Взят в работу"
+msgstr "Взято в роботу"
+
+#: apps/integrations/poster/models.py
+msgid "Отправлен"
+msgstr "Відправлено"
+
+#: apps/integrations/poster/models.py
+msgid "Онлайн-заказ Poster"
+msgstr "Онлайн-замовлення Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Чек Poster"
+msgstr "Чек Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Сумма чека"
+msgstr "Сума чека"
+
+#: apps/integrations/poster/models.py
+msgid "Оплачено по чеку"
+msgstr "Сплачено за чеком"
+
+#: apps/integrations/poster/models.py
+msgid "передача заказа в Poster"
+msgstr "передача замовлення в Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Передача заказов в Poster"
+msgstr "Передача замовлень у Poster"
+
+#: apps/integrations/poster/models.py apps/orders/models.py
+msgid "Принят"
+msgstr "Прийнято"
+
+#: apps/integrations/poster/models.py
+msgid "Не наш"
+msgstr "Не наш"
+
+#: apps/integrations/poster/models.py apps/partners/models.py apps/users/admin.py apps/users/admin_navigation.py apps/users/models.py core/database/models.py
+msgid "Заведение"
+msgstr "Заклад"
+
+#: apps/integrations/poster/models.py
+msgid "Ключ события"
+msgstr "Ключ події"
+
+#: apps/integrations/poster/models.py
+msgid "Объект"
+msgstr "Об'єкт"
+
+#: apps/integrations/poster/models.py
+msgid "ID объекта"
+msgstr "ID об'єкта"
+
+#: apps/integrations/poster/models.py
+msgid "Действие"
+msgstr "Дія"
+
+#: apps/integrations/poster/models.py
+msgid "Время события"
+msgstr "Час події"
+
+#: apps/integrations/poster/models.py
+msgid "Данные"
+msgstr "Дані"
+
+#: apps/integrations/poster/models.py
+msgid "вебхук Poster"
+msgstr "вебхук Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Вебхуки Poster"
+msgstr "Вебхуки Poster"
+
 #: apps/menu/admin.py
 msgid "Гость видит перевод на своём языке; пусто — текст на основном языке. Языки — включённые для гостей в настройках бота, кроме основного. Персонал, экраны кухни и счета — на основном языке."
 msgstr "Гість бачить переклад своєю мовою; порожньо — текст основною мовою. Мови — увімкнені для гостей у налаштуваннях бота, крім основної. Персонал, екрани кухні й рахунки — основною мовою."
@@ -2749,10 +2953,6 @@ msgid "Позиция партнёра"
 msgstr "Позиція партнера"
 
 #: apps/menu/models.py
-msgid "Категория"
-msgstr "Категорія"
-
-#: apps/menu/models.py
 msgid "Код позиции"
 msgstr "Код позиції"
 
@@ -2908,10 +3108,6 @@ msgstr "характеристика"
 msgid "Характеристики"
 msgstr "Характеристики"
 
-#: apps/menu/models.py apps/orders/models.py webapp/staff_views.py webapp/texts.py
-msgid "Вариант"
-msgstr "Варіант"
-
 #: apps/menu/models.py
 msgid "Как увидит гость: 250 мл, M, червона, 500 г."
 msgstr "Як побачить гість: 250 мл, M, червона, 500 г."
@@ -2975,10 +3171,6 @@ msgstr "«Не менше» не може бути більше, ніж «не �
 #: apps/menu/models.py
 msgid "Группа"
 msgstr "Група"
-
-#: apps/menu/models.py
-msgid "Добавка"
-msgstr "Добавка"
 
 #: apps/menu/models.py
 msgid "Доплата"
@@ -3241,10 +3433,6 @@ msgid "Запланирована"
 msgstr "Заплановано"
 
 #: apps/notifications/models.py
-msgid "Отправляется"
-msgstr "Надсилається"
-
-#: apps/notifications/models.py
 msgid "Отправлена"
 msgstr "Надіслано"
 
@@ -3271,10 +3459,6 @@ msgstr "Повідомлення, доля яких невідома після 
 #: apps/notifications/models.py
 msgid "Неизвестно"
 msgstr "Невідомо"
-
-#: apps/notifications/models.py
-msgid "Последняя ошибка"
-msgstr "Остання помилка"
 
 #: apps/notifications/models.py
 msgid "Отправка начата"
@@ -3749,10 +3933,6 @@ msgstr "Цього замовлення на екрані вже немає."
 #: apps/orders/models.py bot/handlers/staff.py webapp/staff_views.py
 msgid "Новый"
 msgstr "Нове"
-
-#: apps/orders/models.py
-msgid "Принят"
-msgstr "Прийнято"
 
 #: apps/orders/models.py
 msgid "Готовится"
@@ -4668,10 +4848,6 @@ msgstr "Гість мережі бачить її, коли обирає зак�
 msgid "заведение"
 msgstr "заклад"
 
-#: apps/partners/models.py apps/users/admin.py apps/users/admin_navigation.py apps/users/models.py core/database/models.py
-msgid "Заведение"
-msgstr "Заклад"
-
 #: apps/partners/models.py
 msgid "Название бота"
 msgstr "Назва бота"
@@ -4679,10 +4855,6 @@ msgstr "Назва бота"
 #: apps/partners/models.py
 msgid "Имя бота (@)"
 msgstr "Ім'я бота (@)"
-
-#: apps/partners/models.py
-msgid "Токен (зашифрован)"
-msgstr "Токен (зашифровано)"
 
 #: apps/partners/models.py
 msgid "Режим"
@@ -6293,6 +6465,10 @@ msgid "Настройки бота"
 msgstr "Налаштування бота"
 
 #: apps/users/admin_navigation.py
+msgid "Poster"
+msgstr "Poster"
+
+#: apps/users/admin_navigation.py
 msgid "Платформа"
 msgstr "Платформа"
 
@@ -6315,6 +6491,18 @@ msgstr "Сповіщення персоналу"
 #: apps/users/admin_navigation.py
 msgid "Сообщения гостям"
 msgstr "Повідомлення гостям"
+
+#: apps/users/admin_navigation.py
+msgid "Заказы в Poster"
+msgstr "Замовлення в Poster"
+
+#: apps/users/admin_navigation.py
+msgid "Соответствия"
+msgstr "Відповідності"
+
+#: apps/users/admin_navigation.py
+msgid "Вебхуки"
+msgstr "Вебхуки"
 
 #: apps/users/apps.py
 msgid "Пользователи и гости"
