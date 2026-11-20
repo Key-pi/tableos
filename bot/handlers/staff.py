@@ -28,6 +28,7 @@ from apps.analytics.services import (
     build_daily_tables_page,
     build_daily_tails_page,
 )
+from apps.billing.bill_split import SPLIT_ROLES, split_parts_of
 from apps.billing.counter_sales import preview_counter_sale, sell_at_counter
 from apps.billing.models import Bill, BillAdjustment, BillingRequest, BillItem, Payment
 from apps.billing.remote_orders import (
@@ -1041,6 +1042,18 @@ def _build_bill_card_view(bill: Bill) -> tuple[bool, str]:
         lines.append(
             _("К оплате: <b>{remaining_amount} грн</b>", remaining_amount=remaining_amount)
         )
+    # Equal parts (PQ-009 in the bot): each part, paid or not, as in the Mini App.
+    parts = split_parts_of(bill)
+    if parts:
+        lines.extend(["", _("Поровну на {parts} (💵 — наличные, 💳 — терминал):",
+                           parts=bill.split_parts)])
+        for part in parts:
+            lines.append(
+                _("✓ Часть {number} — {amount} грн, {method}", number=part.number,
+                  amount=part.amount, method=Payment.Method(part.method).label.lower())
+                if part.paid
+                else _("• Часть {number} — {amount} грн", number=part.number, amount=part.amount)
+            )
     can_pay_with_bonuses = False
     if bill.primary_guest_id and is_open and not bill.bonus_spent_amount and not bill.paid_amount:
         redeemable_amount = (
@@ -1084,13 +1097,24 @@ def _build_bill_card_message(bill: Bill, actor_user):
     remaining_amount = (bill.total_amount - bill.paid_amount).quantize(Decimal("0.01"))
     can_pay_with_bonuses, bill_text = _build_bill_card_view(bill)
     can_edit, can_void = _bill_change_flags(bill, actor_user)
+    is_open = bill.status in _OPEN_BILL_STATUSES
+    parts = split_parts_of(bill) if is_open else []
     markup = build_staff_bill_actions_keyboard(
         bill_public_id=bill.public_id,
         can_issue=bill.status == Bill.Status.DRAFT,
-        can_take_payment=remaining_amount > 0 and bill.status in _OPEN_BILL_STATUSES,
+        # A split bill is paid part by part, not all at once (as in the Mini App).
+        can_take_payment=remaining_amount > 0 and is_open and not parts,
         can_pay_with_bonuses=can_pay_with_bonuses,
         can_edit=can_edit,
         can_void=can_void,
+        unpaid_parts=[(part.number, part.amount) for part in parts
+                      if not part.paid and part.amount > 0],
+        # Split again or undo only before a part is paid; «Общее» of the
+        # table is split by its guests (PQ-009, step 3).
+        can_split=(
+            is_open and remaining_amount > 0 and actor_user.role in SPLIT_ROLES
+            and not any(part.paid for part in parts) and not bill.split_shares.exists()
+        ),
     )
     return bill_text, markup
 

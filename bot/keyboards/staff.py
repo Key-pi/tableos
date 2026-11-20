@@ -745,6 +745,8 @@ def build_staff_bill_actions_keyboard(
     can_pay_with_bonuses: bool = False,
     can_edit: bool = False,
     can_void: bool = False,
+    unpaid_parts: list | None = None,
+    can_split: bool = False,
 ) -> InlineKeyboardMarkup:
     keyboard: list[list[InlineKeyboardButton]] = []
     if can_issue:
@@ -778,6 +780,26 @@ def build_staff_bill_actions_keyboard(
                 ),
             ]
         )
+    # Equal parts (PQ-009 in the bot): a part by cash or terminal; the amount
+    # shown rides in the callback, so a changed bill is caught.
+    for number, amount in unpaid_parts or []:
+        cents = int((amount * 100).to_integral_value())
+        keyboard.append([
+            InlineKeyboardButton(
+                text=_("💵 {number} · {amount} грн", number=number, amount=amount),
+                callback_data=f"staffbillpart:{bill_public_id}:{number}:c:{cents}",
+            ),
+            InlineKeyboardButton(
+                text=_("💳 {number} · {amount} грн", number=number, amount=amount),
+                callback_data=f"staffbillpart:{bill_public_id}:{number}:t:{cents}",
+            ),
+        ])
+    if can_split:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=_("➗ Поровну"), callback_data=f"staffbillsplit:{bill_public_id}",
+            )
+        ])
     change_row: list[InlineKeyboardButton] = []
     if can_edit:
         change_row.append(
@@ -804,6 +826,32 @@ def build_staff_bill_actions_keyboard(
             ),
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def build_staff_bill_split_keyboard(
+    *, bill_public_id: str, is_split: bool,
+) -> InlineKeyboardMarkup:
+    """On how many equal parts (PQ-009 in the bot): 2–8; «Не делить» undoes."""
+
+    choices = [
+        InlineKeyboardButton(
+            text=str(parts), callback_data=f"staffbillsplit:{bill_public_id}:{parts}",
+        )
+        for parts in range(2, 9)
+    ]
+    keyboard = [choices[:4], choices[4:]]
+    if is_split:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=_("Не делить"), callback_data=f"staffbillsplit:{bill_public_id}:0",
+            )
+        ])
+    keyboard.append([
+        InlineKeyboardButton(
+            text=_("← К счёту"), callback_data=f"staffbillrefresh:{bill_public_id}",
+        )
+    ])
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 

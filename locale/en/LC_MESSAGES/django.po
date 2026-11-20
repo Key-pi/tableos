@@ -7817,6 +7817,18 @@ msgid "К оплате: <b>{remaining_amount} грн</b>"
 msgstr "To pay: <b>{remaining_amount} UAH</b>"
 
 #: bot/handlers/staff.py
+msgid "Поровну на {parts} (💵 — наличные, 💳 — терминал):"
+msgstr "Equal parts: {parts} (💵 — cash, 💳 — terminal):"
+
+#: bot/handlers/staff.py
+msgid "✓ Часть {number} — {amount} грн, {method}"
+msgstr "✓ Part {number} — {amount} UAH, {method}"
+
+#: bot/handlers/staff.py
+msgid "• Часть {number} — {amount} грн"
+msgstr "• Part {number} — {amount} UAH"
+
+#: bot/handlers/staff.py
 msgid "У гостя {loyalty_balance} бонусов — можно списать до {redeemable_amount} грн (1 бонус = 1 грн)."
 msgstr "The guest has {loyalty_balance} bonuses — up to {redeemable_amount} UAH can be paid with them (1 bonus = 1 UAH)."
 
@@ -7968,7 +7980,7 @@ msgstr "📱 Work screen"
 msgid "Список обновлён"
 msgstr "List updated"
 
-#: bot/handlers/staff.py webapp/staff_billing.py
+#: bot/handlers/staff.py bot/handlers/staff_bill_split.py webapp/staff_billing.py
 msgid "Работа со счетами доступна только владельцу, менеджеру или кассиру."
 msgstr "Bills are available only to the owner, a manager or a cashier."
 
@@ -8196,7 +8208,7 @@ msgstr "The order has changed, showing the current card"
 msgid "Заказ взят в работу"
 msgstr "Order taken"
 
-#: bot/handlers/staff.py webapp/staff_billing.py
+#: bot/handlers/staff.py bot/handlers/staff_bill_split.py webapp/staff_billing.py
 msgid "Счёт не найден."
 msgstr "Bill not found."
 
@@ -8449,6 +8461,26 @@ msgstr ""
 "{link}\n"
 "\n"
 "{note}"
+
+#: bot/handlers/staff_bill_split.py
+msgid ""
+"<b>Счёт #{public_id}</b>\n"
+"На сколько равных частей разделить {amount} грн?"
+msgstr ""
+"<b>Bill #{public_id}</b>\n"
+"Into how many equal parts to split {amount} UAH?"
+
+#: bot/handlers/staff_bill_split.py webapp/staff_billing.py
+msgid "Счёт делят поровну на {parts}."
+msgstr "The bill is split equally into {parts}."
+
+#: bot/handlers/staff_bill_split.py webapp/staff_billing.py
+msgid "Счёт больше не делят."
+msgstr "The bill is no longer split."
+
+#: bot/handlers/staff_bill_split.py
+msgid "Часть {number} оплачена"
+msgstr "Part {number} paid"
 
 #: bot/handlers/staff_invites.py webapp/staff_sales.py
 msgid "Приглашать сотрудников может владелец или менеджер."
@@ -8861,12 +8893,32 @@ msgid "Терминал"
 msgstr "Terminal"
 
 #: bot/keyboards/staff.py
+msgid "💵 {number} · {amount} грн"
+msgstr "💵 {number} · {amount} UAH"
+
+#: bot/keyboards/staff.py
+msgid "💳 {number} · {amount} грн"
+msgstr "💳 {number} · {amount} UAH"
+
+#: bot/keyboards/staff.py webapp/staff_views.py
+msgid "➗ Поровну"
+msgstr "➗ Equal parts"
+
+#: bot/keyboards/staff.py
 msgid "Изменить счёт"
 msgstr "Change bill"
 
 #: bot/keyboards/staff.py
 msgid "← К счетам"
 msgstr "← Bills"
+
+#: bot/keyboards/staff.py webapp/staff_views.py
+msgid "Не делить"
+msgstr "Do not split"
+
+#: bot/keyboards/staff.py
+msgid "← К счёту"
+msgstr "← To the bill"
 
 #: bot/keyboards/staff.py
 msgid "Назад к счёту"
@@ -9175,14 +9227,6 @@ msgstr "everything"
 #: webapp/kitchen_views.py
 msgid "Экран кухни и бара выключен в настройках заведения."
 msgstr "The kitchen and bar screen is switched off in the venue's settings."
-
-#: webapp/staff_billing.py
-msgid "Счёт делят поровну на {parts}."
-msgstr "The bill is split equally into {parts}."
-
-#: webapp/staff_billing.py
-msgid "Счёт больше не делят."
-msgstr "The bill is no longer split."
 
 #: webapp/staff_billing.py webapp/staff_settlement.py
 msgid "Обновите экран и попробуйте ещё раз."
@@ -9581,10 +9625,6 @@ msgid "Карта"
 msgstr "Card"
 
 #: webapp/staff_views.py
-msgid "➗ Поровну"
-msgstr "➗ Equal parts"
-
-#: webapp/staff_views.py
 msgid "На сколько частей делить счёт?"
 msgstr "How many parts to split the bill into?"
 
@@ -9595,10 +9635,6 @@ msgstr "Split equally into {parts}"
 #: webapp/staff_views.py
 msgid "Часть {number}"
 msgstr "Part {number}"
-
-#: webapp/staff_views.py
-msgid "Не делить"
-msgstr "Do not split"
 
 #: webapp/staff_views.py
 msgid "ост. {count}"
