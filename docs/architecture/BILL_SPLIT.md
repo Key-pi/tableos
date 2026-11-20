@@ -161,7 +161,7 @@ PostgreSQL).
 остаётся в Mini App (в чате это слишком много нажатий), из бота — кнопкой.
 Делается по шагам.
 
-**Шаг 1. Части поровну — сделан 2026-11-20** (ветка `bill-split-bot`,
+**Шаг 1. Части поровну — сделан 2026-11-20, проверен владельцем и слит 2026-11-20** (ветка `bill-split-bot`,
 `bot/handlers/staff_bill_split.py`). В карточке счёта
 (`bot/handlers/staff.py:_build_bill_card_message`):
 - «➗ Поровну» → выбор 2–8 частей (`staffbillsplit:<счёт>`), «Не делить» —
@@ -177,7 +177,7 @@ PostgreSQL).
 Правила — те же `apps/billing/bill_split.py`; кто — владелец, менеджер,
 кассир (`can_manage_billing` и `may_split_bills` в сервисе).
 
-**Шаг 2. Карточка стола — сделан 2026-11-20** (ветка `bill-split-bot`,
+**Шаг 2. Карточка стола — сделан 2026-11-20, проверен владельцем и слит 2026-11-20** (ветка `bill-split-bot`,
 `bot/handlers/staff.py:_build_table_ops_view`, `_render_company`,
 `bot/handlers/staff_table_guests.py`). У каждого активного визита:
 - компания — как в редакторе (`visit_settlement`): гости с ботом (👤) и
