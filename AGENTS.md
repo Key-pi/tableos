@@ -21,7 +21,7 @@ Redis — брокер и хранилище результатов Celery.
   `MODULE_BOUNDARIES.md`, `LAYERING_RULES.md`;
 - безопасность, бот, фоновые задачи: `TENANCY_AND_PERMISSIONS.md`,
   `BOT_RUNTIME.md`, `BACKGROUND_JOBS.md` в `docs/architecture/`;
-- решения: `docs/decisions/ADR-0001.md` — `ADR-0009.md`;
+- решения: `docs/decisions/ADR-0001.md` — `ADR-0010.md`;
 - инженерные практики: `docs/engineering/`;
 - аудит и дорожная карта: `docs/audits/` (находки — `ARCHITECTURE_AUDIT.md`,
   статус батчей — `REFACTOR_ROADMAP.md`).
