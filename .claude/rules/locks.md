@@ -58,7 +58,10 @@ paths:
   Вебхук Poster (`apps/integrations/poster/webhooks.py:process`): строка
   `PosterWebhookEvent` → подключения аккаунта по id (`of=("self",)`);
   статус события перепроверяется под блокировкой. Повтор события — уникальный
-  `dedupe_key`, без блокировки.
+  `dedupe_key`, без блокировки. Заказ на кассу
+  (`apps/integrations/poster/orders.py`): только строка `PosterOrderPush` —
+  захват (`pending`/`unknown` → `sending`) и запись итога, каждое своей
+  короткой транзакцией; запрос к Poster между ними, вне транзакции.
 - Остатки: строки `MenuItem`/`MenuItemVariant` — последними в транзакции,
   сначала позиции, затем варианты, каждые по id, `no_key=True`
   (`apps/menu/stock.py:_lock`).

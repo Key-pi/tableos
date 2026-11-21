@@ -1019,6 +1019,42 @@ def notify_staff_about_parallel_visit(visit) -> int:
     return queued_count
 
 
+def notify_staff_about_order_problem(
+    order, *, title: Callable[[], str], message: Callable[[], str]
+) -> int:
+    """Something staff must do by hand about an order — an order that did
+    not reach the venue's Poster register (PQ-058). Goes to the staff who
+    hear about this way of ordering, also when they mute new-order messages:
+    the order waits for them. ``title`` and ``message`` are built per
+    employee, in their language (PQ-040)."""
+
+    recipients = EmployeeProfile.objects.filter(
+        partner_id=order.partner_id,
+        is_active=True,
+        bot_notifications_enabled=True,
+        telegram_account__isnull=False,
+        user__is_active=True,
+        user__partner_id=order.partner_id,
+    )
+    channel_field = EmployeeProfile.CHANNEL_NOTIFY_FIELDS.get(order.channel)
+    if channel_field:
+        recipients = recipients.filter(**{channel_field: True})
+    queued_count = 0
+    for employee in recipients.select_related("user", "telegram_account"):
+        with speaking_to_employee(employee):
+            notification = StaffNotification.objects.create(
+                partner_id=order.partner_id,
+                employee=employee,
+                order=order,
+                category=StaffNotification.Category.ORDER_STATUS_CHANGED,
+                title=title(),
+                message=message(),
+            )
+        deliver_staff_notification(notification)
+        queued_count += 1
+    return queued_count
+
+
 def notify_partner_owners(
     *, partner_id, title: Callable[[], str], message: Callable[[], str]
 ) -> int:

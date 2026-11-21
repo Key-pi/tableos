@@ -2752,6 +2752,82 @@ msgstr "Poster webhook"
 msgid "Вебхуки Poster"
 msgstr "Poster webhooks"
 
+#: apps/integrations/poster/orders.py
+msgid "Гость Botera"
+msgstr "Botera guest"
+
+#: apps/integrations/poster/orders.py
+msgid "Доставка {when}"
+msgstr "Delivery {when}"
+
+#: apps/integrations/poster/orders.py
+msgid "Самовывоз {when}"
+msgstr "Pickup {when}"
+
+#: apps/integrations/poster/orders.py
+msgid "«{name}» нет в меню Poster"
+msgstr "«{name}» is not in the Poster menu"
+
+#: apps/integrations/poster/orders.py
+msgid "вариант «{name}» не из Poster"
+msgstr "the variant of «{name}» is not from Poster"
+
+#: apps/integrations/poster/orders.py
+msgid "добавка «{name}» не из Poster"
+msgstr "the add-on «{name}» is not from Poster"
+
+#: apps/integrations/poster/orders.py
+msgid "в заказе нет позиций"
+msgstr "the order has no items"
+
+#: apps/integrations/poster/orders.py
+msgid "этот способ заказа в Poster не передаётся"
+msgstr "this way of ordering is not sent to Poster"
+
+#: apps/integrations/poster/orders.py
+msgid "заказ оплачен переводом заранее, а в Poster передаются только заказы с оплатой при получении"
+msgstr "the order was paid in advance by transfer, and only orders paid on receipt are sent to Poster"
+
+#: apps/integrations/poster/orders.py
+msgid "часть заказа оплачена бонусами Botera — такие заказы в Poster пока не передаются"
+msgstr "part of the order was paid with Botera bonuses — such orders are not sent to Poster yet"
+
+#: apps/integrations/poster/orders.py
+msgid "у гостя нет телефона"
+msgstr "the guest has no phone"
+
+#: apps/integrations/poster/orders.py
+msgid "Poster не принял телефон гостя ({reason})"
+msgstr "Poster did not accept the guest's phone ({reason})"
+
+#: apps/integrations/poster/orders.py
+msgid "в Poster у позиции не выбрана обязательная добавка ({reason})"
+msgstr "in Poster a required add-on of an item is not chosen ({reason})"
+
+#: apps/integrations/poster/orders.py
+msgid "Poster отказал: {reason}"
+msgstr "Poster refused: {reason}"
+
+#: apps/integrations/poster/orders.py
+msgid "Poster отключён — заказ не передан"
+msgstr "Poster is disconnected — the order was not sent"
+
+#: apps/integrations/poster/orders.py
+msgid "Poster не ответил после {count} попыток ({reason})"
+msgstr "Poster did not answer after {count} attempts ({reason})"
+
+#: apps/integrations/poster/orders.py
+msgid "Проверьте онлайн-заказы на кассе Poster: если его там нет, пробейте его вручную. Причина: {reason}."
+msgstr "Check the online orders on the Poster register: if it is not there, ring it up by hand. Reason: {reason}."
+
+#: apps/integrations/poster/orders.py
+msgid "Пробейте его на кассе Poster вручную. Причина: {reason}."
+msgstr "Ring it up on the Poster register by hand. Reason: {reason}."
+
+#: apps/integrations/poster/orders.py
+msgid "Заказ #{code} не дошёл до Poster"
+msgstr "Order #{code} did not reach Poster"
+
 #: apps/integrations/poster/services.py
 msgid "Подключать и отключать Poster может владелец заведения."
 msgstr "Only the venue's owner connects and disconnects Poster."

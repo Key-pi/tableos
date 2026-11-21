@@ -57,6 +57,7 @@ from apps.billing.services import (
     pay_bill_with_bonuses,
     record_payment,
 )
+from apps.billing.signals import announce_remote_order
 from apps.bonuses.services import get_redeemable_bonus_amount
 from apps.menu.catalog import first_not_on_sale
 from apps.menu.translations import line_names_in
@@ -785,6 +786,10 @@ def place_remote_order(
         return "\n".join(lines)
 
     notify_staff_about_new_order(order, note=staff_note)
+    # After the commit: whoever listens (the Poster register, PQ-058) gets the
+    # order; a listener's failure never fails the order (apps/billing/signals.py).
+    order_id = order.id
+    transaction.on_commit(lambda: announce_remote_order(order_id))
     return Order.objects.select_related("partner").get(id=order.id)
 
 

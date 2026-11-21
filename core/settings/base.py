@@ -206,6 +206,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "analytics.refresh_daily_partner_metrics",
         "schedule": timedelta(minutes=15),
     },
+    # PQ-058, step 5: orders to Poster that a lost task or a stopped worker left.
+    "recover-poster-order-pushes": {
+        "task": "poster.recover_order_pushes",
+        "schedule": timedelta(minutes=5),
+    },
     # PQ-058, step 3: the menu of every venue on Poster, at night (Kyiv time).
     "sync-poster-menus": {
         "task": "poster.sync_all_menus",

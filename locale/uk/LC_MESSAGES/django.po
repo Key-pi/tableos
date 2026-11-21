@@ -2752,6 +2752,82 @@ msgstr "вебхук Poster"
 msgid "Вебхуки Poster"
 msgstr "Вебхуки Poster"
 
+#: apps/integrations/poster/orders.py
+msgid "Гость Botera"
+msgstr "Гість Botera"
+
+#: apps/integrations/poster/orders.py
+msgid "Доставка {when}"
+msgstr "Доставка {when}"
+
+#: apps/integrations/poster/orders.py
+msgid "Самовывоз {when}"
+msgstr "Самовивіз {when}"
+
+#: apps/integrations/poster/orders.py
+msgid "«{name}» нет в меню Poster"
+msgstr "«{name}» немає в меню Poster"
+
+#: apps/integrations/poster/orders.py
+msgid "вариант «{name}» не из Poster"
+msgstr "варіант «{name}» не з Poster"
+
+#: apps/integrations/poster/orders.py
+msgid "добавка «{name}» не из Poster"
+msgstr "добавка «{name}» не з Poster"
+
+#: apps/integrations/poster/orders.py
+msgid "в заказе нет позиций"
+msgstr "у замовленні немає позицій"
+
+#: apps/integrations/poster/orders.py
+msgid "этот способ заказа в Poster не передаётся"
+msgstr "цей спосіб замовлення в Poster не передається"
+
+#: apps/integrations/poster/orders.py
+msgid "заказ оплачен переводом заранее, а в Poster передаются только заказы с оплатой при получении"
+msgstr "замовлення оплачено переказом заздалегідь, а в Poster передаються лише замовлення з оплатою при отриманні"
+
+#: apps/integrations/poster/orders.py
+msgid "часть заказа оплачена бонусами Botera — такие заказы в Poster пока не передаются"
+msgstr "частину замовлення оплачено бонусами Botera — такі замовлення в Poster поки не передаються"
+
+#: apps/integrations/poster/orders.py
+msgid "у гостя нет телефона"
+msgstr "у гостя немає телефону"
+
+#: apps/integrations/poster/orders.py
+msgid "Poster не принял телефон гостя ({reason})"
+msgstr "Poster не прийняв телефон гостя ({reason})"
+
+#: apps/integrations/poster/orders.py
+msgid "в Poster у позиции не выбрана обязательная добавка ({reason})"
+msgstr "у Poster у позиції не вибрано обов'язкову добавку ({reason})"
+
+#: apps/integrations/poster/orders.py
+msgid "Poster отказал: {reason}"
+msgstr "Poster відмовив: {reason}"
+
+#: apps/integrations/poster/orders.py
+msgid "Poster отключён — заказ не передан"
+msgstr "Poster відключено — замовлення не передано"
+
+#: apps/integrations/poster/orders.py
+msgid "Poster не ответил после {count} попыток ({reason})"
+msgstr "Poster не відповів після {count} спроб ({reason})"
+
+#: apps/integrations/poster/orders.py
+msgid "Проверьте онлайн-заказы на кассе Poster: если его там нет, пробейте его вручную. Причина: {reason}."
+msgstr "Перевірте онлайн-замовлення на касі Poster: якщо його там немає, пробийте його вручну. Причина: {reason}."
+
+#: apps/integrations/poster/orders.py
+msgid "Пробейте его на кассе Poster вручную. Причина: {reason}."
+msgstr "Пробийте його на касі Poster вручну. Причина: {reason}."
+
+#: apps/integrations/poster/orders.py
+msgid "Заказ #{code} не дошёл до Poster"
+msgstr "Замовлення #{code} не дійшло до Poster"
+
 #: apps/integrations/poster/services.py
 msgid "Подключать и отключать Poster может владелец заведения."
 msgstr "Підключати й відключати Poster може власник закладу."
