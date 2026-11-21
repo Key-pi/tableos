@@ -1,4 +1,5 @@
-"""Poster's return after the owner's login (PQ-058, step 2).
+"""Poster's return after the owner's login (PQ-058, step 2) and Poster's
+webhooks (step 4, ``webhook``).
 
 Poster sends the browser back here with ``code`` and ``account``. Only a
 press of «Подключить Poster» in this browser's Admin session leads anywhere
@@ -7,13 +8,15 @@ Poster page of Admin with the reason. A spot that starts working at once
 brings the menu at once (``bring_menu``, step 3).
 """
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.views import redirect_to_login
-from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse
-from django.views.decorators.http import require_GET
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
 
-from apps.integrations.poster import services
+from apps.integrations.poster import services, webhooks
 from apps.integrations.poster.menu_sync import PosterSyncError, sync_menu
 from core.i18n import _
 
@@ -63,3 +66,15 @@ def oauth_callback(request: HttpRequest) -> HttpResponse:
     return HttpResponseRedirect(
         reverse("admin:poster_posterconnection_change", args=[connection.pk]),
     )
+
+
+@csrf_exempt
+@require_POST
+def webhook(request: HttpRequest) -> HttpResponse:
+    """Poster's event: kept if signed, done by a task (``webhooks``)."""
+
+    body = webhooks.read_body(request.body)
+    if body is None or not webhooks.signature_ok(body, settings.POSTER_APPLICATION_SECRET):
+        return JsonResponse({"status": "error"}, status=403)
+    webhooks.receive(body)
+    return JsonResponse({"status": "accept"})

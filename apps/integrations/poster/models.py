@@ -63,6 +63,11 @@ class PosterConnection(PartnerBoundModel):
     last_synced_at = models.DateTimeField(
         null=True, blank=True, verbose_name=_lazy("Меню обновлено"),
     )
+    # The last menu webhook (step 4): the sync a minute later runs only if
+    # nothing changed since — one sync after a burst of changes.
+    menu_changed_at = models.DateTimeField(
+        null=True, blank=True, verbose_name=_lazy("Меню изменено в Poster"),
+    )
     last_error = models.TextField(blank=True, verbose_name=_lazy("Последняя ошибка"))
     last_error_at = models.DateTimeField(
         null=True, blank=True, verbose_name=_lazy("Когда была ошибка"),

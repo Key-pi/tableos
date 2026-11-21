@@ -2588,6 +2588,10 @@ msgstr "Connected by"
 msgid "Меню обновлено"
 msgstr "Menu updated"
 
+#: apps/integrations/poster/models.py
+msgid "Меню изменено в Poster"
+msgstr "Menu changed in Poster"
+
 #: apps/integrations/poster/models.py apps/notifications/models.py
 msgid "Последняя ошибка"
 msgstr "Last error"
@@ -2815,6 +2819,18 @@ msgstr "Poster connected."
 #: apps/integrations/poster/views.py
 msgid "Poster подключён. Выберите, какая точка — это заведение."
 msgstr "Poster connected. Choose which spot this venue is."
+
+#: apps/integrations/poster/webhooks.py
+msgid "Нет работающего подключения к этому аккаунту Poster."
+msgstr "No working connection to this Poster account."
+
+#: apps/integrations/poster/webhooks.py
+msgid "Заказы и чеки из Poster Botera начнёт разбирать на шагах 5–6."
+msgstr "Botera will handle orders and checks from Poster in steps 5–6."
+
+#: apps/integrations/poster/webhooks.py
+msgid "Этот вебхук Botera не нужен."
+msgstr "Botera does not need this webhook."
 
 #: apps/menu/admin.py
 msgid "Гость видит перевод на своём языке; пусто — текст на основном языке. Языки — включённые для гостей в настройках бота, кроме основного. Персонал, экраны кухни и счета — на основном языке."

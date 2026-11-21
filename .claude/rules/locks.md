@@ -55,6 +55,10 @@ paths:
   читается до транзакции; затем `PosterConnection` → связанные `MenuItem` по
   id → их `MenuItemVariant` по id (`no_key`, как у заказа), потом остальное
   меню; ссылки читаются после блокировки — вторая синхронизация видит первую.
+  Вебхук Poster (`apps/integrations/poster/webhooks.py:process`): строка
+  `PosterWebhookEvent` → подключения аккаунта по id (`of=("self",)`);
+  статус события перепроверяется под блокировкой. Повтор события — уникальный
+  `dedupe_key`, без блокировки.
 - Остатки: строки `MenuItem`/`MenuItemVariant` — последними в транзакции,
   сначала позиции, затем варианты, каждые по id, `no_key=True`
   (`apps/menu/stock.py:_lock`).

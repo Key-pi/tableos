@@ -76,6 +76,7 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
         "token_expires_at",
         "connected_by",
         "last_synced_at",
+        "menu_changed_at",
         "last_error",
         "last_error_at",
         "created_at",
