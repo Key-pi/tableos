@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from apps.billing.models import BillItem
 from apps.employees.models import EmployeeProfile
+from apps.integrations.poster.selectors import register_holds
 from apps.menu.catalog import first_not_on_sale, not_sold_in
 from apps.menu.models import MenuItem, MenuItemVariant
 from apps.menu.options import ChoiceError, catalog_choices, needs_choice, resolve_choice
@@ -73,6 +74,28 @@ def get_available_next_statuses(current_status: str) -> list[str]:
     ]
     allowed = ORDER_STATUS_TRANSITIONS[current_status]
     return [status for status in ordered_statuses if status in allowed]
+
+
+# An order the venue's register holds (Poster, PQ-058 step 7, owner
+# 2026-11-21): staff only tell the guest it is ready or on the way — the
+# register accepts, cancels, takes the money and completes it (statuses.py,
+# without an employee).
+REGISTER_STAFF_STATUSES = frozenset(
+    {Order.Status.PREPARING, Order.Status.READY, Order.Status.DELIVERING}
+)
+REGISTER_HOLDS_MESSAGE = N_(
+    "Этот заказ ведёт касса Poster: принимают, отменяют, оплачивают и закрывают его там."
+)
+
+
+def staff_statuses_for(order: Order) -> list[str]:
+    """``get_available_staff_actions`` of this order, without what the
+    register does when it holds the order."""
+
+    statuses = get_available_staff_actions(order.status, channel=order.channel)
+    if register_holds(order):
+        return [status for status in statuses if status in REGISTER_STAFF_STATUSES]
+    return statuses
 
 
 def get_available_staff_actions(current_status: str, channel: str | None = None) -> list[str]:
@@ -403,6 +426,13 @@ def transition_order_status(
             status=order.status,
             to_status=to_status,
         ))
+    if (
+        actor_user is not None
+        and to_status not in REGISTER_STAFF_STATUSES
+        and register_holds(order)
+    ):
+        # The register's own changes come without an employee (statuses.py).
+        raise OrderFlowError(_(REGISTER_HOLDS_MESSAGE))
     if (
         order.payment_timing == Order.PaymentTiming.PREPAID
         and to_status == Order.Status.ACCEPTED

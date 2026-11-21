@@ -70,6 +70,17 @@ class StatusFixture(PosterReadMixin, OrderFixture):
         with self.captureOnCommitCallbacks(execute=True):
             return statuses.sync_order_state(self.push_.pk)
 
+    def staff_in_botera(self, action, **kwargs):
+        """Staff act in Botera while Poster is off (since step 7 they cannot
+        while it holds the order); then Poster works again."""
+
+        working = PosterConnection.objects.filter(partner=self.partner)
+        working.update(status=PosterConnection.Status.DISCONNECTED)
+        try:
+            return action(order=self.order_, actor=self.cashier, **kwargs)
+        finally:
+            working.update(status=PosterConnection.Status.ACTIVE)
+
     def fresh(self):
         self.order_.refresh_from_db()
         self.push_.refresh_from_db()
@@ -155,7 +166,10 @@ class ClosedCheckTests(StatusFixture):
         self.assertFalse(BonusTransaction.objects.filter(
             guest=self.guest, transaction_type=BonusTransaction.TransactionType.ACCRUAL,
         ).exists())
-        # A payment staff record earns it as before.
+        # A payment staff record (an order without Poster) earns it as before.
+        PosterConnection.objects.filter(partner=self.partner).update(
+            status=PosterConnection.Status.DISCONNECTED,
+        )
         other = self.place()
         record_payment_on_receipt(order=other, actor=self.cashier, method=Payment.Method.CASH)
         self.assertTrue(BonusTransaction.objects.filter(
@@ -205,7 +219,7 @@ class LeftToStaffTests(StatusFixture):
         self.assertEqual(self.order_.status, Order.Status.NEW)
 
     def test_a_paid_check_of_an_order_canceled_in_botera(self):
-        cancel_unpaid_remote_order(order=self.order_, actor=self.cashier)
+        self.staff_in_botera(cancel_unpaid_remote_order)
         self.register(check_status=2, pay_type=1, paid="40000")
         self.sync()
         self.assertFalse(Payment.objects.filter(bill__bill_orders__order=self.order_,
@@ -227,8 +241,7 @@ class RejectedTests(StatusFixture):
         self.assertEqual(self.attention_messages(), [])
 
     def test_rejected_after_staff_took_the_money(self):
-        record_payment_on_receipt(order=self.order_, actor=self.cashier,
-                                  method=Payment.Method.CASH)
+        self.staff_in_botera(record_payment_on_receipt, method=Payment.Method.CASH)
         self.register(online_status=7, check_status=4)
         self.sync()
         self.assertNotEqual(self.fresh().status, Order.Status.CANCELED)

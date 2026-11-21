@@ -1,3 +1,4 @@
+from apps.integrations.poster.selectors import with_register_mark
 from apps.orders.models import Cart, Order
 
 
@@ -21,8 +22,10 @@ class OrderRepository:
 
     @staticmethod
     def by_public_id_for_partner(partner_id, public_id: str):
+        # Marked for the staff's buttons (Poster, step 7): the bot draws them
+        # outside the database thread.
         return (
-            Order.objects.select_related(
+            with_register_mark(Order.objects).select_related(
                 "partner",
                 "table",
                 "guest",

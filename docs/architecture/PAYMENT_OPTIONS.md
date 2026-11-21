@@ -84,7 +84,10 @@
   Poster работает, самовывоз и доставка — только оплата при получении
   (`payment_modes_for` убирает перевод заранее, `apps/integrations/poster/selectors.py:register_takes`)
   и без бонусов (`get_remote_quote` их не предлагает, `place_remote_order`
-  отказывает); отправка почтой — как раньше.
+  отказывает); отправка почтой — как раньше. У заказа, который ведёт касса
+  (`apps/integrations/poster/selectors.py:register_holds`), кнопок оплаты и
+  «Гость не забрал» нет, а `record_payment_on_receipt` и
+  `cancel_unpaid_remote_order` от сотрудника отказывают: деньги берёт касса.
 - Заведение на кассе Poster (PQ-059, [POSTER.md](POSTER.md)): закрытый чек
   онлайн-заказа сам записывает оплату при получении —
   `record_register_payment(order, method, provider_code, reference, note)`:

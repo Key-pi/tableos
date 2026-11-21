@@ -78,6 +78,7 @@ from apps.bonuses.services import (
 )
 from apps.employees.models import EmployeeProfile
 from apps.employees.selectors import get_staff_employee_by_telegram
+from apps.integrations.poster.selectors import register_holds
 from apps.menu.models import MenuCategory
 from apps.menu.options import (
     ChoiceError,
@@ -108,6 +109,7 @@ from apps.orders.services import (
     is_order_paid,
     is_order_received,
     requested_time_label,
+    staff_statuses_for,
     transition_order_status,
 )
 from apps.tables.models import Table, TableSession, TableVisit
@@ -269,6 +271,16 @@ def _order_context_label(order: Order) -> str:
 
 
 def _order_actions_keyboard(order: Order):
+    if register_holds(order):
+        # Poster holds it (PQ-058, step 7): «Готово» and «В пути» only; the
+        # register accepts, cancels, takes the money and completes.
+        return build_staff_order_actions_keyboard(
+            order_public_id=order.public_id,
+            available_statuses=staff_statuses_for(order),
+            status_labels=_status_labels(order),
+            can_refund=order.paid_at is not None and order.status != Order.Status.CANCELED,
+            receipt_refusal=False,
+        )
     is_shipping = order.channel == Order.Channel.SHIPPING
     unpaid_on_receipt = awaits_payment_on_receipt(order)
     # A delivery is paid to the courier (PQ-044), a parcel at the post office:
@@ -384,7 +396,7 @@ def _build_order_shortcuts(orders: list[Order]) -> list[tuple[str, str, str]]:
             f"{short_status_labels.get(order.status, order.get_status_display())} • {payment_badge}"
         )
         action = ""
-        if order.status == Order.Status.NEW:
+        if order.status == Order.Status.NEW and not register_holds(order):
             # A prepaid order goes into work only after the transfer is checked.
             action = "check" if awaits_transfer_check(order) else "accept"
         shortcuts.append((order.public_id, label, action))
@@ -436,6 +448,8 @@ def _notification_order_action(notification) -> str:
 
     if not notification.order_id or notification.order.status != Order.Status.NEW:
         return ""
+    if register_holds(notification.order):
+        return ""  # accepted at the register (Poster, step 7)
     return "check" if awaits_transfer_check(notification.order) else "accept"
 
 

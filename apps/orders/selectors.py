@@ -1,8 +1,9 @@
+from apps.integrations.poster.selectors import with_register_mark
 from apps.orders.models import Order
 
 
 def get_open_orders_for_partner(partner_id):
-    return (
+    orders = (
         Order.objects.filter(
             partner_id=partner_id,
         )
@@ -18,6 +19,8 @@ def get_open_orders_for_partner(partner_id):
         .prefetch_related("items")
         .order_by("created_at")
     )
+    # Which of them the register holds (Poster, step 7), for the buttons.
+    return with_register_mark(orders)
 
 
 def get_orders_for_session(session_id, *, partner_id):

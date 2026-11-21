@@ -6,10 +6,12 @@ from asgiref.sync import async_to_sync
 
 from apps.billing.models import Bill, Payment
 from apps.employees.models import EmployeeProfile
+from apps.integrations.poster.models import PosterOrderPush
 from apps.orders.models import Order
 from apps.partners.models import PartnerBotSettings
 from apps.users.models import TelegramAccount, User
 from bot.handlers import staff
+from tests.apps.integrations.poster.test_menu_sync import connect
 from tests.bot.test_remote_checkout import STAFF, PickupBotFixture, _buttons
 
 
@@ -130,3 +132,47 @@ class StaffPaymentOnReceiptTests(PickupBotFixture):
         self._staff(f"staffrcnoy:{self.order.public_id}")
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, Order.Status.CANCELED)
+
+
+class StaffPosterOrderTests(StaffPaymentOnReceiptTests):
+    """The same order once it went to the venue's Poster (PQ-058, step 7):
+    the card offers nothing the register does, and an old button is refused
+    by the service."""
+
+    def setUp(self):
+        super().setUp()
+        connect(self.partner)
+        PosterOrderPush.objects.create(partner=self.partner, order=self.order,
+                                       status=PosterOrderPush.Status.SENT)
+
+    def _staff_press(self, data, handler):
+        callback = self._callback(data, telegram_id=STAFF)
+        with patch.object(staff, "resolve_partner_for_bot_token", return_value=self.partner):
+            async_to_sync(handler)(callback, self.bot)
+        return callback
+
+    def test_card_offers_accepting_payment_and_refusal(self):
+        _text, data = self._card()
+        self.assertEqual([item for item in data if item.startswith(("stafforder:", "staffrc"))],
+                         [])
+
+    def test_card_payment_is_recorded(self):
+        callback = self._staff(f"staffrccard:{self.order.public_id}")
+
+        self.order.refresh_from_db()
+        self.assertIsNone(self.order.paid_at)
+        self.assertIn("касса Poster", callback.answer.call_args.args[0])
+
+    def test_refusal_asks_first_then_cancels(self):
+        self._staff(f"staffrcnoy:{self.order.public_id}")
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.NEW)
+
+    def test_an_old_accept_button_is_refused(self):
+        callback = self._staff_press(f"stafforder:{self.order.public_id}:accepted",
+                                     staff.staff_order_status_callback_handler)
+
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.status, Order.Status.NEW)
+        self.assertIn("больше недоступно", callback.answer.call_args.args[0])

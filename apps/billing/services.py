@@ -29,9 +29,10 @@ from apps.bonuses.services import (
     sync_bonus_balance_from_ledger,
 )
 from apps.employees.models import EmployeeProfile
+from apps.integrations.poster.selectors import register_holds
 from apps.menu.stock import return_for_refund, returnable
 from apps.orders.models import Order, OrderItem
-from apps.orders.services import transition_order_status
+from apps.orders.services import REGISTER_HOLDS_MESSAGE, transition_order_status
 from apps.partners.networks import acts_for_partner, owns_partner
 from apps.users.models import GuestProfile, User
 from core.i18n import _
@@ -1222,9 +1223,12 @@ def cancel_order(
     """Cancel an order; if it is in an open bill, remove its lines first.
 
     Removing the lines of a billed order is a bill change: it needs the bill
-    permission and a reason. Orders in a paid bill cannot be cancelled.
+    permission and a reason. Orders in a paid bill cannot be cancelled. An
+    order the register holds is cancelled there (Poster, step 7).
     """
 
+    if actor is not None and register_holds(order):
+        raise BillingServiceError(_(REGISTER_HOLDS_MESSAGE))
     active_items = list(
         BillItem.objects.filter(
             partner_id=order.partner_id,

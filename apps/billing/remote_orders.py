@@ -64,12 +64,13 @@ from apps.billing.services import (
 )
 from apps.billing.signals import announce_remote_order
 from apps.bonuses.services import get_redeemable_bonus_amount
-from apps.integrations.poster.selectors import register_takes
+from apps.integrations.poster.selectors import goes_to_register, register_holds, register_takes
 from apps.menu.catalog import first_not_on_sale, not_sold_in
 from apps.menu.translations import line_names_in
 from apps.orders.models import Cart, Order
 from apps.orders.services import (
     CHANNEL_OFF_MESSAGES,
+    REGISTER_HOLDS_MESSAGE,
     cart_line_payload,
     complete_order_from_register,
     create_order,
@@ -757,6 +758,9 @@ def place_remote_order(
     )
     carrier = guest.shipping_carrier
     destination = guest.shipping_destination
+    # The venue's Poster will take it (step 7, owner 2026-11-21): staff are
+    # told to accept it at the register, where the money is taken too.
+    in_register = goes_to_register(order)
 
     def staff_note() -> str:
         # Built per employee, in their language (PQ-040).
@@ -783,6 +787,10 @@ def place_remote_order(
                     to_pay=to_pay,
                 )
             )
+        elif to_pay > 0 and payment == ON_RECEIPT and in_register:
+            lines.append(
+                _("Оплата при получении: {to_pay} грн — её примут на кассе Poster.", to_pay=to_pay)
+            )
         elif to_pay > 0 and payment == ON_RECEIPT:
             lines.append(
                 _(
@@ -801,6 +809,8 @@ def place_remote_order(
             )
         else:
             lines.append(_("Оплачен бонусами полностью."))
+        if in_register:
+            lines.append(_("Заказ уходит в Poster — принимайте его на кассе."))
         return "\n".join(lines)
 
     notify_staff_about_new_order(order, note=staff_note)
@@ -977,6 +987,9 @@ def record_payment_on_receipt(*, order: Order, actor, method: str) -> Order:
         raise RemoteOrderError(_("При получении принимаем наличные или карту — выберите способ."))
     bill = _order_bill(order)
     order = _lock_remote_order(order, ON_RECEIPT)
+    if register_holds(order):
+        # The register takes the money (statuses.py: record_register_payment).
+        raise RemoteOrderError(_(REGISTER_HOLDS_MESSAGE))
     if bill.status == Bill.Status.PAID or order.paid_at is not None:
         raise RemoteOrderError(_("Заказ уже оплачен."))
     if order.channel == Order.Channel.DELIVERY and order.status not in DELIVERY_PAID_FROM:
@@ -1002,6 +1015,8 @@ def cancel_unpaid_remote_order(*, order: Order, actor, comment: str = "") -> Ord
     _check_actor(actor, order.partner_id)
     bill = _order_bill(order)
     order = _lock_remote_order(order, ON_RECEIPT)
+    if register_holds(order):
+        raise RemoteOrderError(_(REGISTER_HOLDS_MESSAGE))
     if order.status in {Order.Status.COMPLETED, Order.Status.CANCELED}:
         raise RemoteOrderError(_("Заказ уже закрыт."))
     if bill.status == Bill.Status.PAID or bill.payments.exclude(

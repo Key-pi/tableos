@@ -16,8 +16,9 @@ from apps.billing.remote_orders import (
     receipt_payment_due,
     receipt_refusal_possible,
 )
+from apps.integrations.poster.selectors import register_holds
 from apps.orders.models import Order
-from apps.orders.services import get_available_staff_actions
+from apps.orders.services import get_available_staff_actions, staff_statuses_for
 from core.i18n import N_, _
 
 # Status buttons, the same on every staff screen: the bot, the Mini App and
@@ -66,6 +67,9 @@ STATUS = "status:"
 
 
 def staff_order_actions(order: Order) -> list[str]:
+    if register_holds(order):
+        # Poster holds it (step 7): only «Готово» and «В пути» are Botera's.
+        return [STATUS + status for status in staff_statuses_for(order)]
     is_shipping = order.channel == Order.Channel.SHIPPING
     unpaid_on_receipt = awaits_payment_on_receipt(order)
     # A delivery is paid to the courier (PQ-044), a parcel at the post office:

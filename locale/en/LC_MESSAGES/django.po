@@ -1441,6 +1441,10 @@ msgid "Наложенный платёж: {to_pay} грн. Отметьте оп
 msgstr "Cash on delivery: {to_pay} UAH. Mark the payment in the order card when the carrier transfers the money."
 
 #: apps/billing/remote_orders.py
+msgid "Оплата при получении: {to_pay} грн — её примут на кассе Poster."
+msgstr "Pay on receipt: {to_pay} UAH — taken at the Poster register."
+
+#: apps/billing/remote_orders.py
 msgid "Оплата при получении: {to_pay} грн (наличные или карта). Отметьте оплату в карточке заказа, когда гость заплатит."
 msgstr "Pay on receipt: {to_pay} UAH (cash or card). Mark the payment in the order card when the guest pays."
 
@@ -1451,6 +1455,10 @@ msgstr "The guest reported a transfer of {to_pay} UAH. Check that it arrived and
 #: apps/billing/remote_orders.py
 msgid "Оплачен бонусами полностью."
 msgstr "Paid fully with bonuses."
+
+#: apps/billing/remote_orders.py
+msgid "Заказ уходит в Poster — принимайте его на кассе."
+msgstr "The order goes to Poster — accept it at the register."
 
 #: apps/billing/remote_orders.py
 msgid "по тарифу перевозчика, платит получатель на почте"
@@ -4553,6 +4561,10 @@ msgstr "order part done"
 #: apps/orders/models.py
 msgid "Готовность частей заказов"
 msgstr "Order parts done"
+
+#: apps/orders/services.py
+msgid "Этот заказ ведёт касса Poster: принимают, отменяют, оплачивают и закрывают его там."
+msgstr "The Poster register handles this order: it is accepted, cancelled, paid and closed there."
 
 #: apps/orders/services.py
 msgid "Укажите позиции в формате `code x qty`, например: `a1b2c3d4x2,e5f6a7b8x1`."

@@ -15,6 +15,7 @@ from apps.billing.remote_orders import (
     reject_transfer,
 )
 from apps.billing.services import BillingServiceError, cancel_order, create_bill_from_orders
+from apps.integrations.poster.selectors import with_register_mark
 from apps.orders.kitchen import issue_screen_link, missing_screen_warnings
 from apps.orders.models import (
     Cart,
@@ -287,6 +288,11 @@ class OrderAdmin(ObjectActionsMixin, ScopedAdminMixin):
             if fields:
                 result.append((title, {**options, "fields": fields}))
         return result
+
+    def get_queryset(self, request):
+        # Which orders the register holds (Poster, step 7): the buttons of a
+        # row without a query per row.
+        return with_register_mark(super().get_queryset(request))
 
     def get_object_actions(self, request, obj):
         return order_admin_actions(obj)

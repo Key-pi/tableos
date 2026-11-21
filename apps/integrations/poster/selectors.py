@@ -10,15 +10,21 @@ not in it: Botera may hide what Poster sells (``PosterRef.hidden_in_poster``).
 Step 7: the menu, the cart and checkout read here what the register takes —
 pickup and delivery while Poster works (``register_takes``), and whether
 Botera's own items and add-ons are hidden there (``own_menu_hidden``, the
-venue's «Меню в боте»). Only Poster's own tables are read: no request to
-Poster, nothing of billing or orders is imported.
+venue's «Меню в боте»); the «Новый заказ» message — whether the order will go
+to the register (``goes_to_register``); staff screens and services — whether
+the register holds an order (``register_holds``): then accepting,
+cancelling, the money and completing are the register's (owner 2026-11-21).
+Only Poster's own tables (and the order's lines) are read: no request to
+Poster, nothing of billing's or orders' services is imported.
 """
 
 from __future__ import annotations
 
+import uuid
+
 from django.db.models import Exists, OuterRef
 
-from apps.integrations.poster.models import PosterConnection, PosterRef
+from apps.integrations.poster.models import PosterConnection, PosterOrderPush, PosterRef
 
 POSTER_FIELDS = {
     "menu.menucategory": ("name", "parent"),
@@ -111,3 +117,67 @@ def with_poster_mark(queryset):
     return queryset.annotate(from_poster=Exists(PosterRef.objects.filter(
         partner_id=OuterRef("partner_id"), kind=kind, object_id=OuterRef("pk"),
     )))
+
+
+def goes_to_register(order) -> bool:
+    """The order will be sent to the register: its channel goes there and
+    every line, variant and add-on came from Poster (what ``orders.py``
+    sends; transfer and bonuses are not offered there since step 7)."""
+
+    if not register_takes(order.partner_id, order.channel):
+        return False
+    from apps.menu.models import MenuItem, MenuItemVariant, Modifier
+    from apps.orders.models import OrderItem
+
+    lines = [line for line in order.items.all() if line.kind != OrderItem.Kind.DELIVERY_FEE]
+    if not lines:
+        return False
+    items = {line.menu_item_id for line in lines}
+    variants = {line.variant_id for line in lines if line.variant_id}
+    modifiers = {_hex(row.get("id")) for line in lines for row in line.modifiers or []}
+    return (
+        linked_ids(order.partner_id, MenuItem, items) == items
+        and linked_ids(order.partner_id, MenuItemVariant, variants) == variants
+        and {value.hex for value in linked_ids(order.partner_id, Modifier, modifiers - {""})}
+        == modifiers
+    )
+
+
+def _hex(value) -> str:
+    try:
+        return uuid.UUID(str(value)).hex
+    except (TypeError, ValueError):
+        return ""
+
+
+def register_holds(order) -> bool:
+    """The register holds the order now: it went (or goes) to the venue's
+    working Poster — accepting, cancelling, the money and completing are done
+    there; Botera's staff only say «Готово» and «В пути». A push that failed,
+    or Poster disconnected — the order is Botera's again."""
+
+    if HELD in order.__dict__:  # ``with_register_mark``
+        return bool(order.__dict__[HELD])
+    if getattr(order, "pk", None) is None:  # not saved (or a stand-in)
+        return False
+    return _held_pushes().filter(order_id=order.pk, partner_id=order.partner_id).exists()
+
+
+HELD = "poster_held"
+
+
+def _held_pushes():
+    return PosterOrderPush.objects.exclude(status=PosterOrderPush.Status.FAILED).filter(
+        Exists(PosterConnection.objects.filter(
+            partner_id=OuterRef("partner_id"), status=PosterConnection.Status.ACTIVE,
+        )),
+    )
+
+
+def with_register_mark(queryset):
+    """Orders annotated for ``register_holds`` — a whole list in one query
+    (Admin's list, the staff's open orders)."""
+
+    return queryset.annotate(**{HELD: Exists(_held_pushes().filter(
+        order_id=OuterRef("pk"), partner_id=OuterRef("partner_id"),
+    ))})
