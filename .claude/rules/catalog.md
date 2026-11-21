@@ -35,4 +35,9 @@ paths:
   Admin только для чтения, пока подключение работает
   (`apps/menu/admin.py:PosterFieldsMixin`, список —
   `apps/integrations/poster/selectors.py:POSTER_FIELDS`). Новое поле каталога,
-  которое пишет Poster, — туда же.
+  которое пишет Poster, — туда же. Продаётся ли позиция в способе заказа —
+  `apps/menu/catalog.py:not_sold_in` (и `sold_in_channels`, фильтр в
+  `apps/menu/repositories.py`), а не голый `is_sold_in`: при «Только меню
+  Poster» свои позиции, варианты и добавки Botera не продаются в самовывозе и
+  доставке (шаг 7); добавки гостя — `catalog_choices` / `resolve_choice` с
+  `channel`.

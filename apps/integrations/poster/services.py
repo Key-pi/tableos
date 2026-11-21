@@ -236,6 +236,20 @@ def choose_spot(*, connection_id, user, spot_id) -> PosterConnection:
     return connection
 
 
+def set_menu_mode(*, connection_id, user, mode) -> PosterConnection:
+    """«Меню в боте» (owner 2026-11-21, step 7): only Poster's menu where
+    orders go to the register, or Botera's own items too."""
+
+    if mode not in PosterConnection.MenuMode.values:
+        raise PosterConnectError(_("Такого варианта меню нет."))
+    with transaction.atomic():
+        connection = PosterConnection.objects.select_for_update().get(pk=connection_id)
+        _require_manager(user, connection.partner_id)
+        connection.menu_mode = mode
+        connection.save(update_fields=["menu_mode", "updated_at"])
+    return connection
+
+
 def disconnect(*, connection_id, user) -> PosterConnection:
     """Orders stop going to Poster; the record and the menu stay."""
 

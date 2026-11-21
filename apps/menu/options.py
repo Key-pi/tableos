@@ -9,6 +9,10 @@
   not offered and holds nothing back.
 - Module ``module_options_enabled``: while it is off nothing is chosen and
   every item is sold at its own price, as before.
+- A venue on Poster with «Только меню Poster» (PQ-058, step 7): in pickup and
+  delivery only Poster's variants and add-ons are offered (``channel``) — the
+  register would not take Botera's own; a group with nothing left there is
+  not offered and holds nothing back.
 
 One function decides what was chosen and what it costs — ``resolve_choice``
 — for the bot, the Mini App, the cart, checkout and the staff quick sale.
@@ -69,11 +73,15 @@ def options_on(partner_id) -> bool:
     ).exists()
 
 
-def catalog_choices(partner, items, *, on: bool | None = None) -> dict:
+def catalog_choices(
+    partner, items, *, on: bool | None = None, channel: str | None = None
+) -> dict:
     """``{item.id: ItemChoices}`` for a whole menu in a few queries: the
     module, variants, add-ons with their groups, the groups' items and
-    categories. Items need ``category`` loaded (its ``parent_id`` is read)."""
+    categories. Items need ``category`` loaded (its ``parent_id`` is read).
+    ``channel`` — the guest's way of ordering, when known (step 7)."""
 
+    from apps.integrations.poster.selectors import only_linked, own_menu_hidden
     from apps.menu.models import MenuItemVariant, Modifier, ModifierGroup
 
     items = list(items)
@@ -82,19 +90,24 @@ def catalog_choices(partner, items, *, on: bool | None = None) -> dict:
         on = options_on(partner_id)
     if not on or not items:
         return {item.id: NOTHING for item in items}
+    poster_only = channel is not None and own_menu_hidden(partner_id, channel)
 
     found = {item.id: ItemChoices() for item in items}
-    for variant in MenuItemVariant.objects.filter(
-        item_id__in=list(found), is_available=True
-    ).order_by("sort_order", "price", "name"):
+    variants = MenuItemVariant.objects.filter(item_id__in=list(found), is_available=True)
+    if poster_only:
+        variants = only_linked(variants)
+    for variant in variants.order_by("sort_order", "price", "name"):
         found[variant.item_id].variants.append(variant)
 
     # Only groups with something on sale: the add-ons bring their groups.
+    modifiers = Modifier.objects.filter(
+        group__partner_id=partner_id, group__is_active=True, is_available=True
+    )
+    if poster_only:
+        modifiers = only_linked(modifiers)
     groups: dict = {}
     for modifier in (
-        Modifier.objects.filter(
-            group__partner_id=partner_id, group__is_active=True, is_available=True
-        )
+        modifiers
         .select_related("group")
         .order_by("group__sort_order", "group__name", "group_id", "sort_order", "name")
     ):
@@ -127,8 +140,8 @@ def catalog_choices(partner, items, *, on: bool | None = None) -> dict:
     return found
 
 
-def choices_for(item, *, on: bool | None = None) -> ItemChoices:
-    return catalog_choices(item.partner_id, [item], on=on)[item.id]
+def choices_for(item, *, on: bool | None = None, channel: str | None = None) -> ItemChoices:
+    return catalog_choices(item.partner_id, [item], on=on, channel=channel)[item.id]
 
 
 def needs_choice(item, choices: ItemChoices | None = None) -> bool:
@@ -226,16 +239,18 @@ def _hex(value) -> str:
 
 
 def resolve_choice(
-    item, variant_id=None, modifier_ids=(), *, choices: ItemChoices | None = None
+    item, variant_id=None, modifier_ids=(), *, choices: ItemChoices | None = None,
+    channel: str | None = None,
 ) -> Choice:
-    """Check what was chosen for ``item`` against what is on sale now and
-    return the ``Choice``; ``ChoiceError`` says what is wrong."""
+    """Check what was chosen for ``item`` against what is on sale now (in
+    ``channel``, when given) and return the ``Choice``; ``ChoiceError`` says
+    what is wrong."""
 
     modifier_ids = list(modifier_ids or ())
     # Names in the reader's language (catalog step 4).
     name = translated(item, "name")
     if choices is None:
-        choices = choices_for(item)
+        choices = choices_for(item, channel=channel)
     if choices is NOTHING or not (choices.variants or choices.groups):
         if variant_id or modifier_ids:
             if choices is NOTHING:  # the module is off

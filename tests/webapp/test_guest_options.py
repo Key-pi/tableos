@@ -4,8 +4,10 @@ choice, the order gets it."""
 
 from decimal import Decimal
 
+from apps.integrations.poster.models import PosterRef
 from apps.menu.models import MenuItemVariant, Modifier, ModifierGroup
 from apps.orders.models import CartItem, Order, OrderItem
+from tests.apps.integrations.poster.test_menu_sync import connect
 from tests.apps.menu.test_options import options_module
 from tests.webapp.test_guest_api import MiniAppFixture
 
@@ -131,3 +133,45 @@ class CartTests(OptionsMiniAppFixture):
         self.assertEqual(status, 400)
         self.assertIn("Вівсяне", body["error"])
         self.assertFalse(Order.objects.exists())
+
+
+class PosterMenuTests(OptionsMiniAppFixture):
+    """A venue on Poster with «Только меню Poster» (PQ-058, step 7): Botera's
+    own items are not sold and own add-ons are not offered where the register
+    takes the orders; «Лате» and its sizes came from Poster, «Молоко» is
+    Botera's own group."""
+
+    def setUp(self):
+        super().setUp()
+        connect(self.partner)
+        PosterRef.objects.create(partner=self.partner, kind=PosterRef.Kind.PRODUCT,
+                                 poster_id="1", object_id=self.latte.pk)
+        for number, variant in enumerate((self.small, self.big), start=1):
+            PosterRef.objects.create(partner=self.partner, kind=PosterRef.Kind.VARIANT,
+                                     poster_id=f"1:{number}", object_id=variant.pk)
+
+    def item_json(self, name):
+        status, body = self.call("menu")
+        self.assertEqual(status, 200, body)
+        return next(item for category in body["categories"] for item in category["items"]
+                    if item["name"] == name)
+
+    def test_own_items_are_not_sold_where_the_register_takes_orders(self):
+        self.assertIn("pickup", self.item_json("Лате")["sold_in"])
+        hookah = self.item_json("Кальян")["sold_in"]
+        self.assertNotIn("pickup", hookah)
+        self.assertNotIn("delivery", hookah)
+        self.assertIn("table", hookah)
+
+    def test_own_add_ons_follow_the_way_of_ordering(self):
+        self.assertEqual([group["name"] for group in self.latte_json()["groups"]], ["Молоко"])
+
+        self.choose("pickup")
+        latte = self.latte_json()
+
+        self.assertEqual(latte["choice"], "required")  # a size from Poster
+        self.assertEqual(latte.get("groups", []), [])
+        status, body = self.add(self.big, [self.oat])
+        self.assertEqual(status, 400, body)
+        status, body = self.add(self.big)
+        self.assertEqual(status, 200, body)

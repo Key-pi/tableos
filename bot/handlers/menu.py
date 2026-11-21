@@ -276,7 +276,7 @@ async def send_menu_view(
     menu_items = chosen["items"][: content.max_menu_items_per_category_message]
     closed = await sync_to_async(closed_category)(category)
     closed_when = schedule_label(closed) if closed is not None else ""
-    choices = await sync_to_async(catalog_choices)(partner, menu_items)
+    choices = await sync_to_async(catalog_choices)(partner, menu_items, channel=channel)
     stock = await sync_to_async(_stock_states)(partner, menu_items, choices)
     cart = None
     if channel is not None:
@@ -378,8 +378,9 @@ async def menu_add_callback(callback: CallbackQuery, bot: Bot) -> None:
 # --- a variant and add-ons (catalog step 2) ---------------------------------
 
 
-def _choice_item(partner, public_id: str):
-    """The item on sale with what can be chosen for it, or (None, None)."""
+def _choice_item(partner, public_id: str, telegram_id: int):
+    """The item on sale with what can be chosen for it in the guest's way of
+    ordering (Poster, step 7), or (None, None)."""
 
     item = (
         MenuItemRepository.active_for_partner(partner.id)
@@ -389,7 +390,8 @@ def _choice_item(partner, public_id: str):
     )
     if item is None:
         return None, None
-    return item, choices_for(item)
+    channel = ordering_channel_for_telegram_user(partner_id=partner.id, telegram_id=telegram_id)
+    return item, choices_for(item, channel=channel)
 
 
 def _render_choice_view(item, choices, pick) -> str:
@@ -423,7 +425,7 @@ async def _choice_context(callback: CallbackQuery, bot: Bot):
     except ValueError:
         await callback.answer()
         return None
-    item, choices = await sync_to_async(_choice_item)(partner, public_id)
+    item, choices = await sync_to_async(_choice_item)(partner, public_id, callback.from_user.id)
     if item is None:
         await callback.answer(_("Эта позиция сейчас недоступна."), show_alert=True)
         return None

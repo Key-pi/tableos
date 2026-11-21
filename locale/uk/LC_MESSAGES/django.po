@@ -1381,6 +1381,10 @@ msgid "Этот способ оплаты сейчас недоступен — 
 msgstr "Цей спосіб оплати зараз недоступний — оберіть інший."
 
 #: apps/billing/remote_orders.py
+msgid "Бонусы в этом заказе не списываются — оформите его без бонусов."
+msgstr "Бонуси в цьому замовленні не списуються — оформіть його без бонусів."
+
+#: apps/billing/remote_orders.py
 msgid "Выберите время ещё раз."
 msgstr "Виберіть час ще раз."
 
@@ -2477,6 +2481,10 @@ msgid "Подключить Poster"
 msgstr "Підключити Poster"
 
 #: apps/integrations/poster/admin.py
+msgid "Пока Poster работает, самовывоз и доставка оплачиваются при получении и без бонусов: оплату переводом заранее и бонусы касса пока не принимает."
+msgstr "Поки Poster працює, самовивіз і доставка оплачуються під час отримання і без бонусів: оплату переказом заздалегідь і бонуси каса поки не приймає."
+
+#: apps/integrations/poster/admin.py
 msgid "Это точка «{spot}»"
 msgstr "Це точка «{spot}»"
 
@@ -2491,6 +2499,26 @@ msgstr "Відключити Poster"
 #: apps/integrations/poster/admin.py
 msgid "Заказы перестанут уходить в Poster, меню в Botera останется. Отключить?"
 msgstr "Замовлення перестануть надходити в Poster, меню в Botera залишиться. Відключити?"
+
+#: apps/integrations/poster/admin.py
+msgid "Показывать только меню Poster"
+msgstr "Показувати лише меню Poster"
+
+#: apps/integrations/poster/admin.py
+msgid "В самовывозе и доставке гости перестанут видеть позиции и добавки Botera, которых нет в Poster. Показывать только меню Poster?"
+msgstr "У самовивозі й доставці гості перестануть бачити позиції та добавки Botera, яких немає в Poster. Показувати лише меню Poster?"
+
+#: apps/integrations/poster/admin.py
+msgid "Показывать и свои позиции Botera"
+msgstr "Показувати й свої позиції Botera"
+
+#: apps/integrations/poster/admin.py
+msgid "Гости увидят и позиции Botera, которых нет в Poster. Заказ с ними в Poster не уйдёт: персонал получит сообщение и внесёт его на кассу сам. Показывать?"
+msgstr "Гості побачать і позиції Botera, яких немає в Poster. Замовлення з ними до Poster не піде: персонал отримає повідомлення і внесе його на касу сам. Показувати?"
+
+#: apps/integrations/poster/admin.py
+msgid "Меню в боте: {mode}."
+msgstr "Меню в боті: {mode}."
 
 #: apps/integrations/poster/admin.py
 msgid "Poster отключён."
@@ -2573,6 +2601,14 @@ msgid "Отключено"
 msgstr "Вимкнено"
 
 #: apps/integrations/poster/models.py
+msgid "Только меню Poster"
+msgstr "Лише меню Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Меню Poster и свои позиции Botera"
+msgstr "Меню Poster і свої позиції Botera"
+
+#: apps/integrations/poster/models.py
 msgid "Аккаунт Poster"
 msgstr "Акаунт Poster"
 
@@ -2603,6 +2639,14 @@ msgstr "Меню оновлено"
 #: apps/integrations/poster/models.py
 msgid "Меню изменено в Poster"
 msgstr "Меню змінено в Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Меню в боте"
+msgstr "Меню в боті"
+
+#: apps/integrations/poster/models.py
+msgid "В самовывозе и доставке. «Только меню Poster» — позиций и добавок Botera, которых нет в Poster, гость там не видит. «Меню Poster и свои позиции Botera» — видит; заказ с ними в Poster не уходит, персонал вносит его на кассу сам."
+msgstr "У самовивозі й доставці. «Лише меню Poster» — позицій і добавок Botera, яких немає в Poster, гість там не бачить. «Меню Poster і свої позиції Botera» — бачить; замовлення з ними до Poster не йде, персонал вносить його на касу сам."
 
 #: apps/integrations/poster/models.py apps/notifications/models.py
 msgid "Последняя ошибка"
@@ -2907,6 +2951,10 @@ msgstr "Такої точки немає в акаунті Poster."
 #: apps/integrations/poster/services.py
 msgid "Poster отключён. Подключите его заново."
 msgstr "Poster відключено. Підключіть його знову."
+
+#: apps/integrations/poster/services.py
+msgid "Такого варианта меню нет."
+msgstr "Такого варіанта меню немає."
 
 #: apps/integrations/poster/statuses.py
 msgid "Заказ #{code}: проверьте в Poster"

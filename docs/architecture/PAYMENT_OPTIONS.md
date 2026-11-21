@@ -80,6 +80,11 @@
   аннулируется (бонусы возвращаются `reversal`), заказ `canceled`; нельзя,
   если уже есть оплата деньгами.
 - `confirm_transfer`, `reject_transfer` — только для `prepaid`.
+- Заведение на кассе Poster (PQ-058, шаг 7, [POSTER.md](POSTER.md)): пока
+  Poster работает, самовывоз и доставка — только оплата при получении
+  (`payment_modes_for` убирает перевод заранее, `apps/integrations/poster/selectors.py:register_takes`)
+  и без бонусов (`get_remote_quote` их не предлагает, `place_remote_order`
+  отказывает); отправка почтой — как раньше.
 - Заведение на кассе Poster (PQ-059, [POSTER.md](POSTER.md)): закрытый чек
   онлайн-заказа сам записывает оплату при получении —
   `record_register_payment(order, method, provider_code, reference, note)`:

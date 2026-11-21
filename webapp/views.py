@@ -49,6 +49,7 @@ from apps.menu.catalog import (
     portion_label,
     schedule_label,
     showcase_on,
+    sold_in_channels,
 )
 from apps.menu.options import catalog_choices, has_choices, needs_choice, price_from
 from apps.menu.repositories import MenuItemRepository
@@ -292,7 +293,9 @@ def point_view(request, guest: GuestRequest, body: dict) -> dict:
     return {"ok": True}
 
 
-def _category_json(category, items, *, now, showcase: bool, choices, stock: bool = False) -> dict:
+def _category_json(
+    category, items, *, now, showcase: bool, choices, stock: bool = False, sold_in=None
+) -> dict:
     closed = closed_category(category, now)
     return {
         "id": category.id.hex,
@@ -303,7 +306,10 @@ def _category_json(category, items, *, now, showcase: bool, choices, stock: bool
         "closed": closed is not None,
         "schedule": schedule_label(closed or category),
         "items": [
-            _item_json(item, showcase=showcase, choices=choices[item.id], stock=stock)
+            _item_json(
+                item, showcase=showcase, choices=choices[item.id], stock=stock,
+                sold_in=(sold_in or {}).get(item.id),
+            )
             for item in items
         ],
     }
@@ -333,7 +339,7 @@ def _choices_json(choices) -> dict:
     }
 
 
-def _item_json(item, *, showcase: bool, choices, stock: bool = False) -> dict:
+def _item_json(item, *, showcase: bool, choices, stock: bool = False, sold_in=None) -> dict:
     # Variants and add-ons (module «Варианты и добавки»): «required» — the
     # card opens the item to choose; «optional» — add-ons can be added there.
     if needs_choice(item, choices):
@@ -350,7 +356,11 @@ def _item_json(item, *, showcase: bool, choices, stock: bool = False) -> dict:
         "price_from": bool(choices.variants),
         "choice": choice,
         "photo": item.photo_url,
-        "sold_in": [channel for channel in item.CHANNEL_FIELDS if item.is_sold_in(channel)],
+        # Where it is sold (``apps/menu/catalog.py:sold_in_channels``, Poster step 7).
+        "sold_in": (
+            sold_in if sold_in is not None
+            else [channel for channel in item.CHANNEL_FIELDS if item.is_sold_in(channel)]
+        ),
     }
     if choice != "none":
         data.update(_choices_json(choices))
@@ -390,21 +400,25 @@ def menu_view(request, guest: GuestRequest, body: dict) -> dict:
     if showcase:
         items = items.prefetch_related("custom_badges", "photos", "attributes")
     items = list(items)
-    choices = catalog_choices(venue, items)
+    # Add-ons of the guest's way (Poster step 7); the page asks again after
+    # the guest picks another way (``guest.js:chooseWay``).
+    channel = ordering_channel_for_telegram_user(partner_id=venue.id, telegram_id=guest.telegram_id)
+    choices = catalog_choices(venue, items, channel=channel)
+    sold_in = sold_in_channels(items)
     stock = stock_on(venue.id)
     now = local_now(venue)
     categories = []
     for branch in catalog_tree(venue.id, items):
         top = _category_json(
             branch["category"], branch["items"], now=now, showcase=showcase, choices=choices,
-            stock=stock,
+            stock=stock, sold_in=sold_in,
         )
         top["parent"] = None
         categories.append(top)
         for child in branch["children"]:
             sub = _category_json(
                 child["category"], child["items"], now=now, showcase=showcase,
-                choices=choices, stock=stock,
+                choices=choices, stock=stock, sold_in=sold_in,
             )
             sub["parent"] = top["id"]
             categories.append(sub)

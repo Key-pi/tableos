@@ -307,6 +307,12 @@
       }
       haptic();
       render();
+      // Add-ons can differ by the way of ordering (Poster, step 7).
+      api("menu").then(function (fresh) {
+        if (!fresh.ok) return;
+        menu = fresh.data;
+        render();
+      });
     });
   }
 

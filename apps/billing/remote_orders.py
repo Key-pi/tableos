@@ -29,6 +29,11 @@ Owner decisions (2026-10-23, docs/architecture/PICKUP.md):
 - the guest's phone is required (shared once through Telegram);
 - orders are accepted only within the venue's opening hours.
 
+A venue on Poster (PQ-058, step 7; v1, owner 2026-11-20): pickup and
+delivery go to the register, so they are paid on receipt only and without
+bonuses (``register_takes``); shipping keeps its options. What the menu sells
+there — ``apps/menu/catalog.py:not_sold_in``.
+
 An order is placed when the guest says they have paid, or, paying on
 receipt, when they confirm the order. It gets a personal bill at once;
 bonuses, if chosen, are applied to that bill. A transfer is then confirmed
@@ -59,7 +64,8 @@ from apps.billing.services import (
 )
 from apps.billing.signals import announce_remote_order
 from apps.bonuses.services import get_redeemable_bonus_amount
-from apps.menu.catalog import first_not_on_sale
+from apps.integrations.poster.selectors import register_takes
+from apps.menu.catalog import first_not_on_sale, not_sold_in
 from apps.menu.translations import line_names_in
 from apps.orders.models import Cart, Order
 from apps.orders.services import (
@@ -191,7 +197,9 @@ def _settings(partner_id, channel: str) -> PartnerBotSettings:
     ):
         raise RemoteOrderError(_(CHANNEL_OFF_MESSAGES[channel]))
     if not payment_modes_for(settings, channel):
-        if getattr(settings, PAYMENT_OPTION_FIELDS[channel][PREPAID]):
+        if getattr(settings, PAYMENT_OPTION_FIELDS[channel][PREPAID]) and not register_takes(
+            partner_id, channel
+        ):
             raise RemoteOrderError(_("Заведение ещё не указало реквизиты для оплаты переводом."))
         raise RemoteOrderError(_("Заведение ещё не настроило оплату заказов."))
     return settings
@@ -200,12 +208,17 @@ def _settings(partner_id, channel: str) -> PartnerBotSettings:
 def payment_modes_for(settings: PartnerBotSettings, channel: str) -> tuple[str, ...]:
     """Payment options the module offers, transfer first.
 
-    Transfer counts only with the venue's requisites filled in.
+    Transfer counts only with the venue's requisites filled in, and not
+    where the register takes the order (Poster, v1).
     """
 
     fields = PAYMENT_OPTION_FIELDS[channel]
     modes = []
-    if getattr(settings, fields[PREPAID]) and settings.transfer_payment_details.strip():
+    if (
+        getattr(settings, fields[PREPAID])
+        and settings.transfer_payment_details.strip()
+        and not register_takes(settings.partner_id, channel)
+    ):
         modes.append(PREPAID)
     if getattr(settings, fields[ON_RECEIPT]):
         modes.append(ON_RECEIPT)
@@ -246,10 +259,11 @@ def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = 
             )
         )
     lines = list(cart.items.all())
+    off = not_sold_in((item.menu_item for item in lines), channel)
     not_sold = [
         name  # in the guest's language (catalog step 4)
         for item, name in zip(lines, line_names_in(lines), strict=True)
-        if not (item.menu_item.is_available and item.menu_item.is_sold_in(channel))
+        if not item.menu_item.is_available or item.menu_item_id in off
     ]
     if not_sold:
         raise RemoteOrderError(_(
@@ -262,7 +276,7 @@ def _active_cart(partner_id, guest: GuestProfile, channel: str, *, lock: bool = 
     if closed:
         raise RemoteOrderError(closed)
     # A variant or an add-on taken off sale since (catalog step 2).
-    stale = stale_choice_message(cart.items.all())
+    stale = stale_choice_message(cart.items.all(), channel=channel)
     if stale:
         raise RemoteOrderError(stale)
     return cart
@@ -488,10 +502,9 @@ def get_remote_quote(
         shipping_cost = cost_options[0] if cost_options else ""
     fee = _channel_fee(settings, channel, items_total, shipping_cost)
     total = _money(items_total + fee)
-    bonus_available = get_redeemable_bonus_amount(
-        partner_id=partner_id,
-        guest=guest,
-        purchase_total=total,
+    bonus_available = (
+        Decimal("0.00") if register_takes(partner_id, channel)
+        else get_redeemable_bonus_amount(partner_id=partner_id, guest=guest, purchase_total=total)
     )
     bonus_to_spend = bonus_available if use_bonuses else Decimal("0.00")
     return RemoteQuote(
@@ -630,6 +643,10 @@ def place_remote_order(
     partner = settings.partner
     if payment not in payment_modes_for(settings, channel):
         raise RemoteOrderError(_("Этот способ оплаты сейчас недоступен — выберите другой."))
+    if use_bonuses and register_takes(partner_id, channel):
+        raise RemoteOrderError(_(
+            "Бонусы в этом заказе не списываются — оформите его без бонусов.",
+        ))
     is_delivery = channel == Order.Channel.DELIVERY
     is_shipping = channel == Order.Channel.SHIPPING
     if channel in TIMED_CHANNELS:

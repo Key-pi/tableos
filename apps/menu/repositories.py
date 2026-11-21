@@ -1,3 +1,4 @@
+from apps.integrations.poster.selectors import only_linked, own_menu_hidden
 from apps.menu.models import MenuItem
 
 
@@ -11,4 +12,7 @@ class MenuItemRepository:
         ).select_related("category")
         if channel is not None:
             queryset = queryset.filter(**{MenuItem.CHANNEL_FIELDS[channel]: True})
+            # «Только меню Poster» (step 7): as ``apps/menu/catalog.py:not_sold_in``.
+            if own_menu_hidden(partner_id, channel):
+                queryset = only_linked(queryset)
         return queryset

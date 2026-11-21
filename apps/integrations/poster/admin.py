@@ -26,6 +26,7 @@ from apps.integrations.poster.services import (
     disconnect,
     may_manage_poster,
     poster_configured,
+    set_menu_mode,
     start_connection,
 )
 from apps.integrations.poster.views import bring_menu
@@ -78,6 +79,7 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
         "connected_by",
         "last_synced_at",
         "menu_changed_at",
+        "menu_mode",
         "last_error",
         "last_error_at",
         "created_at",
@@ -94,6 +96,7 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
         "connected_by",
         "last_synced_at",
         "menu_changed_at",
+        "menu_mode",
         "last_error",
         "last_error_at",
         "created_at",
@@ -180,6 +183,14 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         connection = self.get_object(request, object_id) if object_id else None
+        if request.method == "GET" and connection is not None and (
+            connection.status == PosterConnection.Status.ACTIVE
+        ):
+            # Step 7 (v1, owner 2026-11-20): what checkout offers meanwhile.
+            messages.info(request, _(
+                "Пока Poster работает, самовывоз и доставка оплачиваются при получении и без "
+                "бонусов: оплату переводом заранее и бонусы касса пока не принимает."
+            ))
         extra_context = {
             **(extra_context or {}),
             **self._connect_context(request, connection),
@@ -211,6 +222,8 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
                 code="sync", label=_("Обновить меню"), icon="sync", style="primary",
             ))
         if obj.status != PosterConnection.Status.DISCONNECTED:
+            actions.append(self._menu_mode_action(obj))
+        if obj.status != PosterConnection.Status.DISCONNECTED:
             actions.append(ObjectAction(
                 code="disconnect",
                 label=_("Отключить Poster"),
@@ -222,7 +235,36 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
             ))
         return actions
 
+    @staticmethod
+    def _menu_mode_action(obj) -> ObjectAction:
+        """The switch to the other «Меню в боте» (step 7)."""
+
+        if obj.menu_mode == PosterConnection.MenuMode.WITH_OWN:
+            return ObjectAction(
+                code=f"menu:{PosterConnection.MenuMode.POSTER}",
+                label=_("Показывать только меню Poster"),
+                icon="filter_alt",
+                confirm=_(
+                    "В самовывозе и доставке гости перестанут видеть позиции и добавки Botera, "
+                    "которых нет в Poster. Показывать только меню Poster?"
+                ),
+            )
+        return ObjectAction(
+            code=f"menu:{PosterConnection.MenuMode.WITH_OWN}",
+            label=_("Показывать и свои позиции Botera"),
+            icon="add_circle",
+            confirm=_(
+                "Гости увидят и позиции Botera, которых нет в Poster. Заказ с ними в Poster не "
+                "уйдёт: персонал получит сообщение и внесёт его на кассу сам. Показывать?"
+            ),
+        )
+
     def run_object_action(self, request, obj, code, data):
+        if code.startswith("menu:"):
+            connection = set_menu_mode(
+                connection_id=obj.pk, user=request.user, mode=code.removeprefix("menu:"),
+            )
+            return _("Меню в боте: {mode}.", mode=connection.get_menu_mode_display())
         if code == "disconnect":
             disconnect(connection_id=obj.pk, user=request.user)
             return _("Poster отключён.")

@@ -3,11 +3,13 @@
 
 from asgiref.sync import async_to_sync
 
+from apps.integrations.poster.models import PosterConnection, PosterRef
 from apps.menu.models import MenuItem, MenuItemVariant, Modifier, ModifierGroup
 from apps.orders.models import CartItem, Order
 from bot.handlers import menu as menu_handlers
 from bot.handlers import order as order_handlers
 from bot.keyboards.options import MAX_ADD_ONS
+from tests.apps.integrations.poster.test_menu_sync import connect
 from tests.apps.menu.test_options import options_module
 from tests.bot.test_guest_flow import GuestFlowFixture, _buttons, _data
 
@@ -142,3 +144,37 @@ class CartLineTests(BotChoiceFixture):
             self._callback("cart:item:remove:FLOW0001"), self.bot
         )
         self.assertFalse(CartItem.objects.exists())
+
+
+class PosterChoiceTests(BotChoiceFixture):
+    """A venue on Poster with «Только меню Poster» (PQ-058, step 7): for
+    pickup the bot offers only what came from Poster — «Сырники» and its
+    sizes; «Соус» and «Добавить» are Botera's own groups."""
+
+    def setUp(self):
+        super().setUp()
+        connect(self.partner)
+        PosterRef.objects.create(partner=self.partner, kind=PosterRef.Kind.PRODUCT,
+                                 poster_id="1", object_id=self.item.pk)
+        for number, variant in enumerate(self.item.variants.order_by("sort_order"), start=1):
+            PosterRef.objects.create(partner=self.partner, kind=PosterRef.Kind.VARIANT,
+                                     poster_id=f"1:{number}", object_id=variant.pk)
+
+    def test_own_add_ons_are_not_offered_for_pickup(self):
+        text, markup = self.shown(self.press("mo:FLOW0001"))
+
+        self.assertIn("Сырники, 3 шт", text)
+        self.assertNotIn("Сметана", text)
+        self.assertFalse([b for b in _buttons(markup) if "Мёд" in b.text])
+        callback = self.press(self.button(markup, "➕ Добавить").callback_data)
+        callback.answer.assert_called_with("Добавлено в корзину.")
+        self.assertEqual(CartItem.objects.get().item_name, "Сырники, 3 шт")
+
+    def test_with_own_items_they_are_offered(self):
+        PosterConnection.objects.filter(partner=self.partner).update(
+            menu_mode=PosterConnection.MenuMode.WITH_OWN,
+        )
+
+        text, _markup = self.shown(self.press("mo:FLOW0001"))
+
+        self.assertIn("(Сметана)", text)

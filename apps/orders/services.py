@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.billing.models import BillItem
 from apps.employees.models import EmployeeProfile
-from apps.menu.catalog import first_not_on_sale
+from apps.menu.catalog import first_not_on_sale, not_sold_in
 from apps.menu.models import MenuItem, MenuItemVariant
 from apps.menu.options import ChoiceError, catalog_choices, needs_choice, resolve_choice
 from apps.menu.stock import StockError, check_room, release_order, reserve_for_order
@@ -750,9 +750,10 @@ def get_or_create_active_cart_for_telegram_user(
 def _remove_items_not_sold_in(cart: Cart) -> list[str]:
     removed = []
     lines = list(cart.items.select_related("menu_item", "variant"))
+    off = not_sold_in((line.menu_item for line in lines), cart.channel)
     for item, name in zip(lines, line_names_in(lines), strict=True):
         menu_item = item.menu_item
-        if menu_item.is_available and menu_item.is_sold_in(cart.channel):
+        if menu_item.is_available and menu_item.id not in off:
             continue
         removed.append(name)  # the guest reads it (catalog step 4)
         item.delete()
@@ -809,13 +810,11 @@ def add_items_to_cart_for_telegram_user(
     )
     parsed_entries = parse_order_input(raw_items)
     items_payload = _build_items_payload(partner_id=partner_id, parsed_entries=parsed_entries)
-    not_sold = [
-        item.name
-        for item in MenuItem.objects.filter(
-            id__in=[payload["menu_item_id"] for payload in items_payload]
-        )
-        if not item.is_sold_in(cart.channel)
-    ]
+    wanted = list(MenuItem.objects.filter(
+        id__in=[payload["menu_item_id"] for payload in items_payload]
+    ))
+    off = not_sold_in(wanted, cart.channel)
+    not_sold = [item.name for item in wanted if item.id in off]
     if not_sold:
         raise OrderFlowError(
             _(
@@ -826,7 +825,7 @@ def add_items_to_cart_for_telegram_user(
         )
     # By codes there is nowhere to choose a variant or a required add-on.
     menu_items = {payload["menu_item"].id: payload["menu_item"] for payload in items_payload}
-    choices = catalog_choices(partner_id, menu_items.values())
+    choices = catalog_choices(partner_id, menu_items.values(), channel=cart.channel)
     for menu_item in menu_items.values():
         if needs_choice(menu_item, choices[menu_item.id]):
             raise OrderFlowError(
@@ -961,7 +960,7 @@ def add_menu_item_for_telegram_user(
     menu_item = _build_items_payload(
         partner_id=partner_id, parsed_entries=[(item_public_id, 1)]
     )[0]["menu_item"]
-    if not menu_item.is_sold_in(cart.channel):
+    if not_sold_in([menu_item], cart.channel):
         raise OrderFlowError(
             _(
                 "Недоступно для заказа {channel_names}: {not_sold}.",
@@ -970,7 +969,7 @@ def add_menu_item_for_telegram_user(
             )
         )
     try:
-        choice = resolve_choice(menu_item, variant_id, modifier_ids)
+        choice = resolve_choice(menu_item, variant_id, modifier_ids, channel=cart.channel)
         check_room(menu_item, choice.variant, _in_cart(cart, menu_item, choice.variant) + 1)
     except (ChoiceError, StockError) as exc:
         raise OrderFlowError(str(exc)) from exc
@@ -1164,16 +1163,18 @@ def cart_line_payload(line: CartItem) -> dict:
     }
 
 
-def stale_choice_message(cart_items) -> str | None:
+def stale_choice_message(cart_items, *, channel: str | None = None) -> str | None:
     """A line whose choice cannot be ordered any more — the owner took a
     variant or an add-on off sale, made a choice required or switched the
-    module off — or None. Checked again at checkout, like the schedule."""
+    module off; in ``channel``, Botera's own add-ons where the register takes
+    the order (PQ-058, step 7) — or None. Checked again at checkout, like the
+    schedule."""
 
     cart_items = list(cart_items)
     if not cart_items:
         return None
     menu_items = {line.menu_item_id: line.menu_item for line in cart_items}
-    choices = catalog_choices(cart_items[0].partner_id, menu_items.values())
+    choices = catalog_choices(cart_items[0].partner_id, menu_items.values(), channel=channel)
     for line in cart_items:
         try:
             choice = resolve_choice(

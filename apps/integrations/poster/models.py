@@ -36,6 +36,13 @@ class PosterConnection(PartnerBoundModel):
         ACTIVE = "active", _lazy("Работает")
         DISCONNECTED = "disconnected", _lazy("Отключено")
 
+    class MenuMode(models.TextChoices):
+        """What the guest sees where orders go to the register (owner
+        2026-11-21, step 7): Botera's own items and add-ons cannot be sent."""
+
+        POSTER = "poster", _lazy("Только меню Poster")
+        WITH_OWN = "with_own", _lazy("Меню Poster и свои позиции Botera")
+
     account = models.CharField(
         max_length=63, validators=[poster_account_validator],
         verbose_name=_lazy("Аккаунт Poster"),
@@ -67,6 +74,15 @@ class PosterConnection(PartnerBoundModel):
     # nothing changed since — one sync after a burst of changes.
     menu_changed_at = models.DateTimeField(
         null=True, blank=True, verbose_name=_lazy("Меню изменено в Poster"),
+    )
+    menu_mode = models.CharField(
+        max_length=16, choices=MenuMode.choices, default=MenuMode.POSTER,
+        verbose_name=_lazy("Меню в боте"),
+        help_text=_lazy(
+            "В самовывозе и доставке. «Только меню Poster» — позиций и добавок Botera, которых "
+            "нет в Poster, гость там не видит. «Меню Poster и свои позиции Botera» — видит; "
+            "заказ с ними в Poster не уходит, персонал вносит его на кассу сам."
+        ),
     )
     last_error = models.TextField(blank=True, verbose_name=_lazy("Последняя ошибка"))
     last_error_at = models.DateTimeField(

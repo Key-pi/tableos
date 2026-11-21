@@ -9,6 +9,12 @@
 - **Showcase** (module ``module_showcase_enabled``): portion, old price,
   labels, more photos, characteristics, SKU — shown to guests only while the
   module is on (``showcase_on``).
+- **Ways of ordering**: an item is sold where its marks say
+  (``MenuItem.is_sold_in``); a venue on Poster with «Только меню Poster»
+  does not sell Botera's own items in pickup and delivery — they go to the
+  register, which would not take them (PQ-058, step 7). ``not_sold_in`` and
+  ``sold_in_channels`` answer for the cart, checkout and the Mini App;
+  ``apps/menu/repositories.py`` filters the menu the same way.
 """
 
 from __future__ import annotations
@@ -20,6 +26,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.utils import timezone
 
+from apps.integrations.poster.selectors import REGISTER_CHANNELS, linked_ids, own_menu_hidden
 from apps.menu.translations import translated
 from core.i18n import EN, N_, _, active_language
 
@@ -117,6 +124,48 @@ def not_on_sale_message(item, now: datetime | None = None) -> str | None:
         "«{name}» продаётся {when} — сейчас заказать нельзя.",
         name=translated(item, "name"), when=schedule_label(closed),
     )
+
+
+# --- ways of ordering -------------------------------------------------------------
+
+
+def not_sold_in(menu_items, channel) -> set:
+    """Ids of the items not sold in ``channel`` now: their marks, then
+    Botera's own items where the register takes the orders (step 7)."""
+
+    items = list(menu_items)
+    off = {item.id for item in items if not item.is_sold_in(channel)}
+    rest = [item for item in items if item.id not in off]
+    if rest and own_menu_hidden(rest[0].partner_id, channel):
+        from apps.menu.models import MenuItem
+
+        linked = linked_ids(rest[0].partner_id, MenuItem, [item.id for item in rest])
+        off |= {item.id for item in rest if item.id not in linked}
+    return off
+
+
+def sold_in_channels(menu_items) -> dict:
+    """``{item.id: [channel, ...]}`` — where each item is sold now, for the
+    Mini App, which shows the menu of every way at once."""
+
+    items = list(menu_items)
+    if not items:
+        return {}
+    from apps.menu.models import MenuItem
+
+    hidden = {
+        channel for channel in REGISTER_CHANNELS if own_menu_hidden(items[0].partner_id, channel)
+    }
+    linked = (
+        linked_ids(items[0].partner_id, MenuItem, [item.id for item in items]) if hidden else set()
+    )
+    return {
+        item.id: [
+            channel for channel in MenuItem.CHANNEL_FIELDS
+            if item.is_sold_in(channel) and (channel not in hidden or item.id in linked)
+        ]
+        for item in items
+    }
 
 
 # --- showcase ------------------------------------------------------------------
