@@ -2444,6 +2444,14 @@ msgstr "запрошення працівника"
 msgid "Приглашения сотрудников"
 msgstr "Запрошення працівників"
 
+#: apps/integrations/poster/admin.py apps/integrations/poster/models.py
+msgid "Точка Poster"
+msgstr "Точка Poster"
+
+#: apps/integrations/poster/admin.py apps/integrations/poster/models.py
+msgid "Точки аккаунта"
+msgstr "Точки акаунта"
+
 #: apps/integrations/poster/admin.py
 msgid "Подключить Poster можно из Admin заведения."
 msgstr "Підключити Poster можна з Admin закладу."
@@ -2560,10 +2568,6 @@ msgstr "Акаунт Poster"
 msgid "Номер аккаунта Poster"
 msgstr "Номер акаунта Poster"
 
-#: apps/integrations/poster/models.py
-msgid "Точка Poster"
-msgstr "Точка Poster"
-
 #: apps/integrations/poster/models.py apps/partners/models.py
 msgid "Токен (зашифрован)"
 msgstr "Токен (зашифровано)"
@@ -2575,10 +2579,6 @@ msgstr "Токен дійсний до"
 #: apps/integrations/poster/models.py
 msgid "Тариф Poster"
 msgstr "Тариф Poster"
-
-#: apps/integrations/poster/models.py
-msgid "Точки аккаунта"
-msgstr "Точки акаунта"
 
 #: apps/integrations/poster/models.py
 msgid "Подключил"
@@ -2987,6 +2987,10 @@ msgstr "«{name}» знову в меню гостей."
 #: apps/menu/admin.py
 msgid "«{name}» убрана из меню гостей."
 msgstr "«{name}» прибрано з меню гостей."
+
+#: apps/menu/admin.py
+msgid "Из Poster"
+msgstr "З Poster"
 
 #: apps/menu/admin.py
 msgid "Стоп-лист"

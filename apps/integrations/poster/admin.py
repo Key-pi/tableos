@@ -32,6 +32,7 @@ from apps.integrations.poster.views import bring_menu
 from apps.users.constants import AdminSection
 from core.admin_mixins import ObjectAction, ObjectActionsMixin, ScopedAdminMixin
 from core.i18n import _
+from core.i18n import gettext_lazy as _lazy
 
 
 class _ReadOnlyLog:
@@ -82,7 +83,43 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
         "created_at",
         "updated_at",
     )
-    readonly_fields = fields
+    # The venue reads names, not Poster's raw answers (the tariff, the spots).
+    venue_fields = (
+        "status",
+        "account",
+        "account_number",
+        "spot_label",
+        "spots_label",
+        "token_expires_at",
+        "connected_by",
+        "last_synced_at",
+        "menu_changed_at",
+        "last_error",
+        "last_error_at",
+        "created_at",
+        "updated_at",
+    )
+    readonly_fields = (*fields, "spot_label", "spots_label")
+
+    def get_fields(self, request, obj=None):
+        return self.fields if self.is_platform_admin(request) else self.venue_fields
+
+    @staticmethod
+    def _spot_text(spot: dict) -> str:
+        return f"{spot.get('name') or spot.get('spot_id')} ({spot.get('spot_id')})"
+
+    @admin.display(description=_lazy("Точка Poster"))
+    def spot_label(self, obj):
+        if obj.spot_id is None:
+            return "—"
+        for spot in obj.available_spots or []:
+            if spot.get("spot_id") == obj.spot_id:
+                return self._spot_text(spot)
+        return str(obj.spot_id)
+
+    @admin.display(description=_lazy("Точки аккаунта"))
+    def spots_label(self, obj):
+        return ", ".join(self._spot_text(spot) for spot in obj.available_spots or []) or "—"
 
     def has_add_permission(self, request):
         return False

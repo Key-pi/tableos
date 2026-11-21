@@ -2444,6 +2444,14 @@ msgstr "staff invite"
 msgid "Приглашения сотрудников"
 msgstr "Staff invites"
 
+#: apps/integrations/poster/admin.py apps/integrations/poster/models.py
+msgid "Точка Poster"
+msgstr "Poster spot"
+
+#: apps/integrations/poster/admin.py apps/integrations/poster/models.py
+msgid "Точки аккаунта"
+msgstr "Account spots"
+
 #: apps/integrations/poster/admin.py
 msgid "Подключить Poster можно из Admin заведения."
 msgstr "Poster is connected from a venue's Admin."
@@ -2560,10 +2568,6 @@ msgstr "Poster account"
 msgid "Номер аккаунта Poster"
 msgstr "Poster account number"
 
-#: apps/integrations/poster/models.py
-msgid "Точка Poster"
-msgstr "Poster spot"
-
 #: apps/integrations/poster/models.py apps/partners/models.py
 msgid "Токен (зашифрован)"
 msgstr "Token (encrypted)"
@@ -2575,10 +2579,6 @@ msgstr "Token valid until"
 #: apps/integrations/poster/models.py
 msgid "Тариф Poster"
 msgstr "Poster plan"
-
-#: apps/integrations/poster/models.py
-msgid "Точки аккаунта"
-msgstr "Account spots"
 
 #: apps/integrations/poster/models.py
 msgid "Подключил"
@@ -2987,6 +2987,10 @@ msgstr "“{name}” is back on the guests' menu."
 #: apps/menu/admin.py
 msgid "«{name}» убрана из меню гостей."
 msgstr "“{name}” is off the guests' menu."
+
+#: apps/menu/admin.py
+msgid "Из Poster"
+msgstr "From Poster"
 
 #: apps/menu/admin.py
 msgid "Стоп-лист"

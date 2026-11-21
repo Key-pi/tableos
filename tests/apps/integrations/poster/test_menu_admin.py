@@ -121,6 +121,38 @@ class PosterFieldsReadOnlyTests(MenuAdminFixture):
         self.assertFalse(water.is_available)
 
 
+class WhatTheVenueReadsTests(MenuAdminFixture):
+    def test_the_item_list_marks_poster_items(self):
+        page = admin.site._registry[MenuItem]
+        self.assertIn("poster_source", page.get_list_display(self.request))
+        rows = {item.name: item.from_poster for item in page.get_queryset(self.request)}
+        self.assertTrue(rows["Вода мінеральна"])
+        self.assertFalse(rows["Лате"])
+        self.assertContains(self.client.get(reverse("admin:menu_menuitem_changelist")),
+                            "Из Poster")
+
+    def test_no_mark_without_poster(self):
+        PosterConnection.objects.filter(pk=self.connection.pk).update(
+            status=PosterConnection.Status.DISCONNECTED,
+        )
+        page = admin.site._registry[MenuItem]
+        self.assertNotIn("poster_source", page.get_list_display(self.request))
+        self.assertNotContains(self.client.get(reverse("admin:menu_menuitem_changelist")),
+                               "Из Poster")
+
+    def test_the_connection_page_has_names_not_raw_answers(self):
+        PosterConnection.objects.filter(pk=self.connection.pk).update(
+            tariff={"value": []},
+            available_spots=[{"spot_id": 1, "name": "Головна", "address": ""},
+                             {"spot_id": 2, "name": "Поділ", "address": ""}],
+        )
+        response = self.client.get(
+            reverse("admin:poster_posterconnection_change", args=[self.connection.pk]))
+        self.assertContains(response, "Головна (1), Поділ (2)")
+        self.assertNotContains(response, "Тариф Poster")
+        self.assertNotContains(response, "spot_id")
+
+
 class UpdateMenuButtonTests(MenuAdminFixture):
     def page(self):
         return reverse("admin:poster_posterconnection_change", args=[self.connection.pk])

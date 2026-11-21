@@ -9,7 +9,12 @@ from unfold.widgets import (
     UnfoldAdminTextInputWidget,
 )
 
-from apps.integrations.poster.selectors import POSTER_FIELDS, poster_fields
+from apps.integrations.poster.selectors import (
+    POSTER_FIELDS,
+    poster_fields,
+    poster_menu_on,
+    with_poster_mark,
+)
 from apps.menu import stock as stock_levels
 from apps.menu.catalog import BUILTIN_BADGES, WEEKDAYS
 from apps.menu.models import (
@@ -553,16 +558,31 @@ class MenuItemAdmin(PosterFieldsMixin, ObjectActionsMixin, TranslatedAdminMixin,
             if not module_on_for(self, request, module)
         )
 
+    def _poster_on(self, request) -> bool:
+        partner_id = self.get_partner_scope_id(request)
+        return partner_id is not None and poster_menu_on(partner_id)
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return with_poster_mark(queryset) if self._poster_on(request) else queryset
+
     def get_list_display(self, request):
         off = self._channels_off(request)
         list_display = tuple(
             column for column in super().get_list_display(request) if column not in off
         )
+        at = list_display.index("name") + 1 if "name" in list_display else len(list_display)
+        if self._poster_on(request):
+            # Which rows go to the register (PQ-058); the rest is Botera's own.
+            list_display = (*list_display[:at], "poster_source", *list_display[at:])
         if self.has_change_permission(request):
             # Next to the name: on a tablet the end of a wide row is off screen.
-            at = list_display.index("name") + 1 if "name" in list_display else len(list_display)
             return (*list_display[:at], "availability_button", *list_display[at:])
         return list_display
+
+    @admin.display(description=_lazy("Из Poster"), boolean=True)
+    def poster_source(self, obj):
+        return bool(getattr(obj, "from_poster", False))
 
     @admin.display(description=_lazy("Стоп-лист"))
     def availability_button(self, obj):

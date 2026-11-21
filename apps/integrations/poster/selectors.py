@@ -9,6 +9,8 @@ not in it: Botera may hide what Poster sells (``PosterRef.hidden_in_poster``).
 
 from __future__ import annotations
 
+from django.db.models import Exists, OuterRef
+
 from apps.integrations.poster.models import PosterConnection, PosterRef
 
 POSTER_FIELDS = {
@@ -50,3 +52,13 @@ def poster_fields(obj) -> tuple[str, ...]:
         ).exists()
         obj.__dict__[_CACHE] = POSTER_FIELDS[label] if linked else ()
     return obj.__dict__[_CACHE]
+
+
+def with_poster_mark(queryset):
+    """The rows annotated ``from_poster`` — linked to Poster (removed there
+    or not): the menu's lists show which rows go to the register."""
+
+    kind = KINDS[queryset.model._meta.label_lower]
+    return queryset.annotate(from_poster=Exists(PosterRef.objects.filter(
+        partner_id=OuterRef("partner_id"), kind=kind, object_id=OuterRef("pk"),
+    )))
