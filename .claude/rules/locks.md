@@ -51,6 +51,10 @@ paths:
   Одна точка Poster — одно заведение: проверка до сохранения и частичный
   уникальный индекс `poster_connection_active_spot_unique` на гонку двух
   заведений (их строки разные, блокировка не спасает).
+  Меню из Poster (`apps/integrations/poster/menu_sync.py:sync_menu`): Poster
+  читается до транзакции; затем `PosterConnection` → связанные `MenuItem` по
+  id → их `MenuItemVariant` по id (`no_key`, как у заказа), потом остальное
+  меню; ссылки читаются после блокировки — вторая синхронизация видит первую.
 - Остатки: строки `MenuItem`/`MenuItemVariant` — последними в транзакции,
   сначала позиции, затем варианты, каждые по id, `no_key=True`
   (`apps/menu/stock.py:_lock`).

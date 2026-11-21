@@ -2461,6 +2461,10 @@ msgid "Это точка «{spot}»"
 msgstr "Це точка «{spot}»"
 
 #: apps/integrations/poster/admin.py
+msgid "Обновить меню"
+msgstr "Оновити меню"
+
+#: apps/integrations/poster/admin.py
 msgid "Отключить Poster"
 msgstr "Відключити Poster"
 
@@ -2479,6 +2483,62 @@ msgstr "Заклад працює з точкою Poster «{spot}»."
 #: apps/integrations/poster/apps.py
 msgid "Интеграция с Poster"
 msgstr "Інтеграція з Poster"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Меню обновлено из Poster. Позиции: новых — {created}, изменено — {updated}, скрыто — {removed}."
+msgstr "Меню оновлено з Poster. Позиції: нових — {created}, змінено — {updated}, приховано — {removed}."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Категорий, вариантов и добавок изменено: {count}."
+msgstr "Категорій, варіантів і добавок змінено: {count}."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "и ещё {count}"
+msgstr "і ще {count}"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Не перенесено из Poster: {names}."
+msgstr "Не перенесено з Poster: {names}."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Poster не подключён — меню из него не обновить."
+msgstr "Poster не підключено — меню з нього не оновити."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Подключение к Poster не найдено."
+msgstr "Підключення до Poster не знайдено."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Обновлять меню из Poster может владелец заведения."
+msgstr "Оновлювати меню з Poster може власник закладу."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Poster не отдал меню: {reason}"
+msgstr "Poster не віддав меню: {reason}"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Подключение к Poster изменилось, пока читалось меню. Обновите меню ещё раз."
+msgstr "Підключення до Poster змінилося, поки читалося меню. Оновіть меню ще раз."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "У позиций из Poster есть варианты или добавки, а модуль «Варианты и добавки» выключен — гость их не увидит. Включите его: «Настройки бота» → «Каталог»."
+msgstr "У позицій з Poster є варіанти або добавки, а модуль «Варіанти й добавки» вимкнено — гість їх не побачить. Увімкніть його: «Налаштування бота» → «Каталог»."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Категория «{name}» осталась верхней: в ней есть подкатегории Botera."
+msgstr "Категорія «{name}» залишилася верхньою: у ній є підкатегорії Botera."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Без категории"
+msgstr "Без категорії"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "#{id} — без названия"
+msgstr "#{id} — без назви"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "«{name}» — нет цены для этой точки"
+msgstr "«{name}» — немає ціни для цієї точки"
 
 #: apps/integrations/poster/models.py
 msgid "Логин Poster: латинские буквы, цифры и дефис."
@@ -2575,6 +2635,10 @@ msgstr "ID у Botera"
 #: apps/integrations/poster/models.py
 msgid "Удалено в Poster"
 msgstr "Видалено в Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Скрыто в Poster"
+msgstr "Приховано в Poster"
 
 #: apps/integrations/poster/models.py
 msgid "соответствие Poster"
@@ -2737,6 +2801,10 @@ msgid "Poster отключён. Подключите его заново."
 msgstr "Poster відключено. Підключіть його знову."
 
 #: apps/integrations/poster/views.py
+msgid "Меню из Poster не загрузилось: {reason}. Нажмите «Обновить меню» позже."
+msgstr "Меню з Poster не завантажилося: {reason}. Натисніть «Оновити меню» пізніше."
+
+#: apps/integrations/poster/views.py
 msgid "Вход в Poster отменён — Poster не подключён."
 msgstr "Вхід у Poster скасовано — Poster не підключено."
 
@@ -2755,6 +2823,10 @@ msgstr "Гість бачить переклад своєю мовою; поро
 #: apps/menu/admin.py
 msgid "Переводы для гостей"
 msgstr "Переклади для гостей"
+
+#: apps/menu/admin.py
+msgid "Название, цена и состав приходят из Poster — меняйте их в Poster. Здесь — переводы, описание, метки, фото и способы заказа."
+msgstr "Назва, ціна й склад надходять з Poster — змінюйте їх у Poster. Тут — переклади, опис, мітки, фото й способи замовлення."
 
 #: apps/menu/admin.py apps/menu/models.py
 msgid "Дни продажи"

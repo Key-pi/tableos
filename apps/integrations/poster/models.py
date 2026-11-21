@@ -112,6 +112,9 @@ class PosterRef(PartnerBoundModel):
     poster_id = models.CharField(max_length=64, verbose_name=_lazy("ID в Poster"))
     object_id = models.UUIDField(verbose_name=_lazy("ID в Botera"))
     removed_in_poster = models.BooleanField(default=False, verbose_name=_lazy("Удалено в Poster"))
+    # What Poster said at the last sync (categories and items): only a change
+    # there hides or shows the row, so Botera's stop list survives (step 3).
+    hidden_in_poster = models.BooleanField(default=False, verbose_name=_lazy("Скрыто в Poster"))
 
     class Meta:
         verbose_name = _lazy("соответствие Poster")

@@ -30,3 +30,9 @@ paths:
   кроме основного); гость видит перевод (`translated`), без перевода —
   оригинал; строка заказа хранит имя на основном языке для персонала, экраны
   гостя строят его заново (`line_names_in`, без запросов).
+- **Заведение на Poster (PQ-058):** меню пишет синхронизация
+  (`apps/integrations/poster/menu_sync.py`); поля Poster у строк из Poster в
+  Admin только для чтения, пока подключение работает
+  (`apps/menu/admin.py:PosterFieldsMixin`, список —
+  `apps/integrations/poster/selectors.py:POSTER_FIELDS`). Новое поле каталога,
+  которое пишет Poster, — туда же.

@@ -125,7 +125,7 @@ PQ-058). В `core` — общие базовые классы,
 | Сотрудники | `EmployeeProfile`, `StaffInvite` | `employees/selectors.py:get_staff_employee_by_telegram`, `employees/invites.py` (приглашения), `employees/network_staff.py` (копии персонала сети) | Профиль создаёт Admin или подтверждённое приглашение (PQ-046). |
 | Уведомления | `NotificationPreference`, `GuestCall`, `StaffNotification`, `BroadcastCampaign`, `BroadcastDelivery` | `notifications/services.py`, `tasks.py`, `telegram_transport.py` | Вся отправка в Telegram из воркера — здесь. |
 | Аналитика | `PartnerDailyMetric`, `TrafficSource`, `SourceVisit`, `SystemSnapshot` | `analytics/services.py`, `analytics/sources.py`, `analytics/selectors.py` (отчёт сети), `analytics/dashboard.py` (стартовая страница), `analytics/system_load.py` (нагрузка) | Отчёт за день для персонала по запросу (с разбивкой по каналам заказа); снимок метрик раз в 15 минут; источники переходов (PQ-031); снимок нагрузки раз в минуту (PQ-051). |
-| Poster (PQ-058, шаги 1–2 из [POSTER.md](POSTER.md)) | `PosterConnection`, `PosterRef`, `PosterOrderPush`, `PosterWebhookEvent` | `integrations/poster/client.py` (запросы к API Poster через `httpx`, обмен кода OAuth на токен); подключение — `integrations/poster/services.py` (начало входа в сессии, возврат Poster `integrations/poster/views.py:oauth_callback` на `/integrations/poster/oauth/callback/`, выбор точки, отключение); меню, передача заказов и вебхуки — шаги 3–6 | Адаптер к кассе заведения, для заказа и оплаты не обязателен (ADR-0010). Токен — шифром, как у ботов (`PosterConnection.set_access_token`), ни на одной странице Admin. Логин Poster из ответа OAuth проверяется до запроса: на этот адрес уходит секрет приложения. Ключ входящего вебхука — хеш полей события вместе с `data` (Poster шлёт несколько событий одного объекта в одну секунду). `httpx` пишет адрес запроса с токеном в журнал на INFO — его журнал поднят до WARNING (`core/logging/config.py`). |
+| Poster (PQ-058, шаги 1–3 из [POSTER.md](POSTER.md)) | `PosterConnection`, `PosterRef`, `PosterOrderPush`, `PosterWebhookEvent` | `integrations/poster/client.py` (запросы к API Poster через `httpx`, обмен кода OAuth на токен); подключение — `integrations/poster/services.py` (начало входа в сессии, возврат Poster `integrations/poster/views.py:oauth_callback` на `/integrations/poster/oauth/callback/`, выбор точки, отключение); меню — `integrations/poster/menu_sync.py:sync_menu` (кнопка «Обновить меню», сразу после подключения, ночью — задача `poster.sync_all_menus`); какие поля меню принадлежат Poster — `integrations/poster/selectors.py`; передача заказов и вебхуки — шаги 4–6 | Адаптер к кассе заведения, для заказа и оплаты не обязателен (ADR-0010). Токен — шифром, как у ботов (`PosterConnection.set_access_token`), ни на одной странице Admin. Логин Poster из ответа OAuth проверяется до запроса: на этот адрес уходит секрет приложения. Ключ входящего вебхука — хеш полей события вместе с `data` (Poster шлёт несколько событий одного объекта в одну секунду). `httpx` пишет адрес запроса с токеном в журнал на INFO — его журнал поднят до WARNING (`core/logging/config.py`). Меню: Poster читается до транзакции, запись — под блокировкой строки `PosterConnection`; цены позиций и вариантов — в копейках, добавок — в гривнах; удалённое в Poster скрывается; стоп-лист Botera переживает синхронизацию (`PosterRef.hidden_in_poster` — что Poster сказал в прошлый раз). |
 | Mini App | — (адаптер, как бот) | `webapp/views.py` (гость), `webapp/staff_*.py` (рабочий экран), `webapp/kitchen_views.py` (экран кухни) | Вызывает те же сервисы, что бот; подробно — [MINI_APP.md](MINI_APP.md). |
 
 ### Модули заведения
@@ -182,10 +182,10 @@ tables        -> billing, bonuses, notifications, orders, partners, users
 notifications -> billing, employees, menu, orders, partners, tables, users
 bonuses       -> menu, orders, partners, users
 partners      -> analytics, bonuses, employees, menu, notifications, orders, tables, users (Admin, сети, наполнение демо-данными)
-menu          -> orders, partners, users
+menu          -> orders, partners, users, poster (Admin меню: поля из Poster только для чтения)
 employees     -> partners, users
 users         -> analytics, orders, partners (только меню и стартовая страница Admin)
-poster        -> users (разделы прав Admin)
+poster        -> menu, partners, users (меню из Poster, права владельца, разделы прав Admin)
 core          -> partners, users (core/admin_mixins.py); orders, partners, tables (core/urls.py)
 ```
 
@@ -875,12 +875,19 @@ PQ-050): все страницы — `core/admin_mixins.py:BoteraModelAdmin` (е
 показывается. Суперпользователь видит ещё группу «Платформа» (служебные
 таблицы, Telegram-аккаунты, группы) и «Все приложения».
 
-Poster (PQ-058, шаги 1–2): «Настройки» → «Poster» — карточка подключения
+Poster (PQ-058, шаги 1–3): «Настройки» → «Poster» — карточка подключения
 без токена и без кнопок «Сохранить» (форма ничего не пишет), рядом вкладка
 «Заказы в Poster». Владельцу заведения или сети — кнопки «Подключить Poster» /
-«Подключить заново» (POST на `connect/`), «Это точка «…»» и «Отключить Poster»
-(`ObjectActionsMixin`, сервис `integrations/poster/services.py`). Соответствия
-объектов и входящие вебхуки видит только платформа.
+«Подключить заново» (POST на `connect/`), «Это точка «…»», «Обновить меню»
+(пока подключение работает; итог и замечания — сообщениями) и «Отключить
+Poster» (`ObjectActionsMixin`, сервисы `integrations/poster/services.py` и
+`integrations/poster/menu_sync.py`); выбранная точка сразу загружает меню
+(`integrations/poster/views.py:bring_menu`). Пока заведение работает с Poster,
+у категорий, позиций, групп добавок из Poster поля Poster только для чтения с
+пометкой «приходят из Poster», варианты и добавки таких строк не добавляются
+и не удаляются (`apps/menu/admin.py:PosterFieldsMixin`,
+`PosterRowsInlineMixin`); стоп-лист позиции работает. Соответствия объектов
+и входящие вебхуки видит только платформа.
 
 Стартовая страница заведения («Сегодня», шаг 2, PQ-050) —
 `apps/users/admin_dashboard.py:dashboard` (`UNFOLD["DASHBOARD_CALLBACK"]`),
@@ -1054,7 +1061,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1440 тестов после подключения к Poster (PQ-058, шаг 2), зелёные на SQLite и на PostgreSQL 16.
+- 1487 тестов после меню из Poster (PQ-058, шаг 3), зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа
@@ -1071,7 +1078,9 @@ Admin показывает поля жизненного цикла, произ�
   оплаты одной части разделённого счёта (`tests/apps/billing/test_bill_split.py`); два
   новых гостя одной компании разом (`tests/apps/tables/test_visit_guests.py`);
   два заведения разом выбирают одну точку Poster
-  (`tests/apps/integrations/poster/test_connection.py`);
+  (`tests/apps/integrations/poster/test_connection.py`); две синхронизации
+  меню Poster одного заведения разом
+  (`tests/apps/integrations/poster/test_menu_sync.py`);
   два кассира берут одного гостя разом и два гостя платят за «Общее» разом
   (`tests/apps/billing/test_visit_settlement.py`); планы
   запросов открытых заказов и счетов используют частичные индексы (AA-045,

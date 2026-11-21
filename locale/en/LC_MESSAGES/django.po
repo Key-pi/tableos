@@ -2461,6 +2461,10 @@ msgid "Это точка «{spot}»"
 msgstr "This is the «{spot}» spot"
 
 #: apps/integrations/poster/admin.py
+msgid "Обновить меню"
+msgstr "Update menu"
+
+#: apps/integrations/poster/admin.py
 msgid "Отключить Poster"
 msgstr "Disconnect Poster"
 
@@ -2479,6 +2483,62 @@ msgstr "The venue works with the Poster spot «{spot}»."
 #: apps/integrations/poster/apps.py
 msgid "Интеграция с Poster"
 msgstr "Poster integration"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Меню обновлено из Poster. Позиции: новых — {created}, изменено — {updated}, скрыто — {removed}."
+msgstr "Menu updated from Poster. Items: new — {created}, changed — {updated}, hidden — {removed}."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Категорий, вариантов и добавок изменено: {count}."
+msgstr "Categories, variants and add-ons changed: {count}."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "и ещё {count}"
+msgstr "and {count} more"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Не перенесено из Poster: {names}."
+msgstr "Not brought from Poster: {names}."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Poster не подключён — меню из него не обновить."
+msgstr "Poster is not connected — the menu cannot be updated from it."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Подключение к Poster не найдено."
+msgstr "Poster connection not found."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Обновлять меню из Poster может владелец заведения."
+msgstr "Only the venue owner can update the menu from Poster."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Poster не отдал меню: {reason}"
+msgstr "Poster did not return the menu: {reason}"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Подключение к Poster изменилось, пока читалось меню. Обновите меню ещё раз."
+msgstr "The Poster connection changed while the menu was being read. Update the menu again."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "У позиций из Poster есть варианты или добавки, а модуль «Варианты и добавки» выключен — гость их не увидит. Включите его: «Настройки бота» → «Каталог»."
+msgstr "Items from Poster have variants or add-ons, but the «Variants and add-ons» module is off — guests will not see them. Turn it on: «Bot settings» → «Catalog»."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Категория «{name}» осталась верхней: в ней есть подкатегории Botera."
+msgstr "Category «{name}» stayed at the top: it has Botera subcategories."
+
+#: apps/integrations/poster/menu_sync.py
+msgid "Без категории"
+msgstr "No category"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "#{id} — без названия"
+msgstr "#{id} — no name"
+
+#: apps/integrations/poster/menu_sync.py
+msgid "«{name}» — нет цены для этой точки"
+msgstr "«{name}» — no price for this spot"
 
 #: apps/integrations/poster/models.py
 msgid "Логин Poster: латинские буквы, цифры и дефис."
@@ -2575,6 +2635,10 @@ msgstr "Botera ID"
 #: apps/integrations/poster/models.py
 msgid "Удалено в Poster"
 msgstr "Deleted in Poster"
+
+#: apps/integrations/poster/models.py
+msgid "Скрыто в Poster"
+msgstr "Hidden in Poster"
 
 #: apps/integrations/poster/models.py
 msgid "соответствие Poster"
@@ -2737,6 +2801,10 @@ msgid "Poster отключён. Подключите его заново."
 msgstr "Poster is disconnected. Connect it again."
 
 #: apps/integrations/poster/views.py
+msgid "Меню из Poster не загрузилось: {reason}. Нажмите «Обновить меню» позже."
+msgstr "The menu from Poster did not load: {reason}. Press «Update menu» later."
+
+#: apps/integrations/poster/views.py
 msgid "Вход в Poster отменён — Poster не подключён."
 msgstr "Signing in to Poster was cancelled; Poster is not connected."
 
@@ -2755,6 +2823,10 @@ msgstr "Guests see the translation in their language; empty means the text in th
 #: apps/menu/admin.py
 msgid "Переводы для гостей"
 msgstr "Translations for guests"
+
+#: apps/menu/admin.py
+msgid "Название, цена и состав приходят из Poster — меняйте их в Poster. Здесь — переводы, описание, метки, фото и способы заказа."
+msgstr "Name, price and contents come from Poster — change them in Poster. Here: translations, description, labels, photos and ways to order."
 
 #: apps/menu/admin.py apps/menu/models.py
 msgid "Дни продажи"

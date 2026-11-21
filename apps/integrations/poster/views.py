@@ -3,7 +3,8 @@
 Poster sends the browser back here with ``code`` and ``account``. Only a
 press of «Подключить Poster» in this browser's Admin session leads anywhere
 (``services.take_started_connection``); everything else goes back to the
-Poster page of Admin with the reason.
+Poster page of Admin with the reason. A spot that starts working at once
+brings the menu at once (``bring_menu``, step 3).
 """
 
 from django.contrib import messages
@@ -13,7 +14,25 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET
 
 from apps.integrations.poster import services
+from apps.integrations.poster.menu_sync import PosterSyncError, sync_menu
 from core.i18n import _
+
+
+def bring_menu(request: HttpRequest, connection) -> None:
+    """The menu from Poster now, with what happened in messages; the
+    connection stays whatever Poster answers."""
+
+    try:
+        report = sync_menu(connection_id=connection.pk, user=request.user)
+    except PosterSyncError as exc:
+        messages.warning(request, _(
+            "Меню из Poster не загрузилось: {reason}. Нажмите «Обновить меню» позже.",
+            reason=str(exc).rstrip("."),
+        ))
+        return
+    messages.success(request, report.summary())
+    for note in report.notes():
+        messages.warning(request, note)
 
 
 @require_GET
@@ -38,6 +57,7 @@ def oauth_callback(request: HttpRequest) -> HttpResponse:
         return HttpResponseRedirect(poster_page)
     if connection.status == connection.Status.ACTIVE:
         messages.success(request, _("Poster подключён."))
+        bring_menu(request, connection)
     else:
         messages.success(request, _("Poster подключён. Выберите, какая точка — это заведение."))
     return HttpResponseRedirect(

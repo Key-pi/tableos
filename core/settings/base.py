@@ -2,6 +2,7 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
+from celery.schedules import crontab
 from kombu import Queue
 
 from core.logging.config import LOGGING
@@ -204,5 +205,10 @@ CELERY_BEAT_SCHEDULE = {
     "refresh-daily-partner-metrics": {
         "task": "analytics.refresh_daily_partner_metrics",
         "schedule": timedelta(minutes=15),
+    },
+    # PQ-058, step 3: the menu of every venue on Poster, at night (Kyiv time).
+    "sync-poster-menus": {
+        "task": "poster.sync_all_menus",
+        "schedule": crontab(hour=4, minute=17),
     },
 }

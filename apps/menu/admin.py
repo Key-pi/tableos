@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin.utils import unquote
 from django.forms.models import BaseInlineFormSet
 from unfold.admin import TabularInline
 from unfold.widgets import (
@@ -8,6 +9,7 @@ from unfold.widgets import (
     UnfoldAdminTextInputWidget,
 )
 
+from apps.integrations.poster.selectors import POSTER_FIELDS, poster_fields
 from apps.menu import stock as stock_levels
 from apps.menu.catalog import BUILTIN_BADGES, WEEKDAYS
 from apps.menu.models import (
@@ -178,6 +180,49 @@ class TranslatedInlineMixin:
         ]
 
 
+POSTER_NOTE = _lazy(
+    "Название, цена и состав приходят из Poster — меняйте их в Poster. Здесь — переводы, "
+    "описание, метки, фото и способы заказа."
+)
+
+
+class PosterFieldsMixin:
+    """While the venue works with Poster, what Poster owns of a row that came
+    from it is read only (PQ-058, step 3; ``apps/integrations/poster/selectors.py``).
+    The sync writes those fields; Botera's own rows stay as they are."""
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        return [*fields, *(name for name in poster_fields(obj) if name not in fields)]
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        if object_id and request.method == "GET":
+            obj = self.get_object(request, unquote(object_id))
+            if poster_fields(obj):
+                messages.info(request, POSTER_NOTE)
+        return super().changeform_view(request, object_id, form_url, extra_context)
+
+
+class PosterRowsInlineMixin:
+    """The rows of a row from Poster — variants of its item, add-ons of its
+    group: read only, none added or removed here."""
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = list(super().get_readonly_fields(request, obj))
+        if poster_fields(obj):
+            fields += [
+                name for name in POSTER_FIELDS[self.model._meta.label_lower]
+                if name not in fields
+            ]
+        return fields
+
+    def has_add_permission(self, request, obj=None):
+        return not poster_fields(obj) and super().has_add_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        return not poster_fields(obj) and super().has_delete_permission(request, obj)
+
+
 class VenueFormMixin:
     def get_form(self, request, obj=None, change=False, **kwargs):
         form_class = super().get_form(request, obj, change=change, **kwargs)
@@ -200,7 +245,8 @@ class MenuCategoryForm(forms.ModelForm):
 
 
 @admin.register(MenuCategory)
-class MenuCategoryAdmin(TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
+class MenuCategoryAdmin(PosterFieldsMixin, TranslatedAdminMixin, VenueFormMixin,
+                        ScopedAdminMixin):
     admin_section = AdminSection.MENU
     form = MenuCategoryForm
     list_display = ("name", "parent", "partner", "sort_order", "station", "is_active")
@@ -360,7 +406,8 @@ class MenuItemAttributeInline(TranslatedInlineMixin, SectionInlineMixin, Tabular
     extra = 0
 
 
-class MenuItemVariantInline(TranslatedInlineMixin, SectionInlineMixin, TabularInline):
+class MenuItemVariantInline(PosterRowsInlineMixin, TranslatedInlineMixin, SectionInlineMixin,
+                            TabularInline):
     """Variants with their own price (module «Варианты и добавки»)."""
 
     admin_section = AdminSection.MENU
@@ -428,7 +475,8 @@ CHANNEL_MODULES = {
 
 
 @admin.register(MenuItem)
-class MenuItemAdmin(ObjectActionsMixin, TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
+class MenuItemAdmin(PosterFieldsMixin, ObjectActionsMixin, TranslatedAdminMixin, VenueFormMixin,
+                    ScopedAdminMixin):
     admin_section = AdminSection.MENU
     form = MenuItemForm
     list_before_template = "admin/botera/row_actions.html"
@@ -630,7 +678,8 @@ class StockMovementAdmin(ScopedAdminMixin):
         return False
 
 
-class ModifierInline(TranslatedInlineMixin, SectionInlineMixin, TabularInline):
+class ModifierInline(PosterRowsInlineMixin, TranslatedInlineMixin, SectionInlineMixin,
+                     TabularInline):
     admin_section = AdminSection.MENU
     model = Modifier
     fields = ("name", "price", "is_available", "sort_order")
@@ -638,7 +687,8 @@ class ModifierInline(TranslatedInlineMixin, SectionInlineMixin, TabularInline):
 
 
 @admin.register(ModifierGroup)
-class ModifierGroupAdmin(TranslatedAdminMixin, VenueFormMixin, ScopedAdminMixin):
+class ModifierGroupAdmin(PosterFieldsMixin, TranslatedAdminMixin, VenueFormMixin,
+                         ScopedAdminMixin):
     """Add-ons set once and attached to items or whole categories (module
     «Варианты и добавки»; guests see them while it is on)."""
 

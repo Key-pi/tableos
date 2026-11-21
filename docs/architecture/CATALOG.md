@@ -308,3 +308,16 @@ Admin), `tests/webapp/test_guest_stock.py`, `tests/webapp/test_staff_stock.py`,
 `tests/bot/test_menu_translations.py` (меню, выбор и корзина гостя,
 быстрая продажа — основной язык, корзина без запросов, «Мои заказы»), сид —
 `tests/apps/partners/test_seed_baseline_demo.py`.
+
+## Меню из Poster (PQ-058, шаг 3)
+
+У заведения, подключённого к кассе Poster, меню приходит из Poster
+(`apps/integrations/poster/menu_sync.py:sync_menu`; как и что переносится —
+[POSTER.md](POSTER.md#2-меню-из-poster--сделано-шаг-3)). Каталог Botera при
+этом не меняется: категории в два уровня, варианты, группы добавок и
+переводы — те же модели. Пока подключение работает, поля, которые пишет
+Poster (название, цена, категория, фото позиции, варианты и добавки), в
+Admin только для чтения (`apps/menu/admin.py:PosterFieldsMixin`); переводы,
+описание, витрина, свои фото, способы заказа, порядок, остатки и стоп-лист —
+по-прежнему Botera. Свои позиции и категории Botera рядом с меню Poster
+правятся как раньше.

@@ -13,7 +13,7 @@ from django.test import RequestFactory, TestCase, TransactionTestCase, override_
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.integrations.poster import services
+from apps.integrations.poster import menu_sync, services
 from apps.integrations.poster.admin import PosterConnectionAdmin
 from apps.integrations.poster.client import PosterError
 from apps.integrations.poster.models import PosterConnection
@@ -81,6 +81,8 @@ class ConnectionFlowTests(TestCase):
         self.spots = mock.patch.object(services, "fetch_spots", return_value=ONE_SPOT)
         self.exchange_mock = self.exchange.start()
         self.spots_mock = self.spots.start()
+        # A working spot brings the menu at once (step 3): Poster's empty menu.
+        self.menu_mock = mock.patch.object(menu_sync, "fetch_menu", return_value=([], [])).start()
         self.addCleanup(mock.patch.stopall)
         self.client.force_login(self.owner)
 
@@ -136,6 +138,7 @@ class ConnectionFlowTests(TestCase):
         self.assertEqual((kwargs["account"], kwargs["code"]), ("venue", "code-placeholder"))
         self.assertEqual(kwargs["application_secret"], "secret-placeholder")
         self.spots_mock.assert_called_once_with(TOKEN)
+        self.menu_mock.assert_called_once_with(TOKEN)
 
     def test_a_start_is_spent_once(self):
         self._start()
@@ -219,6 +222,7 @@ class ConnectionFlowTests(TestCase):
         connection = PosterConnection.objects.get(partner=self.partner)
         self.assertEqual(connection.status, PosterConnection.Status.PENDING_SPOT)
         self.assertIsNone(connection.spot_id)
+        self.menu_mock.assert_not_called()
 
         act = reverse("admin:poster_posterconnection_act", args=[connection.pk])
         self.client.post(act, {"object_action": "spot:2"})
@@ -226,6 +230,7 @@ class ConnectionFlowTests(TestCase):
         connection.refresh_from_db()
         self.assertEqual(connection.status, PosterConnection.Status.ACTIVE)
         self.assertEqual(connection.spot_id, 2)
+        self.menu_mock.assert_called_once_with(TOKEN)
 
     def test_a_spot_outside_the_account_cannot_be_chosen(self):
         self.spots_mock.return_value = TWO_SPOTS

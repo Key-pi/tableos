@@ -4,14 +4,16 @@ The venue sees «Настройки» → «Poster»: its connection and the log
 sent to Poster (a tab there); references and the webhook inbox are the
 platform's. Nothing is edited in a form: «Подключить Poster», the choice of
 the spot and «Отключить Poster» are POST buttons that call
-``apps/integrations/poster/services.py`` (step 2); «Обновить меню» comes in
-step 3. The access token is on no page.
+``apps/integrations/poster/services.py`` (step 2); «Обновить меню» brings
+the menu now (``menu_sync.sync_menu``, step 3), as the choice of the spot
+does. The access token is on no page.
 """
 
 from django.contrib import admin, messages
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.urls import path
 
+from apps.integrations.poster.menu_sync import PosterSyncError, sync_menu
 from apps.integrations.poster.models import (
     PosterConnection,
     PosterOrderPush,
@@ -26,6 +28,7 @@ from apps.integrations.poster.services import (
     poster_configured,
     start_connection,
 )
+from apps.integrations.poster.views import bring_menu
 from apps.users.constants import AdminSection
 from core.admin_mixins import ObjectAction, ObjectActionsMixin, ScopedAdminMixin
 from core.i18n import _
@@ -56,7 +59,7 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
     single_record = True
     allow_partner_add = False
     allow_partner_delete = False
-    object_action_errors = (PosterConnectError,)
+    object_action_errors = (PosterConnectError, PosterSyncError)
     change_form_outer_before_template = "admin/poster/connection_actions.html"
     list_before_template = "admin/poster/connect.html"
     list_display = ("account", "spot_id", "status", "last_synced_at", "partner")
@@ -165,6 +168,10 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
                 )
                 for spot in obj.available_spots or []
             )
+        if obj.status == PosterConnection.Status.ACTIVE:
+            actions.append(ObjectAction(
+                code="sync", label=_("Обновить меню"), icon="sync", style="primary",
+            ))
         if obj.status != PosterConnection.Status.DISCONNECTED:
             actions.append(ObjectAction(
                 code="disconnect",
@@ -181,6 +188,11 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
         if code == "disconnect":
             disconnect(connection_id=obj.pk, user=request.user)
             return _("Poster отключён.")
+        if code == "sync":
+            report = sync_menu(connection_id=obj.pk, user=request.user)
+            for note in report.notes():
+                messages.warning(request, note)
+            return report.summary()
         spot_id = code.removeprefix("spot:")
         connection = choose_spot(connection_id=obj.pk, user=request.user, spot_id=spot_id)
         spot = next(
@@ -188,6 +200,7 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
              if item.get("spot_id") == connection.spot_id),
             connection.spot_id,
         )
+        bring_menu(request, connection)
         return _("Заведение работает с точкой Poster «{spot}».", spot=spot)
 
 
