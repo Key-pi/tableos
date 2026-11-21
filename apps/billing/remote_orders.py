@@ -65,6 +65,7 @@ from apps.orders.models import Cart, Order
 from apps.orders.services import (
     CHANNEL_OFF_MESSAGES,
     cart_line_payload,
+    complete_order_from_register,
     create_order,
     notify_staff_about_new_order,
     requested_time_label,
@@ -1011,6 +1012,78 @@ def cancel_unpaid_remote_order(*, order: Order, actor, comment: str = "") -> Ord
             else _("Заказ отменён до передачи курьеру.")
         ),
     )
+
+
+# The methods a venue's register reports for money it took (PQ-059).
+REGISTER_METHODS = frozenset({Payment.Method.CASH, Payment.Method.TERMINAL, Payment.Method.MIXED})
+
+
+def _order_status(order: Order) -> str:
+    return Order.objects.filter(pk=order.pk).values_list("status", flat=True).first() or ""
+
+
+@transaction.atomic
+def record_register_payment(*, order: Order, method: str, provider_code: str, reference: str,
+                            note: str) -> bool:
+    """The venue's register took the money for a remote order paid on
+    receipt (Poster's closed check, PQ-059).
+
+    The rest of the Botera bill is paid by the register's method — the sum
+    is Botera's bill, not the check, which may hold more — without an
+    employee, with the register's name and check number, and without
+    cashback (v1). The order is «Завершён» from any non-final status, as by
+    the guest's «Получил(а)». False when the bill is paid already (a repeat).
+    Locks as any payment: Bill → Order.
+    """
+
+    if method not in REGISTER_METHODS:
+        raise RemoteOrderError(_("Неизвестный способ оплаты кассы."))
+    if _order_status(order) == Order.Status.CANCELED:
+        raise RemoteOrderError(_("Заказ уже отменён в Botera."))
+    bill = _order_bill(order)
+    order = _lock_remote_order(order, ON_RECEIPT)
+    if order.status == Order.Status.CANCELED:
+        raise RemoteOrderError(_("Заказ уже отменён в Botera."))
+    if bill.status == Bill.Status.PAID or order.paid_at is not None:
+        return False
+    complete_order_from_register(order=order, note=note)
+    record_payment(
+        bill=bill,
+        amount=_money(bill.total_amount - bill.paid_amount),
+        method=method,
+        created_by=None,
+        comment=note[:255],
+        provider_code=provider_code,
+        external_payment_id=reference,
+        award_cashback=False,
+    )
+    return True
+
+
+@transaction.atomic
+def cancel_remote_order_by_register(*, order: Order, note: str) -> bool:
+    """The venue's register rejected the order: canceled as an unpaid order
+    — the bill voided, bonuses back — without an employee. False when the
+    order is closed already; ``RemoteOrderError`` when money was taken:
+    then staff decide."""
+
+    if _order_status(order) in {Order.Status.COMPLETED, Order.Status.CANCELED}:
+        return False
+    bill = _order_bill(order)
+    order = _lock_remote_order(order, ON_RECEIPT)
+    if order.status in {Order.Status.COMPLETED, Order.Status.CANCELED}:
+        return False
+    if bill.status == Bill.Status.PAID or bill.payments.exclude(
+        method=Payment.Method.BONUSES
+    ).filter(status=Payment.Status.PAID).exists():
+        raise RemoteOrderError(_("По заказу уже есть оплата — отменить его автоматически нельзя."))
+    _void_locked_bill(
+        bill=bill, actor=None, reason_code=BillAdjustment.ReasonCode.OTHER, reason_text=note,
+    )
+    transition_order_status(
+        order=order, to_status=Order.Status.CANCELED, actor_user=None, note=note[:255],
+    )
+    return True
 
 
 def open_unpaid_remote_orders(guest: GuestProfile):

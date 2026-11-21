@@ -198,7 +198,7 @@ class WhatIsDoneTests(WebhookFixture):
                                  Status.PROCESSED)
         self.assertEqual(self.fetch_mock.call_count, 3)
 
-    def test_orders_and_checks_wait_for_steps_5_and_6(self):
+    def test_orders_and_checks_not_from_botera_are_not_ours(self):
         for entity in ("incoming_order", "transaction"):
             self.post(signed(object=entity, action="added", data='{"type":1}'))
         for event in PosterWebhookEvent.objects.all():
@@ -212,7 +212,7 @@ class WhatIsDoneTests(WebhookFixture):
         self.post(signed(object="incoming_order", action="added"))
         client = PosterWebhookEvent.objects.get(entity="client")
         self.assertEqual(client.status, Status.IGNORED)
-        # Orders say they wait; the rest says it is not needed.
+        # An online order says it is not Botera's; the rest is not needed.
         self.assertNotEqual(client.error,
                             PosterWebhookEvent.objects.get(entity="incoming_order").error)
         self.fetch_mock.assert_not_called()

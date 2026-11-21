@@ -176,6 +176,22 @@ class PosterOrderPush(PartnerBoundModel):
         verbose_name=_lazy("Оплачено по чеку"),
     )
     last_error = models.TextField(blank=True, verbose_name=_lazy("Последняя ошибка"))
+    # What the register said last (step 6): the online order 0 new / 1
+    # accepted / 7 rejected; the check 0 open / 2 closed / 3 removed / 4
+    # rejected; ``pay_type`` 0 none / 1 cash / 2 card / 3 mixed.
+    poster_status = models.PositiveSmallIntegerField(
+        null=True, blank=True, verbose_name=_lazy("Статус онлайн-заказа"),
+    )
+    check_status = models.PositiveSmallIntegerField(
+        null=True, blank=True, verbose_name=_lazy("Статус чека"),
+    )
+    pay_type = models.PositiveSmallIntegerField(
+        null=True, blank=True, verbose_name=_lazy("Оплата по чеку"),
+    )
+    # What staff must look at by hand (PQ-059); told once when it appears.
+    attention = models.CharField(
+        max_length=255, blank=True, verbose_name=_lazy("Требует внимания"),
+    )
 
     class Meta:
         verbose_name = _lazy("передача заказа в Poster")

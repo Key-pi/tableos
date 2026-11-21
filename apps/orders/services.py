@@ -510,6 +510,12 @@ def confirm_order_received_by_guest(
 
     if not can_guest_confirm_receipt(order):
         raise OrderFlowError(_("Этот заказ уже завершён или отменён."))
+    return _complete_as_received(order, note="Guest action: confirmed as received.")
+
+
+def _complete_as_received(order: Order, *, note: str) -> Order:
+    """«Завершён» from any non-final status, without an employee (PQ-029);
+    ``order`` is locked by the caller."""
 
     from_status = order.status
     order.status = Order.Status.COMPLETED
@@ -525,7 +531,7 @@ def confirm_order_received_by_guest(
         order=order,
         from_status=from_status,
         to_status=order.status,
-        note="Guest action: confirmed as received.",
+        note=note,
     )
     _create_staff_notifications_for_status_change(
         order=order,
@@ -538,6 +544,20 @@ def confirm_order_received_by_guest(
         to_status=order.status,
     )
     return order
+
+
+@transaction.atomic
+def complete_order_from_register(*, order: Order, note: str) -> Order:
+    """The venue's register closed the order (Poster, PQ-059): «Завершён»
+    from any non-final status, as the guest's «Получил(а)» (PQ-029), without
+    an employee. A completed or canceled order stays as it is."""
+
+    order = Order.objects.select_for_update(of=("self",)).get(
+        id=order.id, partner_id=order.partner_id,
+    )
+    if not can_guest_confirm_receipt(order):
+        return order
+    return _complete_as_received(order, note=note)
 
 
 def _resolve_actor_employee(*, order: Order, actor_user: User | None) -> EmployeeProfile | None:

@@ -18,8 +18,10 @@ the work is a Celery task.
    connection (``PosterConnection.menu_changed_at``) and puts off
    ``poster.sync_menu_after_changes`` by a minute: Poster sends a webhook per
    changed product, the menu is brought once, after the last one
-   (``menu_quiet``). Orders and checks (``incoming_order``, ``transaction``)
-   are kept for steps 5–6; other objects (``client``…) are not needed.
+   (``menu_quiet``). An online order or a check (``incoming_order``,
+   ``transaction``) of a Botera order queues ``poster.sync_order_state``
+   (``statuses.py``, step 6); the cashier's own checks and other objects
+   (``client``…) are not ours.
 
 Locks: the ``PosterWebhookEvent`` row → the account's ``PosterConnection``
 rows by id. An event is processed once: its status is checked under its lock.
@@ -156,7 +158,8 @@ def _connections_of(event: PosterWebhookEvent) -> list[PosterConnection]:
 def process(event_id) -> str:
     """Do what the event asks; "" when it was processed already."""
 
-    from apps.integrations.poster.tasks import sync_menu_after_changes_task
+    from apps.integrations.poster.statuses import order_pushes
+    from apps.integrations.poster.tasks import sync_menu_after_changes_task, sync_order_state_task
 
     with transaction.atomic():
         event = PosterWebhookEvent.objects.select_for_update().filter(pk=event_id).first()
@@ -170,9 +173,17 @@ def process(event_id) -> str:
         # One account may serve several venues (its spots); then no single one.
         event.partner_id = connections[0].partner_id if len(connections) == 1 else None
         if event.entity in ORDER_OBJECTS:
-            return _finish(event, Status.IGNORED, _(
-                "Заказы и чеки из Poster Botera начнёт разбирать на шагах 5–6."
-            ))
+            pushes = order_pushes(event, connections)
+            if not pushes:
+                return _finish(event, Status.IGNORED, _(
+                    "Этот онлайн-заказ или чек — не заказ Botera."
+                ))
+            event.partner_id = pushes[0].partner_id
+            push_ids = [str(push.pk) for push in pushes]
+            transaction.on_commit(lambda: [
+                sync_order_state_task.delay(push_id) for push_id in push_ids
+            ])
+            return _finish(event, Status.PROCESSED)
         if event.entity not in MENU_OBJECTS:
             return _finish(event, Status.IGNORED, _("Этот вебхук Botera не нужен."))
         changed_at = timezone.now()

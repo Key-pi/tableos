@@ -482,9 +482,12 @@ def record_payment(
     external_payment_id: str = "",
     mark_bill_issued: bool = True,
     split_part: int | None = None,
+    award_cashback: bool = True,
 ) -> Payment:
     """``split_part`` — the equal part of a split bill this pays (PQ-009,
-    ``apps/billing/bill_split.py:pay_split_part`` checks it)."""
+    ``apps/billing/bill_split.py:pay_split_part`` checks it).
+    ``award_cashback=False`` — the bill's orders earn no cashback from this
+    payment (money a venue's register took, PQ-059: none in v1)."""
 
     if method not in Payment.Method.values:
         raise BillingServiceError(_("Неизвестный способ оплаты."))
@@ -549,7 +552,7 @@ def record_payment(
     if bill.issued_at is not None:
         update_fields.append("issued_at")
     bill.save(update_fields=update_fields)
-    _process_post_payment_updates(bill)
+    _process_post_payment_updates(bill, award_cashback=award_cashback)
     return payment
 
 
@@ -770,11 +773,11 @@ def redeem_bonus_for_bill(
     return redeem_amount
 
 
-def _process_post_payment_updates(bill: Bill) -> None:
+def _process_post_payment_updates(bill: Bill, *, award_cashback: bool = True) -> None:
     if bill.status != Bill.Status.PAID:
         return
 
-    _sync_orders_after_bill_paid(bill)
+    _sync_orders_after_bill_paid(bill, award_cashback=award_cashback)
     # Table-channel follow-up (requests processed, settled sessions closed);
     # a no-op for bills of other channels. Imported here because
     # table_bills builds on this module (ADR-0009).
@@ -842,7 +845,7 @@ def _award_bill_cashback(bill: Bill, order: Order, *, was_unpaid: bool, whole: b
             raise BillingServiceError(str(exc)) from exc
 
 
-def _sync_orders_after_bill_paid(bill: Bill) -> int:
+def _sync_orders_after_bill_paid(bill: Bill, *, award_cashback: bool = True) -> int:
     paid_payments = list(bill.payments.filter(status=Payment.Status.PAID))
     order_payment_method = _derive_order_payment_method(
         paid_payments,
@@ -874,11 +877,12 @@ def _sync_orders_after_bill_paid(bill: Bill) -> int:
     now = timezone.now()
     for order in orders:
         was_unpaid = order.paid_at is None
-        _award_bill_cashback(
-            bill, order, was_unpaid=was_unpaid, whole=order.id not in split_orders,
-            portion=portions.get(order.id, Decimal("0.00")),
-            bonus_share=bonus_shares.get(order.id, Decimal("0.00")), payers=payers,
-        )
+        if award_cashback:
+            _award_bill_cashback(
+                bill, order, was_unpaid=was_unpaid, whole=order.id not in split_orders,
+                portion=portions.get(order.id, Decimal("0.00")),
+                bonus_share=bonus_shares.get(order.id, Decimal("0.00")), payers=payers,
+            )
         if order.id in unpaid_elsewhere:
             continue
         if order_payment_method and order.payment_method != order_payment_method:

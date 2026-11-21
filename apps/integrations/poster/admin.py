@@ -246,7 +246,8 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
 class PosterOrderPushAdmin(_ReadOnlyLog, ScopedAdminMixin):
     admin_section = AdminSection.ORDERS
     service_table = True
-    list_display = ("order", "status", "attempts", "sent_at", "incoming_order_id", "partner")
+    list_display = ("order", "status", "attempts", "sent_at", "incoming_order_id", "attention",
+                    "partner")
     list_filter = ("partner", "status")
     search_fields = ("order__public_id",)
     fields = (
@@ -258,8 +259,12 @@ class PosterOrderPushAdmin(_ReadOnlyLog, ScopedAdminMixin):
         "sent_at",
         "incoming_order_id",
         "transaction_id",
+        "poster_status",
+        "check_status",
+        "pay_type",
         "poster_sum",
         "poster_payed_sum",
+        "attention",
         "last_error",
         "created_at",
         "updated_at",

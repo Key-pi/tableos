@@ -61,7 +61,12 @@ paths:
   `dedupe_key`, без блокировки. Заказ на кассу
   (`apps/integrations/poster/orders.py`): только строка `PosterOrderPush` —
   захват (`pending`/`unknown` → `sending`) и запись итога, каждое своей
-  короткой транзакцией; запрос к Poster между ними, вне транзакции.
+  короткой транзакцией; запрос к Poster между ними, вне транзакции. Статус из
+  Poster (`apps/integrations/poster/statuses.py`): чтение Poster вне
+  транзакции; оплата по чеку — как любая оплата `Bill → Order`
+  (`record_register_payment`), отмена — `Bill → Order`
+  (`cancel_remote_order_by_register`), «Принят» — `Order`; строка
+  `PosterOrderPush` — отдельной короткой транзакцией, не вместе с ними.
 - Остатки: строки `MenuItem`/`MenuItemVariant` — последними в транзакции,
   сначала позиции, затем варианты, каждые по id, `no_key=True`
   (`apps/menu/stock.py:_lock`).

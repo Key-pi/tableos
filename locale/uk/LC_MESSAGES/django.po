@@ -1533,6 +1533,18 @@ msgid "Заказ отменён до передачи курьеру."
 msgstr "Замовлення скасовано до передачі кур'єру."
 
 #: apps/billing/remote_orders.py
+msgid "Неизвестный способ оплаты кассы."
+msgstr "Невідомий спосіб оплати каси."
+
+#: apps/billing/remote_orders.py
+msgid "Заказ уже отменён в Botera."
+msgstr "Замовлення вже скасовано в Botera."
+
+#: apps/billing/remote_orders.py
+msgid "По заказу уже есть оплата — отменить его автоматически нельзя."
+msgstr "За замовленням уже є оплата — скасувати його автоматично не можна."
+
+#: apps/billing/remote_orders.py
 msgid "Автоотмена: перевод не подтверждён за {minutes} мин."
 msgstr "Автоскасування: переказ не підтверджено за {minutes} хв."
 
@@ -2701,6 +2713,22 @@ msgid "Оплачено по чеку"
 msgstr "Сплачено за чеком"
 
 #: apps/integrations/poster/models.py
+msgid "Статус онлайн-заказа"
+msgstr "Статус онлайн-замовлення"
+
+#: apps/integrations/poster/models.py
+msgid "Статус чека"
+msgstr "Статус чека"
+
+#: apps/integrations/poster/models.py
+msgid "Оплата по чеку"
+msgstr "Оплата за чеком"
+
+#: apps/integrations/poster/models.py templates/admin/index.html
+msgid "Требует внимания"
+msgstr "Потребує уваги"
+
+#: apps/integrations/poster/models.py
 msgid "передача заказа в Poster"
 msgstr "передача замовлення в Poster"
 
@@ -2880,6 +2908,46 @@ msgstr "Такої точки немає в акаунті Poster."
 msgid "Poster отключён. Подключите его заново."
 msgstr "Poster відключено. Підключіть його знову."
 
+#: apps/integrations/poster/statuses.py
+msgid "Заказ #{code}: проверьте в Poster"
+msgstr "Замовлення #{code}: перевірте в Poster"
+
+#: apps/integrations/poster/statuses.py
+msgid "{reason}. Решите вручную в карточке заказа."
+msgstr "{reason}. Вирішіть вручну в картці замовлення."
+
+#: apps/integrations/poster/statuses.py
+msgid "чек Poster №{check} закрыт без оплаты (причина {reason})"
+msgstr "чек Poster №{check} закрито без оплати (причина {reason})"
+
+#: apps/integrations/poster/statuses.py
+msgid "Оплачен на кассе Poster, чек №{check}."
+msgstr "Оплачено на касі Poster, чек №{check}."
+
+#: apps/integrations/poster/statuses.py
+msgid "чек Poster №{check} оплачен, а заказ в Botera уже закрыт ({reason})"
+msgstr "чек Poster №{check} оплачено, а замовлення в Botera вже закрите ({reason})"
+
+#: apps/integrations/poster/statuses.py
+msgid "сумма чека Poster {check_sum} грн, счёт Botera {bill_sum} грн"
+msgstr "сума чека Poster {check_sum} грн, рахунок Botera {bill_sum} грн"
+
+#: apps/integrations/poster/statuses.py
+msgid "Отклонён на кассе Poster."
+msgstr "Відхилено на касі Poster."
+
+#: apps/integrations/poster/statuses.py
+msgid "заказ отклонён на кассе Poster, а по нему уже есть оплата в Botera"
+msgstr "замовлення відхилено на касі Poster, а за ним уже є оплата в Botera"
+
+#: apps/integrations/poster/statuses.py
+msgid "Принят на кассе Poster."
+msgstr "Прийнято на касі Poster."
+
+#: apps/integrations/poster/statuses.py
+msgid "чек Poster №{check} удалён"
+msgstr "чек Poster №{check} видалено"
+
 #: apps/integrations/poster/views.py
 msgid "Меню из Poster не загрузилось: {reason}. Нажмите «Обновить меню» позже."
 msgstr "Меню з Poster не завантажилося: {reason}. Натисніть «Оновити меню» пізніше."
@@ -2901,8 +2969,8 @@ msgid "Нет работающего подключения к этому акк
 msgstr "Немає робочого підключення до цього акаунта Poster."
 
 #: apps/integrations/poster/webhooks.py
-msgid "Заказы и чеки из Poster Botera начнёт разбирать на шагах 5–6."
-msgstr "Замовлення й чеки з Poster Botera почне розбирати на кроках 5–6."
+msgid "Этот онлайн-заказ или чек — не заказ Botera."
+msgstr "Це онлайн-замовлення чи чек — не замовлення Botera."
 
 #: apps/integrations/poster/webhooks.py
 msgid "Этот вебхук Botera не нужен."
@@ -9607,10 +9675,6 @@ msgstr "Ви входите як {person}."
 #: templates/admin/enter_link.html
 msgid "Войти"
 msgstr "Увійти"
-
-#: templates/admin/index.html
-msgid "Требует внимания"
-msgstr "Потребує уваги"
 
 #: templates/admin/index.html
 msgid "Всё в порядке: ничего не ждёт"

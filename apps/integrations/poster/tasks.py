@@ -7,7 +7,7 @@ import logging
 
 from celery import shared_task
 
-from apps.integrations.poster import orders, webhooks
+from apps.integrations.poster import orders, statuses, webhooks
 from apps.integrations.poster.menu_sync import PosterSyncError, sync_menu
 from apps.integrations.poster.models import PosterConnection
 from apps.partners.models import Partner
@@ -20,6 +20,7 @@ PROCESS_WEBHOOK_TASK = "poster.process_webhook"
 SYNC_MENU_AFTER_CHANGES_TASK = "poster.sync_menu_after_changes"
 PUSH_ORDER_TASK = "poster.push_order"
 RECOVER_ORDER_PUSHES_TASK = "poster.recover_order_pushes"
+SYNC_ORDER_STATE_TASK = "poster.sync_order_state"
 
 
 @shared_task(name=SYNC_MENU_TASK)
@@ -77,3 +78,11 @@ def recover_order_pushes_task() -> int:
     """Orders to Poster that a lost task or a stopped worker left."""
 
     return orders.recover_pushes()
+
+
+@shared_task(name=SYNC_ORDER_STATE_TASK)
+def sync_order_state_task(push_id: str, attempt: int = 1) -> str:
+    """What the register said about one Botera order (step 6); a repeat
+    does nothing new."""
+
+    return statuses.sync_order_state(push_id, attempt=attempt)
