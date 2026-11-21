@@ -88,6 +88,8 @@
   (`apps/integrations/poster/selectors.py:register_holds`), кнопок оплаты и
   «Гость не забрал» нет, а `record_payment_on_receipt` и
   `cancel_unpaid_remote_order` от сотрудника отказывают: деньги берёт касса.
+  Возврат такого заказа — тоже на кассе: `refund_bill_lines` отказывает,
+  кнопок возврата нет.
 - Заведение на кассе Poster (PQ-059, [POSTER.md](POSTER.md)): закрытый чек
   онлайн-заказа сам записывает оплату при получении —
   `record_register_payment(order, method, provider_code, reference, note)`:

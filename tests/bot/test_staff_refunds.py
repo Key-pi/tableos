@@ -8,12 +8,14 @@ from asgiref.sync import async_to_sync
 from apps.billing.models import Payment, Refund
 from apps.billing.remote_orders import record_payment_on_receipt
 from apps.employees.models import EmployeeProfile
+from apps.integrations.poster.models import PosterOrderPush
 from apps.menu.models import MenuCategory, MenuItem
 from apps.orders.models import Order
 from apps.orders.services import add_items_to_cart_for_telegram_user
 from apps.partners.models import PartnerBotSettings
 from apps.users.models import TelegramAccount, User
 from bot.handlers import staff, staff_refunds
+from tests.apps.integrations.poster.test_menu_sync import connect
 from tests.bot.test_remote_checkout import GUEST, STAFF, PickupBotFixture, _buttons
 
 
@@ -180,3 +182,21 @@ class StaffRefundStockBotTests(StaffRefundBotFixture):
         for data in _data(self._staff(f"strc:{pid}:{m}:os:c:1").message.edit_text.call_args
                           .kwargs["reply_markup"]):
             self.assertLessEqual(len(data.encode()), 64, data)
+
+
+class PosterOrderRefundTests(StaffRefundBotFixture):
+    """The order went to the venue's Poster after it was paid: the register
+    gives the money back (PQ-058, step 7)."""
+
+    def setUp(self):
+        super().setUp()
+        connect(self.partner)
+        PosterOrderPush.objects.create(partner=self.partner, order=self.order,
+                                       status=PosterOrderPush.Status.SENT)
+
+    def test_an_old_refund_button_is_answered_with_the_register(self):
+        callback = self._staff(f"strf:{self.order.public_id}:0")
+
+        self.assertIn("на кассе Poster", callback.answer.call_args.args[0])
+        callback.message.edit_text.assert_not_called()
+        self.assertFalse(Refund.objects.exists())

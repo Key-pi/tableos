@@ -34,6 +34,7 @@ from apps.billing.table_bills import (
     mark_billing_request_processed,
 )
 from apps.bonuses.services import BonusServiceError
+from apps.integrations.poster.selectors import register_holds_any
 from apps.users.constants import AdminSection
 from core.admin_mixins import (
     ObjectAction,
@@ -365,7 +366,12 @@ class BillAdmin(ObjectActionsMixin, ScopedAdminMixin):
         if may_change:
             result.append(ObjectAction("lines", _("Убрать позиции"), "playlist_remove",
                                        url=lines_url))
-        if obj.status == Bill.Status.PAID and user_can_adjust_bills(request.user, obj.partner_id):
+        if (
+            obj.status == Bill.Status.PAID
+            and user_can_adjust_bills(request.user, obj.partner_id)
+            # The Poster register refunds its orders itself (step 7).
+            and not register_holds_any(obj.items.values_list("order_id", flat=True))
+        ):
             result.append(ObjectAction("refund", _("Возврат по строкам"), "currency_exchange",
                                        url=lines_url))
         if may_void:

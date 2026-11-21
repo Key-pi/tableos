@@ -4,16 +4,22 @@ Admin staff only say «Готово» and «В пути» — accepting, cancell
 money and completing are the register's, and the services refuse them too.
 An order that did not reach Poster, or a venue without Poster — as before."""
 
-from django.test import TestCase
+from decimal import Decimal
+from types import SimpleNamespace
 
-from apps.billing.models import Payment
+from django.contrib import admin
+from django.test import RequestFactory, TestCase
+from django.utils import timezone
+
+from apps.billing.admin import BillAdmin
+from apps.billing.models import Bill, Payment, Refund
 from apps.billing.remote_orders import (
     RemoteOrderError,
     cancel_unpaid_remote_order,
     place_remote_order,
     record_payment_on_receipt,
 )
-from apps.billing.services import BillingServiceError, cancel_order
+from apps.billing.services import BillingServiceError, cancel_order, refund_bill_lines
 from apps.billing.staff_actions import STATUS, staff_order_actions
 from apps.integrations.poster.models import PosterConnection, PosterOrderPush
 from apps.integrations.poster.selectors import goes_to_register, register_holds
@@ -21,21 +27,27 @@ from apps.menu.models import MenuItem
 from apps.notifications.models import StaffNotification
 from apps.orders.admin import order_admin_actions
 from apps.orders.models import Order
+from apps.orders.repositories import OrderRepository
 from apps.orders.selectors import get_open_orders_for_partner
 from apps.orders.services import (
     OrderFlowError,
     add_items_to_cart_for_telegram_user,
     transition_order_status,
 )
+from apps.users.models import User
 from bot.handlers.staff import (
     _build_order_shortcuts,
     _notification_order_action,
     _order_actions_keyboard,
+    _render_order_card,
 )
 from tests.apps.billing.test_remote_orders import NOON, TG
 from tests.apps.integrations.poster.test_orders import OrderFixture
 from tests.apps.integrations.poster.test_statuses import StatusFixture
 from tests.bot.test_guest_flow import _data
+from webapp.context import WebAppDenied
+from webapp.staff_billing import _refund_order
+from webapp.staff_views import _order_json
 
 Push = PosterOrderPush.Status
 Status = Order.Status
@@ -220,3 +232,65 @@ class OrdersOfOtherVenuesTests(TestCase):
 
         self.assertFalse(register_holds(order))
         self.assertFalse(goes_to_register(order))
+
+
+class RefundTests(StatusFixture):
+    """The register took the money, so it gives it back (owner 2026-11-21)."""
+
+    def setUp(self):
+        super().setUp()
+        self.register(online_status=1, check_status=2, pay_type=1, paid="40000")
+        self.sync()
+        self.owner = User.objects.create_user(
+            username="poster_refund_owner", password="x", partner=self.partner,
+            role=User.Role.OWNER, is_staff=True, language="ru",
+        )
+        self.bill = Bill.objects.get(pk=self.bill_id)
+        self.assertEqual(self.bill.status, Bill.Status.PAID)
+
+    def refund(self):
+        return refund_bill_lines(
+            bill=self.bill, bill_item_ids=[line.id for line in self.bill.items.all()],
+            actor=self.owner, reason_code=Refund.ReasonCode.OTHER, method=Refund.Method.CASH,
+        )
+
+    def card(self):
+        order = OrderRepository.by_public_id_for_partner(self.partner.id, self.order_.public_id)
+        return _render_order_card(order), _data(_order_actions_keyboard(order))
+
+    def admin_codes(self):
+        request = RequestFactory().get("/admin/")
+        request.user, request.session = self.owner, {}
+        page = BillAdmin(Bill, admin.site)
+        return [action.code for action in page.get_object_actions(request, self.bill)]
+
+    def test_the_card_sends_refunds_to_the_register(self):
+        text, data = self.card()
+
+        self.assertIn("Заказ ведёт касса Poster", text)
+        self.assertFalse([item for item in data if item.startswith("strf:")])
+        order = Order.objects.get(pk=self.order_.pk)
+        self.assertFalse(_order_json(order, now=timezone.now())["can_refund"])
+        self.assertNotIn("refund", self.admin_codes())
+
+    def test_the_mini_app_refund_page_sends_to_the_register(self):
+        staff = SimpleNamespace(partner=self.partner, employee=SimpleNamespace(user=self.owner))
+
+        with self.assertRaises(WebAppDenied) as caught:
+            _refund_order(staff, self.order_.public_id)
+        self.assertIn("на кассе Poster", str(caught.exception.message))
+
+    def test_the_service_refuses_a_refund(self):
+        with self.assertRaisesMessage(BillingServiceError, "на кассе Poster"):
+            self.refund()
+        self.assertFalse(Refund.objects.exists())
+
+    def test_without_poster_botera_refunds_as_before(self):
+        disconnect(self.partner)
+
+        text, data = self.card()
+
+        self.assertNotIn("касса Poster", text)
+        self.assertIn(f"strf:{self.order_.public_id}:0", data)
+        self.assertIn("refund", self.admin_codes())
+        self.assertEqual(self.refund().money_amount, Decimal("400.00"))

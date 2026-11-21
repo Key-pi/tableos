@@ -163,6 +163,13 @@ def register_holds(order) -> bool:
     return _held_pushes().filter(order_id=order.pk, partner_id=order.partner_id).exists()
 
 
+def register_holds_any(order_ids) -> bool:
+    """``register_holds`` for any of these orders (a bill's orders)."""
+
+    ids = [order_id for order_id in order_ids if order_id]
+    return bool(ids) and _held_pushes().filter(order_id__in=ids).exists()
+
+
 HELD = "poster_held"
 
 

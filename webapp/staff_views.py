@@ -50,6 +50,7 @@ from apps.billing.staff_actions import (
 )
 from apps.bonuses.services import BonusServiceError
 from apps.employees.invites import roles_invitable_by
+from apps.integrations.poster.selectors import register_holds
 from apps.notifications.models import StaffNotification
 from apps.notifications.services import GuestCallError, take_guest_call
 from apps.orders.models import Order
@@ -349,8 +350,10 @@ def _order_json(order: Order, *, now) -> dict:
         if assignee is not None else "",
         "received": is_order_received(order) and order.status != Order.Status.COMPLETED,
         "actions": [_action_json(order, code) for code in staff_order_actions(order)],
-        # Refund of a paid order (PQ-037): the right is checked when it opens.
-        "can_refund": order.paid_at is not None and order.status != Order.Status.CANCELED,
+        # Refund of a paid order (PQ-037): the right is checked when it opens;
+        # an order of the Poster register is refunded there (step 7).
+        "can_refund": order.paid_at is not None and order.status != Order.Status.CANCELED
+        and not register_holds(order),
     }
     if order.channel == Order.Channel.DELIVERY:
         data["address"] = order.delivery_address

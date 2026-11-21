@@ -29,17 +29,22 @@ from apps.bonuses.services import (
     sync_bonus_balance_from_ledger,
 )
 from apps.employees.models import EmployeeProfile
-from apps.integrations.poster.selectors import register_holds
+from apps.integrations.poster.selectors import register_holds, register_holds_any
 from apps.menu.stock import return_for_refund, returnable
 from apps.orders.models import Order, OrderItem
 from apps.orders.services import REGISTER_HOLDS_MESSAGE, transition_order_status
 from apps.partners.networks import acts_for_partner, owns_partner
 from apps.users.models import GuestProfile, User
-from core.i18n import _
+from core.i18n import N_, _
 
 
 class BillingServiceError(Exception):
     """Raised when a bill or payment operation violates billing rules."""
+
+
+# The register took the money of an order it holds, so it gives it back and
+# issues the return receipt (Poster, PQ-058 step 7, owner 2026-11-21).
+REGISTER_REFUND_MESSAGE = N_("Возврат по заказу из Poster делают на кассе Poster.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -1442,6 +1447,8 @@ def refund_bill_lines(
         .filter(partner_id=bill.partner_id, bill_id=bill.id, is_active=True)
         .order_by("created_at", "id")
     )
+    if register_holds_any({line.order_id for line in lines}):
+        raise BillingServiceError(_(REGISTER_REFUND_MESSAGE))
     by_id = {str(line.id): line for line in lines}
     if not item_ids <= set(by_id):
         raise BillingServiceError(_("Строка не из этого счёта."))

@@ -1588,6 +1588,10 @@ msgstr "Спершу позначте, що замовлення зібрано.
 msgid "Отправлен, ТТН {number}."
 msgstr "Відправлено, ТТН {number}."
 
+#: apps/billing/services.py
+msgid "Возврат по заказу из Poster делают на кассе Poster."
+msgstr "Повернення за замовленням із Poster роблять на касі Poster."
+
 #: apps/billing/services.py apps/orders/services.py bot/handlers/order.py
 msgid "стол #{number}"
 msgstr "стіл #{number}"
@@ -8019,6 +8023,10 @@ msgstr "• {item_name} × {quantity}"
 #: bot/handlers/staff.py
 msgid "Сумма: <b>{total_amount} грн</b> · оплата: {payment}"
 msgstr "Сума: <b>{total_amount} грн</b> · оплата: {payment}"
+
+#: bot/handlers/staff.py
+msgid "Заказ ведёт касса Poster: принять, отменить, оплатить и вернуть деньги — там."
+msgstr "Замовлення веде каса Poster: прийняти, скасувати, оплатити й повернути гроші — там."
 
 #: bot/handlers/staff.py
 msgid "Взял в работу: {assignee}"

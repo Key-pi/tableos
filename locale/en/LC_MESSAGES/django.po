@@ -1588,6 +1588,10 @@ msgstr "First mark the order as packed."
 msgid "Отправлен, ТТН {number}."
 msgstr "Shipped, tracking number {number}."
 
+#: apps/billing/services.py
+msgid "Возврат по заказу из Poster делают на кассе Poster."
+msgstr "Refunds for orders from Poster are made at the Poster register."
+
 #: apps/billing/services.py apps/orders/services.py bot/handlers/order.py
 msgid "стол #{number}"
 msgstr "table #{number}"
@@ -8019,6 +8023,10 @@ msgstr "• {item_name} × {quantity}"
 #: bot/handlers/staff.py
 msgid "Сумма: <b>{total_amount} грн</b> · оплата: {payment}"
 msgstr "Total: <b>{total_amount} UAH</b> · payment: {payment}"
+
+#: bot/handlers/staff.py
+msgid "Заказ ведёт касса Poster: принять, отменить, оплатить и вернуть деньги — там."
+msgstr "The Poster register handles this order: accept, cancel, take payment and refund there."
 
 #: bot/handlers/staff.py
 msgid "Взял в работу: {assignee}"

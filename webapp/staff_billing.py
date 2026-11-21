@@ -31,6 +31,7 @@ from apps.billing.repositories import (
     BillRepository,
 )
 from apps.billing.services import (
+    REGISTER_REFUND_MESSAGE,
     cancel_order,
     get_bill_context_label,
     get_order_refund_lines,
@@ -56,6 +57,7 @@ from apps.billing.table_bills import (
     mark_billing_request_processed,
 )
 from apps.bonuses.services import bonus_balance
+from apps.integrations.poster.selectors import register_holds
 from apps.orders.models import Order
 from apps.orders.repositories import OrderRepository
 from apps.partners.models import PartnerBotSettings
@@ -390,6 +392,8 @@ def _refund_order(staff: StaffRequest, public_id: str) -> tuple[Order, Bill, lis
     bill, lines = get_order_refund_lines(order)
     if bill is None:
         raise WebAppDenied(400, N_("У заказа нет оплаченного счёта — возвращать нечего."))
+    if register_holds(order):
+        raise WebAppDenied(400, REGISTER_REFUND_MESSAGE)
     return order, bill, lines
 
 

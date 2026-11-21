@@ -26,6 +26,7 @@ from asgiref.sync import sync_to_async
 
 from apps.billing.models import Refund
 from apps.billing.services import (
+    REGISTER_REFUND_MESSAGE,
     BillingServiceError,
     get_order_refund_lines,
     preview_refund,
@@ -33,6 +34,7 @@ from apps.billing.services import (
     refund_can_restock,
     user_can_adjust_bills,
 )
+from apps.integrations.poster.selectors import register_holds
 from apps.orders.models import Order
 from apps.orders.repositories import OrderRepository
 from apps.orders.services import OrderFlowError
@@ -207,6 +209,9 @@ async def staff_refund_callback(callback: CallbackQuery, bot: Bot) -> None:
         return
     if bill is None or all(line.refunded for line in lines):
         await callback.answer(_("По этому заказу нечего возвращать."), show_alert=True)
+        return
+    if register_holds(order):  # marked by the repository, no query here
+        await callback.answer(_(REGISTER_REFUND_MESSAGE), show_alert=True)
         return
     if len(lines) > MAX_LINES:
         await callback.answer(
