@@ -428,7 +428,8 @@ apps.notifications.tasks` — цикл, разорванный только им
    **Способы оплаты** (PQ-033, [PAYMENT_OPTIONS.md](PAYMENT_OPTIONS.md)) —
    настройки модуля: `PartnerBotSettings.<модуль>_pay_transfer` /
    `<модуль>_pay_on_receipt`; `remote_orders.py:payment_modes_for` отдаёт
-   включённые, гость выбирает, выбор пишется в `Order.payment_timing`
+   включённые, гость выбирает (способ заказа без доступной оплаты гостю не
+   показывается — `remote_orders.py:way_payable`), выбор пишется в `Order.payment_timing`
    (`prepaid` / `on_receipt`). Заказ с оплатой при получении принимается
    как обычно; персонал отмечает оплату
    (`record_payment_on_receipt`: `cash` или `terminal`) или отказ гостя
@@ -1065,7 +1066,7 @@ Admin показывает поля жизненного цикла, произ�
 
 ## Тесты и проверки
 
-- 1630 тестов после шага 7б Poster (PQ-061: деньги заказа считает касса — разница с чеком и удалённый чек), зелёные на SQLite и на PostgreSQL 16.
+- 1631 тест после генеральной репетиции Poster (шаг 8.1: способ заказа без доступной оплаты не показывается), зелёные на SQLite и на PostgreSQL 16.
   Тесты блокировок выполняются только на PostgreSQL и на SQLite
   пропускаются, среди них: параллельные воркеры рассылки
   (`tests/apps/notifications/test_delivery.py`); параллельная смена статуса заказа

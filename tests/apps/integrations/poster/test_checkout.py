@@ -133,6 +133,29 @@ class PaymentAndBonusTests(CheckoutFixture):
         with self.assertRaisesMessage(RemoteOrderError, "ещё не настроило оплату"):
             self.quote()
 
+    def test_a_way_with_no_payment_left_is_not_offered(self):
+        """Rehearsal 2026-11-24: with only the transfer on and Poster working,
+        the guest got the way's button and then «ещё не настроило оплату»."""
+
+        from bot.handlers.menu import choose_way_buttons
+        from bot.services.content import BotContent
+
+        PartnerBotSettings.objects.filter(id=self.settings.id).update(pickup_pay_on_receipt=False)
+        content = BotContent.for_partner(self.partner_reloaded())
+        self.assertFalse(content.supports_pickup_orders())
+        self.assertTrue(content.supports_delivery_orders())  # it still pays on receipt
+        self.assertEqual([data for _text, data in choose_way_buttons(content)],
+                         [f"pick:{DELIVERY}"])  # the Mini App's ways read the same methods
+        # Poster off: the transfer is back, and so is the way.
+        PosterConnection.objects.filter(partner=self.partner).update(
+            status=PosterConnection.Status.DISCONNECTED)
+        self.assertTrue(BotContent.for_partner(self.partner_reloaded()).supports_pickup_orders())
+
+    def partner_reloaded(self):
+        from apps.partners.models import Partner
+
+        return Partner.objects.get(pk=self.partner.pk)
+
     def test_bonuses_are_not_offered(self):
         self.bonuses()
         self._cart()

@@ -12,6 +12,17 @@ from bot.utils.html import escape_html
 from core.i18n import N_, _, own_text
 
 
+def _payable_ways(settings: PartnerBotSettings) -> dict[str, bool]:
+    """Whether each remote way has a payment left for the guest
+    (``apps/billing/remote_orders.py:way_payable``)."""
+
+    from apps.billing.remote_orders import PAYMENT_OPTION_FIELDS, way_payable
+
+    return {
+        f"{channel}_payable": way_payable(settings, channel) for channel in PAYMENT_OPTION_FIELDS
+    }
+
+
 def _render_template(template: str, **context) -> str:
     if not template:
         return ""
@@ -84,6 +95,11 @@ class BotContent:
     module_floor_plan_enabled: bool = False
     module_table_orders_enabled: bool = False
     module_reservations_enabled: bool = False
+    # A remote way the guest can pay for (rehearsal 2026-11-24): with Poster
+    # working and only the transfer on, the way has no payment left.
+    pickup_payable: bool = True
+    delivery_payable: bool = True
+    shipping_payable: bool = True
 
     @classmethod
     def for_partner(cls, partner: Partner) -> "BotContent":
@@ -147,6 +163,7 @@ class BotContent:
             module_floor_plan_enabled=settings.module_floor_plan_enabled,
             module_table_orders_enabled=settings.module_table_orders_enabled,
             module_reservations_enabled=settings.module_reservations_enabled,
+            **_payable_ways(settings),
             auto_close_table_session_after_payment=(
                 settings.auto_close_table_session_after_payment
             ),
@@ -192,6 +209,7 @@ class BotContent:
             self.module_orders_enabled
             and self.module_menu_enabled
             and self.module_delivery_enabled
+            and self.delivery_payable
         )
 
     def supports_pickup_orders(self) -> bool:
@@ -199,6 +217,7 @@ class BotContent:
             self.module_orders_enabled
             and self.module_menu_enabled
             and self.module_pickup_enabled
+            and self.pickup_payable
         )
 
     def supports_shipping_orders(self) -> bool:
@@ -206,6 +225,7 @@ class BotContent:
             self.module_orders_enabled
             and self.module_menu_enabled
             and self.module_shipping_enabled
+            and self.shipping_payable
         )
 
     def supports_remote_orders(self) -> bool:

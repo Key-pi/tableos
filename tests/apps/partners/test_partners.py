@@ -167,6 +167,9 @@ class PartnerBotSettingsModuleTests(TestCase):
             **TABLE_VENUE_MODULES,
             module_delivery_enabled=True,
             module_pickup_enabled=True,
+            # A way is offered only with a payment the guest can use (rehearsal
+            # 2026-11-24): the default transfer needs the venue's requisites.
+            transfer_payment_details="Карта 0000 (тест)",
         )
 
         content = BotContent.from_settings(settings)

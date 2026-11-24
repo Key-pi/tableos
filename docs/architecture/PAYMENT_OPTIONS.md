@@ -71,6 +71,9 @@
 - `payment_modes_for(settings, channel)` — включённые способы (перевод —
   только при заполненных реквизитах); `get_remote_quote` отдаёт их в
   `payment_modes`.
+- `way_payable(settings, channel)` — у включённого способа заказа осталась
+  оплата; без неё бот и Mini App способ не показывают
+  (`bot/services/content.py:BotContent`, генеральная репетиция 2026-11-24).
 - `place_remote_order(..., payment=…)` — отказывает в способе, который
   владелец не включил; записывает `payment_timing`.
 - `record_payment_on_receipt(order, actor, method)` — наличные (`cash`) или

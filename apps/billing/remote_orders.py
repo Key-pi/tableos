@@ -228,6 +228,18 @@ def payment_modes_for(settings: PartnerBotSettings, channel: str) -> tuple[str, 
     return tuple(modes)
 
 
+def way_payable(settings: PartnerBotSettings, channel: str) -> bool:
+    """Whether a remote way the venue turned on has a payment left for the
+    guest, so it may be offered (rehearsal 2026-11-24). Without a query when
+    the way is off or pays on receipt."""
+
+    if not getattr(settings, REMOTE_CHANNELS[channel]):
+        return True
+    if getattr(settings, PAYMENT_OPTION_FIELDS[channel][ON_RECEIPT]):
+        return True
+    return bool(payment_modes_for(settings, channel))
+
+
 def _guest(partner_id, telegram_id: int, *, lock: bool = False) -> GuestProfile:
     queryset = GuestProfile.objects.select_related("telegram_account")
     if lock:
