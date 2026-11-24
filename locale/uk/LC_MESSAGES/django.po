@@ -1092,6 +1092,10 @@ msgstr "Рахунок анульовано"
 msgid "Счёт пересобран"
 msgstr "Рахунок перезібрано"
 
+#: apps/billing/models.py
+msgid "Разница с чеком кассы"
+msgstr "Різниця з чеком каси"
+
 #: apps/billing/models.py bot/keyboards/staff.py
 msgid "Ошибка ввода"
 msgstr "Помилка введення"

@@ -45,7 +45,8 @@
   уникальность `(partner, order_item)` только для `is_active=True`. Миграция
   проверяет дубли до замены ограничения.
 - Новая модель `BillAdjustment`: `bill`, `kind` (`remove_line`, `void`,
-  `order_canceled`), `actor` (User), `reason_code`, `reason_text`,
+  `order_canceled`; позже — `relayout`, PQ-009, и `register_difference` —
+  касса Poster взяла меньше счёта, без сотрудника, PQ-061), `actor` (User), `reason_code`, `reason_text`,
   `total_before`, `total_after`, `payload` (id позиций), `created_at`.
   Только добавление записей; в Admin только просмотр.
 - `EmployeeProfile.can_adjust_bills` (bool, по умолчанию `False`). В Admin

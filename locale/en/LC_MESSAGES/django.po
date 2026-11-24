@@ -1092,6 +1092,10 @@ msgstr "Bill voided"
 msgid "Счёт пересобран"
 msgstr "Bill laid out again"
 
+#: apps/billing/models.py
+msgid "Разница с чеком кассы"
+msgstr "Difference with the register check"
+
 #: apps/billing/models.py bot/keyboards/staff.py
 msgid "Ошибка ввода"
 msgstr "Input error"

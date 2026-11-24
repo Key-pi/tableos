@@ -60,6 +60,7 @@ from apps.billing.services import (
     create_bill_from_orders,
     issue_bill,
     pay_bill_with_bonuses,
+    recalculate_bill_totals,
     record_payment,
 )
 from apps.billing.signals import announce_remote_order
@@ -1056,16 +1057,20 @@ def _order_status(order: Order) -> str:
 
 @transaction.atomic
 def record_register_payment(*, order: Order, method: str, provider_code: str, reference: str,
-                            note: str) -> bool:
+                            note: str, register_paid: Decimal | None = None) -> bool:
     """The venue's register took the money for a remote order paid on
     receipt (Poster's closed check, PQ-059).
 
-    The rest of the Botera bill is paid by the register's method — the sum
-    is Botera's bill, not the check, which may hold more — without an
-    employee, with the register's name and check number, and without
-    cashback (v1). The order is «Завершён» from any non-final status, as by
-    the guest's «Получил(а)». False when the bill is paid already (a repeat).
-    Locks as any payment: Bill → Order.
+    The register counts the money of its orders (owner 2026-11-24, PQ-061):
+    ``register_paid`` — the money it took — below the rest of the bill
+    (its discount, promotion or bonuses; a line taken off) pays the bill,
+    the gap becomes the bill's discount with a «Разница с чеком кассы»
+    record. Without it, or above the rest (something the cashier added is
+    not this order), the rest of the bill is paid. By the register's method,
+    without an employee, with the register's name and check number, and
+    without cashback (v1). The order is «Завершён» from any non-final
+    status, as by the guest's «Получил(а)». False when the bill is paid
+    already (a repeat). Locks as any payment: Bill → Order.
     """
 
     if method not in REGISTER_METHODS:
@@ -1079,9 +1084,16 @@ def record_register_payment(*, order: Order, method: str, provider_code: str, re
     if bill.status == Bill.Status.PAID or order.paid_at is not None:
         return False
     complete_order_from_register(order=order, note=note)
+    amount = _money(bill.total_amount - bill.paid_amount)
+    if register_paid is not None and Decimal("0.00") < register_paid < amount:
+        _keep_register_difference(
+            bill=bill, rest=amount, register_paid=_money(register_paid),
+            provider_code=provider_code, reference=reference, note=note,
+        )
+        amount = _money(register_paid)
     record_payment(
         bill=bill,
-        amount=_money(bill.total_amount - bill.paid_amount),
+        amount=amount,
         method=method,
         created_by=None,
         comment=note[:255],
@@ -1090,6 +1102,33 @@ def record_register_payment(*, order: Order, method: str, provider_code: str, re
         award_cashback=False,
     )
     return True
+
+
+def _keep_register_difference(*, bill: Bill, rest: Decimal, register_paid: Decimal,
+                              provider_code: str, reference: str, note: str) -> BillAdjustment:
+    """The gap between the bill and the register's money: the bill's
+    discount and an append-only record of it. The caller holds the bill."""
+
+    difference = _money(rest - register_paid)
+    total_before = _money(bill.total_amount)
+    bill.discount_amount = _money(bill.discount_amount + difference)
+    recalculate_bill_totals(bill)
+    return BillAdjustment.objects.create(
+        partner_id=bill.partner_id,
+        bill=bill,
+        kind=BillAdjustment.Kind.REGISTER_DIFFERENCE,
+        actor=None,
+        reason_code=BillAdjustment.ReasonCode.OTHER,
+        reason_text=note[:255],
+        total_before=total_before,
+        total_after=bill.total_amount,
+        payload={
+            "provider_code": provider_code,
+            "reference": reference,
+            "register_paid": str(register_paid),
+            "difference": str(difference),
+        },
+    )
 
 
 @transaction.atomic

@@ -13,9 +13,12 @@ outside any transaction, keeps what the register said on the push and does
 what it means:
 
 - the check closed with money (``pay_type`` 1 cash, 2 card, 3 mixed) → the
-  rest of the Botera bill paid that way and the order «Завершён»
-  (``apps/billing/remote_orders.py:record_register_payment``); a check sum
-  other than the bill's is marked for Admin, the money in Botera stays;
+  Botera bill paid that way and the order «Завершён»
+  (``apps/billing/remote_orders.py:record_register_payment``). The register
+  counts the money (owner 2026-11-24, PQ-061): less money (``payed_sum``)
+  than the bill — a Poster discount, promotion or bonuses — pays the bill,
+  the gap is a «Разница с чеком кассы» record; more is marked for Admin and
+  the bill paid as it is; no money at all is left to staff;
 - rejected (online order 7, check 4) → the order canceled and its bill
   voided (``cancel_remote_order_by_register``); the guest gets the usual
   message;
@@ -193,7 +196,8 @@ def _bill_total(order: Order) -> Decimal | None:
 def _pay(push: PosterOrderPush, order: Order, state: RegisterState) -> str:
     check_number = state.transaction_id or ""
     method = PAY_METHODS.get(state.pay_type)
-    if method is None:
+    if method is None or (state.paid is not None and state.paid <= 0):
+        # Nothing taken, or no money: the whole check by Poster bonuses or a full discount.
         return _mark(push.pk, order, Reason(
             N_("чек Poster №{check} закрыт без оплаты (причина {reason})"),
             {"check": check_number, "reason": state.reason or "—"},
@@ -203,17 +207,20 @@ def _pay(push: PosterOrderPush, order: Order, state: RegisterState) -> str:
             order=order, method=method, provider_code=PROVIDER, reference=str(check_number),
             note=gettext_in(_language(order.partner_id), "Оплачен на кассе Poster, чек №{check}.",
                             check=check_number),
+            register_paid=state.paid,
         )
     except RemoteOrderError as exc:
         return _mark(push.pk, order, Reason(
             N_("чек Poster №{check} оплачен, а заказ в Botera уже закрыт ({reason})"),
             {"check": check_number, "reason": str(exc).rstrip(".")},
         ))
+    # Less than the bill follows the check (``register_paid``); more is not this order.
     bill_total = _bill_total(order)
-    if state.total is not None and bill_total is not None and state.total != bill_total:
+    took = state.paid if state.paid is not None else state.total
+    if took is not None and bill_total is not None and took > bill_total:
         return _mark(push.pk, order, Reason(
             N_("сумма чека Poster {check_sum} грн, счёт Botera {bill_sum} грн"),
-            {"check_sum": state.total, "bill_sum": bill_total},
+            {"check_sum": took, "bill_sum": bill_total},
         ), tell_staff=False)
     return "paid"
 

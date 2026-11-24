@@ -448,6 +448,9 @@ class BillAdjustment(PartnerBoundModel):
         # A bill without money laid out again in the settlement editor
         # (PQ-009, step 3): its lines went to the new bills.
         RELAYOUT = "relayout", _lazy("Счёт пересобран")
+        # The venue's register (Poster) took less than the bill: the gap is the
+        # bill's discount, without a person (PQ-061, owner 2026-11-24).
+        REGISTER_DIFFERENCE = "register_difference", _lazy("Разница с чеком кассы")
 
     class ReasonCode(models.TextChoices):
         INPUT_ERROR = "input_error", _lazy("Ошибка ввода")

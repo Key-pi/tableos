@@ -13,7 +13,7 @@ from django.db import connection as db_connection
 from django.db import transaction
 from django.test import TransactionTestCase, override_settings
 
-from apps.billing.models import Bill, Payment
+from apps.billing.models import Bill, BillAdjustment, Payment
 from apps.billing.remote_orders import cancel_unpaid_remote_order, record_payment_on_receipt
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.integrations.poster import statuses, webhooks
@@ -196,6 +196,67 @@ class ClosedCheckTests(StatusFixture):
         self.register(online_status=1, check_status=0)
         self.sync()
         self.assertFalse(Payment.objects.filter(bill=self.bill()).exists())
+
+
+class RegisterTookLessTests(StatusFixture):
+    """The register took less money than the Botera bill — a Poster discount,
+    an automatic promotion, Poster bonuses, a line the cashier took off. The
+    register counts the money: Botera pays the check's sum and keeps the gap
+    as its own record (owner's decision 2026-11-24, PQ-061)."""
+
+    def test_the_bill_follows_the_check(self):
+        self.register(check_status=2, pay_type=1, total="40000", paid="36000")
+        self.sync()
+        bill = self.bill()
+        self.assertEqual((bill.status, bill.total_amount, bill.discount_amount, bill.paid_amount),
+                         (Bill.Status.PAID, Decimal("360.00"), Decimal("40.00"),
+                          Decimal("360.00")))
+        self.assertEqual(Payment.objects.get(bill=bill).amount, Decimal("360.00"))
+        gap = BillAdjustment.objects.get(bill=bill)
+        self.assertEqual(
+            (gap.kind, gap.actor, gap.total_before, gap.total_after),
+            (BillAdjustment.Kind.REGISTER_DIFFERENCE, None, Decimal("400.00"), Decimal("360.00")),
+        )
+        self.assertIn("№12", gap.reason_text)
+        self.assertEqual((gap.payload["register_paid"], gap.payload["difference"],
+                          gap.payload["reference"]), ("360.00", "40.00", "12"))
+        order = self.fresh()
+        self.assertEqual(order.status, Order.Status.COMPLETED)
+        self.assertIsNotNone(order.paid_at)
+        self.assertEqual(self.push_.attention, "")  # nothing left to check
+        self.assertEqual(self.attention_messages(), [])
+
+    def test_recorded_once(self):
+        self.register(check_status=2, pay_type=1, total="40000", paid="36000")
+        self.sync()
+        self.sync()
+        self.assertEqual(BillAdjustment.objects.filter(bill=self.bill()).count(), 1)
+        self.assertEqual(Payment.objects.filter(bill=self.bill()).count(), 1)
+
+    def test_the_same_sum_leaves_no_record(self):
+        self.register(check_status=2, pay_type=1, total="40000", paid="40000")
+        self.sync()
+        self.assertFalse(BillAdjustment.objects.filter(bill=self.bill()).exists())
+        self.assertEqual(self.bill().discount_amount, Decimal("0.00"))
+
+    def test_more_than_the_bill_is_still_the_bill_and_marked(self):
+        # Something the cashier added is not the Botera order.
+        self.register(check_status=2, pay_type=1, total="45000", paid="45000")
+        self.sync()
+        self.assertFalse(BillAdjustment.objects.filter(bill=self.bill()).exists())
+        self.assertEqual(Payment.objects.get(bill=self.bill()).amount, Decimal("400.00"))
+        self.fresh()
+        self.assertIn("450", self.push_.attention)
+
+    def test_closed_with_no_money_is_left_to_staff(self):
+        # The whole check paid by Poster bonuses or a 100 % discount: rare, staff decide.
+        self.register(check_status=2, pay_type=1, total="40000", paid="0")
+        self.sync()
+        self.assertFalse(Payment.objects.filter(bill=self.bill()).exists())
+        self.assertFalse(BillAdjustment.objects.filter(bill=self.bill()).exists())
+        self.fresh()
+        self.assertIn("без оплаты", self.push_.attention)
+        self.assertEqual(len(self.attention_messages()), 1)
 
 
 class LeftToStaffTests(StatusFixture):
