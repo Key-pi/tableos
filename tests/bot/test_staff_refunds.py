@@ -72,6 +72,29 @@ class StaffRefundBotFixture(PickupBotFixture):
         return args.args[0], _data(args.kwargs["reply_markup"])
 
 
+class CashbackLineTests(StaffRefundBotFixture):
+    """The confirm screen says cashback is taken back only when the order
+    earned some (rehearsal 2026-11-25: an order through Poster earns none)."""
+
+    def confirm_text(self):
+        pid = self.order.public_id
+        return self._screen(self._staff(f"strc:{pid}:1:os:c"))[0]
+
+    def test_no_cashback_no_line(self):
+        self.assertNotIn("Кешбэк", self.confirm_text())
+        self.assertIn("Гость получит сообщение.", self.confirm_text())
+
+    def test_earned_cashback_is_taken_back(self):
+        from apps.bonuses.models import BonusTransaction
+
+        BonusTransaction.objects.create(
+            partner=self.partner, guest=self.order.guest, order=self.order,
+            transaction_type=BonusTransaction.TransactionType.ACCRUAL, amount="5.00",
+            source_type="test", source_id="cashback", idempotency_key="test-cashback",
+        )
+        self.assertIn("Кешбэк за возвращённое снимется.", self.confirm_text())
+
+
 class StaffRefundBotTests(StaffRefundBotFixture):
     def test_paid_order_card_offers_a_refund(self):
         order = Order.objects.select_related("partner", "guest__telegram_account").get(

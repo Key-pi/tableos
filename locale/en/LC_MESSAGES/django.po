@@ -9271,8 +9271,12 @@ msgid "Причина: {label}"
 msgstr "Reason: {label}"
 
 #: bot/handlers/staff_refunds.py
-msgid "Кешбэк за возвращённое снимется. Гость получит сообщение."
-msgstr "Cashback for the refunded items is taken back. The guest gets a message."
+msgid "Кешбэк за возвращённое снимется."
+msgstr "Cashback for the refunded items will be taken back."
+
+#: bot/handlers/staff_refunds.py
+msgid "Гость получит сообщение."
+msgstr "The guest will get a message."
 
 #: bot/handlers/staff_refunds.py
 msgid "☑️ Вернуть на склад"

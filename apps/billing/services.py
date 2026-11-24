@@ -1409,6 +1409,21 @@ def preview_refund(bill: Bill, bill_item_ids) -> tuple[Decimal, Decimal]:
     return money, bonus
 
 
+def refund_takes_cashback(bill: Bill, bill_item_ids) -> bool:
+    """Whether the orders of these lines earned cashback, so a refund takes
+    some back (read only; the confirm screen says so only then — an order
+    through Poster earns none)."""
+
+    order_ids = BillItem.objects.filter(
+        partner_id=bill.partner_id, bill_id=bill.id,
+        id__in=[str(item_id) for item_id in bill_item_ids],
+    ).values_list("order_id", flat=True)
+    return BonusTransaction.objects.filter(
+        partner_id=bill.partner_id, order_id__in=order_ids,
+        transaction_type=BonusTransaction.TransactionType.ACCRUAL, amount__gt=0,
+    ).filter(Q(bill=bill) | Q(bill__isnull=True)).exists()
+
+
 def refund_can_restock(bill: Bill, bill_item_ids) -> bool:
     """Whether «вернуть на склад» would put any of these open lines back in
     stock (catalog step 3): the screens offer the tick only then (read only)."""

@@ -32,6 +32,7 @@ from apps.billing.services import (
     preview_refund,
     refund_bill_lines,
     refund_can_restock,
+    refund_takes_cashback,
     register_refunds,
     user_can_adjust_bills,
 )
@@ -131,7 +132,7 @@ def _method_screen(order: Order, mask: int, reason: str):
 
 def _confirm_screen(
     order: Order, lines, mask: int, reason: str, method: str, amounts, *,
-    can_restock: bool = False, restock: bool = False,
+    can_restock: bool = False, restock: bool = False, takes_cashback: bool = False,
 ):
     money, bonus = amounts
     chosen = _selected(lines, mask)
@@ -142,7 +143,9 @@ def _confirm_screen(
     if bonus:
         text.append(_("Бонусы вернутся: {bonus}", bonus=bonus))
     text.append(_("Причина: {label}", label=str(Refund.ReasonCode(REASONS[reason]).label)))
-    text.append(_("Кешбэк за возвращённое снимется. Гость получит сообщение."))
+    if takes_cashback:
+        text.append(_("Кешбэк за возвращённое снимется."))
+    text.append(_("Гость получит сообщение."))
     base = f"{order.public_id}:{mask:x}:{reason}:{method}"
     restock = restock and can_restock
     rows = []
@@ -231,9 +234,10 @@ async def staff_refund_callback(callback: CallbackQuery, bot: Bot) -> None:
         ids = [line.id for line in _selected(lines, mask)]
         amounts = await sync_to_async(preview_refund)(bill, ids)
         can_restock = await sync_to_async(refund_can_restock)(bill, ids)
+        takes_cashback = await sync_to_async(refund_takes_cashback)(bill, ids)
         text, markup = _confirm_screen(
             order, lines, mask, reason, method, amounts,
-            can_restock=can_restock, restock=restock,
+            can_restock=can_restock, restock=restock, takes_cashback=takes_cashback,
         )
     else:
         ids = [line.id for line in _selected(lines, mask)]
