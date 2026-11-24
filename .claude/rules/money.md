@@ -66,7 +66,10 @@ paths:
   касса (владелец 2026-11-24, PQ-061): взяла меньше — оплата её суммой и
   `BillAdjustment` «Разница с чеком кассы» (скидка счёта, без сотрудника);
   больше и чек без денег — пометка; тихо деньги не правятся
-  (`apps/billing/remote_orders.py:record_register_payment`).
+  (`apps/billing/remote_orders.py:record_register_payment`). Чек удалён —
+  `Refund` «На кассе» без сотрудника (`refund_bill_lines(by_register=True)`),
+  неоплаченный — отмена (`undo_remote_order_by_register`); «На кассе»
+  сотрудник не выбирает (`Refund.STAFF_METHODS`).
 - **Продажа на кассе (PQ-054):** заказ «На кассе» сразу выдан, личный счёт и
   оплата наличными или картой (и/или бонусами по коду) — одним действием
   продавца; кешбэк — программы «Покупка на кассе» (`MANUAL_PURCHASE`,

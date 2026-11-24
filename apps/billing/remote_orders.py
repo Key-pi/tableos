@@ -53,7 +53,7 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 
-from apps.billing.models import Bill, BillAdjustment, BillOrder, Payment
+from apps.billing.models import Bill, BillAdjustment, BillOrder, Payment, Refund, RefundLine
 from apps.billing.services import (
     BillingServiceError,
     _void_locked_bill,
@@ -62,6 +62,7 @@ from apps.billing.services import (
     pay_bill_with_bonuses,
     recalculate_bill_totals,
     record_payment,
+    refund_bill_lines,
 )
 from apps.billing.signals import announce_remote_order
 from apps.bonuses.services import get_redeemable_bonus_amount
@@ -1155,6 +1156,46 @@ def cancel_remote_order_by_register(*, order: Order, note: str) -> bool:
         order=order, to_status=Order.Status.CANCELED, actor_user=None, note=note[:255],
     )
     return True
+
+
+@transaction.atomic
+def undo_remote_order_by_register(*, order: Order, provider_code: str, reference: str,
+                                  note: str) -> str:
+    """The venue's register undid the order: its check deleted — a return or
+    a cancel at the register (PQ-061, owner 2026-11-24). Botera repeats it
+    without an employee: the money the register took (payments of
+    ``provider_code``) comes back as a «На кассе» refund of what is not
+    refunded yet (``refund_bill_lines``, the order keeps its status, as any
+    refund of a completed order); an unpaid order is canceled as by a
+    rejection (``cancel_remote_order_by_register``). "refunded",
+    "canceled", or "" when there is nothing left to undo.
+    ``RemoteOrderError`` when the money was taken in Botera, not at the
+    register, or the guest already received an unpaid order: staff decide.
+    Locks: Bill, then as a refund (Bill → BillItem → GuestProfile → Order)
+    or a cancel (Bill → Order).
+    """
+
+    if _order_status(order) == Order.Status.CANCELED:
+        return ""
+    bill = _order_bill(order)
+    if bill.status != Bill.Status.PAID:
+        if _order_status(order) == Order.Status.COMPLETED:
+            raise RemoteOrderError(_(
+                "По заказу уже есть оплата — отменить его автоматически нельзя."))
+        return "canceled" if cancel_remote_order_by_register(order=order, note=note) else ""
+    money = bill.payments.filter(status=Payment.Status.PAID).exclude(method=Payment.Method.BONUSES)
+    if money.exclude(provider_code=provider_code).exists():
+        raise RemoteOrderError(_("По заказу уже есть оплата — отменить его автоматически нельзя."))
+    refunded = set(RefundLine.objects.filter(bill_item__bill=bill).values_list(
+        "bill_item_id", flat=True))
+    left = [item.id for item in bill.items.filter(is_active=True) if item.id not in refunded]
+    if not left:
+        return ""
+    refund_bill_lines(
+        bill=bill, bill_item_ids=left, actor=None, reason_code=Refund.ReasonCode.OTHER,
+        method=Refund.Method.REGISTER, reason_text=note, by_register=True,
+    )
+    return "refunded"
 
 
 def open_unpaid_remote_orders(guest: GuestProfile):

@@ -237,6 +237,18 @@ class OrdersOfOtherVenuesTests(TestCase):
 class RefundTests(StatusFixture):
     """The register took the money, so it gives it back (owner 2026-11-21)."""
 
+    def test_staff_are_not_offered_the_register(self):
+        # «На кассе» is what Poster's deleted check records (PQ-061), not a staff choice.
+        from apps.billing.admin_actions import RefundForm
+        from apps.billing.models import Refund
+        from webapp.staff_billing import REFUND_METHODS
+
+        offered = {value for value, _label in RefundForm().fields["method"].choices}
+        self.assertNotIn(Refund.Method.REGISTER, offered)
+        self.assertIn(Refund.Method.CASH, offered)
+        self.assertNotIn(Refund.Method.REGISTER, REFUND_METHODS)
+        self.assertIn(Refund.Method.CASH, REFUND_METHODS)
+
     def setUp(self):
         super().setUp()
         self.register(online_status=1, check_status=2, pay_type=1, paid="40000")

@@ -752,7 +752,7 @@ msgstr "Швидкі продажі в цьому закладі вимкнен�
 msgid "Выберите, чем платит гость: наличными или картой."
 msgstr "Оберіть, чим платить гість: готівкою чи карткою."
 
-#: apps/billing/counter_sales.py apps/orders/models.py
+#: apps/billing/counter_sales.py apps/billing/models.py apps/orders/models.py
 msgid "На кассе"
 msgstr "На касі"
 
@@ -3005,12 +3005,16 @@ msgid "заказ отклонён на кассе Poster, а по нему уж
 msgstr "замовлення відхилено на касі Poster, а за ним уже є оплата в Botera"
 
 #: apps/integrations/poster/statuses.py
-msgid "Принят на кассе Poster."
-msgstr "Прийнято на касі Poster."
+msgid "Чек Poster №{check} удалён на кассе."
+msgstr "Чек Poster №{check} видалено на касі."
 
 #: apps/integrations/poster/statuses.py
 msgid "чек Poster №{check} удалён"
 msgstr "чек Poster №{check} видалено"
+
+#: apps/integrations/poster/statuses.py
+msgid "Принят на кассе Poster."
+msgstr "Прийнято на касі Poster."
 
 #: apps/integrations/poster/views.py
 msgid "Меню из Poster не загрузилось: {reason}. Нажмите «Обновить меню» позже."

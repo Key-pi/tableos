@@ -23,9 +23,12 @@ what it means:
   voided (``cancel_remote_order_by_register``); the guest gets the usual
   message;
 - accepted (1) while «Новый» → «Принят»; the guest gets the usual message;
-- closed without money, removed, money for an order Botera canceled, a
-  rejected order already paid → nothing automatic: «Требует внимания» on the
-  push and a message to staff, once.
+- removed (``status`` 3: a return or a cancel at the register, PQ-061) →
+  the money the register took comes back as a «На кассе» refund, an unpaid
+  order is canceled (``undo_remote_order_by_register``);
+- closed without money, removed when the money was taken in Botera, money
+  for an order Botera canceled, a rejected order already paid → nothing
+  automatic: «Требует внимания» on the push and a message to staff, once.
 
 Every step checks again under its own locks (Bill → Order for money, Order
 for a status), so the two webhooks Poster sends a second apart do it once.
@@ -45,7 +48,9 @@ from apps.billing.remote_orders import (
     RemoteOrderError,
     cancel_remote_order_by_register,
     record_register_payment,
+    undo_remote_order_by_register,
 )
+from apps.billing.services import BillingServiceError
 from apps.integrations.poster.client import PosterClient, PosterError
 from apps.integrations.poster.models import PosterConnection, PosterOrderPush
 from apps.integrations.poster.orders import Reason
@@ -238,6 +243,21 @@ def _cancel(push: PosterOrderPush, order: Order) -> str:
     return "canceled" if canceled else ""
 
 
+def _removed(push: PosterOrderPush, order: Order, state: RegisterState) -> str:
+    """The check deleted in Poster — a return or a cancel at the register."""
+
+    check_number = state.transaction_id or ""
+    try:
+        return undo_remote_order_by_register(
+            order=order, provider_code=PROVIDER, reference=str(check_number),
+            note=gettext_in(_language(order.partner_id), "Чек Poster №{check} удалён на кассе.",
+                            check=check_number),
+        )
+    except (RemoteOrderError, BillingServiceError):
+        return _mark(push.pk, order, Reason(N_("чек Poster №{check} удалён"),
+                                            {"check": check_number}))
+
+
 def _accept(order: Order) -> str:
     if order.status != Order.Status.NEW:
         return ""
@@ -258,8 +278,7 @@ def apply_state(push: PosterOrderPush, state: RegisterState) -> str:
     if state.check == CHECK_CLOSED:
         return _pay(push, order, state)
     if state.check == CHECK_REMOVED:
-        return _mark(push.pk, order, Reason(N_("чек Poster №{check} удалён"),
-                                            {"check": state.transaction_id or ""}))
+        return _removed(push, order, state)
     if state.online == ACCEPTED:
         return _accept(order)
     return ""

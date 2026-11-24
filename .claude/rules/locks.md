@@ -65,7 +65,8 @@ paths:
   Poster (`apps/integrations/poster/statuses.py`): чтение Poster вне
   транзакции; оплата по чеку — как любая оплата `Bill → Order`
   (`record_register_payment`), отмена — `Bill → Order`
-  (`cancel_remote_order_by_register`), «Принят» — `Order`; строка
+  (`cancel_remote_order_by_register`), удалённый чек — `Bill`, затем как
+  возврат или отмена (`undo_remote_order_by_register`), «Принят» — `Order`; строка
   `PosterOrderPush` — отдельной короткой транзакцией, не вместе с ними.
 - Остатки: строки `MenuItem`/`MenuItemVariant` — последними в транзакции,
   сначала позиции, затем варианты, каждые по id, `no_key=True`

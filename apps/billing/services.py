@@ -1405,6 +1405,7 @@ def refund_bill_lines(
     method: str,
     reason_text: str = "",
     restock: bool = False,
+    by_register: bool = False,
 ) -> Refund:
     """Give money (and bonuses) back for lines of a paid bill (PQ-037).
 
@@ -1423,12 +1424,20 @@ def refund_bill_lines(
 
     Who: the owner, or staff with the owner-granted bill right
     (``user_can_adjust_bills``), as for bill changes (PQ-028).
+    ``by_register`` — the venue's register gave the money back (a Poster
+    check deleted, PQ-061): no person, method «На кассе», for an order the
+    register holds (``apps/billing/remote_orders.py:undo_remote_order_by_register``);
+    staff never refund «На кассе».
     Locks: Bill → BillItem → GuestProfile → Order (bill change order).
     """
 
     if reason_code not in Refund.ReasonCode.values:
         raise BillingServiceError(_("Укажите причину возврата."))
-    if method not in Refund.Method.values:
+    if (
+        method not in Refund.Method.values
+        or (method == Refund.Method.REGISTER) != by_register
+        or (by_register and actor is not None)
+    ):
         raise BillingServiceError(_("Укажите, как вернули деньги."))
     item_ids = {str(item_id) for item_id in bill_item_ids}
     if not item_ids:
@@ -1437,7 +1446,7 @@ def refund_bill_lines(
         bill = Bill.objects.select_for_update().get(id=bill.id, partner_id=bill.partner_id)
     except Bill.DoesNotExist as exc:
         raise BillingServiceError(_("Счёт не найден в этом заведении.")) from exc
-    if not user_can_adjust_bills(actor, bill.partner_id):
+    if not by_register and not user_can_adjust_bills(actor, bill.partner_id):
         raise BillingServiceError(_("Нет права на возвраты. Его выдаёт владелец заведения."))
     if bill.status != Bill.Status.PAID:
         raise BillingServiceError(_("Возврат возможен только по оплаченному счёту."))
@@ -1447,7 +1456,7 @@ def refund_bill_lines(
         .filter(partner_id=bill.partner_id, bill_id=bill.id, is_active=True)
         .order_by("created_at", "id")
     )
-    if register_holds_any({line.order_id for line in lines}):
+    if not by_register and register_holds_any({line.order_id for line in lines}):
         raise BillingServiceError(_(REGISTER_REFUND_MESSAGE))
     by_id = {str(line.id): line for line in lines}
     if not item_ids <= set(by_id):

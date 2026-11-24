@@ -88,7 +88,11 @@
 ## Команды
 
 - `apps/billing/services.py:refund_bill_lines(bill, bill_item_ids, actor,
-  reason_code, method, reason_text)` — возврат.
+  reason_code, method, reason_text)` — возврат. С `by_register` — возврат
+  кассы Poster по удалённому чеку (PQ-061, решение владельца 2026-11-24): без
+  сотрудника и права, способ «На кассе» (`Refund.Method.REGISTER`); сотрудник
+  этот способ не выбирает (`Refund.STAFF_METHODS` — в Admin и Mini App)
+  (`apps/billing/remote_orders.py:undo_remote_order_by_register`).
 - `get_order_refund_lines(order)` — оплаченный счёт заказа и его строки с
   отметкой «возвращено» (только чтение).
 - `preview_refund(bill, ids)` — сколько денег и бонусов вернётся (для

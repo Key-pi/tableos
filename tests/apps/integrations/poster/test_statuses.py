@@ -13,7 +13,7 @@ from django.db import connection as db_connection
 from django.db import transaction
 from django.test import TransactionTestCase, override_settings
 
-from apps.billing.models import Bill, BillAdjustment, Payment
+from apps.billing.models import Bill, BillAdjustment, Payment, Refund
 from apps.billing.remote_orders import cancel_unpaid_remote_order, record_payment_on_receipt
 from apps.bonuses.models import BonusProgram, BonusTransaction
 from apps.integrations.poster import statuses, webhooks
@@ -271,13 +271,16 @@ class LeftToStaffTests(StatusFixture):
         [message] = self.attention_messages()  # once
         self.assertIn("без оплаты", message)
 
-    def test_a_removed_check(self):
-        self.register(check_status=3)
+    def test_a_removed_check_of_money_taken_in_botera(self):
+        # Staff took the money in Botera while Poster was off: it is not the register's to undo.
+        self.staff_in_botera(record_payment_on_receipt, method=Payment.Method.CASH)
+        self.register(check_status=3, pay_type=1, paid="40000")
         self.sync()
         self.fresh()
         self.assertIn("удалён", self.push_.attention)
         self.assertEqual(len(self.attention_messages()), 1)
-        self.assertEqual(self.order_.status, Order.Status.NEW)
+        self.assertFalse(Refund.objects.filter(bill=self.bill()).exists())
+        self.assertEqual(self.bill().status, Bill.Status.PAID)
 
     def test_a_paid_check_of_an_order_canceled_in_botera(self):
         self.staff_in_botera(cancel_unpaid_remote_order)
@@ -288,6 +291,92 @@ class LeftToStaffTests(StatusFixture):
         self.fresh()
         self.assertIn("отменён", self.push_.attention)
         self.assertEqual(len(self.attention_messages()), 1)
+
+
+class RemovedCheckTests(StatusFixture):
+    """The check deleted in Poster's admin panel — how a non-fiscal check is
+    returned or canceled; with a fiscal registrar after «Повернення» too
+    (PQ-061 checks: ``status`` 3 and ``transaction removed`` a second later,
+    the sums stay). The register counts the money: Botera repeats it (owner
+    2026-11-24)."""
+
+    def setUp(self):
+        super().setUp()
+        self.refund_notice = mock.patch(
+            "apps.notifications.services.send_guest_refund_notice").start()
+
+    def paid_then_removed(self, paid="40000"):
+        self.register(check_status=2, pay_type=1, paid=paid)
+        self.sync()
+        self.register(check_status=3, pay_type=1, paid=paid)
+        return self.sync()
+
+    def test_a_paid_check_removed_is_a_refund_at_the_register(self):
+        self.assertEqual(self.paid_then_removed(), "refunded")
+        refund = Refund.objects.get(bill=self.bill())
+        self.assertEqual(
+            (refund.method, refund.actor, refund.is_full, refund.money_amount,
+             refund.reason_code),
+            (Refund.Method.REGISTER, None, True, Decimal("400.00"), Refund.ReasonCode.OTHER),
+        )
+        self.assertIn("№12", refund.reason_text)
+        self.assertEqual(self.bill().refunded_amount, Decimal("400.00"))
+        self.assertEqual(self.fresh().status, Order.Status.COMPLETED)  # as any refund of it
+        self.assertEqual(self.push_.attention, "")
+        self.assertEqual(self.attention_messages(), [])
+        self.refund_notice.assert_called_once_with(refund)
+
+    def test_refunded_once(self):
+        self.paid_then_removed()
+        self.assertEqual(self.sync(), "")
+        self.assertEqual(Refund.objects.filter(bill=self.bill()).count(), 1)
+
+    def test_the_money_the_register_took_comes_back(self):
+        self.paid_then_removed(paid="36000")
+        self.assertEqual(Refund.objects.get(bill=self.bill()).money_amount, Decimal("360.00"))
+
+    def test_an_open_check_removed_cancels_the_order(self):
+        self.register(online_status=1, check_status=0)
+        self.sync()
+        self.register(online_status=1, check_status=3)
+        self.assertEqual(self.sync(), "canceled")
+        self.assertEqual(self.fresh().status, Order.Status.CANCELED)
+        self.assertEqual(self.bill().status, Bill.Status.CANCELED)
+        self.assertEqual(self.guest_told.call_args.kwargs["to_status"], Order.Status.CANCELED)
+        history = OrderStatusHistory.objects.get(order=self.order_, to_status=Order.Status.CANCELED)
+        self.assertIn("№12", history.note)
+        self.assertEqual(self.attention_messages(), [])
+        self.assertEqual(self.sync(), "")  # again: nothing
+
+    def test_received_by_the_guest_and_never_paid_is_left_to_staff(self):
+        Order.objects.filter(pk=self.order_.pk).update(status=Order.Status.COMPLETED)
+        self.register(online_status=1, check_status=3)
+        self.sync()
+        self.assertEqual(self.fresh().status, Order.Status.COMPLETED)
+        self.assertIn("удалён", self.push_.attention)
+        self.assertEqual(len(self.attention_messages()), 1)
+
+    def test_staff_cannot_pick_the_register(self):
+        from apps.billing.services import BillingServiceError, refund_bill_lines
+        from apps.users.models import User
+
+        owner = User.objects.create_user(username="poster_owner", password="x",
+                                         partner=self.partner, role=User.Role.OWNER)
+        PosterConnection.objects.filter(partner=self.partner).update(
+            status=PosterConnection.Status.DISCONNECTED)
+        record_payment_on_receipt(order=self.order_, actor=self.cashier,
+                                  method=Payment.Method.CASH)
+        bill = self.bill()
+        with self.assertRaises(BillingServiceError):
+            refund_bill_lines(bill=bill, bill_item_ids=[i.id for i in bill.items.all()],
+                              actor=owner, reason_code=Refund.ReasonCode.OTHER,
+                              method=Refund.Method.REGISTER)
+        self.assertFalse(Refund.objects.filter(bill=bill).exists())
+        # The owner refunds this way as before: the right is not what stopped it.
+        refund_bill_lines(bill=bill, bill_item_ids=[i.id for i in bill.items.all()],
+                          actor=owner, reason_code=Refund.ReasonCode.OTHER,
+                          method=Refund.Method.CASH)
+        self.assertTrue(Refund.objects.filter(bill=bill).exists())
 
 
 class RejectedTests(StatusFixture):
@@ -407,6 +496,29 @@ class TwoEventsAtOnceTests(PosterReadMixin, OrderSetup, TransactionTestCase):
         push = PosterOrderPush.objects.get(order=order)
         self.poster.answers["incomingOrders.getIncomingOrder"] = online(1)
         self.poster.answers["dash.getTransaction"] = check(2, pay_type=1, paid="40000")
+        self._two_at_once(push)
+        self.assertEqual(Payment.objects.filter(bill__bill_orders__order=order,
+                                                status=Payment.Status.PAID).count(), 1)
+
+    def test_a_removed_check_refunded_once(self):
+        """The check deleted: two syncs at once give one «На кассе» refund."""
+
+        mock.patch("apps.orders.services.send_guest_order_status_update").start()
+        mock.patch("apps.notifications.services.send_guest_refund_notice").start()
+        self.addCleanup(mock.patch.stopall)
+        self._cart()
+        order = self._place_on_receipt()
+        push = PosterOrderPush.objects.get(order=order)
+        self.poster.answers["incomingOrders.getIncomingOrder"] = online(1)
+        self.poster.answers["dash.getTransaction"] = check(2, pay_type=1, paid="40000")
+        statuses.sync_order_state(push.pk)
+        self.poster.answers["dash.getTransaction"] = check(3, pay_type=1, paid="40000")
+        self._two_at_once(push)
+        self.assertEqual(Refund.objects.filter(bill__bill_orders__order=order).count(), 1)
+        push.refresh_from_db()
+        self.assertEqual(push.attention, "")  # the second saw the first under the lock
+
+    def _two_at_once(self, push):
         barrier = threading.Barrier(2)
         read = statuses._read_state
 
@@ -432,8 +544,6 @@ class TwoEventsAtOnceTests(PosterReadMixin, OrderSetup, TransactionTestCase):
             for thread in threads:
                 thread.join()
         self.assertEqual(errors, [])
-        self.assertEqual(Payment.objects.filter(bill__bill_orders__order=order,
-                                                status=Payment.Status.PAID).count(), 1)
 
     def _place_on_receipt(self):
         from apps.billing.remote_orders import place_remote_order

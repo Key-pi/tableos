@@ -520,6 +520,11 @@ class Refund(PartnerBoundModel):
         TRANSFER = "transfer", _lazy("Переводом на карту")
         TERMINAL = "terminal", _lazy("На карту через терминал")
         NONE = "none", _lazy("Деньги не возвращались (только бонусы)")
+        # The venue's register (Poster) gave the money back, without a person
+        # (PQ-061, owner 2026-11-24); staff do not pick it (``STAFF_METHODS``).
+        REGISTER = "register", _lazy("На кассе")
+
+    STAFF_METHODS = (Method.CASH, Method.TRANSFER, Method.TERMINAL, Method.NONE)
 
     bill = models.ForeignKey(
         Bill, on_delete=models.PROTECT, related_name="refunds", verbose_name=_lazy("Счёт")

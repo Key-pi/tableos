@@ -377,7 +377,7 @@ def bill_change_view(request, staff: StaffRequest, body: dict) -> dict:
 # --- refunds of a paid order (PQ-037) ------------------------------------------
 
 REFUND_REASONS = tuple(Refund.ReasonCode.values)
-REFUND_METHODS = tuple(Refund.Method.values)
+REFUND_METHODS = tuple(str(method) for method in Refund.STAFF_METHODS)
 
 
 def _refund_order(staff: StaffRequest, public_id: str) -> tuple[Order, Bill, list]:

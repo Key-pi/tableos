@@ -94,7 +94,9 @@ class RefundForm(forms.Form):
         label=_lazy("Причина"), choices=Refund.ReasonCode.choices, widget=UnfoldAdminSelectWidget
     )
     method = forms.ChoiceField(
-        label=_lazy("Как вернули деньги"), choices=Refund.Method.choices,
+        label=_lazy("Как вернули деньги"),
+        choices=[(value, label) for value, label in Refund.Method.choices
+                 if value in Refund.STAFF_METHODS],
         widget=UnfoldAdminSelectWidget,
     )
     reason_text = forms.CharField(
