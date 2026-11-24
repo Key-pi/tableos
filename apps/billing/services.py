@@ -44,7 +44,36 @@ class BillingServiceError(Exception):
 
 # The register took the money of an order it holds, so it gives it back and
 # issues the return receipt (Poster, PQ-058 step 7, owner 2026-11-21).
-REGISTER_REFUND_MESSAGE = N_("Возврат по заказу из Poster делают на кассе Poster.")
+REGISTER_REFUND_MESSAGE = N_(
+    "Возврат по заказу из Poster начинают на кассе Poster: отмените или верните там чек."
+)
+
+
+def _refunded_here(order: Order) -> bool:
+    # A transfer paid in advance the register only confirmed (Poster v2, owner
+    # 2026-11-24, PQ-061): staff return it once the guest has the order; an
+    # order the register undid (its check deleted) is Botera's again.
+    return (order.payment_timing == Order.PaymentTiming.PREPAID
+            and order.status == Order.Status.COMPLETED)
+
+
+def register_refunds(order: Order) -> bool:
+    """The register gives this order's money back itself: it holds the
+    order and took the money — or, paid in advance, has not handed it over
+    yet: then the refund starts with a cancel there."""
+
+    return not _refunded_here(order) and register_holds(order)
+
+
+def register_refunds_any(order_ids) -> bool:
+    """``register_refunds`` for any of these orders (a bill's orders)."""
+
+    ids = [order_id for order_id in order_ids if order_id]
+    return bool(ids) and register_holds_any(
+        Order.objects.filter(id__in=ids).exclude(
+            payment_timing=Order.PaymentTiming.PREPAID, status=Order.Status.COMPLETED,
+        ).values_list("id", flat=True)
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1427,7 +1456,8 @@ def refund_bill_lines(
     ``by_register`` — the venue's register gave the money back (a Poster
     check deleted, PQ-061): no person, method «На кассе», for an order the
     register holds (``apps/billing/remote_orders.py:undo_remote_order_by_register``);
-    staff never refund «На кассе».
+    staff never refund «На кассе», nor an order whose money the register
+    took (``register_refunds``) — a transfer it confirmed (v2) they do.
     Locks: Bill → BillItem → GuestProfile → Order (bill change order).
     """
 
@@ -1456,7 +1486,7 @@ def refund_bill_lines(
         .filter(partner_id=bill.partner_id, bill_id=bill.id, is_active=True)
         .order_by("created_at", "id")
     )
-    if not by_register and register_holds_any({line.order_id for line in lines}):
+    if not by_register and register_refunds_any({line.order_id for line in lines}):
         raise BillingServiceError(_(REGISTER_REFUND_MESSAGE))
     by_id = {str(line.id): line for line in lines}
     if not item_ids <= set(by_id):

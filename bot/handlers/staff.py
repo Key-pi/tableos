@@ -59,6 +59,7 @@ from apps.billing.services import (
     issue_bill,
     pay_bill_with_bonuses,
     record_payment,
+    register_refunds,
     remove_bill_lines,
     user_can_adjust_bills,
     void_bill,
@@ -278,7 +279,9 @@ def _order_actions_keyboard(order: Order):
             order_public_id=order.public_id,
             available_statuses=staff_statuses_for(order),
             status_labels=_status_labels(order),
-            can_refund=False,  # the register gives the money back
+            # The register gives its money back; a transfer it confirmed (v2) — staff.
+            can_refund=order.paid_at is not None and order.status != Order.Status.CANCELED
+            and not register_refunds(order),
             receipt_refusal=False,
         )
     is_shipping = order.channel == Order.Channel.SHIPPING
@@ -369,7 +372,11 @@ def _render_order_card(order: Order) -> str:
             payment=_order_payment_label(order),
         )
     )
-    if register_holds(order):
+    if register_holds(order) and order.payment_timing == Order.PaymentTiming.PREPAID:
+        lines.append(_(
+            "Заказ ведёт касса Poster: принять (это и подтверждение перевода) и отменить — там."
+        ))
+    elif register_holds(order):
         # Poster, step 7: why the card has only «Готово» and «В пути».
         lines.append(_(
             "Заказ ведёт касса Poster: принять, отменить, оплатить и вернуть деньги — там."

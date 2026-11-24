@@ -66,7 +66,9 @@ paths:
   транзакции; оплата по чеку — как любая оплата `Bill → Order`
   (`record_register_payment`), отмена — `Bill → Order`
   (`cancel_remote_order_by_register`), удалённый чек — `Bill`, затем как
-  возврат или отмена (`undo_remote_order_by_register`), «Принят» — `Order`; строка
+  возврат или отмена (`undo_remote_order_by_register`), «Принят» — `Order`,
+  у перевода заранее «Принят» и закрытый чек — `Bill → Order`, как оплата
+  (`confirm_transfer_by_register`); строка
   `PosterOrderPush` — отдельной короткой транзакцией, не вместе с ними.
 - Остатки: строки `MenuItem`/`MenuItemVariant` — последними в транзакции,
   сначала позиции, затем варианты, каждые по id, `no_key=True`

@@ -186,10 +186,11 @@ class PosterConnectionAdmin(ObjectActionsMixin, ScopedAdminMixin):
         if request.method == "GET" and connection is not None and (
             connection.status == PosterConnection.Status.ACTIVE
         ):
-            # Step 7 (v1, owner 2026-11-20): what checkout offers meanwhile.
+            # Step 7 and v2 (owner 2026-11-20, 2026-11-24): what checkout offers meanwhile.
             messages.info(request, _(
-                "Пока Poster работает, самовывоз и доставка оплачиваются при получении и без "
-                "бонусов: оплату переводом заранее и бонусы касса пока не принимает."
+                "Пока Poster работает, самовывоз и доставка — без бонусов Botera: касса их не "
+                "принимает. Заказ с оплатой переводом приходит на кассу оплаченным: кассир "
+                "проверяет поступление и принимает заказ — это и есть подтверждение перевода."
             ))
         extra_context = {
             **(extra_context or {}),

@@ -439,6 +439,14 @@ def _remote_status_note(order, to_status: str) -> str:
         if to_status == order.Status.COMPLETED:
             return _("Заказ доставлен. Приятного аппетита!")
     if to_status == order.Status.CANCELED and prepaid and order.paid_at is None:
+        from apps.integrations.poster.selectors import sent_to_register
+
+        if sent_to_register(order):
+            # The cashier rejected it (Poster v2, PQ-061): not «the money did
+            # not come» — staff are told to return it.
+            return _(
+                "Заведение отклонило заказ. Если вы уже перевели деньги — заведение вернёт их.",
+            )
         return (
             _(
                 "Оплата не поступила, заказ отменён. Если вы переводили деньги, свяжитесь с "

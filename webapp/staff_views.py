@@ -40,7 +40,7 @@ from apps.billing.remote_orders import (
     tracking_link,
 )
 from apps.billing.repositories import BillingRequestRepository
-from apps.billing.services import BillingServiceError, cancel_order
+from apps.billing.services import BillingServiceError, cancel_order, register_refunds
 from apps.billing.staff_actions import (
     DELIVERY_STATUS_LABELS,
     SHIPPING_STATUS_LABELS,
@@ -50,7 +50,6 @@ from apps.billing.staff_actions import (
 )
 from apps.bonuses.services import BonusServiceError
 from apps.employees.invites import roles_invitable_by
-from apps.integrations.poster.selectors import register_holds
 from apps.notifications.models import StaffNotification
 from apps.notifications.services import GuestCallError, take_guest_call
 from apps.orders.models import Order
@@ -351,9 +350,10 @@ def _order_json(order: Order, *, now) -> dict:
         "received": is_order_received(order) and order.status != Order.Status.COMPLETED,
         "actions": [_action_json(order, code) for code in staff_order_actions(order)],
         # Refund of a paid order (PQ-037): the right is checked when it opens;
-        # an order of the Poster register is refunded there (step 7).
+        # an order of the Poster register is refunded there (step 7), a
+        # transfer it confirmed here (v2).
         "can_refund": order.paid_at is not None and order.status != Order.Status.CANCELED
-        and not register_holds(order),
+        and not register_refunds(order),
     }
     if order.channel == Order.Channel.DELIVERY:
         data["address"] = order.delivery_address

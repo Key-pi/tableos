@@ -29,10 +29,14 @@ Owner decisions (2026-10-23, docs/architecture/PICKUP.md):
 - the guest's phone is required (shared once through Telegram);
 - orders are accepted only within the venue's opening hours.
 
-A venue on Poster (PQ-058, step 7; v1, owner 2026-11-20): pickup and
-delivery go to the register, so they are paid on receipt only and without
-bonuses (``register_takes``); shipping keeps its options. What the menu sells
-there — ``apps/menu/catalog.py:not_sold_in``.
+A venue on Poster (PQ-058, step 7; owner 2026-11-20): pickup and
+delivery go to the register, so they are paid without bonuses
+(``register_takes``); shipping keeps its options. What the menu sells there —
+``apps/menu/catalog.py:not_sold_in``. Paid in advance (v2, owner 2026-11-24,
+PQ-061): the order goes to the register with the payment, and the cashier's
+«Прийняти» confirms the transfer (``confirm_transfer_by_register``); while
+the register holds the order, staff do not confirm or reject it and the
+timer does not cancel it.
 
 An order is placed when the guest says they have paid, or, paying on
 receipt, when they confirm the order. It gets a personal bill at once;
@@ -200,9 +204,7 @@ def _settings(partner_id, channel: str) -> PartnerBotSettings:
     ):
         raise RemoteOrderError(_(CHANNEL_OFF_MESSAGES[channel]))
     if not payment_modes_for(settings, channel):
-        if getattr(settings, PAYMENT_OPTION_FIELDS[channel][PREPAID]) and not register_takes(
-            partner_id, channel
-        ):
+        if getattr(settings, PAYMENT_OPTION_FIELDS[channel][PREPAID]):
             raise RemoteOrderError(_("Заведение ещё не указало реквизиты для оплаты переводом."))
         raise RemoteOrderError(_("Заведение ещё не настроило оплату заказов."))
     return settings
@@ -211,17 +213,13 @@ def _settings(partner_id, channel: str) -> PartnerBotSettings:
 def payment_modes_for(settings: PartnerBotSettings, channel: str) -> tuple[str, ...]:
     """Payment options the module offers, transfer first.
 
-    Transfer counts only with the venue's requisites filled in, and not
-    where the register takes the order (Poster, v1).
+    Transfer counts only with the venue's requisites filled in; where the
+    register takes the order it goes there paid (Poster v2, PQ-061).
     """
 
     fields = PAYMENT_OPTION_FIELDS[channel]
     modes = []
-    if (
-        getattr(settings, fields[PREPAID])
-        and settings.transfer_payment_details.strip()
-        and not register_takes(settings.partner_id, channel)
-    ):
+    if getattr(settings, fields[PREPAID]) and settings.transfer_payment_details.strip():
         modes.append(PREPAID)
     if getattr(settings, fields[ON_RECEIPT]):
         modes.append(ON_RECEIPT)
@@ -230,8 +228,8 @@ def payment_modes_for(settings: PartnerBotSettings, channel: str) -> tuple[str, 
 
 def way_payable(settings: PartnerBotSettings, channel: str) -> bool:
     """Whether a remote way the venue turned on has a payment left for the
-    guest, so it may be offered (rehearsal 2026-11-24). Without a query when
-    the way is off or pays on receipt."""
+    guest, so it may be offered (rehearsal 2026-11-24): the transfer alone
+    needs the requisites. Without a query."""
 
     if not getattr(settings, REMOTE_CHANNELS[channel]):
         return True
@@ -813,6 +811,15 @@ def place_remote_order(
                     to_pay=to_pay,
                 )
             )
+        elif to_pay > 0 and in_register:
+            # The cashier's «Прийняти» confirms it (PQ-061, v2).
+            lines.append(
+                _(
+                    "Гость сообщил о переводе {to_pay} грн. Проверьте поступление, прежде чем "
+                    "принять заказ на кассе: принятый заказ — подтверждённый перевод.",
+                    to_pay=to_pay,
+                )
+            )
         elif to_pay > 0:
             lines.append(
                 _(
@@ -941,6 +948,9 @@ def confirm_transfer(*, order: Order, actor) -> Order:
     _check_actor(actor, order.partner_id)
     bill = _order_bill(order)
     order = _lock_remote_order(order)
+    if register_holds(order):
+        # The cashier's «Прийняти» confirms it (confirm_transfer_by_register).
+        raise RemoteOrderError(_(REGISTER_HOLDS_MESSAGE))
     if not awaits_transfer_check(order):
         raise RemoteOrderError(_("Оплата по этому заказу уже обработана."))
     if bill.status != Bill.Status.PAID:
@@ -968,6 +978,8 @@ def reject_transfer(*, order: Order, actor, comment: str = "") -> Order:
     _check_actor(actor, order.partner_id)
     bill = _order_bill(order)
     order = _lock_remote_order(order)
+    if register_holds(order):
+        raise RemoteOrderError(_(REGISTER_HOLDS_MESSAGE))
     if not awaits_transfer_check(order):
         raise RemoteOrderError(_("Оплата по этому заказу уже обработана."))
     if bill.status == Bill.Status.PAID or bill.paid_amount > 0:
@@ -1117,6 +1129,51 @@ def record_register_payment(*, order: Order, method: str, provider_code: str, re
     return True
 
 
+@transaction.atomic
+def confirm_transfer_by_register(*, order: Order, provider_code: str, reference: str,
+                                 note: str, complete: bool = False) -> bool:
+    """The venue's register took an order paid in advance (Poster v2, owner
+    2026-11-24, PQ-061): the cashier accepts it after checking the transfer
+    came, so «Прийняти» confirms it. The transfer is recorded as by staff's
+    confirmation (``confirm_transfer``), without an employee, with the
+    register's name and check number and without cashback; «Новый» becomes
+    «Принят». ``complete`` — the check closed: the order is «Завершён» too,
+    as by ``record_register_payment``. True when anything changed (False on
+    a repeat). ``RemoteOrderError`` for an order canceled in Botera. Locks
+    as any payment: Bill → Order.
+    """
+
+    if _order_status(order) == Order.Status.CANCELED:
+        raise RemoteOrderError(_("Заказ уже отменён в Botera."))
+    bill = _order_bill(order)
+    order = _lock_remote_order(order)
+    if order.status == Order.Status.CANCELED:
+        raise RemoteOrderError(_("Заказ уже отменён в Botera."))
+    status_before, recorded = order.status, False
+    if bill.status != Bill.Status.PAID and order.paid_at is None:
+        record_payment(
+            bill=bill,
+            amount=_money(bill.total_amount - bill.paid_amount),
+            method=Payment.Method.TRANSFER,
+            created_by=None,
+            comment=note[:255],
+            provider_code=provider_code,
+            external_payment_id=reference,
+            award_cashback=False,
+        )
+        order.refresh_from_db()
+        recorded = True
+    if complete:
+        # From any non-final status: no «Принят» first when the accept's
+        # webhook was lost.
+        order = complete_order_from_register(order=order, note=note[:255])
+    elif order.status == Order.Status.NEW:
+        order = transition_order_status(
+            order=order, to_status=Order.Status.ACCEPTED, actor_user=None, note=note[:255],
+        )
+    return recorded or order.status != status_before
+
+
 def _keep_register_difference(*, bill: Bill, rest: Decimal, register_paid: Decimal,
                               provider_code: str, reference: str, note: str) -> BillAdjustment:
     """The gap between the bill and the register's money: the bill's
@@ -1147,14 +1204,16 @@ def _keep_register_difference(*, bill: Bill, rest: Decimal, register_paid: Decim
 @transaction.atomic
 def cancel_remote_order_by_register(*, order: Order, note: str) -> bool:
     """The venue's register rejected the order: canceled as an unpaid order
-    — the bill voided, bonuses back — without an employee. False when the
+    — the bill voided, bonuses back — without an employee. Paid in advance
+    (v2), before the transfer is recorded: as «Перевод не поступил»; the
+    guest hears the venue returns the money if they sent it. False when the
     order is closed already; ``RemoteOrderError`` when money was taken:
     then staff decide."""
 
     if _order_status(order) in {Order.Status.COMPLETED, Order.Status.CANCELED}:
         return False
     bill = _order_bill(order)
-    order = _lock_remote_order(order, ON_RECEIPT)
+    order = _lock_remote_order(order, order.payment_timing)
     if order.status in {Order.Status.COMPLETED, Order.Status.CANCELED}:
         return False
     if bill.status == Bill.Status.PAID or bill.payments.exclude(
@@ -1181,8 +1240,9 @@ def undo_remote_order_by_register(*, order: Order, provider_code: str, reference
     refund of a completed order); an unpaid order is canceled as by a
     rejection (``cancel_remote_order_by_register``). "refunded",
     "canceled", or "" when there is nothing left to undo.
-    ``RemoteOrderError`` when the money was taken in Botera, not at the
-    register, or the guest already received an unpaid order: staff decide.
+    ``RemoteOrderError`` when the money was taken in Botera or is a
+    transfer (v2), not the register's, or the guest already received an
+    unpaid order: staff decide.
     Locks: Bill, then as a refund (Bill → BillItem → GuestProfile → Order)
     or a cancel (Bill → Order).
     """
@@ -1196,7 +1256,9 @@ def undo_remote_order_by_register(*, order: Order, provider_code: str, reference
                 "По заказу уже есть оплата — отменить его автоматически нельзя."))
         return "canceled" if cancel_remote_order_by_register(order=order, note=note) else ""
     money = bill.payments.filter(status=Payment.Status.PAID).exclude(method=Payment.Method.BONUSES)
-    if money.exclude(provider_code=provider_code).exists():
+    # The register's own money only: a transfer it confirmed (v2) came to the
+    # venue's account, and staff return it.
+    if money.exclude(provider_code=provider_code, method__in=REGISTER_METHODS).exists():
         raise RemoteOrderError(_("По заказу уже есть оплата — отменить его автоматически нельзя."))
     refunded = set(RefundLine.objects.filter(bill_item__bill=bill).values_list(
         "bill_item_id", flat=True))
@@ -1228,6 +1290,7 @@ def expire_unconfirmed_transfer(*, order_id, now: datetime | None = None) -> boo
     Same locks and effects as ``reject_transfer`` (Bill → Order; the bill is
     voided with ``payment_not_received``, bonuses come back), with no staff
     actor. Rechecked under the locks, so a transfer confirmed meanwhile wins.
+    An order the register holds is left to it (Poster v2, PQ-061).
     """
 
     now = now or timezone.now()
@@ -1238,6 +1301,8 @@ def expire_unconfirmed_transfer(*, order_id, now: datetime | None = None) -> boo
     minutes = settings.transfer_wait_minutes if settings is not None else 0
     if not minutes or order.payment_timing != PREPAID:
         return False
+    if register_holds(order):
+        return False  # the register decides (Poster v2, PQ-061)
     try:
         bill = _order_bill(order)
     except RemoteOrderError:

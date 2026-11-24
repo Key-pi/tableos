@@ -22,15 +22,19 @@ Botera first.
    ``delivery_price`` in kopecks (Poster adds it to the check) and
    ``delivery_time`` in the venue's time; lines by Poster ids — a variant as
    ``modificator_id``, add-ons as ``modification`` ``[{"m": id, "a": 1}]``; the
-   comment says the way and time, the guest's comment and the label. No
-   payment: v1 is paid on receipt;
+   comment says the way and time, the guest's comment and the label. Paid in
+   advance by transfer (v2, owner 2026-11-24, PQ-061): ``payment`` — the
+   transfer in kopecks — and each line at Botera's price (``price``, per
+   unit, the whole line with its add-ons), so the check is what the guest
+   paid and the register asks for nothing; the comment tells the cashier to
+   check the transfer before accepting;
 4. writes the result in its own transaction: ``sent`` with the online order
    and its check; unclear (network, timeout, Poster busy) — ``unknown`` and
    another attempt later (``RETRY_DELAYS``), ``MAX_ATTEMPTS`` at most; a
    refusal — ``failed``.
 
-What v1 does not send — paid in advance, paid with bonuses, a line, variant
-or add-on not from Poster — and every ``failed`` go to the staff who hear
+What is not sent — paid with bonuses, a line, variant or add-on not from
+Poster — and every ``failed`` go to the staff who hear
 about this way of ordering, even with new-order messages muted: take the
 order by hand (``notify_staff_about_order_problem``). The order in Botera
 stays as it is.
@@ -162,16 +166,24 @@ def _guest_name(order: Order) -> str:
     return name or _("Гость Botera")
 
 
-def _comment(order: Order) -> str:
+def _comment(order: Order, prepaid: Decimal | None = None) -> str:
     when = requested_time_label(order)
     if order.channel == Order.Channel.DELIVERY:
         parts = [_("Доставка {when}", when=when)]
     else:
         parts = [_("Самовывоз {when}", when=when)]
+    if prepaid is not None:
+        # «Прийняти» confirms the transfer (statuses.py).
+        parts.append(_("Оплачено переводом: {sum} грн. Проверьте поступление, прежде чем "
+                       "принять заказ.", sum=prepaid))
     if order.comment.strip():
         parts.append(order.comment.strip())
     parts.append(label(order))
     return "\n".join(parts)
+
+
+def _kopecks(amount: Decimal) -> int:
+    return int((amount * 100).to_integral_value())
 
 
 def _as_uuid(value):
@@ -185,8 +197,10 @@ def _poster_id(value: str):
     return int(value) if value.isdigit() else value
 
 
-def _lines(order: Order, lines: list[OrderItem]) -> tuple[list[dict], Decimal]:
-    """Poster's products of the order and the delivery fee (not a product)."""
+def _lines(order: Order, lines: list[OrderItem], *,
+           own_prices: bool = False) -> tuple[list[dict], Decimal]:
+    """Poster's products of the order and the delivery fee (not a product);
+    ``own_prices`` — each line at Botera's price, as the guest paid it."""
 
     refs = {
         (ref.kind, ref.object_id): ref
@@ -203,6 +217,8 @@ def _lines(order: Order, lines: list[OrderItem]) -> tuple[list[dict], Decimal]:
         if product is None:
             raise _refuse(N_("«{name}» нет в меню Poster"), name=line.item_name)
         entry = {"product_id": product.poster_id, "count": line.quantity}
+        if own_prices:
+            entry["price"] = _kopecks(line.unit_price)
         if line.variant_id:
             variant = refs.get((Kind.VARIANT, line.variant_id))
             product_id, _sep, modificator_id = (variant.poster_id if variant else "").partition(":")
@@ -227,35 +243,39 @@ def _lines(order: Order, lines: list[OrderItem]) -> tuple[list[dict], Decimal]:
 
 def build_order(order: Order, connection: PosterConnection, language: str) -> dict:
     """The body of ``incomingOrders.createIncomingOrder``; ``PushRefused``
-    for what v1 does not send."""
+    for what is not sent."""
 
     if order.channel not in SERVICE_MODES:
         raise _refuse(N_("этот способ заказа в Poster не передаётся"))
-    if order.payment_timing != Order.PaymentTiming.ON_RECEIPT:
-        raise _refuse(N_(
-            "заказ оплачен переводом заранее, а в Poster передаются только заказы с оплатой при "
-            "получении"
-        ))
     if order.bonus_spent > 0:
         raise _refuse(N_("часть заказа оплачена бонусами Botera — такие заказы в Poster пока не "
                          "передаются"))
     phone = _phone(order.guest.phone)
     if not phone:
         raise _refuse(N_("у гостя нет телефона"))
-    products, fee = _lines(order, list(order.items.all()))
+    lines = list(order.items.all())
+    prepaid_in_advance = order.payment_timing == Order.PaymentTiming.PREPAID
+    products, fee = _lines(order, lines, own_prices=prepaid_in_advance)
+    # The transfer is the whole check: the products at Botera's prices and the delivery.
+    prepaid = (
+        sum((line.unit_price * line.quantity for line in lines), Decimal("0.00"))
+        if prepaid_in_advance else None
+    )
     with texts(language):
         body = {
             "spot_id": str(connection.spot_id),
             "phone": phone,
             "first_name": _guest_name(order),
             "service_mode": SERVICE_MODES[order.channel],
-            "comment": _comment(order),
+            "comment": _comment(order, prepaid),
             "products": products,
         }
+    if prepaid is not None:
+        body["payment"] = {"type": 1, "sum": _kopecks(prepaid), "currency": "UAH"}
     if order.channel == Order.Channel.DELIVERY:
         body["address"] = order.delivery_address
         if fee > 0:
-            body["delivery_price"] = int((fee * 100).to_integral_value())
+            body["delivery_price"] = _kopecks(fee)
         if order.requested_for is not None:
             local = order.requested_for.astimezone(ZoneInfo(order.partner.timezone))
             body["delivery_time"] = local.strftime("%Y-%m-%d %H:%M:%S")

@@ -238,9 +238,6 @@ class RefusedTests(OrderFixture):
         self.assertIn(order.public_id, title)
         self.assertIn(reason, message)
 
-    def test_paid_in_advance(self):
-        self.assert_refused(self.order(payment=Order.PaymentTiming.PREPAID), "переводом")
-
     def test_paid_with_bonuses(self):
         self.assert_refused(self.order(bonus_spent="20.00"), "бонусами")
 
@@ -297,7 +294,7 @@ class RefusedTests(OrderFixture):
             telegram_account=TelegramAccount.objects.create(telegram_id=7300902),
             notify_channel_pickup=False,
         )
-        self.push(self.order(payment=Order.PaymentTiming.PREPAID))
+        self.push(self.order(bonus_spent="20.00"))
         self.assertEqual(
             list(StaffNotification.objects.filter(title__contains="Poster")
                  .values_list("employee__user__username", flat=True)),

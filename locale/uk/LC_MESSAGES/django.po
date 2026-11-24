@@ -1453,6 +1453,10 @@ msgid "Оплата при получении: {to_pay} грн (наличные
 msgstr "Оплата при отриманні: {to_pay} грн (готівка або картка). Позначте оплату в картці замовлення, коли гість заплатить."
 
 #: apps/billing/remote_orders.py
+msgid "Гость сообщил о переводе {to_pay} грн. Проверьте поступление, прежде чем принять заказ на кассе: принятый заказ — подтверждённый перевод."
+msgstr "Гість повідомив про переказ {to_pay} грн. Перевірте надходження, перш ніж прийняти замовлення на касі: прийняте замовлення — підтверджений переказ."
+
+#: apps/billing/remote_orders.py
 msgid "Гость сообщил о переводе {to_pay} грн. Проверьте поступление и подтвердите оплату в карточке заказа."
 msgstr "Гість повідомив про переказ {to_pay} грн. Перевірте надходження й підтвердьте оплату в картці замовлення."
 
@@ -1593,8 +1597,8 @@ msgid "Отправлен, ТТН {number}."
 msgstr "Відправлено, ТТН {number}."
 
 #: apps/billing/services.py
-msgid "Возврат по заказу из Poster делают на кассе Poster."
-msgstr "Повернення за замовленням із Poster роблять на касі Poster."
+msgid "Возврат по заказу из Poster начинают на кассе Poster: отмените или верните там чек."
+msgstr "Повернення за замовленням із Poster починають на касі Poster: скасуйте або поверніть там чек."
 
 #: apps/billing/services.py apps/orders/services.py bot/handlers/order.py
 msgid "стол #{number}"
@@ -2497,8 +2501,8 @@ msgid "Подключить Poster"
 msgstr "Підключити Poster"
 
 #: apps/integrations/poster/admin.py
-msgid "Пока Poster работает, самовывоз и доставка оплачиваются при получении и без бонусов: оплату переводом заранее и бонусы касса пока не принимает."
-msgstr "Поки Poster працює, самовивіз і доставка оплачуються під час отримання і без бонусів: оплату переказом заздалегідь і бонуси каса поки не приймає."
+msgid "Пока Poster работает, самовывоз и доставка — без бонусов Botera: касса их не принимает. Заказ с оплатой переводом приходит на кассу оплаченным: кассир проверяет поступление и принимает заказ — это и есть подтверждение перевода."
+msgstr "Поки Poster працює, самовивіз і доставка — без бонусів Botera: каса їх не приймає. Замовлення з оплатою переказом приходить на касу оплаченим: касир перевіряє надходження і приймає замовлення — це і є підтвердження переказу."
 
 #: apps/integrations/poster/admin.py
 msgid "Это точка «{spot}»"
@@ -2853,6 +2857,10 @@ msgid "Самовывоз {when}"
 msgstr "Самовивіз {when}"
 
 #: apps/integrations/poster/orders.py
+msgid "Оплачено переводом: {sum} грн. Проверьте поступление, прежде чем принять заказ."
+msgstr "Сплачено переказом: {sum} грн. Перевірте надходження, перш ніж прийняти замовлення."
+
+#: apps/integrations/poster/orders.py
 msgid "«{name}» нет в меню Poster"
 msgstr "«{name}» немає в меню Poster"
 
@@ -2871,10 +2879,6 @@ msgstr "у замовленні немає позицій"
 #: apps/integrations/poster/orders.py
 msgid "этот способ заказа в Poster не передаётся"
 msgstr "цей спосіб замовлення в Poster не передається"
-
-#: apps/integrations/poster/orders.py
-msgid "заказ оплачен переводом заранее, а в Poster передаются только заказы с оплатой при получении"
-msgstr "замовлення оплачено переказом заздалегідь, а в Poster передаються лише замовлення з оплатою при отриманні"
 
 #: apps/integrations/poster/orders.py
 msgid "часть заказа оплачена бонусами Botera — такие заказы в Poster пока не передаются"
@@ -2981,6 +2985,18 @@ msgid "{reason}. Решите вручную в карточке заказа."
 msgstr "{reason}. Вирішіть вручну в картці замовлення."
 
 #: apps/integrations/poster/statuses.py
+msgid "Заказ #{code}: верните перевод гостю"
+msgstr "Замовлення #{code}: поверніть переказ гостю"
+
+#: apps/integrations/poster/statuses.py
+msgid "{reason}. Если деньги пришли — верните их гостю."
+msgstr "{reason}. Якщо гроші надійшли — поверніть їх гостю."
+
+#: apps/integrations/poster/statuses.py
+msgid "{reason}. Верните деньги гостю и отметьте возврат в карточке заказа."
+msgstr "{reason}. Поверніть гроші гостю і позначте повернення в картці замовлення."
+
+#: apps/integrations/poster/statuses.py
 msgid "чек Poster №{check} закрыт без оплаты (причина {reason})"
 msgstr "чек Poster №{check} закрито без оплати (причина {reason})"
 
@@ -3003,6 +3019,22 @@ msgstr "Відхилено на касі Poster."
 #: apps/integrations/poster/statuses.py
 msgid "заказ отклонён на кассе Poster, а по нему уже есть оплата в Botera"
 msgstr "замовлення відхилено на касі Poster, а за ним уже є оплата в Botera"
+
+#: apps/integrations/poster/statuses.py
+msgid "касса Poster отклонила заказ, оплаченный переводом"
+msgstr "каса Poster відхилила замовлення, оплачене переказом"
+
+#: apps/integrations/poster/statuses.py
+msgid "чек Poster №{check} отменён на кассе, а заказ оплачен переводом"
+msgstr "чек Poster №{check} скасовано на касі, а замовлення оплачено переказом"
+
+#: apps/integrations/poster/statuses.py
+msgid "Перевод подтверждён на кассе Poster, чек №{check}."
+msgstr "Переказ підтверджено на касі Poster, чек №{check}."
+
+#: apps/integrations/poster/statuses.py
+msgid "заказ, оплаченный переводом, принят на кассе Poster, а в Botera уже закрыт ({reason})"
+msgstr "замовлення, оплачене переказом, прийнято на касі Poster, а в Botera вже закрите ({reason})"
 
 #: apps/integrations/poster/statuses.py
 msgid "Чек Poster №{check} удалён на кассе."
@@ -4007,6 +4039,10 @@ msgstr "Замовлення в дорозі — кур'єр уже їде до 
 #: apps/notifications/services.py
 msgid "Заказ доставлен. Приятного аппетита!"
 msgstr "Замовлення доставлено. Смачного!"
+
+#: apps/notifications/services.py
+msgid "Заведение отклонило заказ. Если вы уже перевели деньги — заведение вернёт их."
+msgstr "Заклад відхилив замовлення. Якщо ви вже переказали гроші — заклад їх поверне."
 
 #: apps/notifications/services.py
 msgid "Оплата не поступила, заказ отменён. Если вы переводили деньги, свяжитесь с заведением."
@@ -8031,6 +8067,10 @@ msgstr "• {item_name} × {quantity}"
 #: bot/handlers/staff.py
 msgid "Сумма: <b>{total_amount} грн</b> · оплата: {payment}"
 msgstr "Сума: <b>{total_amount} грн</b> · оплата: {payment}"
+
+#: bot/handlers/staff.py
+msgid "Заказ ведёт касса Poster: принять (это и подтверждение перевода) и отменить — там."
+msgstr "Замовлення веде каса Poster: прийняти (це і є підтвердження переказу) і скасувати — там."
 
 #: bot/handlers/staff.py
 msgid "Заказ ведёт касса Poster: принять, отменить, оплатить и вернуть деньги — там."

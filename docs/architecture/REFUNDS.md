@@ -92,7 +92,12 @@
   кассы Poster по удалённому чеку (PQ-061, решение владельца 2026-11-24): без
   сотрудника и права, способ «На кассе» (`Refund.Method.REGISTER`); сотрудник
   этот способ не выбирает (`Refund.STAFF_METHODS` — в Admin и Mini App)
-  (`apps/billing/remote_orders.py:undo_remote_order_by_register`).
+  (`apps/billing/remote_orders.py:undo_remote_order_by_register`). Заказ,
+  который ведёт касса и чьи деньги она взяла, сотрудник не возвращает
+  (`register_refunds`, `register_refunds_any`); перевод заранее, который
+  касса только подтвердила (v2, PQ-061), возвращает сотрудник: у
+  завершённого заказа — сразу, у незавершённого — после отмены на кассе
+  (касса закончила с заказом — он снова у Botera).
 - `get_order_refund_lines(order)` — оплаченный счёт заказа и его строки с
   отметкой «возвращено» (только чтение).
 - `preview_refund(bill, ids)` — сколько денег и бонусов вернётся (для

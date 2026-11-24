@@ -30,6 +30,15 @@ what it means:
   for an order Botera canceled, a rejected order already paid → nothing
   automatic: «Требует внимания» on the push and a message to staff, once.
 
+Paid in advance by transfer (v2, owner 2026-11-24, PQ-061) — the register
+holds the transfer, not its money: accepted → the transfer confirmed and
+«Принят», the closed check → «Завершён»
+(``apps/billing/remote_orders.py:confirm_transfer_by_register``); rejected,
+or the check deleted before the transfer was recorded → canceled as above,
+and staff are told to return the transfer if it came; the check deleted
+after it → staff return it and record the refund (the register gives
+nothing back, spike D3).
+
 Every step checks again under its own locks (Bill → Order for money, Order
 for a status), so the two webhooks Poster sends a second apart do it once.
 The push row is locked only to keep what Poster said and the mark.
@@ -47,6 +56,7 @@ from apps.billing.models import Bill, Payment
 from apps.billing.remote_orders import (
     RemoteOrderError,
     cancel_remote_order_by_register,
+    confirm_transfer_by_register,
     record_register_payment,
     undo_remote_order_by_register,
 )
@@ -54,6 +64,7 @@ from apps.billing.services import BillingServiceError
 from apps.integrations.poster.client import PosterClient, PosterError
 from apps.integrations.poster.models import PosterConnection, PosterOrderPush
 from apps.integrations.poster.orders import Reason
+from apps.integrations.poster.selectors import CHECK_REJECTED, CHECK_REMOVED, ONLINE_REJECTED
 from apps.notifications.services import notify_staff_about_order_problem
 from apps.orders.models import Order
 from apps.orders.services import OrderFlowError, transition_order_status
@@ -64,8 +75,8 @@ from core.i18n import N_, _, gettext_in
 logger = logging.getLogger(__name__)
 
 Push = PosterOrderPush.Status
-ACCEPTED, REJECTED = 1, 7
-CHECK_CLOSED, CHECK_REMOVED, CHECK_REJECTED = 2, 3, 4
+ACCEPTED, REJECTED = 1, ONLINE_REJECTED
+CHECK_CLOSED = 2
 PAY_METHODS = {1: Payment.Method.CASH, 2: Payment.Method.TERMINAL, 3: Payment.Method.MIXED}
 PROVIDER = "poster"
 RETRY_DELAYS = (60, 120, 300)  # seconds, when Poster did not answer
@@ -171,9 +182,21 @@ def _language(partner_id) -> str:
     return main_language(PartnerBotSettings.objects.filter(partner_id=partner_id).first())
 
 
-def _mark(push_id, order: Order, reason: Reason, *, tell_staff: bool = True) -> str:
-    """«Требует внимания» on the push; staff are told once per new mark."""
+CHECK_IN_POSTER = (N_("Заказ #{code}: проверьте в Poster"),
+                   N_("{reason}. Решите вручную в карточке заказа."))
+# Paid in advance (v2): the register returns nothing of a transfer.
+RETURN_IF_CAME = (N_("Заказ #{code}: верните перевод гостю"),
+                  N_("{reason}. Если деньги пришли — верните их гостю."))
+RETURN_AND_RECORD = (N_("Заказ #{code}: верните перевод гостю"),
+                     N_("{reason}. Верните деньги гостю и отметьте возврат в карточке заказа."))
 
+
+def _mark(push_id, order: Order, reason: Reason, *, tell_staff: bool = True,
+          words: tuple[str, str] = CHECK_IN_POSTER) -> str:
+    """«Требует внимания» on the push; staff are told once per new mark,
+    ``words`` — the message's title and text."""
+
+    title, message = words
     with transaction.atomic():
         push = PosterOrderPush.objects.select_for_update().get(pk=push_id)
         text = gettext_in(_language(order.partner_id), reason.text, **reason.params)[:255]
@@ -184,9 +207,8 @@ def _mark(push_id, order: Order, reason: Reason, *, tell_staff: bool = True) -> 
         if tell_staff:
             notify_staff_about_order_problem(
                 order,
-                title=lambda: _("Заказ #{code}: проверьте в Poster", code=order.public_id),
-                message=lambda: _("{reason}. Решите вручную в карточке заказа.",
-                                  reason=str(reason)),
+                title=lambda: _(title, code=order.public_id),
+                message=lambda: _(message, reason=str(reason)),
             )
     return "attention"
 
@@ -230,6 +252,10 @@ def _pay(push: PosterOrderPush, order: Order, state: RegisterState) -> str:
     return "paid"
 
 
+def _prepaid(order: Order) -> bool:
+    return order.payment_timing == Order.PaymentTiming.PREPAID
+
+
 def _cancel(push: PosterOrderPush, order: Order) -> str:
     try:
         canceled = cancel_remote_order_by_register(
@@ -237,10 +263,77 @@ def _cancel(push: PosterOrderPush, order: Order) -> str:
                                          "Отклонён на кассе Poster."),
         )
     except RemoteOrderError:
+        if _prepaid(order):
+            return _transfer_recorded(push, order, state=None)
         return _mark(push.pk, order, Reason(
             N_("заказ отклонён на кассе Poster, а по нему уже есть оплата в Botera"),
         ))
+    if canceled and _prepaid(order):
+        _transfer_not_kept(push, order)
     return "canceled" if canceled else ""
+
+
+def _transfer_not_kept(push: PosterOrderPush, order: Order) -> None:
+    """A prepaid order canceled at the register: the guest may have sent
+    the money."""
+
+    _mark(push.pk, order, Reason(N_("касса Poster отклонила заказ, оплаченный переводом")),
+          words=RETURN_IF_CAME)
+
+
+def _transfer_recorded(push: PosterOrderPush, order: Order, state: RegisterState | None) -> str:
+    """Undone at the register after the transfer was recorded."""
+
+    check_number = (state.transaction_id if state else None) or push.transaction_id or ""
+    return _mark(push.pk, order, Reason(
+        N_("чек Poster №{check} отменён на кассе, а заказ оплачен переводом"),
+        {"check": check_number},
+    ), words=RETURN_AND_RECORD)
+
+
+def _settle_transfer(push: PosterOrderPush, order: Order, state: RegisterState, *,
+                     complete: bool) -> str:
+    """"changed", "" on a repeat, or the mark when Botera closed the order."""
+
+    check_number = state.transaction_id or push.transaction_id or ""
+    try:
+        changed = confirm_transfer_by_register(
+            order=order, provider_code=PROVIDER, reference=str(check_number),
+            note=gettext_in(_language(order.partner_id),
+                            "Перевод подтверждён на кассе Poster, чек №{check}.",
+                            check=check_number),
+            complete=complete,
+        )
+    except RemoteOrderError as exc:
+        return _mark(push.pk, order, Reason(
+            N_("заказ, оплаченный переводом, принят на кассе Poster, а в Botera уже закрыт "
+               "({reason})"),
+            {"reason": str(exc).rstrip(".")},
+        ))
+    return "changed" if changed else ""
+
+
+def _accept_prepaid(push: PosterOrderPush, order: Order, state: RegisterState) -> str:
+    """«Прийняти» of a prepaid order: the cashier checked the transfer."""
+
+    result = _settle_transfer(push, order, state, complete=False)
+    return "accepted" if result == "changed" else result
+
+
+def _closed_prepaid(push: PosterOrderPush, order: Order, state: RegisterState) -> str:
+    """The check of a prepaid order closed: the order handed over."""
+
+    result = _settle_transfer(push, order, state, complete=True)
+    if result != "changed":
+        return result
+    bill_total = _bill_total(order)
+    if state.total is not None and bill_total is not None and state.total != bill_total:
+        # Botera's prices went with the payment: the check should be the transfer.
+        return _mark(push.pk, order, Reason(
+            N_("сумма чека Poster {check_sum} грн, счёт Botera {bill_sum} грн"),
+            {"check_sum": state.total, "bill_sum": bill_total},
+        ), tell_staff=False)
+    return "paid"
 
 
 def _removed(push: PosterOrderPush, order: Order, state: RegisterState) -> str:
@@ -248,14 +341,19 @@ def _removed(push: PosterOrderPush, order: Order, state: RegisterState) -> str:
 
     check_number = state.transaction_id or ""
     try:
-        return undo_remote_order_by_register(
+        undone = undo_remote_order_by_register(
             order=order, provider_code=PROVIDER, reference=str(check_number),
             note=gettext_in(_language(order.partner_id), "Чек Poster №{check} удалён на кассе.",
                             check=check_number),
         )
     except (RemoteOrderError, BillingServiceError):
+        if _prepaid(order):
+            return _transfer_recorded(push, order, state)
         return _mark(push.pk, order, Reason(N_("чек Poster №{check} удалён"),
                                             {"check": check_number}))
+    if undone == "canceled" and _prepaid(order):
+        _transfer_not_kept(push, order)
+    return undone
 
 
 def _accept(order: Order) -> str:
@@ -276,11 +374,12 @@ def apply_state(push: PosterOrderPush, state: RegisterState) -> str:
     if state.online == REJECTED or state.check == CHECK_REJECTED:
         return _cancel(push, order)
     if state.check == CHECK_CLOSED:
-        return _pay(push, order, state)
+        return _closed_prepaid(push, order, state) if _prepaid(order) else _pay(
+            push, order, state)
     if state.check == CHECK_REMOVED:
         return _removed(push, order, state)
     if state.online == ACCEPTED:
-        return _accept(order)
+        return _accept_prepaid(push, order, state) if _prepaid(order) else _accept(order)
     return ""
 
 

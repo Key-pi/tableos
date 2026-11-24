@@ -84,15 +84,26 @@
   если уже есть оплата деньгами.
 - `confirm_transfer`, `reject_transfer` — только для `prepaid`.
 - Заведение на кассе Poster (PQ-058, шаг 7, [POSTER.md](POSTER.md)): пока
-  Poster работает, самовывоз и доставка — только оплата при получении
-  (`payment_modes_for` убирает перевод заранее, `apps/integrations/poster/selectors.py:register_takes`)
-  и без бонусов (`get_remote_quote` их не предлагает, `place_remote_order`
-  отказывает); отправка почтой — как раньше. У заказа, который ведёт касса
+  Poster работает, самовывоз и доставка — без бонусов (`get_remote_quote` их
+  не предлагает, `place_remote_order` отказывает,
+  `apps/integrations/poster/selectors.py:register_takes`); отправка почтой —
+  как раньше. У заказа, который ведёт касса
   (`apps/integrations/poster/selectors.py:register_holds`), кнопок оплаты и
   «Гость не забрал» нет, а `record_payment_on_receipt` и
   `cancel_unpaid_remote_order` от сотрудника отказывают: деньги берёт касса.
   Возврат такого заказа — тоже на кассе: `refund_bill_lines` отказывает,
-  кнопок возврата нет.
+  кнопок возврата нет (`apps/billing/services.py:register_refunds`).
+- Перевод заранее при Poster (v2, решение владельца 2026-11-24, PQ-061,
+  [POSTER.md](POSTER.md), «6. Предоплата переводом»): предлагается, как без
+  Poster, с реквизитами; заказ уходит на кассу оплаченным. «Прийняти» на
+  кассе — подтверждение перевода
+  (`apps/billing/remote_orders.py:confirm_transfer_by_register`: оплата
+  «Перевод» без сотрудника и кешбэка, заказ «Принят»; закрытый чек —
+  «Завершён»); отклонён — отмена и сообщение персоналу «верните перевод».
+  Пока касса ведёт заказ, `confirm_transfer` и `reject_transfer` от
+  сотрудника отказывают, автоотмена (`expire_unconfirmed_transfer`) его не
+  трогает. Возврат перевода — сотрудник, «Переводом»: у завершённого заказа
+  сразу, у незавершённого — после отмены на кассе.
 - Заведение на кассе Poster (PQ-059, [POSTER.md](POSTER.md)): закрытый чек
   онлайн-заказа сам записывает оплату при получении —
   `record_register_payment(order, method, provider_code, reference, note,

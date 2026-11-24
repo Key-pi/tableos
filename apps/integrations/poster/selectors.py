@@ -13,7 +13,8 @@ Botera's own items and add-ons are hidden there (``own_menu_hidden``, the
 venue's «Меню в боте»); the «Новый заказ» message — whether the order will go
 to the register (``goes_to_register``); staff screens and services — whether
 the register holds an order (``register_holds``): then accepting,
-cancelling, the money and completing are the register's (owner 2026-11-21).
+cancelling, the money and completing are the register's (owner 2026-11-21),
+and the transfer of a prepaid order is confirmed there (v2, PQ-061).
 Only Poster's own tables (and the order's lines) are read: no request to
 Poster, nothing of billing's or orders' services is imported.
 """
@@ -58,8 +59,8 @@ def poster_menu_on(partner_id) -> bool:
 
 
 def register_takes(partner_id, channel) -> bool:
-    """Orders of this channel go to the venue's Poster: paid on receipt, no
-    bonuses (v1)."""
+    """Orders of this channel go to the venue's Poster: no bonuses; a
+    transfer in advance goes there paid (v2, PQ-061)."""
 
     return channel in REGISTER_CHANNELS and _working(partner_id).exists()
 
@@ -122,7 +123,7 @@ def with_poster_mark(queryset):
 def goes_to_register(order) -> bool:
     """The order will be sent to the register: its channel goes there and
     every line, variant and add-on came from Poster (what ``orders.py``
-    sends; transfer and bonuses are not offered there since step 7)."""
+    sends; bonuses are not offered there since step 7)."""
 
     if not register_takes(order.partner_id, order.channel):
         return False
@@ -154,13 +155,24 @@ def register_holds(order) -> bool:
     """The register holds the order now: it went (or goes) to the venue's
     working Poster — accepting, cancelling, the money and completing are done
     there; Botera's staff only say «Готово» and «В пути». A push that failed,
-    or Poster disconnected — the order is Botera's again."""
+    Poster disconnected, or the register done with it — its check deleted or
+    rejected (PQ-061) — the order is Botera's again."""
 
     if HELD in order.__dict__:  # ``with_register_mark``
         return bool(order.__dict__[HELD])
     if getattr(order, "pk", None) is None:  # not saved (or a stand-in)
         return False
     return _held_pushes().filter(order_id=order.pk, partner_id=order.partner_id).exists()
+
+
+def sent_to_register(order) -> bool:
+    """The register got the order (its push was sent), whether it holds it
+    still or not: a prepaid order canceled then was the register's call
+    (v2, PQ-061) — the guest is told the venue returns the money."""
+
+    return PosterOrderPush.objects.filter(
+        order_id=order.pk, partner_id=order.partner_id, status=PosterOrderPush.Status.SENT,
+    ).exists()
 
 
 def register_holds_any(order_ids) -> bool:
@@ -171,10 +183,15 @@ def register_holds_any(order_ids) -> bool:
 
 
 HELD = "poster_held"
+# What the register says when it is done with an order (``statuses.py``): the
+# check deleted or rejected, the online order rejected.
+CHECK_REMOVED, CHECK_REJECTED, ONLINE_REJECTED = 3, 4, 7
 
 
 def _held_pushes():
-    return PosterOrderPush.objects.exclude(status=PosterOrderPush.Status.FAILED).filter(
+    return PosterOrderPush.objects.exclude(status=PosterOrderPush.Status.FAILED).exclude(
+        check_status__in=(CHECK_REMOVED, CHECK_REJECTED),
+    ).exclude(poster_status=ONLINE_REJECTED).filter(
         Exists(PosterConnection.objects.filter(
             partner_id=OuterRef("partner_id"), status=PosterConnection.Status.ACTIVE,
         )),

@@ -97,16 +97,15 @@ class PaymentAndBonusTests(CheckoutFixture):
     def test_checkout_and_the_push_agree_on_what_goes_to_the_register(self):
         self.assertEqual(set(orders.SERVICE_MODES), set(selectors.REGISTER_CHANNELS))
 
-    def test_pickup_and_delivery_through_poster_are_paid_on_receipt_only(self):
+    def test_pickup_and_delivery_through_poster_take_the_transfer_too(self):
+        """v2 (owner 2026-11-24, PQ-061): the transfer goes to the register
+        paid (test_prepaid.py); the same options without Poster."""
+
         self._cart()
 
-        self.assertEqual(self.quote().payment_modes, (ON_RECEIPT,))
-        self.assertEqual(payment_modes_for(self.settings, DELIVERY), (ON_RECEIPT,))
-
-    def test_without_poster_the_transfer_comes_back(self):
+        self.assertEqual(self.quote().payment_modes, (PREPAID, ON_RECEIPT))
+        self.assertEqual(payment_modes_for(self.settings, DELIVERY), (PREPAID, ON_RECEIPT))
         self.disconnect()
-        self._cart()
-
         self.assertEqual(self.quote().payment_modes, (PREPAID, ON_RECEIPT))
 
     def test_shipping_does_not_go_to_poster_and_keeps_its_options(self):
@@ -119,36 +118,44 @@ class PaymentAndBonusTests(CheckoutFixture):
             payment_modes_for(self.settings, Order.Channel.SHIPPING), (PREPAID, ON_RECEIPT),
         )
 
-    def test_a_transfer_in_advance_is_refused_at_checkout(self):
+    def test_a_transfer_in_advance_goes_to_the_register(self):
         self._cart()
 
-        with self.assertRaisesMessage(RemoteOrderError, "Этот способ оплаты сейчас недоступен"):
-            self.checkout(payment=PREPAID)
-        self.assertFalse(Order.objects.filter(partner=self.partner).exists())
+        order = self.checkout(payment=PREPAID)
 
-    def test_with_only_the_transfer_on_pickup_is_not_set_up(self):
+        self.assertEqual(order.payment_timing, PREPAID)
+        self.assertEqual(PosterOrderPush.objects.get(order=order).status,
+                         PosterOrderPush.Status.SENT)
+        self.assertEqual(self.poster.created()[0]["payment"]["sum"], 40000)
+
+    def test_with_only_the_transfer_on_pickup_needs_the_requisites(self):
         PartnerBotSettings.objects.filter(id=self.settings.id).update(pickup_pay_on_receipt=False)
         self._cart()
 
-        with self.assertRaisesMessage(RemoteOrderError, "ещё не настроило оплату"):
+        self.assertEqual(self.quote().payment_modes, (PREPAID,))
+        PartnerBotSettings.objects.filter(id=self.settings.id).update(transfer_payment_details="")
+        with self.assertRaisesMessage(RemoteOrderError, "ещё не указало реквизиты"):
             self.quote()
 
     def test_a_way_with_no_payment_left_is_not_offered(self):
-        """Rehearsal 2026-11-24: with only the transfer on and Poster working,
-        the guest got the way's button and then «ещё не настроило оплату»."""
+        """Rehearsal 2026-11-24: with only the transfer on and no way to pay
+        by it (then Poster v1, now no requisites), the guest got the way's
+        button and then a refusal."""
 
         from bot.handlers.menu import choose_way_buttons
         from bot.services.content import BotContent
 
-        PartnerBotSettings.objects.filter(id=self.settings.id).update(pickup_pay_on_receipt=False)
+        PartnerBotSettings.objects.filter(id=self.settings.id).update(
+            pickup_pay_on_receipt=False, transfer_payment_details="",
+        )
         content = BotContent.for_partner(self.partner_reloaded())
         self.assertFalse(content.supports_pickup_orders())
         self.assertTrue(content.supports_delivery_orders())  # it still pays on receipt
         self.assertEqual([data for _text, data in choose_way_buttons(content)],
                          [f"pick:{DELIVERY}"])  # the Mini App's ways read the same methods
-        # Poster off: the transfer is back, and so is the way.
-        PosterConnection.objects.filter(partner=self.partner).update(
-            status=PosterConnection.Status.DISCONNECTED)
+        # The requisites in: the transfer goes to the register (v2), and so does the way.
+        PartnerBotSettings.objects.filter(id=self.settings.id).update(
+            transfer_payment_details="Карта 0000 (тест)")
         self.assertTrue(BotContent.for_partner(self.partner_reloaded()).supports_pickup_orders())
 
     def partner_reloaded(self):
@@ -395,4 +402,5 @@ class MenuModeTests(CheckoutFixture):
 
         response = self.client.get(url, follow=True)
 
-        self.assertContains(response, "оплачиваются при получении и без бонусов")
+        self.assertContains(response, "без бонусов Botera")
+        self.assertContains(response, "это и есть подтверждение перевода")
