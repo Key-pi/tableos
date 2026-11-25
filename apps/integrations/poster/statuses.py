@@ -42,15 +42,25 @@ nothing back, spike D3).
 Every step checks again under its own locks (Bill → Order for money, Order
 for a status), so the two webhooks Poster sends a second apart do it once.
 The push row is locked only to keep what Poster said and the mark.
+
+A webhook Poster never delivered (PQ-061): ``recheck_open_orders`` — the
+beat task ``poster.recheck_open_orders`` every 5 minutes — queues the same
+``sync_order_state`` for each order still open in Botera that Poster said
+nothing about for 10 minutes, until 2 days after sending; not for an order
+the register is done with, a venue off Poster or suspended. Reading the
+state brings the push's ``updated_at`` forward, so it waits again.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import Exists, OuterRef
+from django.utils import timezone
 
 from apps.billing.models import Bill, Payment
 from apps.billing.remote_orders import (
@@ -69,7 +79,7 @@ from apps.notifications.services import notify_staff_about_order_problem
 from apps.orders.models import Order
 from apps.orders.services import OrderFlowError, transition_order_status
 from apps.partners.languages import main_language
-from apps.partners.models import PartnerBotSettings
+from apps.partners.models import Partner, PartnerBotSettings
 from core.i18n import N_, _, gettext_in
 
 logger = logging.getLogger(__name__)
@@ -80,6 +90,11 @@ CHECK_CLOSED = 2
 PAY_METHODS = {1: Payment.Method.CASH, 2: Payment.Method.TERMINAL, 3: Payment.Method.MIXED}
 PROVIDER = "poster"
 RETRY_DELAYS = (60, 120, 300)  # seconds, when Poster did not answer
+# A webhook Poster never delivered (PQ-061): an order it said nothing about
+# for RECHECK_QUIET is read again, for RECHECK_FOR after sending.
+RECHECK_QUIET = timedelta(minutes=10)
+RECHECK_FOR = timedelta(days=2)
+RECHECK_BATCH = 200
 
 
 @dataclass
@@ -405,3 +420,32 @@ def sync_order_state(push_id, *, attempt: int = 1) -> str:
         return ""
     _keep_state(push.pk, state)
     return apply_state(push, state)
+
+
+def recheck_open_orders(now=None) -> int:
+    """Orders Poster may have lost a webhook of: queued for
+    ``sync_order_state``, the quietest first; how many."""
+
+    from apps.integrations.poster.tasks import sync_order_state_task
+
+    now = now or timezone.now()
+    working = PosterConnection.objects.filter(
+        partner_id=OuterRef("partner_id"), status=PosterConnection.Status.ACTIVE,
+    )
+    ids = list(
+        PosterOrderPush.objects.filter(
+            status=Push.SENT, incoming_order_id__isnull=False,
+            sent_at__gte=now - RECHECK_FOR, updated_at__lt=now - RECHECK_QUIET,
+        )
+        .filter(Exists(working))
+        .exclude(partner__status=Partner.Status.SUSPENDED)
+        .exclude(order__status__in=(Order.Status.COMPLETED, Order.Status.CANCELED))
+        # The register is done with it: what is left is staff's.
+        .exclude(check_status__in=(CHECK_REMOVED, CHECK_REJECTED))
+        .exclude(poster_status=REJECTED)
+        .order_by("updated_at")
+        .values_list("pk", flat=True)[:RECHECK_BATCH]
+    )
+    for push_id in ids:
+        sync_order_state_task.delay(str(push_id))
+    return len(ids)

@@ -211,6 +211,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "poster.recover_order_pushes",
         "schedule": timedelta(minutes=5),
     },
+    # PQ-061: open orders whose webhook Poster may have lost, read again.
+    "recheck-poster-open-orders": {
+        "task": "poster.recheck_open_orders",
+        "schedule": timedelta(minutes=5),
+    },
     # PQ-058, step 3: the menu of every venue on Poster, at night (Kyiv time).
     "sync-poster-menus": {
         "task": "poster.sync_all_menus",

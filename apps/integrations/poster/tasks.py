@@ -21,6 +21,7 @@ SYNC_MENU_AFTER_CHANGES_TASK = "poster.sync_menu_after_changes"
 PUSH_ORDER_TASK = "poster.push_order"
 RECOVER_ORDER_PUSHES_TASK = "poster.recover_order_pushes"
 SYNC_ORDER_STATE_TASK = "poster.sync_order_state"
+RECHECK_OPEN_ORDERS_TASK = "poster.recheck_open_orders"
 
 
 @shared_task(name=SYNC_MENU_TASK)
@@ -86,3 +87,11 @@ def sync_order_state_task(push_id: str, attempt: int = 1) -> str:
     does nothing new."""
 
     return statuses.sync_order_state(push_id, attempt=attempt)
+
+
+@shared_task(name=RECHECK_OPEN_ORDERS_TASK)
+def recheck_open_orders_task() -> int:
+    """Every 5 minutes: open orders whose webhook Poster may have lost
+    (PQ-061) — read again."""
+
+    return statuses.recheck_open_orders()
